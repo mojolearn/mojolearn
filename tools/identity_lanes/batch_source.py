@@ -20,9 +20,21 @@
 # lengths (B, 1) matmul v (1, 1); loss = sum of both (loss='output'); AdamW with W and v in two parameter groups.
 # Three steps, stop mid-epoch, save, then two more steps uninterrupted vs resumed.
 #
+# Lane fable-finalize (2026-11-25), three guarantees more, all checked here:
+#   THE REPLACEMENT: the checkpoint the fresh process resumes from is read through a HARD LINK taken on the first
+#     checkpoint before a SECOND save to the same name. A save replaces the file (a new file renamed over the name)
+#     and never writes into the previous one, so the link still holds the first checkpoint: an interrupted save
+#     cannot destroy the last good checkpoint.
+#   THE SEAL: the shards are sealed (`BatchSource.seal`: each shard's content digest in index.txt), and a resume on a
+#     twin directory with other step values under the same record lengths is refused by name.
+#   THE FIELDS: a resume with a source that feeds other input fields is refused by name.
+#
 # Sabotage arms (tools/identity_lanes/coverage_sabotage.tsv): batch_source_read_ahead (the saved position is one
 # batch past the consumed one: the resumed next batch ids REFUSE) and program_training_drop_group (the resume restores group
-# 0's state only: v's update moves and the parameter check REFUSES), each on one side.
+# 0's state only: v's update moves and the parameter check REFUSES), program_training_in_place (the second save
+# overwrites the first checkpoint's file: the link holds the second checkpoint and the resumed batch ids REFUSE) and
+# program_training_source_unbound (the twin and the remapped source are accepted: the refusal checks REFUSE), each
+# on one side.
 
 _BSRC_LENGTHS = ((1, 3, 2, 4), (2, 1, 3))
 _BSRC_F = 2
@@ -48,21 +60,35 @@ np.savez(out, **rows)
 '''
 
 
-def _bsrc_write(tmp):
-    """The shard directory: two shards, float32 steps from the lane's fixed draw, int64 offsets."""
-    root = os.path.join(tmp, "shards")
+def _bsrc_write(ml, tmp, name="shards", draw="steps"):
+    """A sealed shard directory: two shards, float32 steps from the lane's fixed draw `draw`, int64 offsets, then
+    `BatchSource.seal`. Another `draw` gives other step values under the same record lengths."""
+    root = os.path.join(tmp, name)
     os.makedirs(root)
     lines = ["mojolearn-batch-shards v1"]
     for k, lengths in enumerate(_BSRC_LENGTHS):  # driver-loop: over the two shards (fixture)
         stem = f"part{k}"
-        steps = _hw((sum(lengths), _BSRC_F), f"ops-batch-source:steps{k}", -1.0, 1.0)
+        steps = _hw((sum(lengths), _BSRC_F), f"ops-batch-source:{draw}{k}", -1.0, 1.0)
         offsets = np.concatenate([[0], np.cumsum(lengths)]).astype(np.int64)
         np.save(os.path.join(root, stem + ".steps.npy"), np.ascontiguousarray(steps, np.float32))
         np.save(os.path.join(root, stem + ".offsets.npy"), offsets)
         lines.append("shard " + stem)
     with open(os.path.join(root, "index.txt"), "w", encoding="ascii") as fh:
         fh.write("\n".join(lines) + "\n")
+    if ml.ops.BatchSource.seal(root) != len(_BSRC_LENGTHS):
+        raise ValueError("ops-batch-source-resume: BatchSource.seal did not seal every shard")
     return root
+
+
+def _bsrc_must_refuse(what, needle, call):
+    """`call` must raise a ValueError naming `needle`; anything else REFUSES the lane."""
+    try:
+        call()
+    except ValueError as exc:
+        if needle in str(exc):
+            return
+        raise ValueError(f"ops-batch-source-resume: {what} was refused with other words: {exc}") from None
+    raise ValueError(f"ops-batch-source-resume: {what} was accepted; it must be refused by name")
 
 
 def _bsrc_program(ml, c):
@@ -90,8 +116,10 @@ def _(ml, X, yc, yr, Xh=None):
     import sys
     parts = {}
     with tempfile.TemporaryDirectory(prefix="ib-ops-batch-source-") as tmp:
-        root = _bsrc_write(tmp)
+        root = _bsrc_write(ml, tmp)
+        twin = _bsrc_write(ml, tmp, "twin", "other-steps")
         ckpt = os.path.join(tmp, "run.ckpt")
+        first_ckpt = os.path.join(tmp, "first.ckpt")
         straight = {}
         with ml.ops.Session(numeric_mode="identical") as c:
             prog, opt, params = _bsrc_program(ml, c)
@@ -106,17 +134,29 @@ def _(ml, X, yc, yr, Xh=None):
                 raise ValueError("ops-batch-source-resume: after three steps the source's consumed position is "
                                  f"{src.state_dict()['consumed']}, not 3")
             prog.save_training(ckpt, optimizer=opt, source=src)
+            os.link(ckpt, first_ckpt)  # the first checkpoint's file, by a second name (module note THE REPLACEMENT)
             for k in range(2):  # driver-loop: over the two uninterrupted steps
                 straight[f"ids{k}"] = np.asarray(src.next_records(), np.int64)
                 prog.fit(source=src, optimizer=opt, parameters=params, loss="output", steps=1)
                 straight[f"curve{k}"] = np.asarray(prog.loss_curve_, np.float32)
                 for j, h in enumerate(order):  # driver-loop: over the two parameters
                     straight[f"p{k}_{j}"] = np.asarray(c.numpy(h))
+            # the second save to the same name: it must replace the file, never write into the first one
+            prog.save_training(ckpt, optimizer=opt, source=src)
+        with ml.ops.Session(numeric_mode="identical") as d:
+            other = ml.ops.BatchSource(twin, 2, **_BSRC_SETTINGS)
+            if (other.n_records, other.n_batches, other.max_length) != (src.n_records, src.n_batches, src.max_length):
+                raise ValueError("ops-batch-source-resume: the twin directory must have the trained shards' shape")
+            _bsrc_must_refuse("a resume on same-shaped replacement data", "not the data the checkpoint was saved with",
+                              lambda: d.load_training(first_ckpt, source=other))
+            masked = ml.ops.BatchSource(root, 2, **dict(_BSRC_SETTINGS, inputs=("steps", "mask")))
+            _bsrc_must_refuse("a resume with other input fields", "are not the fields the checkpoint was trained on",
+                              lambda: d.load_training(first_ckpt, source=masked))
         script = os.path.join(tmp, "resume_child.py")
         with open(script, "w", encoding="utf-8") as fh:
             fh.write(_BSRC_CHILD)
         out = os.path.join(tmp, "resumed.npz")
-        done = subprocess.run([sys.executable, script, ckpt, root, _lane_side(), out], capture_output=True,
+        done = subprocess.run([sys.executable, script, first_ckpt, root, _lane_side(), out], capture_output=True,
                               text=True, timeout=900, check=False)
         if done.returncode != 0:
             raise ValueError("ops-batch-source-resume: the fresh resume process failed: "

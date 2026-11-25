@@ -21,6 +21,18 @@ written with `numpy.save` and nothing else:
 Every shard has the same F, the same W and the same set of files. The records are numbered over the shards in index
 order. The index's first line is the format word: any other word is refused by name.
 
+THE SEAL (lane fable-finalize, 2026-11-25). A shard line may end in ` sha256:<64 hex digits>`: the shard's CONTENT
+DIGEST, the SHA-256 of the SHA-256 digests of its steps, offsets and targets files (the whole files, header
+included; an absent targets file counts as 32 zero bytes). `batch_source_seal` (`BatchSource.seal(path)`) writes
+those words: it is the last step of producing the shards, reads each file once (one host task a file) and
+replaces index.txt whole. An index is sealed when every shard line carries a digest (a mix is refused). The digests
+are part of the FINGERPRINT of a sealed source, so a saved position or a training checkpoint is bound to the bytes
+the shards held when they were sealed, at no cost at open or at save (the corpus is never read again: the index
+is). A resume (a training checkpoint, `load_state_dict`) needs a sealed source and refuses an unsealed one by
+name: without the digest, other data with the same record lengths could not be told from the data that was trained.
+Shards that are rewritten are sealed again; a stale digest (files changed under a sealed index) is the one case
+this cannot see, and re-sealing is the remedy.
+
 FIELDS a Program input (or the fit's target) reads, each batch with B rows and padded length L (the longest record
 of THIS batch): "steps" (B, L, F) with zeros past each record's length; "lengths" (B, 1) float32; "mask" (B, L)
 float32, 1 at a real step, 0 at padding; "targets" (B, W).
@@ -72,7 +84,9 @@ from sequence.ops import FP
 from sequence.exec_trait import Exec
 from autograd.rankn import ShapeN
 from bindings.native_posix_transport_run import posix_errno
+from bindings.byte_checkpoint_native_run import byte_file_write, ByteCheckpointWriteFailure
 from core.host_parallel import host_parallelize
+from core.sha256 import Sha256
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_npy import NativeNpyLayout, ArchiveLiteralWarning, native_npy_layout_collect
 
@@ -83,6 +97,11 @@ comptime BS_FIELD_MASK = 3
 comptime BS_FIELD_TARGETS = 4
 comptime _BS_HEADER_LIMIT = 65536
 comptime _BS_INDEX_LIMIT = 16777216
+#: The digest words of a sealed shard line: ` sha256:` then 64 lowercase hex digits (72 bytes).
+comptime _BS_SEAL_WORD = " sha256:"
+comptime _BS_SEAL_BYTES = 72
+#: Bytes one sealing task reads and hashes at a time (its only buffer: memory a task = 1 MiB).
+comptime _BS_SEAL_CHUNK = 1048576
 comptime _Bytes = UnsafePointer[UInt8, MutUntrackedOrigin]
 #: Words of upload staging a streamed fit queues before it waits for the device (module note THE WAIT): 2^24
 #: float32 words = 64 MB of host memory, whatever the batch shape.
@@ -128,7 +147,9 @@ def batch_source_field_rank(code: Int) -> Int:
 struct BatchSourceSpec(Copyable, Movable):
     """The typed words of a `BatchSource` handle, read once at UNPACK: the directory, rows per batch, the Program
     input fields in capture order, the fit target's field (0: none), shuffle, seed, batches per bucket window, the
-    fingerprint the handle was opened with, and the consumed position."""
+    fingerprint the handle was opened with, whether its index was sealed (module note THE SEAL; a word of the
+    handle, set at open and read by the resume doors, not an input of `batch_source_open`), and the consumed
+    position."""
 
     var path: String
     var batch: Int
@@ -138,6 +159,7 @@ struct BatchSourceSpec(Copyable, Movable):
     var seed: UInt64
     var bucket: Int
     var fingerprint: UInt64
+    var sealed: Bool
     var epoch: Int
     var consumed: Int
 
@@ -150,6 +172,7 @@ struct BatchSourceSpec(Copyable, Movable):
         self.seed = 0
         self.bucket = 1
         self.fingerprint = 0
+        self.sealed = False
         self.epoch = 0
         self.consumed = 0
 
@@ -295,8 +318,51 @@ def _ascii(bytes: List[UInt8], start: Int, stop: Int) raises -> String:
     return out^
 
 
-def _read_index(path: String) raises -> List[String]:
-    """The shard stems of `<path>/index.txt`, after its format word."""
+struct _Index(Movable):
+    """index.txt: the shard stems in order and each shard's content digest (64 hex digits, or "" when the line
+    carries none)."""
+
+    var stems: List[String]
+    var digests: List[String]
+
+    def __init__(out self):
+        self.stems = List[String]()
+        self.digests = List[String]()
+
+    def sealed(self) raises -> Bool:
+        """True when every shard line carries a digest, False when none does; a mix is refused."""
+        var with_digest = 0
+        for k in range(len(self.digests)):  # driver-loop: over the index's shard lines
+            if self.digests[k].byte_length() != 0:
+                with_digest += 1
+        if with_digest != 0 and with_digest != len(self.digests):
+            raise Error("ValueError: BatchSource: index.txt seals some shards and not others; run "
+                        + "BatchSource.seal(path) again after writing the shards")
+        return with_digest != 0
+
+
+def _is_hex(b: UInt8) -> Bool:
+    return (b >= 48 and b <= 57) or (b >= 97 and b <= 102)
+
+
+def _line_digest(bytes: List[UInt8], start: Int, stop: Int) -> Bool:
+    """Does the line [start, stop) end in the seal words (` sha256:` and 64 lowercase hex digits), after at least
+    one byte of stem?"""
+    if stop - start < _BS_SEAL_BYTES + 1:
+        return False
+    var at = stop - _BS_SEAL_BYTES
+    var word: List[UInt8] = [32, 115, 104, 97, 50, 53, 54, 58]  # the bytes of _BS_SEAL_WORD, " sha256:"
+    for i in range(8):  # small-loop(8: the seal word's bytes)
+        if bytes[at + i] != word[i]:
+            return False
+    for i in range(64):  # small-loop(64: the digest's hex digits)
+        if not _is_hex(bytes[at + 8 + i]):
+            return False
+    return True
+
+
+def _read_index(path: String) raises -> _Index:
+    """The shard stems (and content digests, where sealed) of `<path>/index.txt`, after its format word."""
     var fd = _open_read(path + "/index.txt")
     var size = _file_size(fd)
     if size < 0 or size > _BS_INDEX_LIMIT:
@@ -322,19 +388,25 @@ def _read_index(path: String) raises -> List[String]:
     if len(starts) == 0 or _ascii(bytes, starts[0], stops[0]) != BATCH_SOURCE_FORMAT:
         raise Error("ValueError: BatchSource: index.txt does not start with the format words '"
                     + BATCH_SOURCE_FORMAT + "'")
-    var stems = List[String]()
+    var index = _Index()
     for i in range(1, len(starts)):  # driver-loop: over the index's shard lines
         if stops[i] == starts[i]:
             continue
         if stops[i] - starts[i] < 7 or _ascii(bytes, starts[i], starts[i] + 6) != "shard ":
             raise Error("ValueError: BatchSource: index.txt line " + String(i + 1) + " is not 'shard <stem>'")
-        var stem = _ascii(bytes, starts[i] + 6, stops[i])
+        var stem_stop = stops[i]
+        var digest = String("")
+        if _line_digest(bytes, starts[i] + 6, stops[i]):
+            stem_stop = stops[i] - _BS_SEAL_BYTES
+            digest = _ascii(bytes, stops[i] - 64, stops[i])
+        var stem = _ascii(bytes, starts[i] + 6, stem_stop)
         if stem.find("/") >= 0 or stem.find("\0") >= 0 or stem == "." or stem == "..":
             raise Error("ValueError: BatchSource: a shard stem names a file outside the directory")
-        stems.append(stem)
-    if len(stems) == 0:
+        index.stems.append(stem)
+        index.digests.append(digest)
+    if len(index.stems) == 0:
         raise Error("ValueError: BatchSource: index.txt lists no shard")
-    return stems^
+    return index^
 
 
 struct BatchSource(Movable):
@@ -349,6 +421,7 @@ struct BatchSource(Movable):
     var n: Int
     var n_batches: Int
     var fingerprint: UInt64
+    var sealed: Bool
     var steps_fd: List[Int]
     var steps_off: List[Int]
     var tgt_fd: List[Int]
@@ -379,6 +452,7 @@ struct BatchSource(Movable):
         self.n = 0
         self.n_batches = 0
         self.fingerprint = 0
+        self.sealed = False
         self.steps_fd = List[Int]()
         self.steps_off = List[Int]()
         self.tgt_fd = List[Int]()
@@ -579,8 +653,11 @@ def batch_source_open(var spec: BatchSourceSpec) raises -> BatchSource:
         raise Error("ValueError: BatchSource: batch_size must be >= 1")
     if spec.bucket < 1:
         raise Error("ValueError: BatchSource: bucket_batches must be >= 1")
-    var stems = _read_index(spec.path)
+    var index = _read_index(spec.path)
+    var sealed = index.sealed()
+    var stems = index.stems.copy()
     var src = BatchSource(spec^)
+    src.sealed = sealed
     try:
         var with_targets = False
         for k in range(len(stems)):  # driver-loop: over shards (open and admit, once a fit)
@@ -645,12 +722,20 @@ def batch_source_open(var spec: BatchSourceSpec) raises -> BatchSource:
         h = _fnv(h, src.n)
         h = _fnv(h, src.width)
         h = _fnv(h, src.twidth)
-        for i in range(src.n):  # driver-loop: over record lengths (the fingerprint, once a fit)
+        for i in range(src.n):  # driver-loop: over record lengths (the fingerprint, once an open)
             h = _fnv(h, src.rec_len[i])
+        if sealed:
+            # the content digests the index recorded when the shards were sealed (module note THE SEAL): the
+            # fingerprint of a sealed source moves when any byte of a sealed file did, and nothing is read for it
+            for k in range(len(index.digests)):  # driver-loop: over shards (their digest words)
+                var hex = index.digests[k].as_bytes()
+                for i in range(len(hex)):  # small-loop(64: one digest's hex digits)
+                    h = _fnv(h, Int(hex[i]))
         src.fingerprint = h
         if src.spec.fingerprint != 0 and src.spec.fingerprint != h:
             raise Error("ValueError: BatchSource: the shards under " + src.spec.path
-                        + " are not the data this source (or its saved position) was opened on")
+                        + " are not the data this source (or its saved position) was opened on (their record "
+                        + "lengths or their sealed content digests differ)")
         for k in range(len(src.spec.inputs)):  # driver-loop: over the requested fields
             if src.spec.inputs[k] == BS_FIELD_TARGETS and src.twidth == 0:
                 raise Error("ValueError: BatchSource: the field 'targets' needs <stem>.targets.npy files")
@@ -680,6 +765,97 @@ def _exists(path: String) -> Bool:
         return True
     except:
         return False
+
+
+def batch_source_seal(path: String) raises -> Int:
+    """Seal the shard directory `path` (module note THE SEAL): admit it as `batch_source_open` does, take the
+    SHA-256 of every shard file, and replace index.txt whole with the same shard lines, each ending in its shard's
+    content digest. Returns the number of shards. Sealing a sealed directory rewrites the digests from the files as
+    they are now.
+
+    Parallel plan: one host task a file (three a shard: steps, offsets, targets), each reading its file in 1 MiB
+    ranges with pread into its own buffer and hashing them in order; the worker count is the host's
+    (core/host_parallel.mojo), the memory a task 1 MiB. A file's own hash is serial by nature (one SHA-256 chain
+    over its bytes in order)."""
+    # admission: every header and offset table, as an open (the plan settings do not matter to it)
+    var probe = BatchSourceSpec()
+    probe.path = path
+    var admitted = batch_source_open(probe^)
+    admitted.close()
+    var index = _read_index(path)
+    var shards = len(index.stems)
+    var files = 3 * shards
+    var fds = List[Int](length=files, fill=-1)
+    var status = List[Int](length=files, fill=0)
+    var hex = List[UInt8](length=64 * files, fill=UInt8(48))
+    try:
+        for k in range(shards):  # driver-loop: over shards (their files opened for the hash)
+            var base = path + "/" + index.stems[k]
+            fds[3 * k] = _open_read(base + ".steps.npy")
+            fds[3 * k + 1] = _open_read(base + ".offsets.npy")
+            if _exists(base + ".targets.npy"):
+                fds[3 * k + 2] = _open_read(base + ".targets.npy")
+        var fp = _ip(Int(fds.unsafe_ptr()))
+        var sp = _ip(Int(status.unsafe_ptr()))
+        var hp = _Bytes(unsafe_from_address=Int(hex.unsafe_ptr()))
+        def hash_file(u: Int) {imm fp, imm sp, imm hp}:
+            if fp[u] >= 0:
+                var chunk = List[UInt8](length=_BS_SEAL_CHUNK, fill=UInt8(0))
+                var hasher = Sha256()
+                var at = 0
+                var more = True
+                while more:  # driver-loop: over one file's 1 MiB ranges, in order
+                    var got = _pread(fp[u], Int(chunk.unsafe_ptr()), _BS_SEAL_CHUNK, at)
+                    if got <= 0:
+                        sp[u] = got
+                        more = False
+                    else:
+                        hasher.update(Int(chunk.unsafe_ptr()), got)
+                        at += got
+                _ = chunk^  # the reads and the hash went through its address
+                var digest_text = hasher.hexdigest()
+                var digits = digest_text.as_bytes()
+                for i in range(64):  # small-loop(64: the digest's hex digits)
+                    hp[64 * u + i] = digits[i]
+        host_parallelize(hash_file, files)
+    except error:
+        for u in range(files):  # driver-loop: over opened shard files
+            _close(fds[u])
+        raise error
+    for u in range(files):  # driver-loop: over opened shard files
+        _close(fds[u])
+    for u in range(files):  # driver-loop: over the files' read status
+        if status[u] != 0:
+            raise Error("OSError: BatchSource.seal: reading shard " + index.stems[u // 3] + " failed (errno "
+                        + String(-status[u]) + ")")
+    # the new index: the format word, then every shard line with its digest (the SHA-256 of its three files'
+    # digests as 96 raw bytes; an absent targets file is 32 zero bytes)
+    var text = String(BATCH_SOURCE_FORMAT) + "\n"
+    for k in range(shards):  # driver-loop: over shards (their index lines)
+        var raw = List[UInt8](length=96, fill=UInt8(0))
+        for f in range(3):  # small-loop(3: a shard's files)
+            if fds[3 * k + f] < 0:
+                continue
+            for i in range(32):  # small-loop(32: a digest's bytes)
+                raw[32 * f + i] = UInt8(_hex_value(hex[64 * (3 * k + f) + 2 * i]) * 16
+                                        + _hex_value(hex[64 * (3 * k + f) + 2 * i + 1]))
+        var shard_hash = Sha256()
+        shard_hash.update(Int(raw.unsafe_ptr()), 96)
+        _ = raw^  # hashed through its address
+        text += "shard " + index.stems[k] + _BS_SEAL_WORD + shard_hash.hexdigest() + "\n"
+    var out_bytes = List[UInt8]()
+    for b in text.as_bytes():  # driver-loop: over the index's bytes (a short text file)
+        out_bytes.append(b)
+    var failure = ByteCheckpointWriteFailure()
+    byte_file_write(path + "/index.txt", Int(out_bytes.unsafe_ptr()), len(out_bytes), failure, 438)
+    _ = out_bytes^  # written through its address
+    _ = hex^
+    _ = status^
+    return shards
+
+
+def _hex_value(b: UInt8) -> Int:
+    return Int(b) - 48 if b <= 57 else Int(b) - 87
 
 
 def batch_source_saved[IS_DEVICE: Bool](src: BatchSource) -> Tuple[Int, Int]:
