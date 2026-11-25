@@ -20,6 +20,8 @@
 #   NNAttentionRules  NN_TAG_SOFTMAX, NN_TAG_PE, NN_TAG_VIEW (autograd/nn_attention.mojo): multi-head attention
 #                     and the positional encoding
 #   NnCtcRules        NN_CTC_TAG (autograd/nn_ctc.mojo): the CTC loss
+#   SsmRules          SSM_TAG_FIRST..SSM_TAG_LAST (240..247, autograd/ssm_primitives.mojo): the raw state-space
+#                     scans (session-ops-rest)
 # The 3-D convolution and pools, batch / group / instance norm and the activations record rank-N or import tags
 # the inner rules already own.
 
@@ -40,11 +42,15 @@ from autograd.tape import BackwardRules
 from autograd.nn_conv import NnConvRules
 from autograd.nn_attention import NNAttentionRules, nn_attention_rule
 from autograd.nn_ctc import NnCtcRules
+# session-ops-rest begin: the raw state-space scans' tags (Session.selective_scan, ssd_scan, trapezoid_scan)
+from autograd.ssm_primitives import SsmRules, SSM_TAG_FIRST, SSM_TAG_LAST
+# session-ops-rest end
 
 
 def layer_rule(tag: Int) -> Bool:
     """True when `tag` is a Sequential layer tag LayerRules answers itself."""
-    return NnConvRules.owns(tag) or nn_attention_rule(tag) or NnCtcRules.owns(tag)
+    return (NnConvRules.owns(tag) or nn_attention_rule(tag) or NnCtcRules.owns(tag)
+            or (tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST))  # session-ops-rest: SsmRules
 
 
 @fieldwise_init
@@ -61,6 +67,10 @@ struct LayerRules[R: BackwardRules & ImplicitlyCopyable & Movable](BackwardRules
             return NNAttentionRules().supports(tag)
         if NnCtcRules.owns(tag):
             return NnCtcRules().supports(tag)
+        # session-ops-rest begin: SsmRules (tags SSM_TAG_FIRST..SSM_TAG_LAST), as ModelRules routes them
+        if tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST:
+            return SsmRules().supports(tag)
+        # session-ops-rest end
         return self.inner.supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
@@ -70,6 +80,10 @@ struct LayerRules[R: BackwardRules & ImplicitlyCopyable & Movable](BackwardRules
             return NNAttentionRules().zeroed_destination(tag, saved, edge)
         if NnCtcRules.owns(tag):
             return NnCtcRules().zeroed_destination(tag, saved, edge)
+        # session-ops-rest begin: SsmRules (tags SSM_TAG_FIRST..SSM_TAG_LAST), as ModelRules routes them
+        if tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST:
+            return SsmRules().zeroed_destination(tag, saved, edge)
+        # session-ops-rest end
         return self.inner.zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
@@ -79,6 +93,10 @@ struct LayerRules[R: BackwardRules & ImplicitlyCopyable & Movable](BackwardRules
             return NNAttentionRules().writes_total(tag, saved, edge)
         if NnCtcRules.owns(tag):
             return NnCtcRules().writes_total(tag, saved, edge)
+        # session-ops-rest begin: SsmRules (tags SSM_TAG_FIRST..SSM_TAG_LAST), as ModelRules routes them
+        if tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST:
+            return SsmRules().writes_total(tag, saved, edge)
+        # session-ops-rest end
         return self.inner.writes_total(tag, saved, edge)
 
     def apply[E: Exec](
@@ -94,4 +112,9 @@ struct LayerRules[R: BackwardRules & ImplicitlyCopyable & Movable](BackwardRules
         if NnCtcRules.owns(tag):
             NnCtcRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
             return
+        # session-ops-rest begin
+        if tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST:
+            SsmRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+            return
+        # session-ops-rest end
         self.inner.apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
