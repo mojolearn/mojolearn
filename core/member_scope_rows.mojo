@@ -23,7 +23,7 @@ from core.member_abi import (
 from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_OUT_OF_RANGE
 from core.host_parallel import host_widen_index_i64
 from core.entry_table import EntryRef
-from bindings.arena_cache_run import arena_scope_store_put, arena_store_take_rows, arena_cache_free
+from bindings.arena_cache_run import arena_scope_store_hold, arena_cache_unhold, arena_store_take_rows, arena_cache_free
 
 
 struct MemberScopeRows(Movable):
@@ -66,8 +66,9 @@ def member_scope_rows_in(mut call: MemberCall, store: EntryRef, prefix: String, 
         raise Error("TypeError: a " + est + " member reads a host int32 or int64 row index")
     var n = index.rows
     if store_ok and call.scope != MEMBER_SCOPE_NONE and call.pin != 0:
-        var put = arena_scope_store_put(call.scope, store, prefix, x.data, x.rows * x.cols, call.pin)
-        if put.pinned:
+        # HELD (lane gd-device-store): the cached whole X is not freed under the gather below.
+        var held = arena_scope_store_hold(call.scope, store, prefix, x.data, x.rows * x.cols, call.pin)
+        if held.pinned:
             call.pin_kept = 1
         var wide = List[Int64]()
         var index_address = index.data
@@ -76,8 +77,22 @@ def member_scope_rows_in(mut call: MemberCall, store: EntryRef, prefix: String, 
             host_widen_index_i64(index.data, Int(wide.unsafe_ptr()), n)
             index_address = Int(wide.unsafe_ptr())
         # A row outside X is refused by the store's gather (its status word), in its words.
-        var taken = arena_store_take_rows(store, put.store_id, x.cols, index_address, n)
+        var taken = -1
+        var failure = String("")
+        try:
+            taken = arena_store_take_rows(store, held.store_id, x.cols, index_address, n)
+        except error:
+            failure = String(error)
         _ = wide^  # the gather waited for its index copy: the host words may go
+        try:
+            arena_cache_unhold(held)
+        except unhold_error:
+            if failure.byte_length() == 0:
+                failure = String(unhold_error)
+        if failure.byte_length() > 0:
+            if taken >= 0:
+                arena_cache_free(store, taken)
+            raise Error(failure)
         return MemberScopeRows(taken, n, x.cols, True, List[Float32]())
     var dst = List[Float32](unsafe_uninit_length=max(n * x.cols, 1))
     var status: Int
