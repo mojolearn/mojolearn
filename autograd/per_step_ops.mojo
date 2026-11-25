@@ -38,7 +38,7 @@ comptime WEIGHTED_LOSS_CROSS_ENTROPY = 28
 comptime WEIGHTED_LOSS_TINY = Float32(1.1754943508222875e-38)
 
 # Sabotage arms (tools/identity_lanes/coverage_sabotage.tsv coverage-autograd-rnn_parity_loss_weight_gpu /
-# _cpu, lane ops-per-step-weighted): the weight is dropped from the numerator only, on the device executor
+# _cpu, lane ops-per-step-weighted-embedding): the weight is dropped from the numerator only, on the device executor
 # or on the host one. Off in every build; the arm's patch switches one on.
 comptime RNN_PARITY_SABOTAGE_LOSS_WEIGHT = is_defined["MOJOLEARN_RNN_PARITY_SABOTAGE_LOSS_WEIGHT"]()
 comptime RNN_PARITY_SABOTAGE_LOSS_WEIGHT_HOST = is_defined["MOJOLEARN_RNN_PARITY_SABOTAGE_LOSS_WEIGHT_HOST"]()
