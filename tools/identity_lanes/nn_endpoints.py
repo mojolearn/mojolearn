@@ -151,41 +151,7 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts)
 
 
-@lane("nn-ep-mamba3-owned")
-def _(ml, X, yc, yr, Xh=None):
-    """Mamba3Block's owned weight endpoints as the product offers them: the owned snapshot arm
-    (MOJOLEARN_NN40_OWNED_WEIGHTS) was deleted 2026-11-15 (core/experiment_guards_neural.mojo), so
-    every image, GPU and CPU, reports no MAMBA3_CAP_OWNED_WEIGHTS and `install_owned_weights`
-    refuses by name (bindings/mamba_public_native_door.mojo mamba3_install_owned). On each side:
-    the forward; `install_owned_weights` must refuse naming owned weights and leave the block
-    working (the forward after it equal); `export_owned_weights` must refuse "no installed owned
-    snapshot"; `release_owned_weights` releases nothing and the forward after it is equal again.
-    An image that admitted the snapshot fails the lane (the capability would be untested here).
-    Parts: the forward. (w3-fix-11, 2026-11-25: the earlier body asked for a snapshot no build
-    provides, so its clean run was REFUSED on both sides.)"""
-    w = _nn_endpoints_mamba_weights("mamba3", "nn-ep-mamba3-owned")
-    blk = ml.Mamba3Block(w)
-    x = _seq(X, 2, 16, 32)
-    y = _nn_endpoints_host(blk.forward(x))
-    try:
-        blk.install_owned_weights()
-    except RuntimeError as exc:
-        if "owned weights" not in str(exc):
-            raise
-    else:
-        blk.release_owned_weights()
-        raise AssertionError("install_owned_weights was admitted: an owned-weight image needs its own lane")
-    _same_bytes("forward", y, "forward after the refused install", _nn_endpoints_host(blk.forward(x)))
-    try:
-        blk.export_owned_weights()
-    except RuntimeError as exc:
-        if "no installed owned snapshot" not in str(exc):
-            raise
-    else:
-        raise AssertionError("export_owned_weights answered without an installed snapshot")
-    blk.release_owned_weights()
-    _same_bytes("forward", y, "forward after release_owned_weights", _nn_endpoints_host(blk.forward(x)))
-    return _fit(dict(forward=_h(y)))
+# TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: lane nn-ep-mamba3-owned, the install/export/release_owned_weights round trip; the Mamba-3 forward it hashed is nn-ep-mamba-blocks) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.
 
 
 @lane("nn-ep-transformer-block")
@@ -645,6 +611,6 @@ _one_sided("nn-ep-samba-inference", missing="gpu",
 
 _batch_decl("n/a:endpoint-round-trips (state dict, parameter, mode and checkpoint round trips of neural layers "
             "and models, held equal in the lane; no separate prediction batch axis)",
-            "nn-ep-mamba-blocks", "nn-ep-mamba3-owned", "nn-ep-transformer-block", "nn-ep-layernorm", "nn-ep-moe",
+            "nn-ep-mamba-blocks", "nn-ep-transformer-block", "nn-ep-layernorm", "nn-ep-moe",
             "nn-ep-embedding", "nn-ep-embedding-device", "nn-ep-cnn-layers", "nn-ep-cnn-fits", "nn-ep-rnn-state", "nn-ep-sequential-dense",
             "nn-ep-sequential-conv", "nn-ep-sequential-lm", "nn-ep-samba-stack", "nn-ep-samba-inference")

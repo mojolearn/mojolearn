@@ -14,7 +14,6 @@ from mamba.impl.mamba_shell_impl import (
     Mamba3PrefillSession, _mamba1_backward_run, _mamba2_backward_run,
     _mamba3_backward_run, _m3_prefill_run,
     _m3_prefill_backward_run, _M3_BWD_NONFINITE_DY,
-    _m3_export_weights_run, _mamba3_run_owned,
 )
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.state_registry import StateRegistry
@@ -27,10 +26,9 @@ from core.neural_entry_table import (
 from core.mamba3_prefill_session import mamba3_prefill_session_word, mamba3_prefill_session_of
 
 # 0/1 reserve/release under the provider GIL; 2/3/4 Mamba1/2/3 VJP;
-# 5 fresh Mamba3 prefill; 6/7 session prefill/VJP; 8/9 owned prefill/VJP.
+# 5 fresh Mamba3 prefill; 6/7 session prefill/VJP; 8/9 unused (owned, deleted).
 # 10..14 immutable tape reserve/release/forward/backward/close.
-# 15 owned snapshot install; 16 owned carried-state forward/decode;
-# 17 owned export; 18 session close; 19 tape reset; 20..43 decode;
+# 15/16/17 unused (owned, deleted); 18 session close; 19 tape reset; 20..43 decode;
 # 44 session create, 45 session info, 46 capabilities.
 # Session operations lead their words with the session's registry handle word
 # (lane mamba3-prefill-handle, 2026-11-12: the session lives in
@@ -44,8 +42,8 @@ comptime PREFILL_SESSIONS = StateRegistry[Mamba3PrefillSession,
     ("MojolearnMamba3PrefillSessionsIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMamba3PrefillSessionsFastV1")]
 
 
-#: Lane fix-mamba-forward-doors (2026-11-14): the session forward (op 6) and
-#: the owned forward (op 8) take one optional trailing word 1, "held": the
+#: Lane fix-mamba-forward-doors (2026-11-14): the session forward (op 6)
+#: takes one optional trailing word 1, "held": the
 #: call reserves the session, runs and releases it in ONE table call (the
 #: door's former reserve / run / release, three table calls and three
 #: registry leases per forward, bindings/neural_prefill_native_door.mojo).
@@ -94,7 +92,7 @@ def _session_release(owner: MutPointer[Mamba3PrefillSession, MutUntrackedOrigin]
 def mamba3_prefill_image_caps() -> Int:
     """The image's fixed capability bits (NEURAL_MAMBA3_SESSION_CAPS): the
     build condition under which the image registered its former session
-    Python entries (`mamba3_prefill_session_*`, `mamba3_owned_weights_enabled`)."""
+    Python entries (`mamba3_prefill_session_*`)."""
     # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL (unmeasured old path: no fresh-prefill session) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at d28d0a8014.
     # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
     comptime if not (GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL):
@@ -153,11 +151,11 @@ def _mamba3_session_operation(op: Int, session: Int, a: List[Int], words: List[I
     if op == 1:
         _session_release(owner)
         return 0
-    # lane fix-mamba-forward-doors: a held forward (op 6 / 8 with the trailing
+    # lane fix-mamba-forward-doors: a held forward (op 6 with the trailing
     # word 1, PREFILL_BUSY above) reserves, runs and releases here. A failed
     # run leaves the session as the reserved form did: usable False and
     # released by the run's own handler, busy cleared.
-    if (op == 6 and len(words) == 5) or (op == 8 and len(words) == 6):
+    if op == 6 and len(words) == 5:
         if words[len(words) - 1] != 1:
             raise Error("mamba3 prefill: invalid native descriptor arity")
         _session_reserve(owner)
@@ -182,55 +180,19 @@ def _mamba3_session_exec(op: Int, owner: MutPointer[Mamba3PrefillSession, MutUnt
     var p = List[Int](capacity=len(words))
     for i in range(1, len(words) - tail):  # small-loop(admitted native session scalar span)
         p.append(words[i])
-    if op == 15:
-        # (Sweep 2026-11-15: NN40_OWNED_WEIGHTS is False on every build; the install path is gone.)
-        raise Error("mamba3 owned weights: NN40 arm is disabled")
-    if op == 17:
-        if len(a) != 9 or len(p) != 1 or len(f) != 0:
-            raise Error("mamba3 owned export: expected nine writable buffers and generation")
-        if not owner[].owned_weights or not owner[].w or p[0] != owner[].weight_generation:
-            raise Error("mamba3 owned export: missing, unusable or stale generation")
-        for i in range(9):  # small-loop(nine admitted owned export addresses)
-            if a[i] == 0:
-                raise Error("mamba3 owned export: null output address")
-        var dm = owner[].dm
-        _m3_export_weights_run(owner[], a, dm, Mamba3Dims.of(dm))
-        return p[0]
-    if op == 16:
-        if len(a) != 25 or len(p) != 7 or len(f) != 0:
-            raise Error("mamba3_state_owned: expected 25 addresses and seven scalars")
-        if not owner[].owned_weights or p[5] != owner[].weight_generation:
-            raise Error("mamba3 owned forward: stale or unavailable weight generation")
-        if p[6] != 0 and p[6] != 1:
-            raise Error("mamba3_state_owned: step must be 0 or 1")
-        if p[6] == 1 and p[1] != 1:
-            raise Error("mamba3_state_owned: a decode step is one token (L = 1)")
-        # The existing owner validates counters and dimensions and preserves
-        # partial-state/error behavior. No second implementation of recurrence.
-        return _mamba3_run_owned(owner[], a, p[0], p[1], p[2], p[3], p[4])
-    if op == 6 or op == 8:
-        var owned = op == 8
-        if len(a) != (6 if owned else 15) or len(p) != (4 if owned else 3) or len(f) != 0:
+    # TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: owned ops 8/9 forward/VJP, 15 install, 16 carried state, 17 export; they now refuse as unknown) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.
+    if op == 6:
+        if len(a) != 15 or len(p) != 3 or len(f) != 0:
             raise Error("mamba3 prefill: invalid native descriptor arity")
         if p[0] <= 0 or p[1] <= 0:
             raise Error("mamba3 prefill: B and L must be positive")
         var expanded = List[Int](length=25, fill=0)
-        if owned:
-            expanded[0] = a[0]
-            for i in range(5):  # small-loop(output and four report addresses)
-                expanded[20 + i] = a[1 + i]
-        else:
-            for i in range(10):  # small-loop(input and nine weight addresses)
-                expanded[i] = a[i]
-            for i in range(5):  # small-loop(output and four report addresses)
-                expanded[20 + i] = a[10 + i]
-        if owned:
-            if not owner[].owned_weights or p[3] != owner[].weight_generation:
-                raise Error("mamba3 owned forward: stale or unavailable weight generation")
-            if p[2] != owner[].dm:
-                raise Error("mamba3 owned forward: invalid shape or configuration")
-        for i in range(10):  # small-loop(input and optional caller-owned weights)
-            if (i == 0 or not owned) and expanded[i] == 0:
+        for i in range(10):  # small-loop(input and nine weight addresses)
+            expanded[i] = a[i]
+        for i in range(5):  # small-loop(output and four report addresses)
+            expanded[20 + i] = a[10 + i]
+        for i in range(10):  # small-loop(input and nine caller-owned weights)
+            if expanded[i] == 0:
                 raise Error("mamba3 prefill: null input/weight address")
         if expanded[20] == 0:
             raise Error("mamba3 prefill: null output address")
@@ -239,36 +201,26 @@ def _mamba3_session_exec(op: Int, owner: MutPointer[Mamba3PrefillSession, MutUnt
                 if expanded[21 + i] == 0:
                     raise Error("mamba3 prefill: report address required")
         try:
-            return _m3_prefill_run(owner[], expanded, p[0], p[1], p[2], owned)
+            return _m3_prefill_run(owner[], expanded, p[0], p[1], p[2])
         except problem:
             owner[].usable = False
             owner[].release()
             raise problem
-    if op != 7 and op != 9:
+    if op != 7:
         raise Error("Mamba block native ABI: unknown session operation")
     # Session backward keeps the finite-grad refusal recoverable exactly as
-    # its old public entry; owned backward preserves its existing invalidation.
-    var owned = op == 9
-    if len(a) != (12 if owned else 21) or len(p) != (4 if owned else 3) or len(f) != 0:
+    # its old public entry.
+    if len(a) != 21 or len(p) != 3 or len(f) != 0:
         raise Error("mamba3 prefill backward: invalid native descriptor arity")
-    if owned and (not owner[].owned_weights or p[3] != owner[].weight_generation):
-        raise Error("mamba3 owned backward: stale or unavailable weight generation")
-    if p[0] <= 0 or p[1] <= 0 or p[2] <= 0 or (owned and p[2] != owner[].dm):
+    if p[0] <= 0 or p[1] <= 0 or p[2] <= 0:
         raise Error("mamba3 prefill backward: invalid shape or configuration")
-    var expanded = List[Int](length=21, fill=0)
-    if owned:
-        expanded[0] = a[0]
-        for i in range(1, 12):  # small-loop(gradient input/output addresses)
-            expanded[9 + i] = a[i]
-    else:
-        expanded = a.copy()
-    for i in range(len(a)):  # small-loop(12 or 21 native VJP addresses)
+    for i in range(len(a)):  # small-loop(21 native VJP addresses)
         if a[i] == 0:
             raise Error("mamba3 prefill backward: null buffer address at slot " + String(i))
     try:
-        _m3_prefill_backward_run(owner[], expanded, p[0], p[1], p[2], owned)
+        _m3_prefill_backward_run(owner[], a, p[0], p[1], p[2])
     except problem:
-        if not owned and String(problem).startswith(_M3_BWD_NONFINITE_DY):
+        if String(problem).startswith(_M3_BWD_NONFINITE_DY):
             raise problem
         owner[].usable = False
         owner[].release()

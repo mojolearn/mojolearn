@@ -24,8 +24,6 @@ from bindings.samba_state_native_door import samba_fields
 from bindings.samba_route_unpack import samba_route
 from core.entry_table import EntryRef, entry_ref_call
 from core.mamba_state_entry_table import Mamba3StateRoute, MAMBA3_STATE_FORWARD, MAMBA3_STATE_DECODE
-from core.neural_entry_table import NEURAL_MAMBA3_OWNED_STATE
-from providers.python.mamba3_prefill_session_pyapi_door import mamba3_prefill_session_serves, mamba3_prefill_session_run
 from core.samba_entry_table import SambaEntryKey
 from bindings.samba_training_native_door import samba_ids
 from std.python._cpython import GILReleased
@@ -139,23 +137,14 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
     var addresses: List[Int] = [generation_address(x, keep)]
-    # An installed owned snapshot is read on the device: op 16 on the
-    # block's Mamba-3 session handle, open in the image the block's route
-    # names (core/mamba3_prefill_session.mojo; lane mamba3-prefill-handle).
-    var owned = py_get(fields, "_owned_generation")
-    var session = py_get(fields, "_prefill_session")
-    var on_session = (owned is not None and route.has_sessions()
-                      and mamba3_prefill_session_serves(session, route.session_ref()))
+    # TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: the owned carried-state call, op 16 on the block's session) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.
     var weights = fields["_w"]
     for i in range(len(weights)):  # driver-loop: over existing Mamba3 parameter ABI slots
-        if on_session:
-            addresses.append(0)
-        else:
-            addresses.append(generation_weight_address(weights[i], keep))
+        addresses.append(generation_weight_address(weights[i], keep))
     for i in range(len(names)):  # driver-loop: over mutable continuation buffers
         addresses.append(_mutable(slots[names[i]], shapes[i], keep, copies, names[i]))
     # y and the four reports are written whole by every route below (the
-    # GPU and owned `mamba_block_call`, the host shells' `_write`): unfilled
+    # GPU `mamba_block_call`, the host shells' `_write`): unfilled
     # (bindings/neural_prefill_native_door.mojo `_m3_output_array`).
     var output = _m3_output_array([b, l, d])
     var reports = Python.list(_m3_output_array([b, h, 64, 128]), _m3_output_array([b, h, 128]),
@@ -167,28 +156,20 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
         _ = output  # keep the Python object alive through the native call above
     var q = Int(py=slots["buffered_tokens"])
     var pending = 1 if Bool(py=slots["pending"]) else 0
-    var updated = PythonObject(None)
-    if on_session:
-        # The former Python entry `mamba3_state_owned` and the env-gated
-        # provider arm ran this operation with these words.
-        updated = PythonObject(mamba3_prefill_session_run(session, NEURAL_MAMBA3_OWNED_STATE,
-            addresses, [b, 1 if step else l, d, q, pending, Int(py=owned), 1 if step else 0]))
-        _ = output  # keep the Python object alive through the native call above
-    else:
-        # The image that serves this block's carried state, by the block's key
-        # (core/mamba_state_entry_table.mojo; lane transformer-session-native):
-        # one table call, the GIL released around it. The former state
-        # provider capsule and the Python entries `mamba3_forward` /
-        # `mamba3_decode_step` of the block's binding module ran these ops
-        # with these words.
-        var ints: List[Int] = [b, d, q, pending] if step else [b, l, d, q, pending]
-        var entry = route.state_ref()
-        var buffered = 0
-        with GILReleased(Python()):
-            buffered = entry_ref_call(entry, MAMBA3_STATE_DECODE if step else MAMBA3_STATE_FORWARD,
-                addresses, ints, List[Float64]())
-        updated = PythonObject(buffered)
-        _ = output  # keep the Python object alive through the native call above
+    # The image that serves this block's carried state, by the block's key
+    # (core/mamba_state_entry_table.mojo; lane transformer-session-native):
+    # one table call, the GIL released around it. The former state
+    # provider capsule and the Python entries `mamba3_forward` /
+    # `mamba3_decode_step` of the block's binding module ran these ops
+    # with these words.
+    var ints: List[Int] = [b, d, q, pending] if step else [b, l, d, q, pending]
+    var entry = route.state_ref()
+    var buffered = 0
+    with GILReleased(Python()):
+        buffered = entry_ref_call(entry, MAMBA3_STATE_DECODE if step else MAMBA3_STATE_FORWARD,
+            addresses, ints, List[Float64]())
+    var updated = PythonObject(buffered)
+    _ = output  # keep the Python object alive through the native call above
     _writeback(copies)
     py_setitem(slots, "buffered_tokens", updated)
     py_setitem(slots, "pending", False)

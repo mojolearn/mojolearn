@@ -5,11 +5,11 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem
 from std.sys import is_defined
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array_unfilled, py_ints
-from bindings.neural_block_public_door import neural_training_selection, neural_mamba3_restore, neural_block_forward_binding, _neural_input, _neural_int_words
+from bindings.neural_block_public_door import neural_training_selection, neural_block_forward_binding, _neural_input, _neural_int_words
 from core.entry_table import entry_ref_unresolved
 from core.mamba_state_entry_table import Mamba3StateRoute
 from core.neural_entry_table import (
-    NEURAL_MAMBA3_SESSION_FORWARD, NEURAL_MAMBA3_OWNED_FORWARD, MAMBA3_CAP_SESSION_PREFILL, MAMBA3_CAP_REPORTS_OPTIONAL,
+    NEURAL_MAMBA3_SESSION_FORWARD, MAMBA3_CAP_SESSION_PREFILL, MAMBA3_CAP_REPORTS_OPTIONAL,
     MAMBA3_CAP_HELD_FORWARD,
 )
 from providers.python.mamba3_prefill_session_pyapi_door import (
@@ -97,7 +97,7 @@ def _prefill_tape_enabled(entries: PythonObject) raises -> Bool:
 #: that runs below writes each of them whole before the call returns (the
 #: session forward downloads residual_out n_x and the four reports at their
 #: full counts, mamba/impl/mamba_shell_impl.mojo `_m3_prefill_run`; the
-#: owned forward and `mamba3_forward_fresh` (op 3, block_step_reports_to_host)
+#: `mamba3_forward_fresh` (op 3, block_step_reports_to_host)
 #: and the host shell (mamba/host/mamba_host_shell_impl.mojo `_write`) do the
 #: same), so no output byte moves. Per call this removes five zero-fill
 #: passes over 4 * (B*L*d_model + B*H*(64*128 + 128 + 64 + 32)) bytes; the
@@ -148,8 +148,7 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
     var d = Int(py=fields["d_model"])
     var nh = Int(py=fields["nheads"])
     var weights = fields["_w"]
-    neural_mamba3_restore(fields, entries, weights, route)
-    var owned = py_get(fields, "_owned_generation")
+    # TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: the owned-snapshot restore and owned forward, op 8) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.
     # The session image's capability bits (one table call), replacing the
     # former hasattr probes of `mamba3_prefill_session_forward` and the
     # `mamba3_prefill_session_reports_optional` Python entry.
@@ -171,7 +170,7 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
     # lane fix-mamba-forward-doors: one table call per forward where the
     # image reserves, runs and releases itself
     var held = (caps & MAMBA3_CAP_HELD_FORWARD) != 0
-    var session = (caps & MAMBA3_CAP_SESSION_PREFILL) != 0 or owned is not None
+    var session = (caps & MAMBA3_CAP_SESSION_PREFILL) != 0
     var skip = False
     if session and Bool(py=py_get(fields, "_discard_reports", PythonObject(False))):
         skip = (caps & MAMBA3_CAP_REPORTS_OPTIONAL) != 0
@@ -191,27 +190,18 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
     if session:
         # The block's session: a native registry handle of its training image
         # (the former Python entries mamba3_prefill_session_create,
-        # mamba3_prefill_session_forward[_owned], the handle factory and the
+        # mamba3_prefill_session_forward, the handle factory and the
         # env-gated provider arm ran the same operations with these words).
         var owner = mamba3_prefill_session_ensure(fields, session_entry)
         var addresses: List[Int] = [Int(py=x._addr)]
-        if owned is not None:
-            addresses.append(Int(py=out._addr))
-            addresses.extend(report_addresses.copy())
-            params.append(Int(py=owned))
-            if held:
-                _ = mamba3_prefill_session_run_held(owner, NEURAL_MAMBA3_OWNED_FORWARD, addresses, params)
-            else:
-                _ = mamba3_prefill_session_run(owner, NEURAL_MAMBA3_OWNED_FORWARD, addresses, params)
+        for i in range(len(weights)):  # driver-loop: over fixed Mamba3 weight addresses
+            addresses.append(Int(py=weights[i]._addr))
+        addresses.append(Int(py=out._addr))
+        addresses.extend(report_addresses.copy())
+        if held:
+            _ = mamba3_prefill_session_run_held(owner, NEURAL_MAMBA3_SESSION_FORWARD, addresses, params)
         else:
-            for i in range(len(weights)):  # driver-loop: over fixed Mamba3 weight addresses
-                addresses.append(Int(py=weights[i]._addr))
-            addresses.append(Int(py=out._addr))
-            addresses.extend(report_addresses.copy())
-            if held:
-                _ = mamba3_prefill_session_run_held(owner, NEURAL_MAMBA3_SESSION_FORWARD, addresses, params)
-            else:
-                _ = mamba3_prefill_session_run(owner, NEURAL_MAMBA3_SESSION_FORWARD, addresses, params)
+            _ = mamba3_prefill_session_run(owner, NEURAL_MAMBA3_SESSION_FORWARD, addresses, params)
         _ = owner^
     else:
         var addresses = Python.list(x._addr)

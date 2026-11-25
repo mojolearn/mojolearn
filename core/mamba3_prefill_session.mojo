@@ -3,13 +3,12 @@
 mamba3-prefill-handle, 2026-11-12; the shape of
 core/transformer_block_session.mojo).
 
-A Mamba-3 block's prefill session (its device context, owned weight snapshot
+A Mamba-3 block's prefill session (its device context, retained weights
 and retained forward stages: `Mamba3PrefillSession` in
-`mamba/impl/mamba_shell_impl.mojo`; on the CPU training image the owned host
-snapshot `M3OwnedHostSession` in `mamba/host/mamba_host_shell_impl.mojo`) lives
-in its training image's own state registry (`core/state_registry.mojo`,
-generation-checked handles, Arc leases; `mamba/native_block_dispatch.mojo`,
-`mamba/host/native_block_dispatch.mojo`). A caller holds one handle word and
+`mamba/impl/mamba_shell_impl.mojo`) lives in its GPU training image's own
+state registry (`core/state_registry.mojo`, generation-checked handles, Arc
+leases; `mamba/native_block_dispatch.mojo`). The CPU training image keeps no
+prefill session (its owned-snapshot sessions went with NN40, 2026-11-25). A caller holds one handle word and
 reaches every session operation through the image's Mamba entry of
 `core/neural_entry_table.mojo` (NEURAL_TABLE_MAMBA_TRAIN, the same pointer the
 image's capsule carries), keyed by the block's training (tier, vendor). The

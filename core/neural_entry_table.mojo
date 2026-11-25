@@ -149,16 +149,7 @@ comptime NEURAL_MAMBA3_FRESH_FORWARD = 5
 comptime NEURAL_MAMBA3_SESSION_FORWARD = 6
 """a: 15 [x, nine weights, y, four reports]; words [h, B, L, d] (GPU image only)."""
 comptime NEURAL_MAMBA3_SESSION_BACKWARD = 7
-comptime NEURAL_MAMBA3_OWNED_FORWARD = 8
-"""a: 6 [x, y, four reports]; words [h, B, L, d, generation]."""
-comptime NEURAL_MAMBA3_OWNED_BACKWARD = 9
-comptime NEURAL_MAMBA3_OWNED_INSTALL = 15
-comptime NEURAL_MAMBA3_OWNED_STATE = 16
-"""a: 25 (the carried-state buffers; weight slots unread); words [h, B, L, d,
-buffered, pending, generation, step] -> buffered tokens (the former Python
-entry `mamba3_state_owned`)."""
-comptime NEURAL_MAMBA3_OWNED_EXPORT = 17
-"""a: nine writable buffers; words [h, generation] -> generation."""
+# TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: NEURAL_MAMBA3_OWNED_FORWARD 8, _BACKWARD 9, _INSTALL 15, _STATE 16, _EXPORT 17 and MAMBA3_CAP_OWNED_WEIGHTS 4; the codes stay unused) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.
 comptime NEURAL_MAMBA3_SESSION_CLOSE = 18
 """words [h]: close the session and release its handle (a busy session
 refuses and keeps the handle). No reserve."""
@@ -174,10 +165,8 @@ comptime MAMBA3_CAP_SESSION_PREFILL = 1
 """the non-owned session forward/backward (ops 6/7; the GPU image)."""
 comptime MAMBA3_CAP_REPORTS_OPTIONAL = 2
 """op 6 admits a null report address (IDN_MAMBA3_REPORTS_ON_REQUEST)."""
-comptime MAMBA3_CAP_OWNED_WEIGHTS = 4
-"""the owned weight snapshot (NN40_OWNED_WEIGHTS)."""
 comptime MAMBA3_CAP_HELD_FORWARD = 8
-"""ops 6 / 8 take a trailing word 1: reserve, run and release in one call
+"""op 6 takes a trailing word 1: reserve, run and release in one call
 (lane fix-mamba-forward-doors; every image with prefill sessions)."""
 
 #: Lane fix-mamba-forward-doors (2026-11-14): what this switch decides is the

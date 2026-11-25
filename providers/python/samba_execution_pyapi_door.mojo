@@ -14,7 +14,7 @@ from providers.python.transformer_block_session_pyapi_door import (
 )
 from core.neural_entry_table import (
     neural_ref, NEURAL_TABLE_BLOCK_TRAIN, NEURAL_TABLE_MAMBA_TRAIN,
-    MAMBA3_CAP_SESSION_PREFILL, MAMBA3_CAP_REPORTS_OPTIONAL, MAMBA3_CAP_OWNED_WEIGHTS,
+    MAMBA3_CAP_SESSION_PREFILL, MAMBA3_CAP_REPORTS_OPTIONAL,
 )
 from providers.python.mamba3_prefill_session_pyapi_door import (
     mamba3_prefill_caps, mamba3_prefill_session_open, mamba3_prefill_session_serves, mamba3_prefill_session_handle,
@@ -61,7 +61,6 @@ struct SambaLayerPublication(Movable):
     var gradient_names: List[String]
     var publish_reports: Bool
     var transformer: Bool
-    var restore_owned: Bool
 
     def __init__(out self, fields: PythonObject, state: PythonObject, transformer: Bool):
         self.fields = fields
@@ -78,7 +77,6 @@ struct SambaLayerPublication(Movable):
         self.gradient_shapes = List[List[Int]]()
         self.gradient_names = List[String]()
         self.publish_reports = True
-        self.restore_owned = False
 
 
 def _samba_native_fields(value: PythonObject) raises -> PythonObject:
@@ -238,23 +236,20 @@ struct AdmittedSambaExecution(Movable):
                     var h = Int(py=layer_fields["nheads"])
                     var weights = layer_fields["_w"]
                     var a: List[Int] = [0]
-                    var owned = py_get(layer_fields, "_owned_generation")
-                    var restore = Bool(py=py_get(layer_fields, "_owned_restore_pending", PythonObject(False)))
-                    var use_owned = owned is not None or restore
+                    # TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: the owned-snapshot ops 8/9/15/16 of a Samba Mamba-3 layer) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.
                     var weight_addresses = List[Int]()
                     for j in range(len(weights)):  # driver-loop: one admission of the Mamba3 weight slots
                         weight_addresses.append(generation_address(weights[j], self.keep))
-                        if not use_owned:
-                            a.append(weight_addresses[j])
-                    publication.weight_addresses = weight_addresses.copy()
+                        a.append(weight_addresses[j])
+                    publication.weight_addresses = weight_addresses^
                     var provider = layer_fields["_native_mamba_block_provider_cache"]
                     var session = py_get(layer_fields, "_prefill_session")
                     # The training image's Mamba entry and its capability bits
                     # (one table call): the former hasattr probes and the
-                    # reports-optional / owned-weights Python entries.
+                    # reports-optional Python entry.
                     var train = neural_ref[NEURAL_TABLE_MAMBA_TRAIN](selection.key)
                     var caps = mamba3_prefill_caps(train)
-                    var use_session = use_owned or (layer_state is None and (caps & MAMBA3_CAP_SESSION_PREFILL) != 0)
+                    var use_session = layer_state is None and (caps & MAMBA3_CAP_SESSION_PREFILL) != 0
                     var handle = 0
                     if use_session:
                         # The block's session: a native registry handle of the
@@ -264,8 +259,6 @@ struct AdmittedSambaExecution(Movable):
                         # Python entries mamba3_prefill_session_create and
                         # mamba_prefill_native_handle_v1, and _prefill_binding).
                         if not mamba3_prefill_session_serves(session, train):
-                            if owned is not None and not restore:
-                                raise Error("RuntimeError: Mamba3 owned snapshot requires its installed binding/setup")
                             session = mamba3_prefill_session_open(train)
                         publication.session = session
                         handle = mamba3_prefill_session_handle(session)
@@ -279,15 +272,12 @@ struct AdmittedSambaExecution(Movable):
                         self.owners.append(AdmittedNativeExecution(provider, PythonObject(None), 0, -1, -1, PythonObject(None), 0))
                     publication.provider = provider
                     var p: List[Int] = [b, l, self.width]
-                    var operation = 8 if use_owned else (6 if use_session else 5)
-                    var output_slot = 1 if use_owned else 10
+                    var operation = 6 if use_session else 5
+                    var output_slot = 10
                     if layer_state is not None:
                         var slots = _samba_native_fields(layer_state)
                         if py_get(slots, "_resident_session") is not None:
                             raise Error("Mamba3: state belongs to an open resident decode session; synchronize or close it first")
-                        if use_owned:
-                            for j in range(9):  # small-loop(unread owned weight pointer slots)
-                                a.append(0)
                         var names = [String("theta"), String("h"), String("buffer_qrot"), String("buffer_krot"), String("buffer_v"),
                             String("buffer_dt"), String("buffer_sig"), String("buffer_adt"), String("pending_k"), String("pending_v")]
                         var shapes = List[List[Int]]()
@@ -299,15 +289,9 @@ struct AdmittedSambaExecution(Movable):
                             a.append(_mutable(slots[names[j]], shapes[j], self.keep, publication.copies, names[j]))
                         var q = Int(py=slots["buffered_tokens"])
                         var pending = 1 if Bool(py=slots["pending"]) else 0
-                        if use_owned:
-                            p = [b, l, self.width, q, pending, Int(py=owned) if owned is not None else 0, 1 if step else 0]
-                            operation = 16
-                        else:
-                            p = [b, self.width, q, pending] if step else [b, l, self.width, q, pending]
-                            operation = 5 if step else 4
+                        p = [b, self.width, q, pending] if step else [b, l, self.width, q, pending]
+                        operation = 5 if step else 4
                         output_slot = 20
-                    elif use_owned:
-                        p.append(Int(py=owned) if owned is not None else 0)
                     var sizes = List[Int]()
                     publication.report_shapes.append([b, h, 64, 128]); publication.report_shapes.append([b, h, 128])
                     publication.report_shapes.append([b, h, 64]); publication.report_shapes.append([b, h, 32])
@@ -322,14 +306,6 @@ struct AdmittedSambaExecution(Movable):
                             count *= publication.report_shapes[j][axis]
                         sizes.append(0 if skip else count)
                     layer = NativeSambaLayer(self.owners[len(self.owners) - 1].endpoint(), operation, a^, p^, [], 0, output_slot, output_slot + 1, sizes^)
-                    if restore:
-                        if (caps & MAMBA3_CAP_OWNED_WEIGHTS) == 0:
-                            raise Error("RuntimeError: Mamba3 owned weights require the compiled owned-weight entry")
-                        publication.restore_owned = True
-                        layer.prepare_operation = 15
-                        layer.prepare_addresses = weight_addresses^
-                        layer.prepare_parameters = [self.width]
-                        layer.generation_slot = 3 if layer_state is None else 5
                 if layer_state is not None:
                     layer.counter_slot = 8 if transformer else (2 if step and layer.operation == 5 else 3)
                     layer.pending_slot = -1 if transformer else layer.counter_slot + 1
@@ -422,18 +398,12 @@ struct AdmittedSambaExecution(Movable):
                     layer.report_slot = -1
                     layer.report_sizes.clear()
                     layer.backward_parameters.clear()
-                    layer.prepare_operation = -1
                     layer.tape = True
                     publication.publish_reports = False
-                    publication.restore_owned = False
                 else:
                     layer.backward_endpoint = layer.endpoint.copy()
                     if publication.transformer:
                         layer.backward_operation = 3 if publication.session is not None else 5
-                    elif layer.operation == 8:
-                        layer.backward_operation = 9
-                        layer.owned_backward = True
-                        layer.backward_parameters.append(layer.parameters[3])
                     else:
                         layer.backward_operation = 7 if publication.session is not None else 4
             except problem:
@@ -477,9 +447,6 @@ struct AdmittedSambaExecution(Movable):
                 continue
             if publication.session is not None:
                 py_setitem(publication.fields, "_native_session" if publication.transformer else "_prefill_session", publication.session)
-            if layer.prepared:
-                py_setitem(publication.fields, "_owned_generation", PythonObject(layer.prepared_result))
-                py_setitem(publication.fields, "_owned_restore_pending", False)
             if publication.transformer and publication.state is not None and publication.profile is not None:
                 py_setattr(publication.state, "arithmetic_profile", publication.profile)
             if not layer.completed:

@@ -26,7 +26,7 @@ def _connect_admission(config_cls, model_cls, state_cls, training, neural, sessi
         "_resident_wanted", "seed", "counter",
         "peak_lr", "min_lr", "warmup_steps", "total_steps", "_wopt", "_int15", "nheads", "d_inner",
         "d_in_proj", "window", "_opts_tail", "_extended", "numeric_profile", "_native_kind", "_native_route",
-        "_owned_generation", "_owned_restore_pending", "_discard_reports", "dt_limit", "_dt_limit",
+        "_discard_reports", "dt_limit", "_dt_limit",
         "_arithmetic_profile", "_arithmetic_profile_mode", "_arithmetic_profile_changed",
         "batch_size", "max_tokens", "k_cache", "v_cache", "cached_tokens", "theta", "h",
         "buffer_qrot", "buffer_krot", "buffer_v", "buffer_dt", "buffer_sig", "buffer_adt",

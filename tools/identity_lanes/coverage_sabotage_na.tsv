@@ -85,7 +85,6 @@ tokenizer/impl/tokenizer_host_shell_impl.mojo:bpe_decode_batch_fit	a capacity ch
 tokenizer/impl/tokenizer_host_shell_impl.mojo:tokens_gather_rows_width	a dims check returning a row width (a shape)
 tokenizer/impl/tokenizer_host_shell_impl.mojo:tokenizer_store_i64	stores sizes and offsets only (a fault changes sizes)
 # lane verify-coverage-owed (2026-10-21)
-mamba/host/mamba_host_shell_impl.mojo:_m3_owned_install_run	opt-in experiment only: the host install refuses unless built with -D MOJOLEARN_NN40_OWNED_WEIGHTS (NN40_OWNED_WEIGHTS, default off), so no default build runs it
 training/optimizer_public.mojo:OPT_POOL	the slot pool's storage (a process global), no value
 training/optimizer_public.mojo:OptPool	the slot pool's storage, no value
 training/optimizer_public.mojo:OptPool.__init__	the slot pool's empty construction, no value
@@ -104,7 +103,6 @@ sequence/opt_public.mojo:seq_optimizer_close_on	nothing is resident on a host bi
 cluster/resident_centers.mojo:_DEVCTX_SLOT	a DeviceContext slot name (a handle)
 cluster/resident_centers.mojo:KMEANS_CENTERS_REGISTRY	the resident-centers registry storage (a process global), no value
 kernel_methods/krr_resident.mojo:KRR_RESIDENT_REGISTRY	the resident kernel-ridge registry storage (a process global), no value
-mamba/host/mamba_host_shell_impl.mojo:_m3_owned_export_run	opt-in experiment only: weights are owned only after an install, which the host binding refuses unless built with -D MOJOLEARN_NN40_OWNED_WEIGHTS (default off), so no default build exports any
 cluster/resident_centers.mojo:KMeansCentersRegistry	the resident-centers registry type (storage), no value
 kernel_methods/krr_resident.mojo:KernelRidgeResidentRegistry	the resident kernel-ridge registry type (storage), no value
 # lane verify-coverage-20261024: the whole-surface audit's infrastructure (no data value)
@@ -126,7 +124,6 @@ core/device_store.mojo:DeviceStore.__init__	the resident store's empty construct
 core/forest_host_groves.mojo:HostGroveRegistry.__init__	the grove registry's empty construction, no value
 cluster/resident_centers.mojo:KMeansCentersRegistry.__init__	the resident-centers registry's empty construction, no value
 kernel_methods/krr_resident.mojo:KernelRidgeResidentRegistry.__init__	the resident kernel-ridge registry's empty construction, no value
-mamba/host/mamba_host_shell_impl.mojo:M3OwnedHostSession.__init__	the owned-weight session's empty construction, no value
 tokenizer/impl/tokenizer_host_shell_impl.mojo:BpeHandle.__init__	the BPE handle's construction from a built table, no arithmetic
 transformer/transformer_binding_impl.mojo:CausalLMSession.__deinit__	a session's teardown (frees buffers), no value leaves it
 training/byte_lm_config.mojo:ByteConfig.__init__	the byte LM configuration record's construction, no arithmetic

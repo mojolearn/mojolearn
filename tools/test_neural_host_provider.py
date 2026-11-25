@@ -60,20 +60,17 @@ def test_training_hosts_use_their_original_numerical_owners_and_common_transport
     assert 'vendor != "cpu" and getenv' not in admission
 
 
-def test_host_owned_operations_preserve_failure_state_and_original_counters():
+def test_host_block_entry_has_no_prefill_session():
     source=(ROOT/'mamba/host/native_block_dispatch.mojo').read_text()
-    # The owned-weights install path is deleted with MOJOLEARN_NN40_OWNED_WEIGHTS (59b53529ef).
-    for helper in ('_m3_owned_forward_run','_m3_owned_backward_run',
-                   '_m3_owned_state_run','_m3_owned_export_run'):
-        assert helper+'(owner[],' in source
-    assert 'except problem:\n        owner[].usable = False' in source
-    assert 'owner[].weight_reuses += 1' in source
-    assert 'owner[].backward_recomputes += 1' in source
+    # The CPU training image's sessions held only the NN40 owned snapshot and
+    # went with it (lane owned-weights-deletion, 2026-11-25): no registry, no
+    # owned helper; caps answer 0 and every other session op is unavailable.
+    for gone in ('StateRegistry', '_m3_owned_', '_nn40_host_require', 'M3OwnedHostSession'):
+        assert gone not in source, gone
+    assert 'raise Error("Mamba host provider: unavailable operation")' in source
     assert 'Float32(f[0]), Float32(f[1])' in source
-    original=(ROOT/'mamba/host/mamba_host_shell_impl.mojo').read_text()
-    assert 'generation: Int, reserved: Bool = False)' in original
     # The bound is the operation table size (NEURAL_MAMBA_OPERATIONS, 7454253cb5), not a literal.
-    for text in ('len(a) != want_a', 'len(p) != want_p', 'op >= NEURAL_MAMBA_OPERATIONS', 'result == 0'):
+    for text in ('op >= NEURAL_MAMBA_OPERATIONS', 'result == 0'):
         assert text in source
 
 

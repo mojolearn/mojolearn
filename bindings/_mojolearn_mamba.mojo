@@ -266,7 +266,6 @@ from mamba.impl.mamba_shell_impl import (
     _m2_session_export_run,
     _m2_session_load_run,
     _m3_load_weights,
-    _mamba3_run_owned,
     Mamba3DecodeSession,
     _m3_require_session_open,
     _m3_session_copy_in,
@@ -274,7 +273,6 @@ from mamba.impl.mamba_shell_impl import (
     _m3_session_step_run,
     _m3_session_decode_run,
     _m3_session_export_run,
-    NN40_OWNED_WEIGHTS,
     Mamba3PrefillSession,
     _m3_weight_lens,
     _m3_weights_same_bits,
@@ -286,8 +284,6 @@ from mamba.impl.mamba_shell_impl import (
     _m3_prefill_backward_forward,
     _M3_BWD_NONFINITE_DY,
     _m3_prefill_backward_run,
-    _m3_install_weights_run,
-    _m3_export_weights_run,
     IDN_SAMBA_M3_FORWARD_TAPE,
     Mamba3ForwardTape,
     _m3_backward_tape_run,
@@ -959,22 +955,7 @@ def _m3_b_arm_words(params: PythonObject) raises -> List[Int]:
     return p^
 
 
-def mamba3_owned_weights_enabled_binding() raises -> PythonObject:
-    # Kept: the protected verify (python/mojolearn/_verify_api_neural.py) reads it.
-    return PythonObject(NN40_OWNED_WEIGHTS)
-
-
-def mamba3_prefill_session_install_weights_binding(session: PythonObject, addrs: PythonObject, d_model: PythonObject) raises -> PythonObject:
-    """B arm only: owned snapshot install (op 15) on the session handle owner."""
-    if len(addrs) != 9:
-        raise Error("mamba3 owned weights: expected nine weight addresses")
-    return _m3_b_arm(session, 15, addrs, [Int(py=d_model)])
-
-
-def mamba3_prefill_session_backward_owned_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """B arm only: owned backward (op 9) on the session handle owner."""
-    return _m3_b_arm(session, 9, addrs, _m3_b_arm_words(params))
-
+# TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: the Python entries mamba3_owned_weights_enabled, mamba3_prefill_session_install_weights, mamba3_prefill_session_backward_owned) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.
 
 
 def mamba3_forward_tape_enabled_binding() raises -> PythonObject:
@@ -1323,12 +1304,9 @@ def build__mojolearn_mamba() -> PythonObject:
             # (core/mamba3_prefill_session.mojo, lane mamba3-prefill-handle):
             # create/close/forward/forward_owned/info/export/reports_optional,
             # mamba3_state_owned, mamba_prefill_native_handle_v1 and the
-            # _Mamba3PrefillSession type are gone. Kept: the owned-weights
-            # answer the protected verify reads, and the three B-arm entries of
-            # MOJOLEARN_NEURAL_TABLE_ROUTE_OFF, which take the handle owner.
-            m.def_function[mamba3_owned_weights_enabled_binding]("mamba3_owned_weights_enabled")
-            m.def_function[mamba3_prefill_session_install_weights_binding]("mamba3_prefill_session_install_weights")
-            m.def_function[mamba3_prefill_session_backward_owned_binding]("mamba3_prefill_session_backward_owned")
+            # _Mamba3PrefillSession type are gone, and the owned-weights
+            # entries with NN40 (2026-11-25). Kept: the session backward
+            # B-arm entry of MOJOLEARN_NEURAL_TABLE_ROUTE_OFF.
             m.def_function[mamba3_prefill_session_backward_binding]("mamba3_prefill_session_backward")
         _ = m.add_type[Mamba3DecodeSession]("_Mamba3DecodeSession")
         m.def_function[mamba3_session_create_binding]("mamba3_session_create")

@@ -38,9 +38,6 @@ OrderedRMSE	needs installed-artifact qualification (unverified)
 GPT2Tokenizer	deprecated alias of BpeTokenizer; its page renders blank
 # Members (Class.member or module.member): skipped by conf.py's autodoc-skip-member hook.
 SmallMLPTrainer.train_steps	now on every vendor (captured program); no NVIDIA and AMD reference records yet
-Mamba3Block.install_owned_weights	owned-weights build only; raises RuntimeError elsewhere
-Mamba3Block.export_owned_weights	owned-weights build only; raises RuntimeError elsewhere
-Mamba3Block.release_owned_weights	owned-weights build only; raises RuntimeError elsewhere
 KernelPCA.inverse_transform	not implemented: needs the pre-image map of fit_inverse_transform=True, which is not implemented
 KernelDensity.sample	not implemented: drawing points from the fitted density is not provided
 ensemble.catboost_auto_learning_rate	host scalar helper behind GradientBoosting's automatic learning rate; no verifier lane calls it directly

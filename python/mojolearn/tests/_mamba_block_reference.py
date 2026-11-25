@@ -287,23 +287,16 @@ def mamba2_call(self, x, state, step):
 def _mamba3_call_fresh(self, x, ext):
     """Discard-only prefill: return all reports without a host cache.
 
-    The binding's `mamba3_forward_fresh` entry on the block's weights. A block
-    with an installed owned snapshot runs the same entry on that snapshot
-    (`export_owned_weights`): the owned session forward is the fresh
-    arithmetic on the snapshot's bytes. The prefill session itself is a
+    The binding's `mamba3_forward_fresh` entry on the block's weights. The
+    prefill session itself is a
     native registry handle of the image (lane mamba3-prefill-handle,
     2026-11-12); its Python entries are gone, and the session's retained
     weights never change the arithmetic, so the oracle needs none.
     """
-    if getattr(self, "_owned_restore_pending", False):
-        self.install_owned_weights()
     b, l = int(x.shape[0]), int(x.shape[1])
     nh = self.nheads
     y = _buffers.empty((b, l, self.d_model), '<f4')
     weights = list(self._w)
-    if getattr(self, "_owned_generation", None) is not None:
-        snapshot = self.export_owned_weights()
-        weights = [snapshot[name] for name in self._W_NAMES]  # glue: the nine owned weights in slot order
     h_last = _buffers.empty((b, nh, _M3_HEADDIM, _M3_D_STATE), '<f4')
     k_last = _buffers.empty((b, nh, _M3_D_STATE), '<f4')
     v_last = _buffers.empty((b, nh, _M3_HEADDIM), '<f4')

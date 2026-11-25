@@ -114,34 +114,9 @@ def test_mamba3_pickle_round_trip_is_native(monkeypatch):
     x = _tokens(2, 4, dm)
     want = np.asarray(block.forward(x)).copy()
     state = _native(monkeypatch, block.__getstate__)
-    assert "_prefill_session" not in state and state["_owned_generation"] is None
+    assert "_prefill_session" not in state and "_owned_generation" not in state
     clone = pickle.loads(pickle.dumps(block))
     assert np.asarray(clone.forward(x)).tobytes() == want.tobytes()
-
-
-def test_mamba3_owned_weights_are_native(monkeypatch):
-    block, dm = _block("mamba3")
-    x = _tokens(2, 4, dm)
-    want = np.asarray(block.forward(x)).copy()
-    try:
-        generation = _native(monkeypatch, block.install_owned_weights)
-    except AssertionError as exc:
-        if "NN40" in str(exc):
-            pytest.skip("this binding has no owned-weight arm")
-        raise
-    assert generation is not None
-    assert np.asarray(block.forward(x)).tobytes() == want.tobytes()
-    exported = _native(monkeypatch, block.export_owned_weights)
-    for name, w in zip(block._W_NAMES, block._w):
-        assert np.asarray(exported[name]).tobytes() == np.asarray(w).tobytes(), name
-    info = _native(monkeypatch, block.session_info)
-    assert set(info) == {"weight_uploads", "weight_recopies", "weight_reuses",
-                         "backward_reuses", "backward_recomputes", "stages_held"}
-    clone = pickle.loads(pickle.dumps(block))
-    assert np.asarray(clone.forward(x)).tobytes() == want.tobytes()
-    _native(monkeypatch, block.release_owned_weights)
-    assert block._owned_generation is None
-    assert np.asarray(block.forward(x)).tobytes() == want.tobytes()
 
 
 _STATE = {

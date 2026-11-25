@@ -255,49 +255,13 @@ def test_mamba3_forward_holds_one_session_across_calls():
     assert info["stages_held"] == 1
 
 
-def test_mamba3_owned_weights_round_trip():
+def test_mamba3_has_no_owned_weight_methods():
+    # The NN40 owned-weight snapshot was deleted (2026-11-25): its three
+    # methods left the public surface, with no alias or stub.
     block, x = _mamba3()
-    want = np.asarray(block.forward(x)).copy()
-    try:
-        generation = block.install_owned_weights()
-    except RuntimeError as exc:
-        # Builds without the owned-weight arm refuse by name; the block keeps working.
-        assert "owned weights" in str(exc)
-        assert np.asarray(block.forward(x)).tobytes() == want.tobytes()
-        return
-    assert generation is not None
-    assert np.asarray(block.forward(x)).tobytes() == want.tobytes()
-    exported = block.export_owned_weights()
-    for name, w in zip(block._W_NAMES, block._w):
-        assert np.asarray(exported[name]).tobytes() == np.asarray(w).tobytes(), name
-    block.release_owned_weights()
-    assert block._owned_generation is None
-    assert np.asarray(block.forward(x)).tobytes() == want.tobytes()
-
-
-def test_mamba3_export_without_snapshot_refuses():
-    block, x = _mamba3()
-    with pytest.raises(RuntimeError, match="no installed owned snapshot"):
-        block.export_owned_weights()
-    block.release_owned_weights()  # releasing nothing is a no-op
+    for name in ("install_owned_weights", "export_owned_weights", "release_owned_weights"):
+        assert not hasattr(block, name), name
     block.forward(x)
-    with pytest.raises(RuntimeError, match="no installed owned snapshot"):
-        block.export_owned_weights()
-
-
-def test_mamba3_install_owned_weights_refuses_without_owned_arm():
-    block, x = _mamba3()
-    try:
-        block.install_owned_weights()
-    except RuntimeError:
-        # Refused by name, every time, and nothing is left installed.
-        with pytest.raises(RuntimeError, match="owned weights"):
-            block.install_owned_weights()
-        with pytest.raises(RuntimeError, match="no installed owned snapshot"):
-            block.export_owned_weights()
-        return
-    block.release_owned_weights()
-    pytest.skip("this build provides owned weights; the refusal applies to builds without them")
 
 
 def test_pattern_name_is_total():

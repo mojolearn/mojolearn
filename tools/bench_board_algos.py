@@ -3545,8 +3545,8 @@ def _configure_neural_ab(path, lane):
         raise ValueError("neural A/B runtime must be an object")
     if runtime.get("numeric_mode", "identical") != "identical":
         raise ValueError("neural A/B runtime numeric_mode must be identical")
-    if runtime.get("operation", "model_default") != "model_default" or runtime.get("owned_weights"):
-        raise ValueError("explicit session/owned operations require bench_board_neural.py")
+    if runtime.get("operation", "model_default") != "model_default":
+        raise ValueError("explicit session operations require bench_board_neural.py")
     settings = runtime.get("estimator_settings", {})
     if not isinstance(settings, dict) or set(settings) - {"pool_size"}:
         raise ValueError("algos neural A/B supports estimator_settings.pool_size only")

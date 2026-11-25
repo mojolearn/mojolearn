@@ -39,8 +39,7 @@ from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from std.os import abort
-from mamba.host.native_block_dispatch import NATIVE_MAMBA_HOST_BLOCK_API, NATIVE_MAMBA_HOST_STATE_API, mamba_host_block_operation
-from core.mamba3_prefill_session import Mamba3PrefillHandle
+from mamba.host.native_block_dispatch import NATIVE_MAMBA_HOST_BLOCK_API, NATIVE_MAMBA_HOST_STATE_API
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from std.python import Python, PythonObject
 from bindings.native_identity_type_unpack import native_identity_type
@@ -96,14 +95,6 @@ from mamba.host.mamba_host_shell_impl import (
     _m3_weights,
     _mamba3_run,
     _mamba3_backward_run,
-    NN40_OWNED_WEIGHTS,
-    M3OwnedHostSession,
-    _m3_owned_install_run,
-    _m3_owned_forward_run,
-    _m3_owned_state_run,
-    _m3_owned_backward_run,
-    _m3_owned_export_run,
-    _nn40_host_require,
 )
 from mamba.host.neural_entry_host import publish_neural_mamba_host
 
@@ -352,11 +343,8 @@ def build__mojolearn_mamba_host() -> PythonObject:
         # create/close/forward_owned/info/export/reports_optional,
         # mamba3_state_owned, mamba_prefill_native_handle_v1, the
         # _M3OwnedHostSession type, mamba3_forward and mamba3_decode_step are
-        # gone. Kept: the owned-weights answer the protected verify reads and
-        # the two B-arm entries of MOJOLEARN_NEURAL_TABLE_ROUTE_OFF.
-        m.def_function[mamba3_owned_weights_enabled_binding]("mamba3_owned_weights_enabled")
-        m.def_function[mamba3_owned_install_binding]("mamba3_prefill_session_install_weights")
-        m.def_function[mamba3_owned_backward_binding]("mamba3_prefill_session_backward_owned")
+        # gone; the owned-weights answer and its two B-arm entries went with
+        # NN40 (2026-11-25, lane owned-weights-deletion).
         m.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")
         m.def_function[mamba3_backward_binding]("mamba3_backward")
         m.def_function[mamba3_forward_tape_enabled_binding]("mamba3_forward_tape_enabled")
@@ -369,46 +357,4 @@ def mamba1_profile_binding() -> PythonObject:
     return PythonObject(1)  # NN34 profile 2 (M1_SCAN=1) deleted 2026-10-11
 
 
-def mamba3_owned_weights_enabled_binding() -> PythonObject:
-    return PythonObject(NN40_OWNED_WEIGHTS)
-
-
-def _m3_host_b_arm(session: PythonObject, op: Int, addrs: PythonObject, params: List[Int]) raises -> PythonObject:
-    """B arm of `-D MOJOLEARN_NEURAL_TABLE_ROUTE_OFF` (bindings/neural_block_public.mojo):
-    the pre-table Python entry around the same owned-session operation of
-    `mamba/host/native_block_dispatch.mojo` on the block's session handle owner
-    (core/mamba3_prefill_session.mojo; lane mamba3-prefill-handle). Reserve and
-    release run with the GIL held, the operation with it released."""
-    var word = session.downcast_value_ptr[Mamba3PrefillHandle]()[].word()
-    var a = List[Int]()
-    for i in range(len(addrs)):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
-        a.append(Int(py=addrs[i]))
-    var words: List[Int] = [word]
-    words.extend(params.copy())
-    var slot: List[Int] = [word]
-    _ = mamba_host_block_operation(0, List[Int](), slot, List[Float64]())
-    var result = 0
-    try:
-        with GILReleased(Python()):
-            result = mamba_host_block_operation(op, a, words, List[Float64]())
-    except error:
-        _ = mamba_host_block_operation(1, List[Int](), slot, List[Float64]())
-        raise error
-    _ = mamba_host_block_operation(1, List[Int](), slot, List[Float64]())
-    return PythonObject(result)
-
-
-def mamba3_owned_install_binding(session: PythonObject, addrs: PythonObject, d_model_obj: PythonObject) raises -> PythonObject:
-    """B arm only: owned snapshot install (op 15) on the session handle owner."""
-    _ = _addrs(addrs, 9, String("mamba3 owned install"))
-    return _m3_host_b_arm(session, 15, addrs, [Int(py=d_model_obj)])
-
-
-def mamba3_owned_backward_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """B arm only: owned backward (op 9) on the session handle owner."""
-    if len(params) != 4:
-        raise Error("mamba3 owned backward: expected B, L, d_model, generation")
-    var p = List[Int]()
-    for i in range(4):  # small-loop(four owned backward scalars)
-        p.append(Int(py=params[i]))
-    return _m3_host_b_arm(session, 9, addrs, p)
+# TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: mamba3_owned_weights_enabled and the owned B-arm entries mamba3_prefill_session_install_weights / mamba3_prefill_session_backward_owned) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.

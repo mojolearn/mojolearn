@@ -116,7 +116,7 @@ def mamba3_prefill_session_run(owner: PythonObject, operation: Int, addresses: L
 def mamba3_prefill_session_run_held(owner: PythonObject, operation: Int, addresses: List[Int],
     scalars: List[Int]) raises -> Int:
     """Lane fix-mamba-forward-doors (core/neural_entry_table.mojo
-    MAMBA3_CAP_HELD_FORWARD): a session forward (op 6 / 8) as ONE call
+    MAMBA3_CAP_HELD_FORWARD): a session forward (op 6) as ONE call
     through the owner's Mamba entry with the GIL released: the trailing word
     1 asks the image to reserve, run and release in that call
     (MAMBA3_CAP_HELD_FORWARD; the caller checked the owner's caps). The

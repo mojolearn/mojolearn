@@ -205,40 +205,11 @@ def neural_checks(recorder,public,methods):
                 before=m(x);after=restored(x)
                 assert encode(before)==encode(after)
                 return after
-            # Public probe (lane verify-runtime-report): the compiled switch is
-            # read through install_owned_weights itself, which refuses by name
-            # ('owned') when the binding was built without owned weights.
-            try:
-                m.install_owned_weights();enabled=True
-            except RuntimeError as error:
-                if 'owned' not in str(error).lower():raise
-                enabled=False
-            if not enabled:
-                if method=='install_owned_weights':
-                    return {'availability':'compiled owned weights disabled','numerical_execution':False}
-                if method=='release_owned_weights':
-                    m.release_owned_weights();return m(x)
-                if method=='session_info':
-                    assert m.session_info() is None;return {'session':None}
-                try:getattr(m,method)()
-                except RuntimeError as error:
-                    assert 'owned' in str(error).lower()
-                    return {'availability':'compiled owned weights disabled','numerical_execution':False}
-                raise AssertionError('disabled owned-weight capability was admitted')
-            try:
-                before=m(x)
-                if method=='export_owned_weights':return m.export_owned_weights()
-                if method=='release_owned_weights':
-                    m.release_owned_weights()
-                    after=m(x);assert encode(before)==encode(after)
-                    return after
-                if method=='session_info':
-                    info=m.session_info();assert isinstance(info,dict)
-                    # Counters describe cache implementation, not numerical identity.
-                    return {'reported': True, 'output':before}
-                return before
-            finally:
-                m.release_owned_weights()
+            # TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: the install/export/release_owned_weights probe) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.
+            if method=='session_info':
+                # A fresh block has opened no prefill session on any build.
+                assert m.session_info() is None;return {'session':None}
+            raise AssertionError('no verify probe for '+public+'.'+method)
         if name.startswith('Samba'):
             config=ml.SambaConfig(4,32,['attention'],n_heads=1,intermediate=32)
             if name=='SambaConfig':
