@@ -82,6 +82,19 @@ NON_COMPUTING = frozenset((
 ))
 
 
+#: Public functions that QUERY an already fitted model handed to them as their
+#: first argument (core/function_device_fitted.mojo): they run where that
+#: model lives, and their `device` only states the side the caller expects
+#: (a different explicit side is refused). The model carries the side (built
+#: through the view, or reloaded with the side by `side_call`), so the view
+#: passes the call through unchanged (device None: the model's own side) and
+#: never injects one. gd-verify-view (2026-11-25): injecting it refused the
+#: CPU-side reload of lanes hdbscan and hdbscan-leaf ("given device='cpu' but
+#: its HDBSCAN was constructed with device=None") and the cross-check, whose
+#: GPU-view probe queried the CPU saved model with device='gpu'. Short names.
+MODEL_BOUND = frozenset(("approximate_predict", "membership_vector", "all_points_membership_vectors"))
+
+
 class NoDevice(TypeError):
     """A public callable reached through the view takes no ``device``."""
 
@@ -262,7 +275,9 @@ def _caller(fn, name, side_name, strict, boundary="internal"):
     """`fn` wrapped so a call carries `device=side_name`. Resolved once."""
     mode = device_mode(fn)
     build = _builders(boundary)
-    if mode in ("device", "kwargs", "unknown") and not _non_computing(name):
+    if mode == "device" and _short(name) in MODEL_BOUND:
+        call = build["passthrough"](fn, unwrap)
+    elif mode in ("device", "kwargs", "unknown") and not _non_computing(name):
         call = build["inject"](fn, side_name, unwrap)
     elif _non_computing(name) or not strict or mode == "builder":
         call = build["passthrough"](fn, unwrap)
