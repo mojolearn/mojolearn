@@ -16,6 +16,11 @@ Units (one column each build: the host column with -D MOJOLEARN_COLUMN_CPU=1, el
      uninterrupted; a FRESH session (and a source reopened from the saved position alone) loads it with
      program_training_load and runs two steps: the same next record ids, the same step losses (the dropout masks)
      and the same parameters, word for word.
+  2  ONE OPENING (lane fr2-followups). One opened source serves 100 `Program.fit(source=, steps=1)` calls (the
+     handle's native owner keeps it across calls, autograd/batch_source.mojo THE OWNER): the shards are never
+     reopened (the same descriptors), every epoch is planned exactly once (the counter is here, not in the product:
+     a plan is seen as a new record-order list or a new plan epoch after a call), and after every call the batch
+     the next call trains is already read ahead (so a call reads one batch, not the epoch's index and plan).
 Sabotage arms coverage-autograd-batch_source_read_ahead_{gpu,cpu} and coverage-autograd-program_training_drop_group_
 {gpu,cpu} fail unit 1 on their own column.
 """
@@ -41,7 +46,8 @@ from bindings.byte_checkpoint_native_run import byte_file_write, ByteCheckpointW
 from checks.native_tests.ops_higher_common import tensor
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, CPU_COLUMN_BUILD, require
 
-comptime BATCH_SOURCE_UNITS = 2
+comptime BATCH_SOURCE_UNITS = 3
+comptime _STEP_CALLS = 100
 comptime _F = 2
 
 
@@ -301,6 +307,48 @@ def run_resume_unit[E: Exec & Movable & Deinitable, KIND: Int](root: String, var
     ops_session_close[E, KIND](fresh)
 
 
+# ---------------------------------------------------------------- unit 2: one opening, one plan an epoch
+def run_steps_unit[E: Exec & Movable & Deinitable, KIND: Int](root: String, var ex: E) raises:
+    """100 one-step fits on one opened source: no reopen, each epoch planned once, the next batch read ahead."""
+    var sid = ops_session_open[E, KIND](ex^, False)
+    try:
+        var s = ops_session[E, KIND](sid)
+        var m = _model(s[])
+        var params: List[Int] = [m[2], m[3]]
+        var src = batch_source_open(_spec(root, 5))
+        var fds = src.steps_fd.copy()
+        var plans = 0
+        var order_at = Int(src.order.unsafe_ptr())
+        var plan_epoch = src.plan_epoch
+        for k in range(_STEP_CALLS):  # driver-loop: over the one-step fit calls
+            _ = _step(s[], m[0], src, m[1], params)
+            var now_at = Int(src.order.unsafe_ptr())
+            if now_at != order_at or src.plan_epoch != plan_epoch:
+                plans += 1
+                if src.plan_epoch != plan_epoch + 1:
+                    _fail("call " + String(k) + " planned epoch " + String(src.plan_epoch) + " after epoch "
+                          + String(plan_epoch) + " (an epoch planned twice or skipped)")
+                order_at = now_at
+                plan_epoch = src.plan_epoch
+            var done = k + 1
+            var next = src.pending()
+            if next[0] != done // src.n_batches or next[1] != done % src.n_batches:
+                _fail("after " + String(done) + " one-step calls the next batch is (" + String(next[0]) + ", "
+                      + String(next[1]) + ")")
+            if src.held_epoch != next[0] or src.held_batch != next[1]:
+                _fail("after call " + String(k) + " the batch the next call trains is not read ahead")
+            for f in range(len(fds)):  # driver-loop: over shard descriptors
+                if src.steps_fd[f] != fds[f]:
+                    _fail("call " + String(k) + " reopened shard " + String(f))
+        if plans != plan_epoch + 1:
+            _fail(String(plans) + " plans for epochs 0 to " + String(plan_epoch) + " (want one an epoch)")
+        src.close()
+    except error:
+        ops_session_close[E, KIND](sid)
+        raise error
+    ops_session_close[E, KIND](sid)
+
+
 def test_batch_source() raises:
     comptime if CPU_COLUMN_BUILD:
         def host_unit(unit: Int) raises:
@@ -308,8 +356,10 @@ def test_batch_source() raises:
             _write_shards(root)
             if unit == 0:
                 run_plan_unit(root)
-            else:
+            elif unit == 1:
                 run_resume_unit[HostExec, OPS_HOST](root, HostExec(), HostExec())
+            else:
+                run_steps_unit[HostExec, OPS_HOST](root, HostExec())
         check_cases("batch_source", BATCH_SOURCE_UNITS, host_unit)
     else:
         def device_unit(unit: Int) raises:
@@ -317,8 +367,10 @@ def test_batch_source() raises:
             _write_shards(root)
             if unit == 0:
                 run_plan_unit(root)
-            else:
+            elif unit == 1:
                 run_resume_unit[DeviceExec, OPS_DEVICE](root, DeviceExec(), DeviceExec())
+            else:
+                run_steps_unit[DeviceExec, OPS_DEVICE](root, DeviceExec())
         check_cases_serial("batch_source", BATCH_SOURCE_UNITS, device_unit)
 
 

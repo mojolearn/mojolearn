@@ -46,7 +46,7 @@ from providers.python.autograd_gradient_diagnostics_pyapi_pack import gradient_r
 from autograd.nn_scan_frontend import session_scan
 from autograd.autograd_ops_frontend_run import _SOP_SCAN, _SOP_LOAD_TRAINING
 from autograd.program_training_checkpoint import program_training_load
-from providers.python.batch_source_pyapi_door import batch_source_training_part, batch_source_position_out
+from providers.python.batch_source_pyapi_door import batch_source_training_part, batch_source_reposition
 # nn-blocks-scan end
 # nn-blocks-cbw begin
 from autograd.program import OpsProgram
@@ -656,7 +656,8 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         var expect = batch_source_training_part(args[1])
         var loaded = program_training_load[E, KIND](Int(py=sid), String(py=native_path(args[0])), expect)
         if expect.present:
-            batch_source_position_out(args[1], loaded.source.epoch, loaded.source.consumed)
+            # the handle's opened source is dropped: the next fit rebuilds it once at the loaded position
+            batch_source_reposition(args[1], loaded.source.epoch, loaded.source.consumed)
         var bundle = native_loaded_module("builtins").dict()
         py_setitem(bundle, PythonObject("program"),
                    program_new_owner(session, program_info(loaded.program, s[].program(loaded.program))))

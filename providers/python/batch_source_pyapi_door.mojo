@@ -4,10 +4,17 @@
 
 UNPACK reads the handle once into a typed `BatchSourceSpec` (autograd/batch_source.mojo): the exact connected
 `BatchSource` class only (a Python iterable, generator, data loader or a subclass is refused before anything is
-called: no call back into Python during a fit), its `_spec` tuple and its `_position` pair. RUN opens the shards,
-trains and closes them (autograd/program_entries.mojo `program_fit_source`). PACK writes the consumed position
-back to the handle and builds the returned dicts. The handle holds no native resource between calls, so a handle
-rebuilt in a fresh process from the same directory and a saved state is the same source.
+called: no call back into Python during a fit), its `_spec` tuple and its `_position` pair. RUN trains on the
+handle's opened source (autograd/program_entries.mojo `program_fit_source`). PACK writes the consumed position
+back to the handle and builds the returned dicts.
+
+THE OWNER (lane fr2-followups; autograd/batch_source.mojo THE OWNER). The opened source (index, record table, epoch
+plan, shard descriptors, host buffers, read-ahead batch) lives on a native `BatchSourceOwner` held in the handle's
+`_owner`, built by the first fit and reused by every later one while it stands at the handle's `_position`. A
+position written from outside a fit (`load_state_dict`, `Session.load_training`) or a reopen drops it; an owner of
+another binding image (another mode or executor) is replaced. The owner is a cache of what `_spec` and
+`_position` determine, so a handle rebuilt in a fresh process from the same directory and a saved state is still
+the same source. Releasing the handle closes the descriptors (the owner's destructor, no Python `__del__`).
 
 `_spec` = (path, batch_size, input field codes, target code, shuffle, seed, bucket_batches, fingerprint);
 `_position` = (epoch, consumed batches of that epoch).
@@ -19,10 +26,65 @@ from bindings.native_json_door import native_path
 from core.shared_slot import SharedSlot
 from providers.python.autograd_program_arrays_pyapi_door import is_integer_input, uint64_input
 from autograd.batch_source import (
-    BatchSourceSpec, BATCH_SOURCE_FORMAT, BS_FIELD_TARGETS, batch_source_open, batch_source_field,
+    BatchSource, BatchSourceSpec, BATCH_SOURCE_FORMAT, BS_FIELD_TARGETS, batch_source_open, batch_source_field,
     batch_source_field_name,
 )
 from autograd.program_training_checkpoint import ProgramTrainingSource
+from autograd.session_lifetime import SESSION_MODE
+
+
+# DEVICE and MODE are part of the type on purpose, as SessionLifetime's (autograd/session_lifetime.mojo): the
+# Python type registry is one per process and `import mojolearn` loads the device and host x_sequence images in
+# both numeric modes; each registers its own owner type (bindings/_mojolearn_x_sequence(_host).mojo add_type).
+struct BatchSourceOwner[DEVICE: Bool, MODE: Int = SESSION_MODE](Movable, Writable):
+    """A BatchSource handle's opened source, kept across fit calls (module note THE OWNER)."""
+
+    var src: BatchSource
+
+    def __init__(out self, var src: BatchSource):
+        self.src = src^
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("_BatchSourceOwner(records=", self.src.n, ", epoch=", self.src.epoch, ", consumed=",
+                     self.src.consumed, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        writer.write("_BatchSourceOwner(records=", self.src.n, ", epoch=", self.src.epoch, ", consumed=",
+                     self.src.consumed, ")")
+
+    def __deinit__(deinit self):
+        self.src.release_descriptors()
+
+
+comptime BatchSourcePtr = UnsafePointer[BatchSource, MutUntrackedOrigin]
+
+
+def batch_source_held[DEVICE: Bool](source: PythonObject, var spec: BatchSourceSpec) raises -> BatchSourcePtr:
+    """RUN's opened source for the handle `source` whose words are `spec` (module note THE OWNER): the handle's
+    owner when it is this image's and stands at the handle's position, else a source opened once from `spec` and
+    kept on the handle. The source lives in the owner the handle holds; the caller keeps `source` alive while it
+    uses the pointer."""
+    var held = source._owner
+    if held is not None:
+        try:
+            var owner = held.downcast_value_ptr[BatchSourceOwner[DEVICE]]()
+            if owner[].src.epoch == spec.epoch and owner[].src.consumed == spec.consumed:
+                var address = Int(UnsafePointer(to=owner[].src))
+                _ = held
+                return BatchSourcePtr(unsafe_from_address=address)
+        except:
+            pass  # another binding image's owner (another mode or executor): replaced below
+    var made = PythonObject(alloc=BatchSourceOwner[DEVICE](batch_source_open(spec^)))
+    py_setattr(source, "_owner", made)
+    var owner = made.downcast_value_ptr[BatchSourceOwner[DEVICE]]()
+    var address = Int(UnsafePointer(to=owner[].src))
+    _ = made
+    return BatchSourcePtr(unsafe_from_address=address)
+
+
+def _drop_owner(source: PythonObject) raises:
+    """Forget the handle's opened source (its descriptors close when the owner is released)."""
+    py_setattr(source, "_owner", PythonObject(None))
 
 
 struct _BatchSourceDoor(Defaultable, Movable):
@@ -90,7 +152,14 @@ def batch_source_spec(source: PythonObject) raises -> BatchSourceSpec:
 
 
 def batch_source_position_out(source: PythonObject, epoch: Int, consumed: Int) raises:
-    """PACK: the consumed position back on the handle."""
+    """PACK of a fit: the consumed position back on the handle (its owner stands there and is kept)."""
+    py_setattr(source, "_position", Python.tuple(PythonObject(epoch), PythonObject(consumed)))
+
+
+def batch_source_reposition(source: PythonObject, epoch: Int, consumed: Int) raises:
+    """A position set from outside a fit (a loaded state or checkpoint): written to the handle and its owner
+    dropped, so the next fit rebuilds the opened source once at that position."""
+    _drop_owner(source)
     py_setattr(source, "_position", Python.tuple(PythonObject(epoch), PythonObject(consumed)))
 
 
@@ -123,7 +192,7 @@ def batch_source_restore(source: PythonObject, part: ProgramTrainingSource) rais
             or spec.bucket != part.bucket or spec.shuffle != part.shuffle):
         raise Error("ValueError: Session.load_training(source=): the source is not the one the checkpoint was saved "
                     + "with (other data, seed, batch_size, bucket_batches or shuffle)")
-    batch_source_position_out(source, part.epoch, part.consumed)
+    batch_source_reposition(source, part.epoch, part.consumed)
 
 
 def _state_dict(source: PythonObject) raises -> PythonObject:
@@ -203,6 +272,7 @@ def _open(source: PythonObject, args: PythonObject) raises:
     var bucket = spec.bucket
     var src = batch_source_open(spec^)
     src.close()
+    _drop_owner(source)  # a reopened handle: an owner of its former words is not its source
     py_setattr(source, "_spec", Python.tuple(PythonObject(path), PythonObject(batch), py_call(b.tuple, codes),
                                             PythonObject(target), PythonObject(shuffle), _word_out(seed),
                                             PythonObject(bucket), _word_out(src.fingerprint)))
