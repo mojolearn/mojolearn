@@ -25,6 +25,8 @@ from core.dbscan_native_api import (
     DBSCAN_VENDOR,
     DBSCAN_CAPABILITIES,
     DBSCAN_CAP_RESIDENT,
+    DBSCAN_CAP_DEV_STORE,
+    DBSCAN_CAP_FOLD_X,
     dbscan_native_v1,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -261,10 +263,13 @@ def fixture(driver: DBSCANNativeDriver, unit: Int, host: Bool) raises:
     require(driver.metadata(DBSCAN_MODE) == Int(GLOBAL_NUMERIC_MODE), "DBSCAN actual mode")
     require(driver.metadata(DBSCAN_VENDOR) == 1 if host else driver.metadata(DBSCAN_VENDOR) > 1,
         "DBSCAN actual host/device vendor")
-    # A bit set: the device image also answers DBSCAN_CAP_DEV_STORE and DBSCAN_CAP_FOLD_X (additive bits);
-    # the host image answers none, the device image must carry the resident bit.
+    # The exact word each image answers (no mask: a bit gained or lost is caught). The host image answers none;
+    # the device image answers RESIDENT, DEV_STORE (vdf-scope-cluster4) and FOLD_X (512881ce44),
+    # core/dbscan_native_device.mojo capabilities().
     var dbscan_caps = driver.metadata(DBSCAN_CAPABILITIES)
-    require(dbscan_caps == 0 if host else (dbscan_caps & DBSCAN_CAP_RESIDENT) != 0, "DBSCAN resident capability")
+    var dbscan_want = 0 if host else (DBSCAN_CAP_RESIDENT | DBSCAN_CAP_DEV_STORE | DBSCAN_CAP_FOLD_X)
+    require(dbscan_caps == dbscan_want, "DBSCAN resident capability: " + String(dbscan_caps)
+        + ", want " + String(dbscan_want))
     var source = input_f32(p.name + "-source", p.rows * p.features)
     var source_before = source.copy()
     var weights = input_f32(p.name + "-weights", p.rows if p.weighted else 0)
