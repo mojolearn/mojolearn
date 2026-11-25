@@ -52,8 +52,11 @@ from sequence.ops import (
 )
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_routes
 from sequence.recurrent import (
-    Net, Work, RnnStep, SEQ_WGRAD_BLOCKED, TASK_CE, WGRAD_IDN_SCRATCH, bias_rows, fill, gather_rows, gather_seq, gemm,
+    Net, Work, RnnStep, RnnOptions, SEQ_WGRAD_BLOCKED, TASK_CE, TASK_MSE, WGRAD_IDN_SCRATCH, bias_rows, fill,
+    gather_rows, gather_seq, gemm,
 )
+from autograd.rankn_layout import rankn_concat, rankn_narrow
+from autograd.loss_ops import LS_MSE
 from autograd.kernels.recurrent import colsum, wgrad_block, wgrad_blocked
 from sequence.mlp import EPI_BIAS_ACT
 from sequence.gemm_split import gemm_split_block, gemm_split_shape
@@ -895,6 +898,95 @@ def rnn_forward_autograd[E: Exec](
     return rnn_head(tape, ex, inp, w_o, b_o, B, yhat, w.dy, w)
 
 
+def rnn_forward_options[E: Exec](
+    mut tape: Tape, mut ex: E, net: Net, opts: RnnOptions, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
+    yhat: FP, h0_clean: Bool, train: Bool, seed: UInt64, step: Int,
+) raises -> Tuple[Tensor, Tensor]:
+    """Lane rnn-parity (Andrew 2026-11-25): rnn_forward_autograd with RnnOptions; returns (the head's output,
+    the top layer's output [T B, dirs H], time order). Per layer, per direction (net.dirs 2: the reverse one walks
+    time T - 1 down to 0, rnn_layer's `reverse`) the input projection and the recurrence, each in its own Work
+    slot l dirs + d with the batch's initial state of that slot when given (w.h0b, w.c0b); two directions are
+    concatenated on the features, forward first (PyTorch's output layout); in training (`train`) dropout with
+    probability opts.dropout between stacked layers, its mask a function of (seed, step L + l) alone. The head:
+    output="sequence" every one of the T B rows (time-major) into `yhat` [T B, O]; else the final state, PyTorch's
+    h_n: the forward direction's state at time T - 1 (each row's last valid state: the length mask copies it
+    forward) and the reverse direction's at time 0, concatenated. The head's gradient storage is w.dy. Every
+    launch is one the plain forward runs (projections, scan or chain, the head's GEMM) or a tape layout op
+    (concat, narrow, dropout), the same order on the host and every vendor."""
+    tape.reset()
+    var H = net.H
+    var GH = net.G() * H
+    var inp = tape.variable(ex, x, T * B, net.D, False)
+    var top_f = inp
+    var top_r = inp
+    for l in range(net.L):  # driver-loop: over layers
+        var din = net.din(l)
+        var outs = List[Tensor]()
+        for d in range(net.dirs):  # driver-loop: over directions
+            var k = l * net.dirs + d
+            var w_ih = tape.variable_into(ex, P + net.w_ih(l, d), Gr + net.w_ih(l, d), GH, din)
+            var w_hh = tape.variable_into(ex, P + net.w_hh(l, d), Gr + net.w_hh(l, d), GH, H)
+            var b_ih = tape.variable_into(ex, P + net.b_ih(l, d), Gr + net.b_ih(l, d), 1, GH)
+            var b_hh = tape.variable_into(ex, P + net.b_hh(l, d), Gr + net.b_hh(l, d), 1, GH)
+            var gx = rnn_linear(tape, ex, inp, w_ih, b_ih, w.gx[k], RNN_INPUT_BIAS_IN_GX, True, l > 0, w)
+            var h0 = Optional[FP](None)
+            var c0 = Optional[FP](None)
+            if w.has_h0:
+                h0 = Optional[FP](w.h0b + k * B * H)
+                if w.has_c0:
+                    c0 = Optional[FP](w.c0b + k * B * H)
+            outs.append(rnn_layer(tape, ex, gx, w_hh, b_hh, P + net.b_ih(l, d), net.cell, T, B, w, k,
+                                  h0_clean and not w.has_h0, d == 1, h0, c0))
+        if net.dirs == 1:
+            inp = outs[0]
+        else:
+            inp = rankn_concat(tape, ex, outs, 1)
+            tape.materialize(ex, inp)
+        if l == net.L - 1:
+            top_f = outs[0]
+            top_r = outs[net.dirs - 1]
+        elif train and opts.dropout > Float32(0.0):
+            inp = tape.dropout(ex, inp, opts.dropout, seed, (step * net.L + l) & 0xFFFFFFFF)
+    var hw = net.head_in()
+    var w_o = tape.variable_into(ex, P + net.head(), Gr + net.head(), net.O, hw)
+    var b_o = tape.variable_into(ex, P + net.head() + net.O * hw, Gr + net.head() + net.O * hw, 1, net.O)
+    if opts.seq_out:
+        # every step's state into the head: one GEMM over the T B rows, its weight gradient the blocked order
+        var saved = _linear_record(tape, ex, inp, w_o, b_o, yhat, 0, T * B, True, True, True, w)
+        var logits = tape.custom_into(ex, [inp, w_o, b_o], yhat, w.dy, T * B, net.O, RNN_LINEAR, saved)
+        return (logits, inp)
+    if net.dirs == 1:
+        return (rnn_head(tape, ex, inp, w_o, b_o, B, yhat, w.dy, w), inp)
+    var ends = List[Tensor]()
+    ends.append(rankn_narrow(tape, ex, top_f, 0, (T - 1) * B, B))
+    ends.append(rankn_narrow(tape, ex, top_r, 0, 0, B))
+    var fin = rankn_concat(tape, ex, ends, 1)
+    tape.materialize(ex, fin)
+    var saved = _linear_record(tape, ex, fin, w_o, b_o, yhat, 0, B, True, False, True, w)
+    var logits = tape.custom_into(ex, [fin, w_o, b_o], yhat, w.dy, B, net.O, RNN_LINEAR, saved)
+    return (logits, inp)
+
+
+def rnn_weighted_loss[E: Exec](
+    mut tape: Tape, mut ex: E, net: Net, task: Int, logits: Tensor, R: Int, w: Work,
+) raises -> Tensor:
+    """Lane rnn-parity: sum_r w_r l_r / (sum_r w_r + 2^-126) over the R rows of `logits` as tape nodes (the
+    tape's term, product, blocked fold and division bodies: one order on every column). l_r is the row's mean
+    squared error over the O outputs against w.yb, or its softmax cross-entropy against the code in w.yb; w_r =
+    w.wrow[r] takes no gradient. A zero total weight gives 0, never NaN."""
+    var wt = tape.variable(ex, w.wrow, R, 1, False)
+    var terms: Tensor
+    if task == TASK_MSE:
+        var target = tape.variable(ex, w.yb, R, net.O, False)
+        terms = tape.mean(ex, tape.loss_terms(ex, logits, target, LS_MSE), 1)
+    else:
+        var codes = tape.variable(ex, w.yb, R, 1, False)
+        terms = tape.cross_entropy_rows(ex, logits, codes)
+    var num = tape.sum(ex, tape.multiply(ex, terms, wt))
+    var den = tape.add(ex, tape.sum(ex, wt), tape.variable(ex, w.tiny, 1, 1, False))
+    return tape.divide(ex, num, den)
+
+
 def rnn_backward_autograd[E: Exec](mut tape: Tape, mut ex: E, net: Net, logits: Tensor, dy: FP, B: Int) raises:
     """Seed the existing loss derivative dy [B, O] (the head's gradient
     storage, so no seed copy) at the head output; parameter gradients land
@@ -942,6 +1034,21 @@ struct AutogradRnnStep(RnnStep):
 
     def backward[E: Exec](mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work) raises:
         rnn_backward_autograd(self.tape, ex, net, self.logits, w.dy, B)
+
+    def forward_options[E: Exec](
+        mut self, mut ex: E, net: Net, opts: RnnOptions, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
+        seed: UInt64, step: Int,
+    ) raises:
+        var out = rnn_forward_options(self.tape, ex, net, opts, P, Gr, x, T, B, w, w.yhat,
+                                      B <= self.h0_rows, True, seed, step)
+        self.logits = out[0]
+        # a forward from given initial states leaves them in rows [0, B): the next one fills (or copies) again
+        self.h0_rows = 0 if w.has_h0 else B
+
+    def weighted_backward[E: Exec](mut self, mut ex: E, net: Net, task: Int, R: Int, w: Work, loss_dst: FP) raises:
+        var loss = rnn_weighted_loss(self.tape, ex, net, task, self.logits, R, w)
+        _copy(ex, loss_dst, self.tape.value(loss), 1)
+        self.tape.backward_scalar_with_rules(ex, loss, RecurrentRules())
 
 
 # ------------------------------------------------------------------ predict
