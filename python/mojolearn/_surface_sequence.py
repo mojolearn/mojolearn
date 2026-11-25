@@ -130,6 +130,9 @@ FAMILIES = (
                         # nn-blocks-composed begin: the composed tagger (tools/identity_lanes/nn_composed.py)
                         "ops-composed-tagger",
                         # nn-blocks-composed end
+                        # nn-blocks-qkv / nn-blocks-cbw (w3-integrate-10: the two lanes were registered in
+                        # tools/identity_lanes but never declared here, so verify read them UNDECLARED)
+                        "ops-attention-qkv", "nn-cbw-custom-vjp",
                         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -328,6 +331,8 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # nn-blocks-composed begin
     "ops-composed-tagger": "Session: a masked tagger (embedding, scan cell with dropout, parameter groups), resumed",
     # nn-blocks-composed end
+    "ops-attention-qkv": "Session: attention over explicit q, k, v (mask, causal, scale, grouped heads)",
+    "nn-cbw-custom-vjp": "Session: custom_op / custom with a user-defined backward rule",
                        }
 PUBLIC_PENDING_LANES = {
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
@@ -396,4 +401,6 @@ PUBLIC_PENDING_LANES = {
     # nn-blocks-scatter begin
     "ops-scatter-segment": "no reference",
     # nn-blocks-scatter end
+    "ops-attention-qkv": "no reference",  # nn-blocks-qkv (w3-integrate-10: declared)
+    "nn-cbw-custom-vjp": "no reference",  # nn-blocks-cbw (w3-integrate-10: declared)
 }
