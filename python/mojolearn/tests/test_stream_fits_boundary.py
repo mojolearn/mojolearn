@@ -132,8 +132,14 @@ def test_recurrent_streamed_fit_and_refusals(tmp_path):
     root = _shards(str(tmp_path), targets="steps")
     est = mojolearn.GRURegressor(hidden_size=4, output="sequence", max_epochs=2).fit(source=_source(root))
     assert len(est.loss_curve_) == 2 * _source(root).n_batches and est.n_timesteps_ == LONGEST
-    with pytest.raises(TypeError, match="no lengths, sample_weight"):
-        _gru().fit(source=_source(root), sample_weight=np.ones(7))
+    with pytest.raises(TypeError, match="no lengths"):
+        _gru().fit(source=_source(root), lengths=np.ones(7))
+    with pytest.raises(ValueError, match="one weight a record of the source"):
+        _gru().fit(source=_source(root), sample_weight=np.ones(6, np.float32))
+    with pytest.raises(ValueError, match="h_0 must have shape"):
+        _gru().fit(source=_source(root), h_0=np.zeros((1, 6, 4), np.float32))
+    with pytest.raises(ValueError, match="early_stopping needs validation_data"):
+        mojolearn.GRURegressor(hidden_size=4, output="sequence", early_stopping=True).fit(source=_source(root))
     with pytest.raises(ValueError, match="one class index a record"):
         mojolearn.GRUClassifier(hidden_size=4).fit(source=_source(root))
 
@@ -176,8 +182,6 @@ def test_recurrent_streamed_class_weights_per_step(tmp_path):
     weighted = _tagger(class_weight={0: 1.0, 1: 3.0, 2: 0.5}).fit(source=_source(root))
     assert not np.array_equal(weighted.params_, plain.params_)
     assert np.all(np.isfinite(weighted.loss_curve_))
-    with pytest.raises(ValueError, match="class_weight as a dict"):
-        _tagger(class_weight="balanced").fit(source=_source(root))
     with pytest.raises(ValueError, match="class_weight is for classifiers"):
         mojolearn.GRURegressor(hidden_size=4, class_weight={0: 2.0}).fit(source=_source(_shards(str(tmp_path / "r"))))
 
@@ -189,7 +193,7 @@ def test_recurrent_streamed_validation_per_epoch(tmp_path):
     yv = (np.arange(3 * LONGEST).reshape(3, LONGEST) * 7) % 3
     lv = np.array([4, 2, 3])
     plain = _tagger().fit(source=_source(root))
-    seen = _tagger().fit(source=_source(root), validation_data=(xv, yv, lv))
+    seen = _tagger().fit(source=_source(root), validation_data=(xv, yv, lv), restore_best=False)
     assert np.array_equal(seen.params_, plain.params_)
     assert len(seen.validation_loss_) == 2 and np.all(np.isfinite(seen.validation_loss_))
     assert seen.best_epoch_ == 1 + int(np.argmin(seen.validation_loss_))
@@ -197,3 +201,77 @@ def test_recurrent_streamed_validation_per_epoch(tmp_path):
         _tagger().fit(source=_source(root), validation_data=(xv, yv))
     with pytest.raises(ValueError, match="padded to the source's max_length"):
         _tagger().fit(source=_source(root), validation_data=(xv[:, :3], yv[:, :3], np.array([3, 2, 3])))
+
+
+# ---------------------------------------------------------------- lane stream-fits-2: every option of the array fit
+def _valid_steps_counts(root):
+    """The classes fixture's labels at valid steps (testing oracle: the class counts 'balanced' divides by)."""
+    counts = np.zeros(3, np.int64)
+    for k, lengths in enumerate(LENGTHS):
+        t = np.load(os.path.join(root, f"p{k}.targets.npy"))
+        for r, length in enumerate(lengths):
+            counts += np.bincount(t[r, :length].astype(np.int64), minlength=3)
+    return counts
+
+
+def test_recurrent_streamed_balanced_is_the_counted_dict(tmp_path):
+    """class_weight='balanced' weighs by the source's valid-step counts, as the same weights given as a dict."""
+    root = _classes_by_step(str(tmp_path))
+    counts = _valid_steps_counts(root)
+    weights = {c: float(np.float32(counts.sum() / (3.0 * counts[c]))) for c in range(3)}
+    balanced = _tagger(class_weight="balanced").fit(source=_source(root))
+    given = _tagger(class_weight=weights).fit(source=_source(root))
+    assert np.array_equal(balanced.params_, given.params_)
+
+
+def test_recurrent_streamed_sample_weight_and_h0_per_record(tmp_path):
+    """sample_weight holds one weight a record (or a step); weights of 1 are the unweighted fit, a weight a record
+    equals it at every step; h_0 is one state a record."""
+    root = _classes_by_step(str(tmp_path))
+    n = _source(root).n_records
+    plain = _tagger().fit(source=_source(root))
+    ones = _tagger().fit(source=_source(root), sample_weight=np.ones(n, np.float32))
+    assert np.array_equal(ones.params_, plain.params_)
+    w = (np.arange(n, dtype=np.float32) + 1) / 4
+    by_record = _tagger().fit(source=_source(root), sample_weight=w)
+    by_step = _tagger().fit(source=_source(root), sample_weight=np.repeat(w[:, None], LONGEST, axis=1))
+    assert np.array_equal(by_record.params_, by_step.params_)
+    assert not np.array_equal(by_record.params_, plain.params_)
+    h0 = (np.arange(n * 4, dtype=np.float32).reshape(1, n, 4) % 5 - 2) / 4
+    started = _tagger().fit(source=_source(root), h_0=h0)
+    assert np.all(np.isfinite(started.loss_curve_)) and not np.array_equal(started.params_, plain.params_)
+
+
+def _validation():
+    xv = (np.arange(3 * LONGEST * F, dtype=np.float32).reshape(3, LONGEST, F) % 5 - 2) / 3.0
+    yv = (np.arange(3 * LONGEST).reshape(3, LONGEST) * 7) % 3
+    return xv, yv, np.array([4, 2, 3])
+
+
+def test_recurrent_streamed_early_stopping_and_restore_best(tmp_path):
+    """early_stopping with validation_data stops after n_iter_no_change passes without an improvement of tol;
+    restore_best keeps the best pass's parameters."""
+    root = _classes_by_step(str(tmp_path))
+    nb = _source(root).n_batches
+    stopped = _tagger(early_stopping=True, n_iter_no_change=1, tol=1e9).fit(
+        source=_source(root), validation_data=_validation(), restore_best=False)
+    assert len(stopped.validation_loss_) == 2 and len(stopped.loss_curve_) == 2 * nb
+    kept = _tagger().fit(source=_source(root), validation_data=_validation(), restore_best=True)
+    best = kept.best_epoch_
+    reference = mojolearn.GRUClassifier(hidden_size=4, output="sequence", learning_rate=0.05, random_state=0,
+                                        max_epochs=best).fit(source=_source(root))
+    assert np.array_equal(kept.params_, reference.params_)
+
+
+def test_recurrent_streamed_early_stopping_resumed_after_pickling(tmp_path):
+    """partial_fit(source=, validation_data=) carries the monitor: three steps, pickling and the rest stop where
+    the uninterrupted run stops, with its parameters."""
+    root = _classes_by_step(str(tmp_path))
+    est = lambda: _tagger(early_stopping=True, n_iter_no_change=1, tol=1e9)  # noqa: E731
+    whole = est().partial_fit(source=_source(root), steps=12, validation_data=_validation())
+    part = est().partial_fit(source=_source(root), steps=3, validation_data=_validation())
+    back = pickle.loads(pickle.dumps(part))
+    back.partial_fit(source=_source(root), steps=9, validation_data=_validation())
+    assert whole.n_iter_ == 8 and back.n_iter_ == 8
+    assert np.array_equal(back.params_, whole.params_)
+    assert np.array_equal(back._stream_monitor_, whole._stream_monitor_)
