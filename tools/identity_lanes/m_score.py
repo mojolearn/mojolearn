@@ -360,8 +360,16 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("m-multioutput-clf-score")
 def _(ml, X, yc, yr, Xh=None):
     """MultiOutputClassifier.score (the table's base, public-scorer-factories, fits none): two label columns
-    (the fixture's labels and a sign column) over a depth-4 tree on 1024 rows; the subset accuracy."""
-    Y = np.ascontiguousarray(np.stack([yc[:1024], (X[:1024, 1] > 0).astype(yc.dtype)], axis=1)).astype(np.int64)
+    (the fixture's labels and a rank column) over a depth-4 tree on 1024 rows; the subset accuracy.
+
+    The second column is whether a row's feature 1 ranks in the lower half (a stable argsort, ties in row order), so
+    it has both classes on every fixture (FIX w3-fix-13, 2026-11-25). The old sign column `X[:, 1] > 0` was one
+    class on the `negative` and `denormal_ftz` fixtures, and the classifier refused by design ("y has fewer than 2
+    classes"). Fixture defect."""
+    order = np.argsort(X[:1024, 1], kind="stable")
+    lower = np.zeros(1024, dtype=np.int64)
+    lower[order[:512]] = 1
+    Y = np.ascontiguousarray(np.stack([yc[:1024].astype(np.int64), lower], axis=1))
     m = ml.MultiOutputClassifier(ml.DecisionTreeClassifier(max_depth=4)).fit(X[:1024], Y)
     return _m_score_fit(m, X[:256], Y[:256], Xh)
 
