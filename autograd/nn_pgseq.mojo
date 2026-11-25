@@ -50,7 +50,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_FILL, dummy_ptr
 from sequence.recurrent import OptConfig, OptState, opt_scalars
 from sequence.lamb_core import lamb_apply, lamb_clip, lamb_table, lamb_trust, lamb_unit_ratio, lamb_upd
-from autograd.nn_pg import pg_check_membership
+from autograd.nn_pg import ParamGroupTable, pg_check_membership
 from autograd.nn_optim import (
     NN_LAMB_ALWAYS_ADAPT, NN_LAMB_BIAS_CORRECTION, NN_LAMB_CLIP, NN_OPT_ADAGRAD, NN_OPT_LAMB, NN_SCHED_PLATEAU,
     NnLamb, nn_opt_step,
@@ -227,7 +227,10 @@ def pgseq_resolve(
                             + names[g][i] + "'; its parameters are " + have)
         members.append(tensors^)
     # part 1's membership refusals over tensor indices (an empty group, a tensor twice, a tensor in two groups)
-    var checked = pg_check_membership(members)
+    # (no user group: no_decay alone, the default group and its twin)
+    var checked = ParamGroupTable()
+    if U > 0:
+        checked = pg_check_membership(members)
     var out = List[Float64]()
     out.append(Float64(G))
     out.append(Float64(T))
