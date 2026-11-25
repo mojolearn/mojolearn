@@ -255,7 +255,9 @@ def gbdt_imp_expand_device(
     var d_in = ctx.enqueue_create_buffer[DType.float32](max(n_rows * n_raw, 1))
     fold_x_fill(ctx, d_in, x_word, n_rows * n_raw)
     ctr_plan_size_bins(ctx, ctr, n_rows)
-    enqueue_ctr_expand_kernels(ctx, ctr, d_in.unsafe_ptr(), n_rows, row_major, d_borders, d_out)
+    enqueue_ctr_expand_kernels(
+        ctx, ctr, d_in.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows, row_major, d_borders, d_out
+    )
     if comb:
         # the tree-CTR columns flag into the same refusal words
         enqueue_combination_columns(ctx, comb.value(), d_in, n_rows, row_major, d_out, ctr.d_bad)

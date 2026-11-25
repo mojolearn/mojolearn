@@ -658,7 +658,8 @@ def enqueue_resident_ctr_expand(
             src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](x),
         )
     enqueue_ctr_expand_kernels(
-        ctx, plan, plan.d_in.value().unsafe_ptr(), n_rows, row_major, d_borders, d_out
+        ctx, plan, plan.d_in.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows, row_major,
+        d_borders, d_out,
     )
     if read_bad:
         ctx.enqueue_copy(dst_ptr=plan.h_bad.unsafe_ptr(), src_buf=plan.d_bad)
