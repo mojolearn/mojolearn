@@ -153,6 +153,11 @@ struct MemberSet(Movable):
     # nothing is offered), and whether the thread's scope was read.
     var sources: PythonObject
     var scope_read: Bool
+    # THE PER-INPUT PINS (core/member_abi.mojo `MemberCall.y_pin`): per
+    # member, the objects that own its target's and its weights' words (None:
+    # nothing is offered), set by `member_set_resident_inputs`.
+    var y_sources: PythonObject
+    var weights_sources: PythonObject
     # The caller's class labels in code order (None: it hands none over).
     # Set before `member_set_admit` by a caller whose code targets have
     # labels it holds: a classifier member whose class_weight is a dict
@@ -178,6 +183,8 @@ struct MemberSet(Movable):
         self.kept_all = True
         self.sources = Python.list()
         self.scope_read = False
+        self.y_sources = Python.list()
+        self.weights_sources = Python.list()
         self.labels = PythonObject(None)
         self.reads = List[UInt8]()
 
@@ -315,6 +322,8 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
                 gil_free)
     set.reads.append(reads)
     _ = py_call(set.sources.append, PythonObject(None))
+    _ = py_call(set.y_sources.append, PythonObject(None))
+    _ = py_call(set.weights_sources.append, PythonObject(None))
     _ = py_call(set.estimators.append, estimator)
     _ = py_call(set.contexts.append, member_context)
     _ = py_call(set.fields.append, fields)
@@ -435,16 +444,48 @@ def member_set_resident(mut set: MemberSet, source: PythonObject, context: Pytho
     takes it. Raises what the scope's own doors raise for a thread-local
     that holds something else: the caller then keeps its own loop, whose
     doors refuse in their own words."""
+    var last = _resident_last(set, context)
+    if last < 0:
+        return
+    py_setitem(set.sources, PythonObject(last), source)
+
+
+def _resident_last(mut set: MemberSet, context: PythonObject) raises -> Int:
+    """The member admitted last when it reads the thread's active scope (the
+    scope read once per set, at the first member with `MEMBER_CAN_SCOPE`);
+    -1 when it does not, or no scope is active."""
     var last = len(set.run.plans) - 1
     if last < 0 or not set.run.plans[last].member.can(MEMBER_CAN_SCOPE):
-        return
+        return -1
     if not set.scope_read:
         var rows_context = prep_native_context(context)["family_msel_rows_context"]
         set.run.scope = member_scope_word(rows_context)
         set.scope_read = True
     if set.run.scope < 0:
+        return -1
+    return last
+
+
+def member_set_resident_inputs(mut set: MemberSet, y_source: PythonObject, weights_source: PythonObject,
+    context: PythonObject) raises:
+    """UNPACK, after the admit of the member admitted last (beside
+    `member_set_resident`): THE PER-INPUT PINS. `y_source` is the Python
+    object whose buffer holds that member's target words exactly as admitted
+    (the address it gave `member_set_admit`, never a re-coded or gathered
+    copy), `weights_source` the one that holds its weights' words; None for
+    either offers nothing for that input. Inside the thread's `resident()`
+    scope a member whose family reads a scope then may keep that column on
+    the device across the set's fits (the search kind's rule, lane
+    vdf-scope-pins). Each offering member takes its own reference
+    (`member_set_pins_take`), so one reference never reaches two caches.
+    Raises what `member_set_resident` raises."""
+    var last = _resident_last(set, context)
+    if last < 0:
         return
-    py_setitem(set.sources, PythonObject(last), source)
+    if y_source is not None:
+        py_setitem(set.y_sources, PythonObject(last), y_source)
+    if weights_source is not None:
+        py_setitem(set.weights_sources, PythonObject(last), weights_source)
 
 
 def member_set_tests(set: MemberSet, u: Int) -> Bool:
@@ -492,9 +533,21 @@ def member_set_pins_take(mut set: MemberSet) raises:
     the same."""
     for u in range(len(set.run.plans)):  # driver-loop: over the members (one reference each)
         set.run.pin_tokens[u] = 0
+        set.run.y_pin_tokens[u] = 0
+        set.run.weights_pin_tokens[u] = 0
+        set.run.y_taken[u] = UInt8(0)
+        set.run.weights_taken[u] = UInt8(0)
         var source = set.sources[u]
         if source is not None:
             set.run.pin_tokens[u] = member_pin_take(source, 1)
+        # THE PER-INPUT PINS: one reference each on the member's y and
+        # weights owners (`member_set_resident_inputs`).
+        var y_source = set.y_sources[u]
+        if y_source is not None:
+            set.run.y_pin_tokens[u] = member_pin_take(y_source, 1)
+        var weights_source = set.weights_sources[u]
+        if weights_source is not None:
+            set.run.weights_pin_tokens[u] = member_pin_take(weights_source, 1)
 
 
 def member_set_pins_return(mut set: MemberSet) raises:
@@ -504,7 +557,16 @@ def member_set_pins_return(mut set: MemberSet) raises:
         if set.run.pin_tokens[u] != 0:
             member_pin_return(set.run.pin_tokens[u], 1)
             set.run.pin_tokens[u] = 0
+        # The worker wrote 0 for a y / weights reference its cache took.
+        if set.run.y_pin_tokens[u] != 0:
+            member_pin_return(set.run.y_pin_tokens[u], 1)
+            set.run.y_pin_tokens[u] = 0
+        if set.run.weights_pin_tokens[u] != 0:
+            member_pin_return(set.run.weights_pin_tokens[u], 1)
+            set.run.weights_pin_tokens[u] = 0
     _ = set.pins
+    _ = set.y_sources
+    _ = set.weights_sources
 
 
 def member_set_run(mut set: MemberSet) raises:
