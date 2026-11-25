@@ -151,7 +151,19 @@ def neighbors_member_pack(model: PythonObject, fields: PythonObject, context: Py
         return
     if plan.kind == 0:
         # The caller's labels (member_pack_labeled), taken once: code c is labels[c].
-        var labels = member_labels_take(fields, b)
+        # LANE w3f7-c: as a plain list. A classifier member's caller publishes
+        # them as the connected ClassLabels (msel_member_units_door `_member_fit`:
+        # `_public_labels`; a meta member's outputs likewise), a list SUBCLASS
+        # the shared admission refuses in the Sequential words, so the view
+        # below refused every refit PACK of a KNeighborsClassifier in a search
+        # (test_mf_rows8d seed_as_given, the MultiOutputClassifier(KNN) search
+        # row; verify lane public-scorer-factories). The 2-D path
+        # (`_pack_outputs`) already copied each output's list this way
+        # (69b6398f72); the estimator's own fit keeps `_label_names` an exact
+        # list, which predict admits. Cause 2a6cf4325f (this view), exposed by
+        # 7626d7be07 (a refused pack raises; it fell back before). One native
+        # list copy per pack (classes-sized), only for ClassLabels.
+        var labels = classifier_label_list(member_labels_take(fields, b), context)
         var flat = family_array(Python.tuple(rows), "<i4", context)
         var flat_address = Int(py=classical_address(flat))
         unsafe_memcpy(dest=_I32P(unsafe_from_address=flat_address),

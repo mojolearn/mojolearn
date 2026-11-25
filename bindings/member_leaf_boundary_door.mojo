@@ -397,6 +397,9 @@ def member_leaf_pack_labeled(model: PythonObject, fields: PythonObject, context:
     # the Sequential admission's words at a search's refit PACK: every refit
     # search over a KNeighborsClassifier in a fresh process (test_mf_rows8d
     # seed_as_given, the multi-output StratifiedShuffleSplit row). Once per pack.
+    # LANE w3f7-c: that refusal was the labels' TYPE (ClassLabels, a list
+    # subclass), fixed in `neighbors_member_pack` (classifier_label_list); the
+    # connection stays for the decoded label array the pack views there.
     _member_context_connect(context)
     member_labels_hold(fields, labels)
     member_leaf_pack(model, fields, context, b, plan, state)
