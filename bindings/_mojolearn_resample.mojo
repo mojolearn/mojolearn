@@ -20,7 +20,11 @@ orders written out there), which the public door
 (bindings/linalg_ops_resample_door.mojo) calls with the GIL released. The six
 Python entries that took two length-checked lists are deleted. Every result
 struct crosses as its arrays and scalars; the scalars widen float32 to
-float64 exactly. The gather entries below keep the two-list form.
+float64 exactly. The row gather of `resample` is operation 8 of the same
+table (lane gd-rf-resample, 2026-11-25): the Python-list gather entries
+(`resample_gather_gpu`, `resample_permutation_gather_gpu`,
+`resample_gpu_gather_enabled`, `resample_gather_narrow`,
+`resample_gather_narrow_bytes`) are deleted.
 """
 
 from core.experiment_guards_series import SERIES_GUARDS_OK
@@ -51,11 +55,7 @@ from resample.mojolearn_resample_run import (
 from resample.estimator import (
     resample_indices_replace_into,
     resample_indices_permute_into,
-    RESAMPLE_GPU_GATHER,
-    resample_gather_gpu, resample_permutation_gather_gpu,
     resample_fast_defines,
-    GATHER_NARROW_MAX_BYTES,
-    resample_gather_narrow,
 )
 
 
@@ -86,64 +86,11 @@ def resample_vendor_binding() raises -> PythonObject:
 # Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
 
 
-def resample_gpu_gather_enabled_binding() raises -> PythonObject:
-    return PythonObject(Int(RESAMPLE_GPU_GATHER))
-
-
-def resample_gather_gpu_binding[REPLACE: Bool = True](addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    # addrs: src,dst per array; params: n,count,seed,width per array.
-    var k = len(addrs) // 2
-    if k < 1 or len(addrs) != 2 * k or len(params) != 3 + k:
-        raise Error("resample: invalid GPU gather argument lengths")
-    var srcs = List[Int]()
-    var dsts = List[Int]()
-    var widths = List[Int]()
-    # driver-loop: over the gathered arrays (argument spans)
-    for a in range(k):
-        srcs.append(Int(py=addrs[2 * a]))
-        dsts.append(Int(py=addrs[2 * a + 1]))
-        widths.append(Int(py=params[3 + a]))
-    var n = Int(py=params[0])
-    var count = Int(py=params[1])
-    var seed = UInt64(Int(py=params[2]))
-    var done = False
-    with GILReleased(Python()):
-        done = resample_gather_gpu[REPLACE](n, count, seed, srcs, dsts, widths)
-    return PythonObject(Int(done))
-
-
-def resample_permutation_gather_gpu_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    return resample_gather_gpu_binding[False](addrs, params)
-
-
-def resample_gather_narrow_bytes_binding() raises -> PythonObject:
-    """RESAMPLE_FAST_GATHER_NARROW: the widest row (bytes) gathered on the device."""
-    return PythonObject(GATHER_NARROW_MAX_BYTES)
-
-
-def resample_gather_narrow_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """RESAMPLE_FAST_GATHER_NARROW (`resample_gather_narrow`): addrs = [idx
-    (count int32, WRITTEN), src, dst per array]; params = [n, count, seed,
-    width per array] (width 0: the caller gathers that array). Returns the
-    bit mask of the arrays gathered, -1 in a build without the define."""
-    var k = (len(addrs) - 1) // 2
-    if k < 1 or len(addrs) != 2 * k + 1 or len(params) != 3 + k:
-        raise Error("resample: invalid narrow gather argument lengths")
-    var srcs = List[Int]()
-    var dsts = List[Int]()
-    var widths = List[Int]()
-    for a in range(k):  # small-loop(k: the arrays passed to resample, a handful): addresses and widths, no row data
-        srcs.append(Int(py=addrs[1 + 2 * a]))
-        dsts.append(Int(py=addrs[2 + 2 * a]))
-        widths.append(Int(py=params[3 + a]))
-    var idx = Int(py=addrs[0])
-    var n = Int(py=params[0])
-    var count = Int(py=params[1])
-    var seed = UInt64(Int(py=params[2]))
-    var done = -1
-    with GILReleased(Python()):
-        done = resample_gather_narrow(n, count, seed, idx, srcs, dsts, widths)
-    return PythonObject(done)
+# TOMBSTONE: resample_gpu_gather_enabled, resample_gather_gpu, resample_permutation_gather_gpu,
+# resample_gather_narrow_bytes, resample_gather_narrow (Python-list entries of the FAST + Apple row gather and its
+# dead narrow stub) deleted 2026-11-25 by lane gd-rf-resample: the row gather is operation 8 of the typed table on
+# every GPU image (resample/resample_native.mojo). Recoverable at the parent of that commit on
+# lane/gd-resident-functions.
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_resample.mojo
@@ -182,11 +129,6 @@ def build__mojolearn_resample() -> PythonObject:
         m.def_function[resample_native_api_v1_binding]("resample_native_api_v1")
         m.def_function[resample_store_v1_binding]("resample_store_v1")
         m.def_function[resample_fast_defines_binding]("resample_fast_defines")
-        m.def_function[resample_gpu_gather_enabled_binding]("resample_gpu_gather_enabled")
-        m.def_function[resample_gather_gpu_binding[True]]("resample_gather_gpu")
-        m.def_function[resample_permutation_gather_gpu_binding]("resample_permutation_gather_gpu")
-        m.def_function[resample_gather_narrow_bytes_binding]("resample_gather_narrow_bytes")
-        m.def_function[resample_gather_narrow_binding]("resample_gather_narrow")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_resample: ", e))

@@ -10,7 +10,7 @@ from bindings.native_torch_admission_door import native_torch_exact, native_torc
 from bindings.host_inference_scalars_door import host_inference_scalar
 from providers.python.estimator_binding_pyapi_door import estimator_binding_device
 from providers.python.resample_public_pyapi_pack import resample_device
-from providers.python.resample_rows_pyapi_door import ResampleRows, resample_rows_indices, resample_rows_gpu, resample_rows_narrow
+from providers.python.resample_rows_pyapi_door import ResampleRows, resample_rows_indices, resample_rows_run
 from providers.python.resample_pandas_pyapi_door import resample_pandas_array
 from bindings.resample_keys_unpack import resample_keys
 
@@ -41,12 +41,11 @@ def resample_rows_operation(args: PythonObject, context: PythonObject) raises ->
     for i in range(len(arrays)):  # driver-loop: capture each original input and metadata once, retaining its owners
         var original = arrays[i]
         var value = original
-        var gpu = py_type(original) is py_get(context, nk[].k_ndarray)
         if native_pandas_exact(original):
             value = resample_pandas_array(original, context)
         elif native_torch_exact(py_type(original)):
             value = native_torch_numpy(original)
-        rows.append(ResampleRows(value, context, gpu))
+        rows.append(ResampleRows(value, context))
         py_call(lengths.append, rows[len(rows) - 1].n)
     var n = rows[0].n
     for i in range(1, len(rows)):  # driver-loop: all row lengths are compared from retained native metadata
@@ -66,10 +65,17 @@ def resample_rows_operation(args: PythonObject, context: PythonObject) raises ->
         # Preserve the numerical owner's existing size refusal before gather
         # output allocation, as the former public operation did.
         _ = resample_rows_indices(binding, n, count, replace, seed, context)
-    var result = resample_rows_gpu(rows, binding, n, count, replace, seed, context)
-    if result is None and replace:
-        result = resample_rows_narrow(rows, binding, n, count, seed, context)
-    if result is None:
+    # lane gd-rf-resample (2026-11-25): one route on every image, vendor and
+    # tier: the image draws the rows and gathers every array of plain words
+    # itself (on the device in a GPU image; providers/python/
+    # resample_rows_pyapi_door.mojo `resample_rows_run`). Gone: the FAST +
+    # Apple-only device gather entry, the dead narrow route, and the host row
+    # gather every other GPU call made. No rows to gather (n or n_samples 0):
+    # the empty outputs below.
+    var result: PythonObject
+    if n > 0 and count > 0:
+        result = resample_rows_run(rows, arrays, binding, n, count, replace, seed, context)
+    else:
         var indices = resample_rows_indices(binding, n, count, replace, seed, context)
         result = Python.list()
         for i in range(len(rows)):  # driver-loop: return finished rows in the caller's argument order

@@ -2398,11 +2398,11 @@ def resample_indices_host(
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.expdel2-37-series.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_GATHER_OFF (old path, EXP:1131 reconciled; the FAST + Apple gather default kept) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
 # Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_GATHER_OFF.patch; record in docs/TOMBSTONES.md.
-comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU)
-    # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
-    # three shapes; quality equal, expected refusal recovered. Historical MIXED.
-    # One warmup+score; ab-20261006/repairs-54c1f35a5/results/F04.
+# The gate RESAMPLE_GPU_GATHER (FAST + Apple only) is gone (lane
+# gd-rf-resample, 2026-11-25): resample.resample gathers its rows on the
+# device on EVERY GPU image, vendor and tier (`resample_rows_device`), the
+# GPU-path rule (no host row gather inside a GPU call). The F04 numbers above
+# stay as the record of the Apple FAST decision that first moved it there.
 
 
 # Pair independent array transfers on one stream. Source/output DeviceBuffers
@@ -2420,11 +2420,11 @@ comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 # resample-full-summary.json; model is stateless, output/index hashes saved.
 # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF (old path beside the Apple FAST default, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
 # Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF.patch; record in docs/TOMBSTONES.md.
-comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU)
-    # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
-    # three shapes; quality equal, expected refusal recovered. Historical MIXED.
-    # One warmup+score; ab-20261006/repairs-54c1f35a5/results/F04.
+# RESAMPLE_FAST_WAIT_PAIR (the switch between this one-completion form and a
+# per-array pinned-staging loop that no build reached: both switches were the
+# same FAST + Apple condition) is gone with RESAMPLE_GPU_GATHER (lane
+# gd-rf-resample): the one-completion form above is the device gather's only
+# form, `_resample_rows_gather`.
 
 # F19 M3 2026-10-06 public resample shapes(1,37)/(3,129)/(1,7,67):
 # B/A1.0402/0.9868/1.7701, quality equal, one warmup+score. Historical losses.
@@ -2444,16 +2444,34 @@ comptime RESAMPLE_FAST_TILED_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU)
 
 
-def resample_gather_grouped(
-    ctx: DeviceContext, mut rows: DeviceBuffer[DType.int32], n: Int, count: Int,
-    srcs: List[Int], dsts: List[Int], widths: List[Int],
+def _resample_rows_gather(
+    ctx: DeviceContext, mut rows: DeviceBuffer[DType.int32], n: Int, count: Int, idx_dst: Int,
+    srcs: List[Int], dsts: List[Int], words: List[Int], slots: List[Int],
 ) raises:
+    """Rows `rows[0, count)` of every array `a` with `words[a] > 0` (its rows
+    as `words[a]` 4-byte words) gathered ON THE DEVICE into the caller's
+    output `dsts[a]` (count x words[a] words), downloaded once each; the
+    `count` row numbers into the caller's int32 buffer `idx_dst` when it is
+    not 0 (the caller gathers an array the device cannot hold, an object or
+    an odd-width row, with them). The source is the resident store's slot
+    `slots[a]` of the caller's buffer (inside a `resident()` scope: read in
+    place) or one upload from `srcs[a]`. A word is copied, never converted:
+    the outputs are the bytes a host gather of the same rows writes. One
+    completion for every array (the F04 pairing above)."""
+    if idx_dst != 0:
+        ctx.enqueue_copy(dst_ptr=i32_ptr(idx_dst), src_buf=rows.create_sub_buffer[DType.int32](0, count))
     var keep = List[DeviceBuffer[DType.float32]]()
-    for a in range(len(srcs)):
-        var d = widths[a]
-        var source = ctx.enqueue_create_buffer[DType.float32](n * d)
+    for a in range(len(srcs)):  # driver-loop: over the gathered arrays (argument spans)
+        var d = words[a]
+        if d <= 0:
+            continue
+        var source: DeviceBuffer[DType.float32]
+        if slots[a] >= 0:
+            source = resample_store_buffer(slots[a], n * d)
+        else:
+            source = ctx.enqueue_create_buffer[DType.float32](n * d)
+            ctx.enqueue_copy(dst_buf=source, src_ptr=f32_ptr(srcs[a]))
         var output = ctx.enqueue_create_buffer[DType.float32](count * d)
-        ctx.enqueue_copy(dst_buf=source, src_ptr=f32_ptr(srcs[a]))
         comptime if RESAMPLE_FAST_TILED_GATHER:
             ctx.enqueue_function[gather_rows_tiled_f32_kernel](
                 output.unsafe_ptr(), source.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
@@ -2468,7 +2486,7 @@ def resample_gather_grouped(
         keep.append(source^)
         keep.append(output^)
     ctx.synchronize()
-    _ = keep^
+    _ = keep^  # every source and output stays referenced until the one completion above
 
 
 # F19 M3 permutation complete calls B/A2.0031/2.1569/1.0847 at509x3/521x129/997x67;
@@ -2477,87 +2495,56 @@ def resample_gather_grouped(
 # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE (opt-in FAST arm, F19 slower, no promotion) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
 # Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE.patch; record in docs/TOMBSTONES.md.
 # (Sweep 2026-11-15: comptime RESAMPLE_FAST_DEVICE_PERMUTE removed; always False, nothing read it.)
+# lane gd-rf-resample (2026-11-25): replace=False now gathers on the device
+# too (`resample_rows_device`), by the GPU-path rule; the F19 numbers above
+# are the Apple FAST record of that choice.
+# TOMBSTONE: resample_gather_gpu, resample_permutation_gather_gpu, resample_gather_grouped (the FAST + Apple
+# gather entrances reached through Python-list binding entries; replaced by `resample_rows_device`, every GPU
+# image, through op 8 of the typed table) deleted 2026-11-25 by lane gd-rf-resample; code recoverable at the
+# parent of that commit on lane/gd-resident-functions (no patch: never a define, AGENTS.md "Deleting an
+# experiment" part 3).
 
-def resample_permutation_gather_gpu(
-    n: Int, count: Int, seed: UInt64, srcs: List[Int], dsts: List[Int], widths: List[Int],
-) raises -> Bool:
-    return resample_gather_gpu[False](n, count, seed, srcs, dsts, widths)
 
-
-def resample_gather_gpu[REPLACE: Bool = True](
-    n: Int, count: Int, seed: UInt64, srcs: List[Int],
-    dsts: List[Int], widths: List[Int],
-) raises -> Bool:
-    """Synchronized caller-owned float32 outputs; only GPU draws/gathers.
-    Input/output copies are transport, not host row indexing. No retained pointers.
-    """
-    comptime if RESAMPLE_GPU_GATHER:
-        comptime if not REPLACE:
-            return False
-        utils_validate(n, count, REPLACE)
-        if len(srcs) == 0 or len(srcs) != len(dsts) or len(srcs) != len(widths):
-            raise Error("resample: invalid gather array spans")
-        if count <= 0:
-            return False
-        # driver-loop: over the gathered arrays (argument spans)
-        for a in range(len(widths)):
-            if widths[a] <= 0 or max(n * widths[a], count * widths[a]) > 2147483647:
-                return False
-        var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE if REPLACE else RESAMPLE_KIND_UTILS_PERMUTE)
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var draw_count = count if REPLACE else n
-        var rows = ctx.enqueue_create_buffer[DType.int32](draw_count)
-        var keys = ctx.enqueue_create_buffer[DType.uint64](1 if REPLACE else n)
-        ctx.enqueue_function[utils_draw_kernel](
-            rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
-            Int32(n), Int32(draw_count), Int32(1) if REPLACE else Int32(0),
-            grid_dim=(ceildiv(draw_count, 256), 1, 1), block_dim=(256, 1, 1),
-        )
-        comptime if not REPLACE:
-            var scratch = ctx.enqueue_create_buffer[DType.int32](n)
-            if _permutation_order_device(ctx, n, keys, rows, scratch, 256):
-                resample_gather_grouped(ctx, rows, n, count, srcs, dsts, widths)
-            else:
-                resample_gather_grouped(ctx, scratch, n, count, srcs, dsts, widths)
-            _ = scratch^
-            _ = rows^
-            _ = keys^
-            _ = ctx^
-            return True
-        comptime if RESAMPLE_FAST_WAIT_PAIR:
-            resample_gather_grouped(ctx, rows, n, count, srcs, dsts, widths)
-            _ = rows^
-            _ = keys^
-            _ = ctx^
-            return True
-        for a in range(len(srcs)):
-            var d = widths[a]
-            var src = f32_ptr(srcs[a])
-            var dst = f32_ptr(dsts[a])
-            var hsrc = ctx.enqueue_create_host_buffer[DType.float32](n * d)
-            var dsrc = ctx.enqueue_create_buffer[DType.float32](n * d)
-            var dout = ctx.enqueue_create_buffer[DType.float32](count * d)
-            var hout = ctx.enqueue_create_host_buffer[DType.float32](count * d)
-            ctx.synchronize()
-            copy_f32(src, hsrc.unsafe_ptr(), n * d)
-            ctx.enqueue_copy(dst_buf=dsrc, src_ptr=hsrc.unsafe_ptr())
-            ctx.enqueue_function[gather_rows_f32_kernel](
-                dout.unsafe_ptr(), dsrc.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
-                grid_dim=(ceildiv(count * d, 256), 1, 1), block_dim=(256, 1, 1),
-            )
-            ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
-            ctx.synchronize()
-            copy_f32(hout.unsafe_ptr(), dst, count * d)
-            _ = hsrc^
-            _ = dsrc^
-            _ = dout^
-            _ = hout^
-        _ = rows^
-        _ = keys^
-        _ = ctx^
-        return True
+def resample_rows_device(
+    n: Int, count: Int, replace: Bool, seed: UInt64, idx_dst: Int,
+    srcs: List[Int], dsts: List[Int], words: List[Int], slots: List[Int],
+) raises:
+    """`sklearn.utils.resample(*arrays, replace=..., n_samples=count,
+    random_state=seed)` on the device (lane gd-rf-resample, 2026-11-25): the
+    row numbers are `resample_indices_host`'s (the same draw launch, and for
+    replace=False the same device order), never leave the device unless
+    `idx_dst` asks for them, and every array with `words[a] > 0` is gathered
+    there (`_resample_rows_gather`). Before, outside FAST + Apple, the rows
+    were drawn here, downloaded, and gathered ON THE HOST by the public
+    door. Gathered rows are copies: the bits do not change."""
+    utils_validate(n, count, replace)
+    if len(srcs) != len(dsts) or len(srcs) != len(words) or len(srcs) != len(slots):
+        raise Error("resample: invalid gather array spans")
+    if count <= 0:
+        return
+    var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE if replace else RESAMPLE_KIND_UTILS_PERMUTE)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var m = count if replace else n
+    var rows = ctx.enqueue_create_buffer[DType.int32](m)
+    var scratch = ctx.enqueue_create_buffer[DType.int32](1 if replace else n)
+    var keys = ctx.enqueue_create_buffer[DType.uint64](1 if replace else n)
+    ctx.enqueue_function[utils_draw_kernel](
+        rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
+        Int32(n), Int32(m), Int32(1) if replace else Int32(0),
+        grid_dim=(ceildiv(m, 256), 1, 1), block_dim=(256, 1, 1),
+    )
+    var in_rows = True
+    if not replace:
+        in_rows = _permutation_order_device(ctx, n, keys, rows, scratch, 256)
+    if in_rows:
+        _resample_rows_gather(ctx, rows, n, count, idx_dst, srcs, dsts, words, slots)
     else:
-        return False
+        _resample_rows_gather(ctx, scratch, n, count, idx_dst, srcs, dsts, words, slots)
+    _ = scratch^
+    _ = rows^
+    _ = keys^
+    # DEVIATION 1946: the context dies LAST.
+    _ = ctx^
 
 
 #: Formerly `-D MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW` (lane apple-fast-s-shap,
@@ -2581,16 +2568,7 @@ def resample_gather_gpu[REPLACE: Bool = True](
 # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW, MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES (opt-in FAST arm and its width knob, EXP:1404 READY-AB, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
 # Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW.patch and experiments/removed/MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES.patch; record in docs/TOMBSTONES.md.
 # (Sweep 2026-11-15: comptime RESAMPLE_FAST_GATHER_NARROW removed; always False, nothing read it.)
-comptime GATHER_NARROW_MAX_BYTES = 128
-
-
-def resample_gather_narrow(
-    n: Int, count: Int, seed: UInt64, idx_dst: Int, srcs: List[Int], dsts: List[Int], widths: List[Int],
-) raises -> Int:
-    """RESAMPLE_FAST_GATHER_NARROW: the `count` replace=True row indices into
-    the caller's int32 buffer idx_dst, and every array a with 0 < widths[a]
-    and widths[a] * 4 <= GATHER_NARROW_MAX_BYTES gathered on the device into
-    dsts[a] (count x widths[a] float32). Returns the bit mask of the arrays
-    gathered (the caller gathers the rest with the indices), -1 in a build
-    without the define. Synchronized; nothing retained."""
-    return -1
+# TOMBSTONE: GATHER_NARROW_MAX_BYTES, resample_gather_narrow (the stub left by the define's deletion above: it
+# returned -1, "not taken", in every build; its door route and binding entries went with it) deleted 2026-11-25
+# by lane gd-rf-resample: `resample_rows_device` gathers every row width on the device. Recoverable at the parent
+# of that commit on lane/gd-resident-functions.
