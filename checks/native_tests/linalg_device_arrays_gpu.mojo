@@ -422,6 +422,7 @@ def test_copy_device_arrays() raises:
     _same("copy == source", _get(ctx, hc, 37), a)
     var zeros = List[Float32](length=37, fill=0.0)
     train_dev_put(ctx, hc, _fp(zeros), 37)
+    _ = zeros^  # keep-alive: an address helper's argument (LASTUSE helpers)
     _same("source unchanged after writing the copy", _get(ctx, ha, 37), a)
     train_dev_free(ctx, ha)
     train_dev_free(ctx, hc)

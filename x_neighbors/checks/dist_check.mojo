@@ -89,6 +89,7 @@ def run_checks() raises:
     var ei = zi(n * k)
     var ed = zf(n * k)
     op_knn_select(fa(sq), fa(ed), ia(ei), n, n, k, 1)
+    _ = ed^  # keep-alive: an address helper's argument (LASTUSE helpers)
     same("5207 knn_select exclude-self device", count_diff_i32(ei, we[1]))
     tr.record_list_i32("x_neighbors.knn_select", si)
     _ = sq^

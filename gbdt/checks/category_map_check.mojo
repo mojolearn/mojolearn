@@ -103,6 +103,7 @@ def distinct(n: Int, modulus: UInt64) raises:
         _need(code < len(got) and got[code] == values[i], "every fitted key has its rank")
     _need(category_code_of(_key_ptr(got), len(got), modulus + UInt64(1)) == len(got),
           "an unseen key takes the unseen code")
+    _ = got^  # keep-alive: an address helper's argument (LASTUSE helpers)
     _ = values
 
 

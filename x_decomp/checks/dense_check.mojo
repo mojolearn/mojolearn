@@ -80,6 +80,7 @@ def run_checks() raises:
         var qa2 = qa.copy()
         var want_r = host_qr_factor(qa2, qm, qn)
         var got_r = fast_qr_factor(ptr(qa), qm, qn)
+        _ = qa^  # keep-alive: an address helper's argument (LASTUSE helpers)
         same("host QR slices " + String(qm) + " x " + String(qn), count_diff_f32(got_r, want_r))
     # (2026-11-19, lane fx-gpu-checks-xfam) The two cases that held
     # x_decomp/host_jacobi.mojo (fast_one_sided_jacobi_svd, fast_jacobi_eigh)
@@ -101,6 +102,7 @@ def run_checks() raises:
     var lp = List[Int32](length=ln, fill=Int32(0))
     var linfo = zeros(1)
     HostExec.lu(ptr(lh), iptr(lp), ptr(linfo), ln)
+    _ = linfo^  # keep-alive: an address helper's argument (LASTUSE helpers)
     same("host LU factor n 100", count_diff_f32(lh, lw[0]))
     same("host LU pivots n 100", count_diff_i32(lp, lw[1]))
     # ---- 5307 the pivot
@@ -172,6 +174,7 @@ def run_checks() raises:
     same("5308 chol device", count_diff_f32(cd, wl))
     var ch = g.copy()
     HostExec.chol(ptr(ch), ptr(info), ns)
+    _ = info^  # keep-alive: an address helper's argument (LASTUSE helpers)
     same("5308 chol host", count_diff_f32(ch, wl))
     tr.record_list_f32("x_decomp.chol", cd)
     # ---- 5309 MGS2

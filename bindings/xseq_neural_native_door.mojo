@@ -792,6 +792,7 @@ def _rnn_fit_full(model: PythonObject, fields: PythonObject, x_source: PythonObj
         py_setitem(fields, PythonObject("validation_loss_"), vcurve[py_call(native_loaded_module("builtins").slice,
                                                                              PythonObject(0), PythonObject(run))])
         py_setitem(fields, PythonObject("best_epoch_"), Int(vp[epochs + 1]))
+        _ = vcurve^  # keep-alive: an address helper's argument (LASTUSE helpers)
     var curve = losses
     if run != epochs:
         curve = losses[py_call(native_loaded_module("builtins").slice, PythonObject(0), PythonObject(run * per))]

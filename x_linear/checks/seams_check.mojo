@@ -94,6 +94,8 @@ def check_dot(mut card: IdentityTrace) raises:
     var want = dot_pinned(a, b)
     var got = List[Float32](length=1, fill=0)
     got[0] = dot(_p(a), 0, _p(b), 0, 37)
+    _ = a^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = b^  # keep-alive: an address helper's argument (LASTUSE helpers)
     _require(_bits(got[0]) == _bits(want), "dot: shipped fold != ascending fused fold")
     card.record_host("x_linear.seam5000.dot", _u(got), 1)
     _ = got^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
@@ -220,6 +222,11 @@ def check_tie(mut card: IdentityTrace) raises:
     var iw = List[Int32](length=2 * d, fill=0)
     var tw = List[Float32](length=team_work(n, 0, 0), fill=0)
     lars_fit(solo(_p(tw), n, 0, 0), _p(x), _p(y), n, d, _pi(ip), _p(fp), _p(res), _p(fw), _pi(iw))
+    _ = fp^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = fw^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = tw^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = x^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = y^  # keep-alive: an address helper's argument (LASTUSE helpers)
     _ = ip^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
     _ = iw^
     _require(Int(res[d + 4]) == argmax_abs_first(xty), "tie: LARS's first active feature is not the lowest tied index")
@@ -249,6 +256,11 @@ def check_nan(mut card: IdentityTrace) raises:
     var iw = List[Int32](length=1, fill=0)
     var tw = List[Float32](length=team_work(3, 0, 0), fill=0)
     isotonic_predict(solo(_p(tw), 3, 0, 0), _p(q), _p(th), 3, 1, _pi(ip), _p(fp), _p(res), _p(fw), _pi(iw))
+    _ = fp^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = fw^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = q^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = th^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = tw^  # keep-alive: an address helper's argument (LASTUSE helpers)
     _ = ip^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
     _ = iw^
     _require(_bits(res[0]) == CANONICAL_NAN_BITS and _bits(res[2]) == CANONICAL_NAN_BITS,
@@ -279,6 +291,7 @@ def check_intercept(mut card: IdentityTrace) raises:
     wb.append(b)
     var got = List[Float32](length=1, fill=0)
     got[0] = decision_one(_p(x), 0, d, _p(wb), 0, 0)
+    _ = wb^  # keep-alive: an address helper's argument (LASTUSE helpers)
     _require(_bits(got[0]) == _bits(score_intercept_last(x, w, b)), "intercept: shipped score != fold then intercept")
     card.record_host("x_linear.seam5007.intercept", _u(got), 1)
     _ = got^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use

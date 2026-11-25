@@ -704,6 +704,8 @@ def _tsvd_explained_tail(
         _mp(var_t), Int32(n_components), _mp(var_x), Int32(n_features), _mp(d_exp), _mp(d_rat),
         grid_dim=1, block_dim=TSVD_FIN_TPB,
     )
+    _ = var_t^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = var_x^  # keep-alive: an address helper's argument (LASTUSE helpers)
     if n_components > 0:
         ctx.enqueue_copy(dst_ptr=explained_ptr, src_buf=d_exp)
         ctx.enqueue_copy(dst_ptr=ratio_ptr, src_buf=d_rat)

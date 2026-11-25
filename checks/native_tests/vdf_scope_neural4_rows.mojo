@@ -204,6 +204,7 @@ def _nmf_one(solver: Int) raises:
     var ids = _taken_fold(whole, idx)
     var rr = nmf_run[DevExec, DevRDev, True, DevDecomp](F32Ptr(unsafe_from_address=Int(0)), n, _D, nc, NMF_INIT_NNDSVDA,
         _p(unused), _p(unused), 0, solver, a, _p(wr), _p(hr), 0, 0, ids[1])
+    _ = unused^  # keep-alive: an address helper's argument (LASTUSE helpers)
     _free(ids[1])
     _free(ids[0])
     var what = String("NMF solver ") + String(solver)
