@@ -59,6 +59,11 @@ def connect():
                    host_archive_classical_formats=(), host_archive_forest_formats=(),
                    host_archive_lifetime_layouts={}, archive_class_formats={})
     from ._native_table_key import KEYS as _native_table_keys
+    # A loader that takes `device` (HDBSCAN.load) admits it with the
+    # constructor's check (bindings/classical_trees_door.mojo): the class
+    # table, the backend's fields and the lazy CPU-image connection.
+    from ._device_table import connect_context as _device_connect_context
+    _device_connect_context(save)
     save.update(archive_save_schemas={}, host_archive_context=archive,
                 native_table_keys=_native_table_keys,
                 classifier_labels_class=ClassLabels,
