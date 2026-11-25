@@ -1,0 +1,24 @@
+diff --git a/core/p3_linear_impl.mojo b/core/p3_linear_impl.mojo
+index 555e1f9731..b017f582f5 100644
+--- a/core/p3_linear_impl.mojo
++++ b/core/p3_linear_impl.mojo
+@@ -29,6 +29,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
+ from core.fold_x_device import fold_x_fill
+ from max.gpu import block_dim, block_idx, thread_idx
+ from checks.numerics import ftz
++from std.memory import bitcast  # SABOTAGE coverage (sab-arms-67)
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side key
+ from core.admitted_finite_status import enqueue_finite_status
+ from core.gemm import gemv_n_ols_predict
+ from core.step_phase import (
+@@ -127,6 +129,10 @@ def ols_predict_device(
+         step_count_d2h()
+     ctx.synchronize()
+     step_count_sync()
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the first prediction one ulp off (low bit flipped), the GPU bindings only
++        if n_rows > 0:
++            var sab = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr)
++            sab[0] = bitcast[DType.float32](bitcast[DType.uint32](sab[0]) ^ UInt32(1))
+     var bad = 1 if test and word[0] != Int32(0) else 0
+     _ = x^
+     _ = coef^

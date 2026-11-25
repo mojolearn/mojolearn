@@ -1,0 +1,21 @@
+diff --git a/cholesky/estimator.mojo b/cholesky/estimator.mojo
+index 510ce9e6df..5507844be5 100644
+--- a/cholesky/estimator.mojo
++++ b/cholesky/estimator.mojo
+@@ -42,6 +42,7 @@ which is what the gates and the card use.
+ from core.hostptr import copy_f32
+ from core.transfer import transfer_download_f32_list, transfer_upload_list
+ from std.sys.compile import is_defined
++from std.memory import bitcast  # SABOTAGE coverage (sab-arms-67)
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from max.gpu import block_dim, block_idx, thread_idx
+ from checks.numerics import NUMERIC_FAST
+@@ -121,6 +122,8 @@ def cholesky_profile_jitter() -> Float32:
+     reach into `cholesky/checks/` for it -- and so that when it appears in
+     a Gaussian process's source it appears as a NAME rather than as a
+     literal somebody will later change. DEVIATION 1637."""
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the profile ridge one ulp up, the GPU bindings only
++        return bitcast[DType.float32](bitcast[DType.uint32](chol_jitter_pinned()) + UInt32(1))
+     return chol_jitter_pinned()
+ 
+ 
