@@ -194,6 +194,13 @@ comptime _SOP_SCAN = 1118
 comptime _SOP_CUSTOM_OP = 1260
 comptime _SOP_CUSTOM = 1261
 # nn-blocks-cbw end
+# session-ops-conv begin: Sequential's convolutions as Session ops (session codes 130, 132..134; 131, conv2d with
+# dilation or per-axis words, is chosen by Session.conv2d's door and has no name of its own)
+comptime _SOP_CONV1D = 1130
+comptime _SOP_CONV3D = 1132
+comptime _SOP_CONV_TRANSPOSE1D = 1133
+comptime _SOP_CONV_TRANSPOSE2D = 1134
+# session-ops-conv end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -371,6 +378,12 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["custom_op"] = _SOP_CUSTOM_OP
         self.codes["custom"] = _SOP_CUSTOM
         # nn-blocks-cbw end
+        # session-ops-conv begin
+        self.codes["conv1d"] = _SOP_CONV1D
+        self.codes["conv3d"] = _SOP_CONV3D
+        self.codes["conv_transpose1d"] = _SOP_CONV_TRANSPOSE1D
+        self.codes["conv_transpose2d"] = _SOP_CONV_TRANSPOSE2D
+        # session-ops-conv end
 
 
 # One table per process (identical contents in every extension that links this file).

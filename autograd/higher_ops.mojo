@@ -156,6 +156,11 @@ def higher_family(op: Int) -> String:
     if tag == 202 or tag == 203:
         return "attention"
     # nn-blocks-qkv end
+    # session-ops-conv begin: Session.conv_transpose1d / 2d record the transposed convolution's tag
+    # (autograd/nn_conv.mojo NNC_TAG_CONV_TRANSPOSE)
+    if tag == 560:
+        return "conv_transpose1d / conv_transpose2d"
+    # session-ops-conv end
     return "custom"
 
 

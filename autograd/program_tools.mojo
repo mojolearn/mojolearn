@@ -215,6 +215,18 @@ def program_op_name(code: Int) -> String:
     if code == 126:
         return "custom"
     # nn-blocks-cbw end
+    # session-ops-conv begin
+    if code == 130:
+        return "conv1d"
+    if code == 131:
+        return "conv2d_dilated"
+    if code == 132:
+        return "conv3d"
+    if code == 133:
+        return "conv_transpose1d"
+    if code == 134:
+        return "conv_transpose2d"
+    # session-ops-conv end
     return "op_" + String(code)
 
 
