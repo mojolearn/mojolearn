@@ -865,7 +865,13 @@ def vocab_decode_ids(tok: VocabTokenizer, ids: List[Int]) raises -> List[UInt8]:
 
 def vocab_encode_ids(tok: VocabTokenizer, bytes: List[UInt8], allow: Bool) raises -> List[Int]:
     """`models.Tokenizer.encode`'s ids, reversed in the sabotage build."""
-    var ids = tok.encode(bytes, allow)
+    return vocab_ids_sabotage(tok.encode(bytes, allow))
+
+
+def vocab_ids_sabotage(var ids: List[Int]) -> List[Int]:
+    """The sabotage build's reversal of `models.Tokenizer.encode`'s ids, on every device's ids
+    (the host's and the GPU image's, lane vdf2-tokmodel), so the negative arm fails on both;
+    the ids unchanged otherwise."""
     comptime if TOKENIZER_HOST_SABOTAGE:
         var rev = List[Int](capacity=len(ids))
         for i in range(len(ids)):

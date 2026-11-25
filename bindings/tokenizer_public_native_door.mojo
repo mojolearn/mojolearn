@@ -61,13 +61,16 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
     BpeHandle, BpeTrainedHandle, VocabHandle, _handle_from_table,
     bpe_handle_load, bpe_encode_into, bpe_encode_batch_into, bpe_check_ids,
     bpe_decode_seq_bytes, bpe_train_fill, trained_vocab_settle,
-    tokenizer_append_bytes, vocab_check_pairs, vocab_encode_ids, vocab_decode_ids,
+    tokenizer_append_bytes, vocab_check_pairs, vocab_encode_ids, vocab_decode_ids, vocab_ids_sabotage,
     vocab_fingerprint_hex, SpelledVocab, SpelledMerges, SPELLED_OK,
     SPELLED_BAD_ID, SPELLED_NOT_STR, SPELLED_RAISED, SPELLED_NOT_PAIR,
     SPELLED_NOT_LEVEL, spelled_vocab_tokens, spelled_merges_text, spelled_merges_list,
 )
 from core.lm_batch_run import lm_gather_rows
 from core.shared_slot import SharedSlot
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
+from core.tokenizer_gpu_entry_table import TOK_GPU_OP_VOCAB_DECODE, TOK_GPU_OP_VOCAB_ENCODE, TOK_GPU_OP_VOCAB_LOAD
+from bindings.tokenizer_gpu_connect_unpack import tokenizer_gpu_entry_connect
 
 
 struct TokenizerPublicConnection(Defaultable, Movable):
@@ -90,6 +93,10 @@ struct TokenizerPublicConnection(Defaultable, Movable):
     var k_normalizer: PythonObject
     var k_bos_ids: PythonObject
     var k_eos_ids: PythonObject
+    # `models.Tokenizer(device="gpu")` (lane vdf2-tokmodel): the GPU tokenizer image's entry,
+    # resolved ONCE at connect_vocab, or the words device='gpu' is refused with.
+    var vocab_gpu_entry: EntryRef
+    var vocab_gpu_refusal: String
 
     def __init__(out self):
         self.vocab = PythonObject(None)
@@ -106,6 +113,8 @@ struct TokenizerPublicConnection(Defaultable, Movable):
         self.k_normalizer = PythonObject(None)
         self.k_bos_ids = PythonObject(None)
         self.k_eos_ids = PythonObject(None)
+        self.vocab_gpu_entry = entry_ref_unresolved()
+        self.vocab_gpu_refusal = String("RuntimeError: tokenizer requires its import-time native connection")
 
 
 comptime TOKENIZER_PUBLIC_CONNECTION = SharedSlot[TokenizerPublicConnection, "MojolearnTokenizerPublicConnectionV2"]
@@ -176,7 +185,7 @@ def _owner_names() raises -> PythonObject:
     var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
     if state[].owner_names is None:
         var names = Python.list()
-        for name in [String("_handle"), String("_m"), String("_source"), String("_n_vocab"), String("_n_ranks"), String("_identity"), String("_max_token_bytes"), String("_fast"), String("_gpu"), String("_device"), String("tokens"), String("merges"), String("stats"), String("vocab_size"), String("min_frequency"), String("backend"), String("pattern"), String("normalizer"), String("source"), String("added"), String("_added_by_id"), String("bos_ids"), String("eos_ids"), String("bos_token_id"), String("eos_token_id")]:  # driver-loop: over the fixed tokenizer state field names, once per process
+        for name in [String("_handle"), String("_m"), String("_source"), String("_n_vocab"), String("_n_ranks"), String("_identity"), String("_max_token_bytes"), String("_fast"), String("_gpu"), String("_device"), String("device"), String("tokens"), String("merges"), String("stats"), String("vocab_size"), String("min_frequency"), String("backend"), String("pattern"), String("normalizer"), String("source"), String("added"), String("_added_by_id"), String("bos_ids"), String("eos_ids"), String("bos_token_id"), String("eos_token_id")]:  # driver-loop: over the fixed tokenizer state field names, once per process
             _ = py_call(names.append, PythonObject(name))
         state[].owner_names = py_call(native_loaded_module("builtins").tuple, names)
     return state[].owner_names
@@ -660,6 +669,28 @@ def _cut_device(value: PythonObject, context: PythonObject) raises -> Int:
     var gpu = context[6]
     if py_type(gpu[0]) is native_loaded_module("builtins").str:
         raise Error(String(gpu[0]))
+    return DEVICE_GPU
+
+
+def _vocab_device(value: PythonObject, context: PythonObject) raises -> Int:
+    """The admitted `device` of one `mojolearn.models.Tokenizer` construction (the constructor and
+    `from_pretrained`), read once before any file or table is read (lane vdf2-tokmodel). The
+    estimators' meaning through the ONE rule (core/function_device.mojo `function_device_decide`;
+    both sides exist): None keeps today's host route (one identity compare), 'cpu' runs the host
+    tokenizer, 'gpu' runs encode and decode in the GPU tokenizer image (tokenizer/gpu/vocab_gpu.mojo,
+    the same ids as the host column). 'gpu' on a CPU-only installation is refused in the
+    estimators' words, and where the GPU image's entry did not resolve at connection, in those
+    words. Returns DEVICE_INSTALL, DEVICE_CPU or DEVICE_GPU."""
+    var request = device_unpack(value, native_loaded_module("builtins"))
+    if request == DEVICE_INSTALL:
+        return request
+    var cpu_only = py_get(context[5], PythonObject("_CPU_ONLY")) is not None
+    var decided = function_device_decide(request, cpu_only, True, True, "mojolearn.models.Tokenizer")
+    if decided.request != DEVICE_GPU:
+        return DEVICE_CPU
+    ref state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()[]
+    if state.vocab_gpu_refusal.byte_length() != 0:
+        raise Error(state.vocab_gpu_refusal)
     return DEVICE_GPU
 
 
@@ -1275,11 +1306,14 @@ def _vocab_pattern(pattern: PythonObject) raises -> Int:
     raise Error("ValueError: tokenizer unknown pattern " + name)
 
 
-def _vocab_settle(tokenizer: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
+def _vocab_settle(tokenizer: PythonObject, options: PythonObject, context: PythonObject, mut device: Int) raises -> PythonObject:
     var fields = _owner(tokenizer, context[0])
     _sequence(options, "options")
-    if len(options) != 7:
-        raise Error("TypeError: tokenizer requires seven options")
+    if len(options) != 8:
+        raise Error("TypeError: tokenizer requires eight options")
+    # options[7] is `device=`, admitted first (before any table is read) and stored as given, as
+    # the estimators store theirs (lane vdf2-tokmodel).
+    device = _vocab_device(options[7], context)
     _ = _vocab_pattern(options[0])
     if options[2] is not None and _str(options[2], "normalizer") != "NFC":
         raise Error("ValueError: tokenizer normalizer must be null or NFC")
@@ -1308,10 +1342,36 @@ def _vocab_settle(tokenizer: PythonObject, options: PythonObject, context: Pytho
     py_setitem(fields, "bos_ids", py_call(native_loaded_module("builtins").tuple, _py_int_list(bos)))
     py_setitem(fields, "eos_ids", py_call(native_loaded_module("builtins").tuple, _py_int_list(eos)))
     py_setitem(fields, "_m", context[1])
+    py_setitem(fields, "device", options[7])
     return fields
 
 
-def _vocab_finish(fields: PythonObject, var tok: VocabTokenizer) raises:
+def _vocab_gpu_load(tok: VocabTokenizer) raises -> Int:
+    """device='gpu': the host tables uploaded ONCE to the GPU tokenizer image (TOK_GPU_OP_VOCAB_LOAD,
+    plain int64 spans, the GIL released); its handle word is the result."""
+    ref ranks = tok.ranks
+    var entry = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()[].vocab_gpu_entry
+    var addresses: List[Int] = [
+        Int(ranks.arena.unsafe_ptr()), Int(ranks.offset.unsafe_ptr()), Int(ranks.length.unsafe_ptr()),
+        Int(ranks.buckets.unsafe_ptr()), Int(tok.sp_arena.unsafe_ptr()), Int(tok.sp_offset.unsafe_ptr()),
+        Int(tok.sp_length.unsafe_ptr()), Int(tok.sp_id.unsafe_ptr()), Int(tok.added_of.unsafe_ptr()),
+    ]
+    var ints: List[Int] = [
+        len(ranks.arena), len(ranks.offset), len(ranks.buckets), ranks.mask, len(tok.sp_arena),
+        len(tok.sp_id), len(tok.added_of), tok.pattern,
+    ]
+    var floats = List[Float64]()
+    var handle: Int
+    var py = Python()
+    with GILReleased(py):
+        handle = entry_ref_call(entry, TOK_GPU_OP_VOCAB_LOAD, addresses, ints, floats)
+    if handle == 0:
+        raise Error("RuntimeError: tokenizer (gpu): the device table was not created")
+    _ = len(addresses)
+    return handle
+
+
+def _vocab_finish(fields: PythonObject, var tok: VocabTokenizer, device: Int) raises:
     var added = native_instance_item(fields, PythonObject("added"))
     var keys = py_call(native_loaded_module("builtins").list, added.keys())
     var arena = List[UInt8]()
@@ -1325,12 +1385,18 @@ def _vocab_finish(fields: PythonObject, var tok: VocabTokenizer) raises:
     py_setitem(fields, "_n_vocab", PythonObject(tok.n_vocab()))
     py_setitem(fields, "_max_token_bytes", PythonObject(tok.max_token_bytes()))
     var handle = VocabHandle()
+    handle.max_bytes = tok.max_token_bytes()
+    handle.n_vocab = tok.n_vocab()
+    if device == DEVICE_GPU:
+        handle.gpu_entry = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()[].vocab_gpu_entry
+        handle.gpu_table = _vocab_gpu_load(tok)
     handle.tok = tok^
     py_setitem(fields, "_handle", PythonObject(alloc=handle^))
 
 
 def _vocab_init(tokenizer: PythonObject, tokens: PythonObject, merges: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = _vocab_settle(tokenizer, options, context)
+    var device = DEVICE_INSTALL
+    var fields = _vocab_settle(tokenizer, options, context, device)
     var arena = List[UInt8]()
     var lengths = List[Int]()
     _pack_tokens(tokens, arena, lengths)
@@ -1348,7 +1414,7 @@ def _vocab_init(tokenizer: PythonObject, tokens: PythonObject, merges: PythonObj
     vocab_check_pairs(table, left, right, checks)
     check_loose(table, checks, _bool(options[5], "ignore_merges"))
     var tok = VocabTokenizer(table^, builtin_unicode_classes(), _vocab_pattern(options[0]))
-    _vocab_finish(fields, tok^)
+    _vocab_finish(fields, tok^, device)
     return PythonObject(None)
 
 
@@ -1356,10 +1422,11 @@ def vocab_spelled_public_binding(cls: PythonObject, vocab: PythonObject, merges:
     if cls is not context[0]:
         raise Error("TypeError: tokenizer factory requires the connected Tokenizer class")
     var tokenizer = _new(cls)
-    var fields = _vocab_settle(tokenizer, options, context)
+    var device = DEVICE_INSTALL
+    var fields = _vocab_settle(tokenizer, options, context, device)
     var table = _table_from_spelled(vocab, merges, False, _bool(options[5], "ignore_merges"))
     var tok = VocabTokenizer(table^, builtin_unicode_classes(), _vocab_pattern(options[0]))
-    _vocab_finish(fields, tok^)
+    _vocab_finish(fields, tok^, device)
     return tokenizer
 
 
@@ -1385,7 +1452,11 @@ def _vocab_encode(tokenizer: PythonObject, data: PythonObject, add_special: Pyth
     if add:
         bos = _ids(native_instance_item(fields, _key(_K_BOS_IDS)))
         eos = _ids(native_instance_item(fields, _key(_K_EOS_IDS)))
-    var ids = vocab_encode_ids(owner[].tok.value(), bytes, allow)
+    var ids: List[Int]
+    if owner[].gpu_table != 0:
+        ids = _vocab_encode_gpu(owner[], bytes, allow)
+    else:
+        ids = vocab_encode_ids(owner[].tok.value(), bytes, allow)
     var result = _tokenizer_result_list(len(bos) + len(ids) + len(eos))
     ref cpy = Python().cpython()
     var box_int = cpython_table()[].PyLong_FromLongLong
@@ -1418,6 +1489,57 @@ def _vocab_encode(tokenizer: PythonObject, data: PythonObject, add_special: Pyth
     return result
 
 
+def _vocab_encode_gpu(handle: VocabHandle, bytes: List[UInt8], allow: Bool) raises -> List[Int]:
+    """device='gpu' encode: the UNPACKed (NFC-normalized) bytes handed to the GPU image by address
+    (TOK_GPU_OP_VOCAB_ENCODE, the GIL released): uploaded once, the ids read back once. The ids are
+    widened for PACK, the step the host route's List[Int] already is."""
+    var n = len(bytes)
+    var ids32 = List[Int32](length=max(n, 1), fill=Int32(0))
+    var addresses: List[Int] = [handle.gpu_table, Int(bytes.unsafe_ptr()), Int(ids32.unsafe_ptr())]
+    var ints: List[Int] = [n, 1 if allow else 0]
+    var floats = List[Float64]()
+    var count: Int
+    var py = Python()
+    with GILReleased(py):
+        count = entry_ref_call(handle.gpu_entry, TOK_GPU_OP_VOCAB_ENCODE, addresses, ints, floats)
+    if count < 0 or count > n:
+        raise Error("RuntimeError: tokenizer (gpu) returned " + String(count) + " ids for " + String(n) + " bytes")
+    var ids = List[Int](capacity=count)
+    for i in range(count):  # cpu-route: the finished ids widened for publication (PACK)
+        ids.append(Int(ids32[i]))
+    _ = len(bytes)
+    _ = len(ids32)
+    return vocab_ids_sabotage(ids^)
+
+
+def _vocab_decode_gpu(handle: VocabHandle, ids: List[Int]) raises -> List[UInt8]:
+    """device='gpu' decode: the admitted ids (Int is int64) handed to the GPU image by address
+    (TOK_GPU_OP_VOCAB_DECODE, the GIL released): the gather on the device, the bytes read back
+    once. The first id that is neither an added token nor a rank is refused in the host's words
+    (`VocabTokenizer.append_decoded`), by value and position."""
+    var nids = len(ids)
+    var cap = nids * handle.max_bytes
+    var out = List[UInt8](length=max(cap, 1), fill=UInt8(0))
+    var addresses: List[Int] = [handle.gpu_table, Int(ids.unsafe_ptr()), Int(out.unsafe_ptr())]
+    var ints: List[Int] = [nids, cap]
+    var floats = List[Float64]()
+    var total: Int
+    var py = Python()
+    with GILReleased(py):
+        total = entry_ref_call(handle.gpu_entry, TOK_GPU_OP_VOCAB_DECODE, addresses, ints, floats)
+    if total < 0:
+        var at = -1 - total
+        if at >= nids:
+            raise Error("RuntimeError: tokenizer (gpu) decode reported position " + String(at))
+        raise Error("ValueError: id " + String(ids[at]) + " at position " + String(at) + " is outside [0, "
+            + String(handle.n_vocab) + ") and no added token")
+    if total > cap:
+        raise Error("RuntimeError: tokenizer (gpu) decoded " + String(total) + " bytes into room for " + String(cap))
+    out.resize(total, UInt8(0))
+    _ = len(ids)
+    return out^
+
+
 def _vocab_decode(tokenizer: PythonObject, data: PythonObject, bytes_only: Bool, errors: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _owner(tokenizer, context[0])
     var handle = native_instance_item(fields, _key(_K_HANDLE))
@@ -1425,7 +1547,11 @@ def _vocab_decode(tokenizer: PythonObject, data: PythonObject, bytes_only: Bool,
     if not owner[].tok:
         raise Error("ValueError: tokenizer vocabulary is not loaded")
     var ids = _ids(data)
-    var bytes = vocab_decode_ids(owner[].tok.value(), ids)
+    var bytes: List[UInt8]
+    if owner[].gpu_table != 0:
+        bytes = _vocab_decode_gpu(owner[], ids)
+    else:
+        bytes = vocab_decode_ids(owner[].tok.value(), ids)
     var result: PythonObject
     if bytes_only:
         result = _py_bytes(bytes)
@@ -1560,8 +1686,11 @@ def _vocab_config_pattern(pre: PythonObject, patterns: PythonObject) raises -> P
 
 
 def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: PythonObject,
-                             cfg: PythonObject, module: PythonObject, patterns: PythonObject) raises -> PythonObject:
+                             cfg: PythonObject, module: PythonObject, patterns: PythonObject,
+                             device: PythonObject) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
+    # `device=` refused before the configuration is read (stored by `_vocab_settle`).
+    _ = _vocab_device(device, module)
     _plain(data)
     _plain(cfg)
     _plain(patterns)
@@ -1660,6 +1789,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
     _ = py_call(options.append, py_get(model, "ignore_merges", PythonObject(False)))
     var source = _path(path)
     _ = py_call(options.append, source)
+    _ = py_call(options.append, device)
     var tokenizer = vocab_spelled_public_binding(cls, base, merges, options, module)
     var fields = _owner(tokenizer, module[0])
     py_setitem(fields, "bos_token_id", bos[0] if len(bos) != 0 else PythonObject(None))
@@ -1675,7 +1805,9 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
 
 
 def vocab_pretrained_public_binding(cls: PythonObject, path: PythonObject, module: PythonObject,
-                                   patterns: PythonObject) raises -> PythonObject:
+                                   patterns: PythonObject, device: PythonObject) raises -> PythonObject:
+    # `device=` refused before any file is read.
+    _ = _vocab_device(device, module)
     var text = native_path(path)
     var filename = text
     var directory = PythonObject(".")
@@ -1698,7 +1830,7 @@ def vocab_pretrained_public_binding(cls: PythonObject, path: PythonObject, modul
     if native_path_exists(config_path):
         cfg = native_json_read(config_path)
     filename = _path(filename)
-    return vocab_json_public_binding(cls, data, filename, cfg, module, patterns)
+    return vocab_json_public_binding(cls, data, filename, cfg, module, patterns, device)
 
 
 def tokenizer_bpe_identity(tokenizer: PythonObject) raises -> PythonObject:
@@ -1825,6 +1957,9 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
         if state[].vocab is not None and state[].vocab is not context:
             raise Error("TypeError: tokenizer native context was already connected")
         _connect_error_handlers()
+        # The GPU side of `Tokenizer(device="gpu")`: context[6] is the GPU tokenizer binding's
+        # connection tuple; its entry is resolved here once (lane vdf2-tokmodel).
+        state[].vocab_gpu_refusal = tokenizer_gpu_entry_connect(context[6], state[].vocab_gpu_entry)
         state[].vocab = context
         return PythonObject(None)
     # Each public constructor's `device=` is its last item, admitted once
@@ -1914,9 +2049,9 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
     if operation == "vocab_spelled":
         return vocab_spelled_public_binding(args[0], args[1], args[2], args[3], context)
     if operation == "vocab_pretrained":
-        return vocab_pretrained_public_binding(args[0], args[1], context, context[2])
+        return vocab_pretrained_public_binding(args[0], args[1], context, context[2], args[2])
     if operation == "vocab_json":
-        return vocab_json_public_binding(args[0], args[1], args[2], args[3], context, context[2])
+        return vocab_json_public_binding(args[0], args[1], args[2], args[3], context, context[2], args[4])
     if operation == "vocab_pretokenize":
         return _vocab_pretokenize(args[0], args[1], context)
     if operation == "vocab_pattern":

@@ -71,29 +71,41 @@ def pretokenize(data, pattern, *, device=None):
 class Tokenizer:
     """See the module header. `tokens` are the rank-ordered token bytes,
     `merges` the `(left, right)` byte pairs, `pattern` a name in
-    `PATTERNS`, `added` `{content: id}`."""
+    `PATTERNS`, `added` `{content: id}`.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where encoding and decoding run. None uses this installation's
+        default, 'cpu' runs on the CPU and 'gpu' runs on the GPU, with the
+        same ids as the CPU, and requires a GPU installation. Other values
+        raise ValueError.
+
+    Example: ``Tokenizer.from_pretrained("path/to/model", device="gpu").encode("Hi")``.
+    """
 
     unicode_version = _unicodedata.unidata_version
 
     def __init__(self, tokens, merges, *, pattern, added=None, normalizer=None,
-                 bos_ids=(), eos_ids=(), ignore_merges=False, source="<tokens>"):
-        return _NATIVE.tokenizer_public_call('vocab_init', (self, tokens, merges, (pattern, added, normalizer, bos_ids, eos_ids, ignore_merges, source)), _TOKENIZER_CONTEXT)
+                 bos_ids=(), eos_ids=(), ignore_merges=False, source="<tokens>", device=None):
+        return _NATIVE.tokenizer_public_call('vocab_init', (self, tokens, merges, (pattern, added, normalizer, bos_ids, eos_ids, ignore_merges, source, device)), _TOKENIZER_CONTEXT)
 
     @classmethod
     def _from_spelled(cls, vocab, merges, *, pattern, added, normalizer, bos_ids, eos_ids, ignore_merges,
-                      source):
-        return _NATIVE.tokenizer_public_call('vocab_spelled', (cls, vocab, merges, (pattern, added, normalizer, bos_ids, eos_ids, ignore_merges, source)), _TOKENIZER_CONTEXT)
+                      source, device=None):
+        return _NATIVE.tokenizer_public_call('vocab_spelled', (cls, vocab, merges, (pattern, added, normalizer, bos_ids, eos_ids, ignore_merges, source, device)), _TOKENIZER_CONTEXT)
 
     # ------------------------------------------------------------ loading
     @classmethod
-    def from_pretrained(cls, path):
+    def from_pretrained(cls, path, *, device=None):
         """`path` is a directory holding `tokenizer.json` (and optionally
-        `tokenizer_config.json`), or the `tokenizer.json` itself."""
-        return _NATIVE.tokenizer_public_call('vocab_pretrained', (cls, path), _TOKENIZER_CONTEXT)
+        `tokenizer_config.json`), or the `tokenizer.json` itself. `device`
+        is where encoding and decoding run, as for the constructor."""
+        return _NATIVE.tokenizer_public_call('vocab_pretrained', (cls, path, device), _TOKENIZER_CONTEXT)
 
     @classmethod
-    def _from_json(cls, data, path, cfg=None):
-        return _NATIVE.tokenizer_public_call('vocab_json', (cls, data, path, cfg), _TOKENIZER_CONTEXT)
+    def _from_json(cls, data, path, cfg=None, *, device=None):
+        return _NATIVE.tokenizer_public_call('vocab_json', (cls, data, path, cfg, device), _TOKENIZER_CONTEXT)
 
     # ------------------------------------------------------------ facts
     @property
@@ -147,7 +159,8 @@ class Tokenizer:
 
 # Immutable import-time metadata; native execution owns all public operations.
 # [5] the backend's fields (its `_CPU_ONLY` record) and [6] the GPU tokenizer binding's connection
-# (`..tokenizer._TOKENIZER_CONTEXT[8]`, connected once there): what `pretokenize(device=...)` reads.
+# (`..tokenizer._TOKENIZER_CONTEXT[8]`, connected once there): what `pretokenize(device=...)` and
+# `Tokenizer(device=...)` read (the GPU image's entry is resolved from [6] once, at connect_vocab).
 from .. import _backend as _tokenizer_backend
 from ..tokenizer import _TOKENIZER_CONTEXT as _BPE_CONTEXT
 _TOKENIZER_CONTEXT = (Tokenizer, _NATIVE, _NAME_OF, _unicodedata.unidata_version,
