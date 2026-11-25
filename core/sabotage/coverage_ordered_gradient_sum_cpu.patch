@@ -1,0 +1,13 @@
+diff --git a/core/ordered_gradient_sum_host.mojo b/core/ordered_gradient_sum_host.mojo
+index 8175d27848..eaf0202d40 100644
+--- a/core/ordered_gradient_sum_host.mojo
++++ b/core/ordered_gradient_sum_host.mojo
+@@ -78,5 +78,8 @@ def ordered_gradient_sum_cpu(base: Int, count: Int, shards: Int) raises -> Int:
+         # the running total the GPU's last step uploads and scans
+         _ogs_refuse_nonfinite(base, count, count, False)
+     _ = ordered_fold_f32(base, table_addr + 8 * (shards - 2), 1, count)
++    # SABOTAGE: the first folded total moved by one (the CPU side only; the GPU pair fold never calls this)
++    var total = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=base)
++    total.unsafe_store(0, total.unsafe_load(0) + Float32(1.0))
+     _ = table^  # the shard address table is read by the fold above: keep it alive through it
+     return 0
