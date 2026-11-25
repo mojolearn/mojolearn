@@ -28,6 +28,15 @@ design; the sub-lanes update their rows ("added" with the Session name) as they 
 - **Higher order.** `vjp`/`jvp`/`hvp` and `create_graph=True` differentiate with NeuralRules / recorded
   backward and refuse a layer node by name ("custom backward rule not registered"), as they refuse the
   custom op.
+- **Scan and custom-backward cells.** `Session.scan` accepts a cell built from ordinary ops, layer ops included
+  (what the composed tagger case exercises). A cell containing a custom-backward op (`custom_op`), or a scan
+  inside a custom op's program, is REFUSED at bind by name; nesting is not implemented in this wave.
+- **Digests.** Session and Program expose no `digest_` / `training_digest_`. Verify hashes their selected outputs
+  and state directly; that is the contract, and no digest property is added to them.
+- **Fixtures.** As small as possible while the intended fault still changes the result; the case that matters
+  (repeated ids, unequal lengths, a second optimizer group) over a bigger tensor. Related cases that exercise the
+  same implementation share one lane / data file, with separate assertions where the defects differ. No wall
+  time is claimed; the integrated suite is timed only when it runs.
 
 ## Inventory
 
