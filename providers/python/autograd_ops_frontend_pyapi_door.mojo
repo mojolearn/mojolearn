@@ -96,6 +96,13 @@ from providers.python.nn_pg_pyapi_door import (
 from autograd.autograd_ops_frontend_run import _SOP_SCATTER_ADD, _SOP_SEGMENT_SUM, _SOP_SEGMENT_MEAN, _SOP_SEGMENT_MAX
 from autograd.nn_scatter import OPS_SCATTER_ADD, OPS_SEGMENT_SUM
 # nn-blocks-scatter end
+# session-ops-resize begin
+from autograd.autograd_ops_frontend_run import _SOP_INTERPOLATE, _SOP_PIXEL_SHUFFLE, _SOP_PIXEL_UNSHUFFLE
+from autograd.session_ops_resize import (
+    OPS_INTERPOLATE, OPS_PIXEL_SHUFFLE, OPS_PIXEL_UNSHUFFLE, OPS_PAD_MODE, RSZ_NEAREST, RSZ_LINEAR, RSZ_BILINEAR,
+    RSZ_PAD_REFLECT, RSZ_PAD_REPLICATE,
+)
+# session-ops-resize end
 
 
 struct _SessionOpNames(Defaultable, Movable):
@@ -193,6 +200,105 @@ def _tuple_ints(xs: List[Int]) raises -> PythonObject:
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
 # TOMBSTONE: MOJOLEARN_SESSION_CALL_DESCRIPTOR (B arm loses: every same-image Session call through the descriptor, zero-filled read-back arrays; A/B abn9 NVIDIA L40S, ops-session-step 2.63 -> 2.93 ms 1.11, program-run 1.00 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
 # Restore: git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
+
+
+# session-ops-resize begin: UNPACK of interpolate's options and pad's mode (autograd/session_ops_resize.mojo)
+def _rsz_is_str(x: PythonObject) raises -> Bool:
+    return py_type(x) is py_type(PythonObject(""))
+
+
+def _pad_mode(mode: PythonObject, value: PythonObject) raises -> Int:
+    """0 for 'constant' (Session.pad's code 73), else the mode word of OPS_PAD_MODE."""
+    if not _rsz_is_str(mode):
+        raise Error("TypeError: pad: mode must be a string")
+    var name = String(py=mode)
+    if name == "constant":
+        return 0
+    var word = 0
+    if name == "reflect":
+        word = RSZ_PAD_REFLECT
+    elif name == "replicate":
+        word = RSZ_PAD_REPLICATE
+    elif name == "circular":
+        raise Error("ValueError: pad: mode 'circular' is not available; use 'constant', 'reflect' or 'replicate'")
+    else:
+        raise Error("ValueError: pad: unknown mode '" + name + "'; use 'constant', 'reflect' or 'replicate'")
+    if not program_numeric_scalar(value) or Float64(py=value) != 0:
+        raise Error("ValueError: pad: mode '" + name + "' takes no value")
+    return word
+
+
+def _interpolate_kind(x: PythonObject) raises -> Int:
+    """-1 for one number (every spatial axis), else the sequence's length (one or two)."""
+    if _is_int(x) or program_numeric_scalar(x):
+        return -1
+    var n = len(x)
+    if n < 1 or n > 2:
+        raise Error("ValueError: interpolate: size and scale_factor take one or two values (inputs (N, C, L) or "
+                    + "(N, C, H, W); 5-D inputs have no kernel)")
+    return n
+
+
+def _interpolate_words(args: PythonObject) raises -> List[Int]:
+    var size = args[1]
+    var scale = args[2]
+    if _nil(size) == _nil(scale):
+        raise Error("ValueError: interpolate: give exactly one of size or scale_factor")
+    if not _rsz_is_str(args[3]):
+        raise Error("TypeError: interpolate: mode must be a string")
+    var name = String(py=args[3])
+    var mode = -1
+    if name == "nearest":
+        mode = RSZ_NEAREST
+    elif name == "linear":
+        mode = RSZ_LINEAR
+    elif name == "bilinear":
+        mode = RSZ_BILINEAR
+    elif name == "trilinear" or name == "bicubic" or name == "area" or name == "nearest-exact":
+        raise Error("ValueError: interpolate: mode '" + name + "' is not available; use 'nearest', 'linear' "
+                    + "(N, C, L) or 'bilinear' (N, C, H, W)")
+    else:
+        raise Error("ValueError: interpolate: unknown mode '" + name + "'")
+    var align = 0
+    if not _nil(args[4]):
+        if mode == RSZ_NEAREST:
+            raise Error("ValueError: interpolate: align_corners can only be set with mode 'linear' or 'bilinear'")
+        align = Int(Bool(py=args[4]))
+    var recompute = 0 if _nil(args[5]) else Int(Bool(py=args[5]))
+    if Bool(py=args[6]):
+        raise Error("ValueError: interpolate: antialias=True is not available")
+    var size_kind = 0
+    var s0 = 0
+    var s1 = 0
+    if not _nil(size):
+        if recompute == 1:
+            raise Error("ValueError: interpolate: recompute_scale_factor needs scale_factor, not size")
+        size_kind = -1 if _is_int(size) else _interpolate_kind(size)
+        if size_kind == -1:
+            s0 = _int(size, "size", 1)
+            s1 = s0
+        else:
+            s0 = _int(size[0], "size", 1)
+            s1 = _int(size[1], "size", 1) if size_kind == 2 else s0
+    var scale_kind = 0 if _nil(scale) else _interpolate_kind(scale)
+    var words: List[Int] = [mode, align, recompute, size_kind, s0, s1, scale_kind]
+    return words^
+
+
+def _interpolate_scales(scale: PythonObject) raises -> List[Float32]:
+    var fs: List[Float32] = [Float32(0), Float32(0)]
+    if _nil(scale):
+        return fs^
+    if program_numeric_scalar(scale):
+        fs[0] = _float(scale, "scale_factor")
+        fs[1] = fs[0]
+    else:
+        fs[0] = _float(scale[0], "scale_factor")
+        fs[1] = _float(scale[1], "scale_factor") if len(scale) == 2 else fs[0]
+    if not (fs[0] > Float32(0)) or not (fs[1] > Float32(0)):
+        raise Error("ValueError: interpolate: scale_factor must be positive")
+    return fs^
+# session-ops-resize end
 
 
 # nn-blocks-cbw begin: UNPACK of Session.custom_op: a Program's description,
@@ -985,7 +1091,15 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         ints = _ints(args[1], "pads")
         if len(ints) < 1 or len(ints) > 16:
             raise Error("ValueError: pads must list two counts for each of one to eight axes")
-        fs.append(_float(args[2], "value"))
+        # session-ops-resize: `mode` (args[3]) None or 'constant' keeps code 73 and its words exactly; one
+        # identity test against None per call, the mode's name read only when the caller named one
+        if not _nil(args[3]):
+            var pad_mode = _pad_mode(args[3], args[2])
+            if pad_mode != 0:
+                code = OPS_PAD_MODE
+                ints.insert(0, pad_mode)
+        if code == 73:
+            fs.append(_float(args[2], "value"))
     elif op == _SOP_CUMSUM:
         code = 75
         hs.append(_int(args[0], "handle", 1))
@@ -1153,6 +1267,23 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         hs = [_int(args[0], "data", 1), _int(args[1], "segment_ids", 1)]
         ints.append(_int(args[2], "num_segments"))
     # nn-blocks-scatter end
+    # session-ops-resize begin
+    elif op == _SOP_INTERPOLATE:
+        # args (x, size, scale_factor, mode, align_corners, recompute_scale_factor, antialias): torch's
+        # interpolate; words as autograd/session_ops_resize.mojo states, read once here
+        code = OPS_INTERPOLATE
+        hs.append(_int(args[0], "input", 1))
+        ints = _interpolate_words(args)
+        fs = _interpolate_scales(args[2])
+    elif op == _SOP_PIXEL_SHUFFLE:
+        code = OPS_PIXEL_SHUFFLE
+        hs.append(_int(args[0], "input", 1))
+        ints.append(_int(args[1], "upscale_factor", 1))
+    elif op == _SOP_PIXEL_UNSHUFFLE:
+        code = OPS_PIXEL_UNSHUFFLE
+        hs.append(_int(args[0], "input", 1))
+        ints.append(_int(args[1], "downscale_factor", 1))
+    # session-ops-resize end
     # nn-blocks-pg begin
     if op >= _SOP_PG_FIRST and op <= _SOP_PG_LAST:
         return pg_session_call_py[E](s, op, args)

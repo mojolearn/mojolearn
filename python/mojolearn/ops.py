@@ -88,6 +88,9 @@ _OP = {
     # nn-blocks-qkv begin
     "attention": 122,
     # nn-blocks-qkv end
+    # session-ops-resize begin: "pad" with mode 'reflect' / 'replicate' records 153
+    "interpolate": 150, "pixel_shuffle": 151, "pixel_unshuffle": 152,
+    # session-ops-resize end
 }
 _GELU = {"none": 0, "tanh": 1}
 # the state buffers autograd/ops_api.mojo optimizer_state returns, by kind
@@ -670,14 +673,34 @@ class Session:
         """
         return _SESSION_CALL(self, "argmax", (x, axis, keepdims, int32))
 
-    def pad(self, x, pads, value=0.0):
-        """``x`` padded with ``value``.
+    def pad(self, x, pads, value=0.0, mode=None):
+        """``x`` padded with ``value``, or by reflection or replication.
 
         ``pads`` lists two counts per axis, as ONNX ``Pad`` does: every
         axis's count before its first element, then every axis's count after
         its last one. A negative count removes elements instead.
+
+        ``mode`` is ``'constant'`` (the default, also when ``None``),
+        ``'reflect'`` or ``'replicate'``, as in
+        ``torch.nn.functional.pad``. ``'reflect'`` mirrors ``x`` without
+        repeating its edge value and ``'replicate'`` repeats the edge value;
+        both pad an ``(N, C, L)`` or ``(N, C, H, W)`` tensor on its spatial
+        axes only (the batch and channel counts are 0), take non-negative
+        counts, and take no ``value``. A reflection count must be smaller
+        than the axis it pads. The argument order is this method's own:
+        ``value`` comes before ``mode``, and ``pads`` keeps the ONNX order
+        above (PyTorch lists the last axis's pair first).
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(4, dtype=np.float32).reshape(1, 1, 4))
+        ...     s.numpy(s.pad(x, [0, 0, 2, 0, 0, 1], mode="reflect"))
+        array([[[2., 1., 0., 1., 2., 3., 2.]]], dtype=float32)
         """
-        return _SESSION_CALL(self, "pad", (x, pads, value))
+        return _SESSION_CALL(self, "pad", (x, pads, value, mode))
 
     def any(self, x, axis=None, keepdims=None):
         """1.0 where some element over ``axis`` is nonzero, else 0.0, with
@@ -2107,6 +2130,77 @@ class Session:
         """
         return _SESSION_CALL(self, "custom", (op, inputs))
     # nn-blocks-cbw end
+
+    # session-ops-resize begin ------------------------------- resampling and rearranging
+    def interpolate(self, x, size=None, scale_factor=None, mode="nearest", align_corners=None,
+                    recompute_scale_factor=None, antialias=False):
+        """``x`` resampled to a new length or height and width, as
+        ``torch.nn.functional.interpolate``.
+
+        ``x`` is ``(N, C, L)`` or ``(N, C, H, W)``. Give exactly one of
+        ``size`` (the output length, or height and width: one integer for
+        every spatial axis or one per axis) and ``scale_factor`` (one number
+        or one per axis; the output size is ``floor(input_size *
+        scale_factor)``). ``mode`` is ``'nearest'``, ``'linear'`` (for
+        ``(N, C, L)``) or ``'bilinear'`` (for ``(N, C, H, W)``).
+        ``align_corners`` (``'linear'`` and ``'bilinear'`` only, ``False`` by
+        default) maps the corner samples of input and output onto each
+        other. With a ``scale_factor`` the source positions use that factor,
+        unless ``recompute_scale_factor=True``, which uses the input and
+        output sizes instead.
+
+        In a recording session the gradient flows back to ``x``: each output
+        value's gradient is added to the input values it was read from.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.array([[[[1, 2], [3, 4]]]], dtype=np.float32))
+        ...     s.numpy(s.interpolate(x, scale_factor=2))
+        array([[[[1., 1., 2., 2.],
+                 [1., 1., 2., 2.],
+                 [3., 3., 4., 4.],
+                 [3., 3., 4., 4.]]]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "interpolate", (x, size, scale_factor, mode, align_corners,
+                                                   recompute_scale_factor, antialias))
+
+    def pixel_shuffle(self, x, upscale_factor):
+        """``x`` of shape ``(N, C * r * r, H, W)`` rearranged to
+        ``(N, C, H * r, W * r)`` with ``r = upscale_factor``, as
+        ``torch.nn.functional.pixel_shuffle``:
+        ``out[n, c, h * r + i, w * r + j] = x[n, c * r * r + i * r + j, h, w]``.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(4, dtype=np.float32).reshape(1, 4, 1, 1))
+        ...     s.numpy(s.pixel_shuffle(x, 2))
+        array([[[[0., 1.],
+                 [2., 3.]]]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "pixel_shuffle", (x, upscale_factor))
+
+    def pixel_unshuffle(self, x, downscale_factor):
+        """The inverse of :meth:`pixel_shuffle`: ``x`` of shape
+        ``(N, C, H * r, W * r)`` rearranged to ``(N, C * r * r, H, W)`` with
+        ``r = downscale_factor``, as ``torch.nn.functional.pixel_unshuffle``.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(4, dtype=np.float32).reshape(1, 1, 2, 2))
+        ...     s.numpy(s.pixel_unshuffle(x, 2)).ravel()
+        array([0., 1., 2., 3.], dtype=float32)
+        """
+        return _SESSION_CALL(self, "pixel_unshuffle", (x, downscale_factor))
+    # session-ops-resize end
 
 
 class Program:
