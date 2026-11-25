@@ -183,6 +183,13 @@ def _checks_generic_answer_input(est, method, Xp):
         return Xp
     if params and params[0].name == "h" and params[0].default is params[0].empty:
         return _checks_generic_HORIZON
+    # A first parameter with an int default is a position, not rows: ARIMA's `predict(self, start=0, end=None,
+    # exog=None)` documents "start : int, default 0  First index to predict"; handing it the row matrix made the
+    # native door refuse it as a setting ("AutoARIMA numeric settings require native scalar values",
+    # providers/python/autoarima_lifecycle_pyapi_door.mojo `_integer_object`). The lane hands the documented default
+    # (every in-sample prediction of the fitted series). Harness defect (FIX w3-fix-13, 2026-11-25).
+    if params and type(params[0].default) is int:
+        return params[0].default
     return Xp
 
 
