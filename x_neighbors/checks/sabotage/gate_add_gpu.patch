@@ -1,8 +1,19 @@
 diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
-index 0f291c74d7..047c29f71e 100644
+index 0f291c74d7..b57983615e 100644
 --- a/x_neighbors/items.mojo
 +++ b/x_neighbors/items.mojo
-@@ -68,6 +68,12 @@ def _sub(a: Float32, b: Float32) -> Float32:
+@@ -63,11 +63,23 @@ comptime XN_NC_CHUNK_ROWS = 16384
+ 
+ @always_inline
+ def _sub(a: Float32, b: Float32) -> Float32:
++    from std.sys import is_defined
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane w3-fix-10-s2): the difference one ulp up, the GPU bindings only (SVGP's RBF kernel and predictive variance take _sub, never _add)
++        var h = ftz(ftz(a) - ftz(b))
++        if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
++        return h
+     return ftz(ftz(a) - ftz(b))
+ 
  
  @always_inline
  def _add(a: Float32, b: Float32) -> Float32:
