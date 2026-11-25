@@ -59,7 +59,7 @@ def _(ml, X, yc, yr, Xh=None):
                                   s.tensor(_hw((3,), "nn-pg:b2", -0.1, 0.1))))
         codes = (_ids(X, 32, 1) % 16).astype(np.int32)
         head = s.numpy(s.lm_head_loss(s.tensor(rows), s.tensor(_hw((16, 8), "nn-pg:head", -0.5, 0.5)),
-                                      s.ids(codes)))
+                                      s.tensor(codes.astype(np.float32))))  # class values (lm_head_v2 refuses int words)
         seqx = s.tensor(_seq(X, 4, 8, 6, skip=2048))
         rec = []
         for gates, op in ((4, s.lstm), (3, s.gru), (1, s.rnn)):
