@@ -1128,7 +1128,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             backward_recorded(self.tape, self.ex, t, seed)
         elif self.cbw.holds_rules():
             # nn-blocks-cbw: the graph holds a user-defined backward rule
-            self.cbw_backward_seeded(t, seed, ImportRules())
+            self.cbw_backward_seeded(t, seed)
         else:
             # First-order seeded and scalar backward accept the same supported
             # rank-N and import operations. Recorded higher derivatives keep
@@ -1641,21 +1641,16 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             for i in range(len(hs)):  # small-loop(hs: an op's input handles, three or a concat's list): handle lookup, no data
                 x.append(self.tensor(hs[i]))
             return self._op_run_tensors(code, hs, ints, fs, x)
-        except err:
-            # nn-blocks-scan begin: OPS_SCAN is in no dispatch chain, so no other operation pays a compare for it:
-            # its code falls through `_op_run_tensors` to "unknown operation code" (no work done, nothing
-            # launched) and is taken here, on the error edge only. `_scan` replays its cell through
-            # `_op_run_tensors`, never through this method, so the two never call each other (AGENTS.md part 6).
-            if code != OPS_SCAN:
-                raise err
-            # nn-blocks-scan end
         finally:
             x.clear()
             swap(x, self.op_tensors)
-        return self._scan(hs, ints, fs)  # nn-blocks-scan: reached only for OPS_SCAN (above)
 
-    def _op_run_tensors(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
-        """Execute with this call's freshly checked native tensor references."""
+    def _op_run_tensors[in_scan: Bool = False](
+        mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]
+    ) raises -> Int:
+        """Execute with this call's freshly checked native tensor references.
+        `in_scan` (nn-blocks-zerocost): True for a scan cell's own nodes (`_scan_call`), whose instance has no
+        OPS_SCAN branch, so `_scan` and this method never call each other (AGENTS.md part 6)."""
         var n = len(x)
         var ni = len(ints)
         var nf = len(fs)
@@ -1689,10 +1684,6 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # Lane r1-restore-measured-winners: the byte LM trainer's tuned
             # embedding backward, one custom node (autograd/lm_embedding_op.mojo).
             return self._lm_embedding(hs, ints, fs, x)
-        # nn-blocks-qkv begin
-        if code == OPS_ATTENTION_QKV:
-            return self._attention_qkv(hs, ints, fs, x)
-        # nn-blocks-qkv end
         if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR or code == OPS_TRANSFORMER_SOFTMAX:
             # These primitive signatures have at most two handles. Their
             # arity validation below rejects any additional operands.
@@ -2057,12 +2048,23 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             t = nn_segment(self.tape, self.ex, x[0], self.tape.value_of(self.ex, x[1]), self.shapes[sg_slot].count(),
                            ints[0], code - OPS_SEGMENT_SUM)
         # nn-blocks-scatter end
+        # nn-blocks-qkv begin: attention over q, k, v (reached only by codes no branch above took; nn-blocks-zerocost
+        # moved it here from ahead of the primitive checks, where every later operation paid its compare)
+        elif code == OPS_ATTENTION_QKV:
+            return self._attention_qkv(hs, ints, fs, x)
+        # nn-blocks-qkv end
         # nn-blocks-cbw begin: a user-defined backward rule (reached only by
         # codes no branch above took: no compare on another operation's path)
         elif code == OPS_CUSTOM_VJP:
             return self._cbw_forward(hs, ints, fs, x)
         # nn-blocks-cbw end
         else:
+            # nn-blocks-scan begin: the scan over a captured cell, on the chain's no-match path (no other operation
+            # pays a compare for it); absent from a scan cell's own instance (in_scan), so no recursion
+            comptime if not in_scan:
+                if code == OPS_SCAN:
+                    return self._scan(hs, ints, fs)
+            # nn-blocks-scan end
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):
             # elementwise and row-wise ops keep x's full shape (a free view
@@ -2914,12 +2916,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     def _scan_call(
         mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], mut x: List[Tensor],
     ) raises -> Int:
-        """One existing operation inside a scan: `_op_run` without the scan branch (so a scan never re-enters
-        it), the operand list `x` the scan's own reused capacity."""
+        """One existing operation inside a scan: `_op_run_tensors` without the scan branch (in_scan, so a scan
+        never re-enters it), the operand list `x` the scan's own reused capacity."""
         x.clear()
         for i in range(len(hs)):  # small-loop(hs: one node's input handles): handle lookup, no data
             x.append(self.tensor(hs[i]))
-        return self._op_run_tensors(code, hs, ints, fs, x)
+        return self._op_run_tensors[in_scan=True](code, hs, ints, fs, x)
 
     def _scan(mut self, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
         """OPS_SCAN: [xs (steps, ...), state_1 .. state_k, (lengths), param_1 .. param_m], ints and floats the
