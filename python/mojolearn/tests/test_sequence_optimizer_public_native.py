@@ -69,9 +69,11 @@ def test_sequence_native_admission_refuses_python_hooks(cls):
     refused(cls, params, lr=Foreign(), numeric_mode="identical")
     opt = cls(params, numeric_mode="identical")
     refused(opt.step, [Foreign()])
-    opt.lr_schedule = Foreign()
-    error = refused(opt.step, np.ones_like(params))
-    assert "native schedule" in str(error)
+    # the schedule is admitted once, at assignment (lane vdf-sched: the
+    # property's native setter), never per step
+    with pytest.raises(TypeError, match="native schedule"):
+        opt.lr_schedule = Foreign()
+    refused(opt.step, [Foreign()])
     del opt.lr_schedule
     assert not calls
 

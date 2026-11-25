@@ -14,13 +14,14 @@ from mojolearn._verify_native_runtime import audit_native_call
 
 
 def invoke(operation, arguments):
-    # A metric family operation's tuple ends with the public shells' `device`
-    # item (None: this installation's device).
-    return expansion._NATIVE(None, operation, arguments + (None,), expansion._NATIVE_CONTEXT)
+    return expansion._NATIVE(None, operation, arguments, expansion._NATIVE_CONTEXT)
 
 
 def native(operation, arguments):
-    return audit_native_call(invoke, operation, arguments).assert_native()
+    # A metric family operation's tuple ends with the public shells' `device`
+    # item (None: this installation's device), appended here, outside the
+    # audited call (a tuple concatenation inside it is wrapper work).
+    return audit_native_call(invoke, operation, arguments + (None,)).assert_native()
 
 
 @pytest.mark.parametrize("scalar", [0.25, np.float16(0.25), np.float32(0.25), np.float64(0.25)])
@@ -72,6 +73,8 @@ def test_metric_warning_filters_and_real_exception_category_are_native(operation
         y = np.array([1.0], dtype="f4")
         arguments = (y, y, None, "uniform_average", True, "identical")
 
+    arguments = arguments + (None,)  # the public shells' trailing `device` item
+
     def poison(*args, **kwargs):
         raise AssertionError("warnings.warn Python callback reached")
 
@@ -120,7 +123,7 @@ def test_custom_label_protocol_is_refused_before_hooks_run():
             return super().__len__()
 
     audit = audit_native_call(invoke, "family_mexp_cls_balanced_accuracy",
-                              (Labels([0, 1]), [0, 1], None, False, "identical"))
+                              (Labels([0, 1]), [0, 1], None, False, "identical", None))
     assert isinstance(audit.exception, TypeError)
     assert calls == []
     assert not audit.report()["python_frames"]
