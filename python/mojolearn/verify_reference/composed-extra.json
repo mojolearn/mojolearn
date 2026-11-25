@@ -607,50 +607,6 @@
    "do": [
     {
      "op": "session",
-     "as": "c",
-     "do": [
-      {
-       "op": "call",
-       "fn": "c.tensor",
-       "args": [
-        "@x"
-       ],
-       "as": "cx"
-      },
-      {
-       "op": "call",
-       "fn": "c.logsumexp",
-       "args": [
-        "@cx",
-        1
-       ],
-       "as": "cl"
-      },
-      {
-       "op": "call",
-       "fn": "c.sum",
-       "args": [
-        "@cl"
-       ],
-       "as": "cs"
-      },
-      {
-       "op": "call",
-       "fn": "c.capture",
-       "kw": {
-        "inputs": [
-         "@cx"
-        ],
-        "outputs": [
-         "@cs"
-        ]
-       },
-       "as": "prog"
-      }
-     ]
-    },
-    {
-     "op": "session",
      "as": "s",
      "record": true,
      "do": [
@@ -744,6 +700,63 @@
        "fn": "s.grad",
        "of": "@sx",
        "as": "g"
+      }
+     ]
+    },
+    {
+     "op": "session",
+     "as": "c",
+     "do": [
+      {
+       "op": "call",
+       "fn": "c.tensor",
+       "args": [
+        "@x"
+       ],
+       "as": "cx"
+      },
+      {
+       "op": "call",
+       "fn": "c.logsumexp",
+       "args": [
+        "@cx",
+        1
+       ],
+       "as": "cl"
+      },
+      {
+       "op": "call",
+       "fn": "c.sum",
+       "args": [
+        "@cl"
+       ],
+       "as": "cs"
+      },
+      {
+       "op": "call",
+       "fn": "c.capture",
+       "kw": {
+        "inputs": [
+         "@cx"
+        ],
+        "outputs": [
+         "@cs"
+        ]
+       },
+       "as": "prog"
+      },
+      {
+       "op": "fd_grad",
+       "program": "@prog",
+       "inputs": [
+        "@x"
+       ],
+       "wrt": 0,
+       "grad": "@g",
+       "eps": 0.01,
+       "rtol": 0.02,
+       "atol": 0.001,
+       "what": "the logsumexp gradient"
       }
      ]
     },
@@ -847,19 +860,6 @@
      "b": "@neg",
      "rtol": 0.0,
      "what": "a row of only -inf gives -inf"
-    },
-    {
-     "op": "fd_grad",
-     "program": "@prog",
-     "inputs": [
-      "@x"
-     ],
-     "wrt": 0,
-     "grad": "@g",
-     "eps": 0.01,
-     "rtol": 0.02,
-     "atol": 0.001,
-     "what": "the logsumexp gradient"
     },
     {
      "op": "digest",
@@ -1093,54 +1093,6 @@
    "do": [
     {
      "op": "session",
-     "as": "c",
-     "do": [
-      {
-       "op": "call",
-       "fn": "c.tensor",
-       "args": [
-        "@z"
-       ],
-       "as": "cz"
-      },
-      {
-       "op": "call",
-       "fn": "c.tensor",
-       "args": [
-        "@t"
-       ],
-       "as": "ct"
-      },
-      {
-       "op": "call",
-       "fn": "c.cross_entropy",
-       "args": [
-        "@cz",
-        "@ct"
-       ],
-       "kw": {
-        "probabilities": true
-       },
-       "as": "cl"
-      },
-      {
-       "op": "call",
-       "fn": "c.capture",
-       "kw": {
-        "inputs": [
-         "@cz",
-         "@ct"
-        ],
-        "outputs": [
-         "@cl"
-        ]
-       },
-       "as": "prog"
-      }
-     ]
-    },
-    {
-     "op": "session",
      "as": "s",
      "record": true,
      "do": [
@@ -1236,6 +1188,68 @@
        "fn": "s.grad",
        "of": "@sz",
        "as": "g"
+      }
+     ]
+    },
+    {
+     "op": "session",
+     "as": "c",
+     "do": [
+      {
+       "op": "call",
+       "fn": "c.tensor",
+       "args": [
+        "@z"
+       ],
+       "as": "cz"
+      },
+      {
+       "op": "call",
+       "fn": "c.tensor",
+       "args": [
+        "@t"
+       ],
+       "as": "ct"
+      },
+      {
+       "op": "call",
+       "fn": "c.cross_entropy",
+       "args": [
+        "@cz",
+        "@ct"
+       ],
+       "kw": {
+        "probabilities": true
+       },
+       "as": "cl"
+      },
+      {
+       "op": "call",
+       "fn": "c.capture",
+       "kw": {
+        "inputs": [
+         "@cz",
+         "@ct"
+        ],
+        "outputs": [
+         "@cl"
+        ]
+       },
+       "as": "prog"
+      },
+      {
+       "op": "fd_grad",
+       "program": "@prog",
+       "inputs": [
+        "@z",
+        "@t"
+       ],
+       "wrt": 0,
+       "grad": "@g",
+       "eps": 0.01,
+       "rtol": 0.02,
+       "atol": 0.001,
+       "what": "the logits' gradient"
       }
      ]
     },
@@ -1343,20 +1357,6 @@
      "b": "@want_w",
      "rtol": 1e-05,
      "what": "the weighted soft-target sum"
-    },
-    {
-     "op": "fd_grad",
-     "program": "@prog",
-     "inputs": [
-      "@z",
-      "@t"
-     ],
-     "wrt": 0,
-     "grad": "@g",
-     "eps": 0.01,
-     "rtol": 0.02,
-     "atol": 0.001,
-     "what": "the logits' gradient"
     },
     {
      "op": "digest",
