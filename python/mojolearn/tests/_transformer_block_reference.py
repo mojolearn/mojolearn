@@ -81,7 +81,9 @@ def transformer_call(block, x, state, step):
         if not hasattr(ext, "transformer_forward_int15"):
             raise NotImplementedError(f"{what}: this binding has no transformer_forward_int15 entry")
         params = ([b, l, block.d_model, block.n_heads, block.n_kv_heads, block.head_dim,
-                   block.intermediate, smax, s0, block.window] + list(block._opts_tail))
+                   block.intermediate, smax, s0, block.window] + list(block._opts_tail)
+                  # the block's parts mask (lane fixed15-parts-native: the entry takes it last; 511 = every part)
+                  + [int(getattr(block, "_np_parts", 511))])
         new_len = ext.transformer_forward_int15(head + block._tail_addrs(), params)
     elif step:
         a2, p2 = block._with_tails(
