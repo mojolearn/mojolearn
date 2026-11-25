@@ -85,8 +85,8 @@ def nb_ops_device_run(operation: Int, a: MutPointer[Int, MutUntrackedOrigin], p:
         # Lane vdf-scope-cluster2a: the index from a device fold (no host words).
         var status = nb_status_word(a[0])
         var fold = nb_fold_words(1, p[0], p[1], p[2], status)
-        # The sixth word (lane vdf2-tail): 1 asks the cosine zero-row test of the index rows on the device.
-        return knn_index_prepare_fold(fold[0], fold[1], fold[2], p[3], p[4], status, p[5] != 0)
+        # The sixth word (lane vdf2-tail): the metric's device test of the index rows (NB_FOLD_TEST_*).
+        return knn_index_prepare_fold(fold[0], fold[1], fold[2], p[3], p[4], status, p[5])
     if operation == NB_OP_CLASSIFY:
         var n_classes = nb_class_counts(p, NB_CLASSIFY_FIXED, np, p[5])
         var ip = _f32(a[0])

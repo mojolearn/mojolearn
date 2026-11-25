@@ -16,7 +16,9 @@ zero-row refusals as device reductions. Cosine (lane vdf2-tail): the scoped fit 
 (the prepare's device zero-row test, kept with the index), so its first call keeps the pin like euclidean's; a scoped
 cosine fit queried with PLAIN host rows gives the host-index bytes (the plan takes the index's device zero-row word and
 scans only the host queries); a zero row in the train fold is refused with the host scan's words ("index row 5") on
-the host-index arm, the scoped arm with fold queries and the scoped arm with host queries.
+the host-index arm, the scoped arm with fold queries and the scoped arm with host queries. Jensen-Shannon (lane
+vdf2-tail): the same claims (its scoped fit builds the index on the device and tests X >= 0 there), and a negative
+word in the train fold is refused at fit with `knn_check_metric_input`'s words on the host-index and scoped arms.
 Data: a SplitMix64 stream (uniform [0, 4)), 96 rows x 3; class codes 0..2 from the stream; folds 0..63 / 64..95.
 """
 from std.testing import TestSuite
@@ -83,7 +85,8 @@ def _route(device: Bool) -> DeviceRoute:
 
 
 def _new(route: DeviceRoute, regressor: Bool, metric: Int) raises -> Int:
-    # kind, n_neighbors 5, the metric (1 euclidean, 2 cosine), metric argument 2, distance weights (1), query_tile 0
+    # kind, n_neighbors 5, the metric (1 euclidean, 2 cosine, 15 jensenshannon), metric argument 2, distance weights
+    # (1), query_tile 0
     var params: List[Float64] = [1.0 if regressor else 0.0, 5.0, Float64(metric), 2.0, 1.0, 0.0]
     var call = MemberCall(route)
     call.params = Int(params.unsafe_ptr())
@@ -227,6 +230,31 @@ def _cosine_zero_row(route: DeviceRoute, codes: List[Int32], targets: List[Float
     _ = len(x)
 
 
+def _js_negative(route: DeviceRoute, codes: List[Int32], targets: List[Float32]) raises:
+    """One negative word in row 7 of the train fold: the Jensen-Shannon fit refuses it on both arms, same words."""
+    var x = _uniform4(20261124, _ROWS * _D)
+    x[7 * _D + 1] = -0.5
+    var failure = String("")
+    try:
+        _ = _arm(route, x, codes, targets, False, True, -1, 0, 15)
+    except error:
+        failure = String(error)
+    require(failure.find("metric='jensenshannon' needs X >= 0") >= 0,
+            "jensenshannon host row index: refused at fit, got '" + failure + "'")
+    var scope = arena_scope_new(0)
+    try:
+        failure = String("")
+        try:
+            _ = _arm(route, x, codes, targets, False, True, scope, 1, 15)
+        except error:
+            failure = String(error)
+        require(failure.find("metric='jensenshannon' needs X >= 0") >= 0,
+                "jensenshannon device fold: refused at fit with the host check's words, got '" + failure + "'")
+    finally:
+        _ = arena_scope_close(scope)
+    _ = len(x)
+
+
 def _same(a: _Arm, b: _Arm, what: String) raises:
     for i in range(_TEST):  # driver-loop: over the test rows (small)
         require(a.codes[i] == b.codes[i], what + ": predicted codes")
@@ -244,13 +272,14 @@ def fixture(device: Bool) raises:
     var caps = member_call(_member(), MEMBER_OP_CAPABILITIES, probe)
     require((caps & MEMBER_CAN_ROW_INDEX) != 0, "the k-NN member answers MEMBER_CAN_ROW_INDEX")
     require(((caps & MEMBER_CAN_SCOPE) != 0) == device, "MEMBER_CAN_SCOPE on the device column only")
-    for which in range(4):  # driver-loop: over the classifier and the regressor, euclidean and cosine
+    for which in range(6):  # driver-loop: over the classifier and the regressor, euclidean, cosine, jensenshannon
         var regressor = which % 2 == 1
-        # Cosine (lane vdf-scope-cluster7): the fit keeps the gathered points, the fold queries are gathered on the
-        # device and the zero-row refusals run there (neighbors/zero_row_device.mojo).
-        var metric = 1 if which < 2 else 2
+        # Cosine (lane vdf-scope-cluster7, vdf2-tail) and Jensen-Shannon (vdf-scope-cluster8, vdf2-tail): the fit
+        # builds its index from the fold on the device with the metric's test there, the fold queries are gathered
+        # on the device and their refusals run there (neighbors/zero_row_device.mojo).
+        var metric = 1 if which < 2 else (2 if which < 4 else 15)
         var what = (String("regressor ") if regressor else String("classifier ")) + (
-            String("euclidean ") if metric == 1 else String("cosine "))
+            String("euclidean ") if metric == 1 else (String("cosine ") if metric == 2 else String("jensenshannon ")))
         var plain = _arm(route, x, codes, targets, regressor, False, -1, 0, metric)
         var host_index = _arm(route, x, codes, targets, regressor, True, -1, 0, metric)
         _same(host_index, plain, what + "host row index vs plain fold rows")
@@ -273,6 +302,7 @@ def fixture(device: Bool) raises:
             _ = arena_scope_close(scope)
     if device:
         _cosine_zero_row(route, codes, targets)
+        _js_negative(route, codes, targets)
     _ = len(x) + len(targets) + len(codes)
 
 

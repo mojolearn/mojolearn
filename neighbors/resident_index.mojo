@@ -56,7 +56,8 @@ from core.neural_context import process_ctx, neural_device_plan
 from core.ctx_key import ctx_cache_key
 from core.msel_device_x import msel_fold_entry_context, msel_device_x_f32
 from core.device_zero import enqueue_fill
-from neighbors.zero_row_device import device_first_zero_row
+from neighbors.zero_row_device import device_first_zero_row, device_first_negative_word
+from core.neighbors_entry_table import NB_FOLD_TEST_NONE, NB_FOLD_TEST_COSINE, NB_FOLD_TEST_JS
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
@@ -141,7 +142,7 @@ struct ResidentKnnIndex(Movable):
         n_index: Int,
         n_features: Int,
         status_addr: Int,
-        zero_test: Bool = False,
+        metric_test: Int = NB_FOLD_TEST_NONE,
     ) raises:
         """THE FOLD INDEX (lane vdf-scope-cluster2a, 2026-11-24): the index is
         rows `fold_index` (int64, `n_index` of them) of the resident base
@@ -152,10 +153,13 @@ struct ResidentKnnIndex(Movable):
         gather's finite and range words land in the two host int32 words at
         `status_addr` (one synchronisation). The context is the resident
         slot's on the device plan's root, which must be the fold entry's
-        (`knn_fold_ready`). `zero_test` (lane vdf2-tail; a cosine fit): the
-        gathered rows' first all-zero row is found on the device here, once
-        (neighbors/zero_row_device.mojo, the host scan's first row), and kept
-        as `zero_row` for every later cosine search plan."""
+        (`knn_fold_ready`). `metric_test` (lane vdf2-tail): NB_FOLD_TEST_COSINE
+        finds the gathered rows' first all-zero row on the device here, once
+        (neighbors/zero_row_device.mojo, the host scan's first row), kept as
+        `zero_row` for every later cosine search plan; NB_FOLD_TEST_JS tests
+        X >= 0 on the device (`knn_check_metric_input`'s test, the fit's
+        refusal) and writes the THIRD int32 status word (1: a negative word).
+        Both run only when the range word is clear (the rows were gathered)."""
         if n_index <= 0 or n_features <= 0:
             raise Error("knn_index_prepare: n_index and n_features must be positive")
         if status_addr == 0 or status_addr % 4 != 0:
@@ -176,7 +180,11 @@ struct ResidentKnnIndex(Movable):
         _ = status^
         var zero_row = -2
         var words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)
-        if zero_test and words[0] == 0 and words[1] == 0:
+        if metric_test == NB_FOLD_TEST_JS:
+            words[2] = Int32(0)
+            if words[1] == 0 and device_first_negative_word(ctx, index, n_index * n_features) >= 0:
+                words[2] = Int32(1)
+        elif metric_test == NB_FOLD_TEST_COSINE and words[0] == 0 and words[1] == 0:
             zero_row = device_first_zero_row(ctx, index, n_index, n_features)
         self.n_index = n_index
         self.n_features = n_features
@@ -455,19 +463,19 @@ def knn_index_prepare(
 
 def knn_index_prepare_fold(
     fold_base: Int, base_rows: Int, fold_index: Int, n_index: Int, n_features: Int, status_addr: Int,
-    zero_test: Bool = False,
+    metric_test: Int = NB_FOLD_TEST_NONE,
 ) raises -> Int:
     """The resident index of a model-selection fold, gathered on the device
     (`ResidentKnnIndex` THE FOLD INDEX; lane vdf-scope-cluster2a): the handle,
     or 0 when the fold's finite or range word (the two int32 words at
-    `status_addr`) is set (nothing kept). `zero_test` (lane vdf2-tail): the
-    cosine zero-row test of the index rows on the device, kept with it."""
+    `status_addr`) is set, or the Jensen-Shannon test's third word (nothing
+    kept). `metric_test` (lane vdf2-tail): `ResidentKnnIndex`'s fold test."""
     var state = _registry()
     var entry = ResidentKnnIndex(fold_base=fold_base, base_rows=base_rows, fold_index=fold_index,
                                  n_index=n_index, n_features=n_features, status_addr=status_addr,
-                                 zero_test=zero_test)
+                                 metric_test=metric_test)
     var words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)
-    if words[0] != 0 or words[1] != 0:
+    if words[0] != 0 or words[1] != 0 or (metric_test == NB_FOLD_TEST_JS and words[2] != 0):
         _ = entry^
         return 0
     return _locked_insert(state, entry^)
