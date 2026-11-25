@@ -527,6 +527,14 @@ def _rnn_predict_options_of(fields: PythonObject) raises -> RnnFieldOptions:
     return RnnFieldOptions(seq_out, dirs, 0.0, False, 0.0, False, 0.1, 10, 1e-4, False)
 
 
+def _rnn_c0_check(h0: PythonObject, c0: PythonObject, cell: Int) raises:
+    """c_0 is the LSTM's cell state and goes with h_0 (refused here on every route, before any call)."""
+    if c0 is not None and h0 is None:
+        raise Error("ValueError: c_0 needs h_0")
+    if c0 is not None and cell != 2:
+        raise Error("ValueError: c_0 is the LSTM's cell state; GRU and RNN take h_0 only")
+
+
 def _rnn_state_arg(source: PythonObject, slots: Int, n: Int, hidden: Int, name: String,
                    context: PythonObject) raises -> PythonObject:
     """h_0 / c_0: None, or a float32 (num_layers * num_directions, n_samples, hidden_size) array (PyTorch's h_0
@@ -572,7 +580,7 @@ def _rnn_class_weights(fields: PythonObject, target: PythonObject, n: Int, steps
 
 
 def _rnn_fit_full(model: PythonObject, fields: PythonObject, x_source: PythonObject, target_in: PythonObject,
-                  route: XseqRoute, context: PythonObject, lengths_in: PythonObject, sw_source: PythonObject,
+                  route: XseqRoute, context: PythonObject, lengths_in: PythonObject, sw_in: PythonObject,
                   h0_source: PythonObject, c0_source: PythonObject, validation: PythonObject,
                   vtarget_in: PythonObject, restore_best: Bool, partial: Bool) raises -> PythonObject:
     """`_RecurrentBase._fit(X, target)` with every option (lane rnn-parity). `target_in` is the admitted float32
@@ -580,6 +588,7 @@ def _rnn_fit_full(model: PythonObject, fields: PythonObject, x_source: PythonObj
     (X_val, lengths_val) pair or None and `vtarget_in` its target likewise. `partial`: partial_fit, one epoch
     from the fitted parameters and optimizer state."""
     var fo = rnn_field_options(fields)
+    var sw_source = sw_in
     var x_full = _rnn_x(x_source, fields, True, context)
     var target = target_in
     var lengths_source = lengths_in
@@ -603,8 +612,16 @@ def _rnn_fit_full(model: PythonObject, fields: PythonObject, x_source: PythonObj
         var tail_s = py_call(b.slice, PythonObject(cut), PythonObject(None))
         vx = x_full[tail_s]
         x = x_full[head_s]
-        vy = target[tail_s]
-        target = target[head_s]
+        # the target holds one row per sequence, or with output="sequence" one per step (n T rows): cut at the
+        # held-out sequences' first row
+        var rows_per = Int(py=x_full.shape[1]) if fo.seq_out else 1
+        var yhead = py_call(b.slice, PythonObject(0), PythonObject(cut * rows_per))
+        var ytail = py_call(b.slice, PythonObject(cut * rows_per), PythonObject(None))
+        vy = target[ytail]
+        target = target[yhead]
+        if sw_source is not None:
+            # the held-out sequences' weights leave with them (validation is unweighted)
+            sw_source = xseq_input(sw_source, context)[head_s]
         if lengths_source is not None:
             var lf = xseq_as_f32_c(lengths_source, 1, "lengths", context)
             vlen = lf[tail_s]
@@ -639,6 +656,7 @@ def _rnn_fit_full(model: PythonObject, fields: PythonObject, x_source: PythonObj
     var slots = layers * fo.dirs
     var h0 = _rnn_state_arg(h0_source, slots, n, hidden, "h_0", context)
     var c0 = _rnn_state_arg(c0_source, slots, n, hidden, "c_0", context)
+    _rnn_c0_check(h0, c0, cell)
     var plain = fo.plain() and sw is None and cw is None and h0 is None and vx is None and not partial
     var stream = XseqStream(py_get(fields, nk[].k_random_state), context)
     var mods = NativeModules()
@@ -860,6 +878,7 @@ def _rnn_run_options(model: PythonObject, fields: PythonObject, source: PythonOb
     var h0 = _rnn_state_arg(h0_source, slots, n, hidden, "h_0", context)
     var c0 = _rnn_state_arg(c0_source, slots, n, hidden, "c_0", context)
     var cell = _rnn_cell(model, fields)
+    _rnn_c0_check(h0, c0, cell)
     var hn = xseq_zeros(Python.tuple(slots, n, hidden), context) if want_state else PythonObject(None)
     var cn = xseq_zeros(Python.tuple(slots, n, hidden), context) if want_state and cell == 2 else PythonObject(None)
     var params = admit_nd_f32(xseq_private_input(py_item(fields, nk[].k_params_), context, "params_"), "params_",
@@ -1019,6 +1038,8 @@ def xseq_rnn(model: PythonObject, operation: Int, args: PythonObject, context: P
             raise Error("TypeError: state must be the (h, c) pair step returned, or None")
         c0 = h0[1]
         h0 = h0[0]
+    if c0 is not None and h0 is None:
+        raise Error("ValueError: c_0 needs h_0")
     var options = not (fo.seq_out == False and fo.dirs == 1 and h0 is None and not want_state)
     if operation == XSEQ_OPN_RNN_HIDDEN_SEQUENCE:
         if options:

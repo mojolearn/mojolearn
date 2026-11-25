@@ -713,7 +713,7 @@ trait RnnStep(Defaultable & Movable & Deinitable):
 
 # Lane rnn-parity fault injection (verify's sabotage arms of the weighted fit, never in a product build): the
 # loss weights drop their sample-weight factor on ONE side, the device executor's fit or the host executor's.
-# The verify lane sequence-rnn-weighted-steps (tools/identity_lanes/sequence.py) must FAIL under either.
+# The verify lane sequence-rnn-weighted-steps (tools/identity_lanes/rnn_parity.py) must FAIL under either.
 comptime RNN_PARITY_SABOTAGE_WEIGHT_DEVICE = is_defined["MOJOLEARN_RNN_PARITY_SABOTAGE_WEIGHT_DEVICE"]()
 comptime RNN_PARITY_SABOTAGE_WEIGHT_HOST = is_defined["MOJOLEARN_RNN_PARITY_SABOTAGE_WEIGHT_HOST"]()
 
