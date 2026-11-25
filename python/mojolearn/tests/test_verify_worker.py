@@ -97,8 +97,11 @@ def test_device_failure_stops_remaining_probes():
         _train_hash=lambda fit: "abc",
         _probe_fit=lambda *args: (None, None, None, "dead/saturated-device signature"),
         _probe_batch=lambda *args: pytest.fail("must not run another probe on unhealthy device"),
+        # the device view (vd-verify): a two-sided lane, the package as given
+        one_sided_na=lambda lane, side: None,
+        device_view=lambda ml, side, lane: ml,
     )
-    parts = verifier.run_cell(harness, None, "test", "base", (None, None, None), Rows(), 2)
+    parts = verifier.run_cell(harness, None, "test", "base", (None, None, None), Rows(), 2, side="cpu")
     assert parts
     assert all(value is None and "dead/saturated" in error for value, error in parts.values())
 
@@ -142,6 +145,9 @@ def controller(monkeypatch, tmp_path, lanes=("one", "two"), divergent=()):
     output = tmp_path / "evidence.json"
 
     def run_verify(**extra):
+        # one cell worker unless a test asks for more: the incremental
+        # journal is then in cell order, which the assertions below read
+        extra.setdefault("cell_workers", 1)
         args = SimpleNamespace(all=True, quick=False, lanes=",".join(lanes), repeats=1, no_models=True,
                                json=True, json_out=str(output), cell_timeout=1,
                                reference_table=str(table_file), **extra)
@@ -156,7 +162,9 @@ def controller(monkeypatch, tmp_path, lanes=("one", "two"), divergent=()):
 
 
 def good_value(lane):
-    return {part: [lane.ljust(16, "0")[:16], None] for part in verifier.vref.PARTS}
+    # one cell's worker value: {side: {part: (value, error)}} (vd-verify's
+    # two-sided format); the CPU side alone keeps one row per part
+    return {"cpu": {part: [lane.ljust(16, "0")[:16], None] for part in verifier.vref.PARTS}}
 
 
 @pytest.mark.parametrize("failure", ["timeout", "crash", "preflight", "mismatch", None])
@@ -180,7 +188,7 @@ def test_controller_checkpoints_and_stops_without_false_pass(monkeypatch, tmp_pa
             raise worker.WorkerFailure("test worker exceeded limit")
         if failure == "crash" and request["lane"] == "one":
             raise worker.WorkerCrash("cell/one/base: worker exited -5; ")
-        return dict(value={part: ["abcdef0123456789", None] for part in reference.PARTS}, bindings=[])
+        return dict(value={"cpu": {part: ["abcdef0123456789", None] for part in reference.PARTS}}, bindings=[])
 
     monkeypatch.setattr(worker, "run", run)
     code, report, progress, journal = run_verify(fresh_process_per_cell=True)
@@ -520,3 +528,18 @@ for i, r in enumerate(requests):
     seen = []
     assert worker.run_batch(batch_requests(3), timeout=5, on_result=lambda i, r: seen.append(i)) is None
     assert seen == [0, 1, 2]
+
+
+def test_parallel_cell_workers_keep_the_report_in_cell_order(monkeypatch, tmp_path):
+    """Batches on several cell workers at once (w3-integrate-8): every cell
+    is answered once and the report's rows read in cell order."""
+    run_verify = controller(monkeypatch, tmp_path, lanes=LANES)
+    batch, batch_calls = fake_batch(lambda r: good_value(r["lane"]))
+    run, _ = fresh_runs()
+    monkeypatch.setattr(worker, "run_batch", batch)
+    monkeypatch.setattr(worker, "run", run)
+    code, report, progress, journal = run_verify(batch_cells=1, cell_workers=4)
+    assert code == verifier.EXIT_VERIFIED
+    assert progress["execution"]["cell_workers"] == 4
+    assert sorted(lane for call in batch_calls for lane in call) == sorted(LANES)
+    assert sorted(row["lane"] for row in journal) == sorted(lane for lane in LANES for _ in verifier.vref.PARTS)
