@@ -120,13 +120,20 @@ def _(ml, X, yc, yr, Xh=None):
     """An ImportedProgram (the `sequence-onnx-import` lane's two-layer ONNX file, batch 64):
     `run`, `run_dynamic` and `profile` (its outputs; the timings are not numbers of the model) must
     give the same output; `inspect` (called: graph metadata); `save` and Session.load_program on the
-    same side, whose `run` must equal. Parts: the output and the held-out output."""
-    IP = ml.importers._program.ImportedProgram
+    same side, whose `run` must equal. Parts: the output and the held-out output.
+
+    The class is imported from its module (FIX w3-fix-13, 2026-11-25): `ml.importers._program` read a private
+    submodule as an attribute of the package, which exists only once something has imported it; from the installed
+    wheel nothing had, and `mojolearn.importers.__getattr__` (it resolves only `import_model`) raised AttributeError,
+    so the lane was REFUSED. Harness defect."""
+    from mojolearn.importers._program import ImportedProgram as IP
     x = _nn_programs_f32(X[:64, :6])
     xh = _nn_programs_f32((X if Xh is None else Xh)[:64, :6])
     with tempfile.TemporaryDirectory(prefix="ib-nn-pg-import-") as tmp:
         path = _coverage_onnx(os.path.join(tmp, "model.onnx"), X)
         prog = ml.import_model(path, shapes={"x": (64, 6)}, numeric_mode="identical")
+        if not isinstance(prog, IP):
+            raise AssertionError(f"import_model returned {type(prog).__name__}, not ImportedProgram")
         y = np.asarray(IP.run(prog, x))
         held = np.asarray(IP.run(prog, xh))
         dyn = IP.run_dynamic(prog, x)
@@ -204,11 +211,15 @@ def _(ml, X, yc, yr, Xh=None):
         m = CLM.load(root, numeric_profile="fp32_v1")
         m2 = CLM.load(other, numeric_profile="fp32_v1")
         A = ml.Array.from_buffer
-        y = np.asarray(CLM.__call__(m, A(ids)))
+        # `m(...)`, never `CLM.__call__(m, ...)`: CLM is the device view's BoundClass, whose own `__call__`
+        # CONSTRUCTS a CausalLM (python/mojolearn/_verify_device.py BoundClass.__call__), so the old spelling built a
+        # model from (m, ids) and the constructor refused it ("model operation requires its connected record
+        # class"). Harness defect (FIX w3-fix-13, 2026-11-25).
+        y = np.asarray(m(A(ids)))
         sd = m.state_dict()
         flat = [np.ascontiguousarray(np.asarray(p)) for p in CLM.parameters(m)]
         CLM.load_state_dict(m2, sd)
-        _same_bytes("CausalLM call", y, "CausalLM call after load_state_dict", np.asarray(CLM.__call__(m2, A(ids))))
+        _same_bytes("CausalLM call", y, "CausalLM call after load_state_dict", np.asarray(m2(A(ids))))
         state = m.allocate_state(2, 8)
         first = np.asarray(m.forward(A(ids), state))
         CLM.reset_state(m, state)
