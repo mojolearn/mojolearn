@@ -12,7 +12,7 @@ from providers.python.neural_descriptor_pyapi_door import (
 from hierarchy.cluster_descriptor_schema import (
     HIERARCHY_CLUSTER_ABI, HIERARCHY_CLUSTER_OPERATIONS,
     HIERARCHY_CLUSTER_MODE, HIERARCHY_CLUSTER_CAPABILITIES,
-    HIERARCHY_CLUSTER_CAP_FIT, HIERARCHY_CLUSTER_CAP_DEVICE,
+    HIERARCHY_CLUSTER_CAP_FIT,
 )
 
 
@@ -31,7 +31,9 @@ def hierarchy_cluster_admit(binding: PythonObject) raises -> PythonObject:
     if mode != 0 and mode != 1:
         raise Error("hierarchy cluster provider: unsupported compiled numeric mode")
     var capabilities = neural_descriptor_execute(provider, HIERARCHY_CLUSTER_CAPABILITIES, [], [], [])
-    if capabilities != HIERARCHY_CLUSTER_CAP_FIT and capabilities != (HIERARCHY_CLUSTER_CAP_FIT | HIERARCHY_CLUSTER_CAP_DEVICE):
+    # The capability word is a bit set (DEVICE, FOLD_X are additive; 512881ce44 added FOLD_X to the identical
+    # device image): admission tests the one bit it needs, never the whole word.
+    if (capabilities & HIERARCHY_CLUSTER_CAP_FIT) == 0:
         raise Error("hierarchy cluster provider: fit capability is unavailable")
     var snapshot = PythonObject(alloc=CompiledBindingSnapshot(provider, binding, String(HIERARCHY_CLUSTER_ABI), mode, [capabilities]))
     compiled_binding_retain(binding, factory, String(HIERARCHY_CLUSTER_ABI), snapshot)
