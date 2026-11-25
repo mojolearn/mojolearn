@@ -225,3 +225,9 @@ Sequential.max_pool3d	nn-conv3d 3-D layers: not yet in a release verification
 Sequential.avg_pool3d	nn-conv3d 3-D layers: not yet in a release verification
 Sequential.adaptive_avg_pool3d	nn-conv3d 3-D layers: not yet in a release verification
 # nn-conv3d end
+# nn-blocks-scatter begin
+Session.scatter_add	not yet in a release verification
+Session.segment_sum	not yet in a release verification
+Session.segment_mean	not yet in a release verification
+Session.segment_max	not yet in a release verification
+# nn-blocks-scatter end

@@ -166,6 +166,13 @@ comptime _SOP_CONV_LINEAR = 145
 comptime _SOP_LSTM = 146
 comptime _SOP_GRU = 147
 comptime _SOP_RNN = 148
+# nn-blocks-scatter begin: scatter_add and the segment reductions (session codes 113..116); private codes
+# 1113..1116 so the nn-blocks sub-lanes' additions cannot collide
+comptime _SOP_SCATTER_ADD = 1113
+comptime _SOP_SEGMENT_SUM = 1114
+comptime _SOP_SEGMENT_MEAN = 1115
+comptime _SOP_SEGMENT_MAX = 1116
+# nn-blocks-scatter end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -321,6 +328,12 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["lstm"] = _SOP_LSTM
         self.codes["gru"] = _SOP_GRU
         self.codes["rnn"] = _SOP_RNN
+        # nn-blocks-scatter begin
+        self.codes["scatter_add"] = _SOP_SCATTER_ADD
+        self.codes["segment_sum"] = _SOP_SEGMENT_SUM
+        self.codes["segment_mean"] = _SOP_SEGMENT_MEAN
+        self.codes["segment_max"] = _SOP_SEGMENT_MAX
+        # nn-blocks-scatter end
 
 
 # One table per process (identical contents in every extension that links this file).

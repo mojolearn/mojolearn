@@ -106,7 +106,11 @@ FAMILIES = (
                         "public-theta-variants-forecast",
                         "sequence-croston-forecast",
                         "sequence-ets-forecast",
-                        "sequence-theta-forecast",),
+                        "sequence-theta-forecast",
+                        # nn-blocks-scatter begin: ops.Session scatter_add and segment reductions
+                        "ops-scatter-segment",
+                        # nn-blocks-scatter end
+                        ),
         inference_lanes=(),
         forest_kinds=(),
         classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL", "VAR", "MLPClassifier",
@@ -280,6 +284,9 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     "sequence-croston-forecast": "CrostonClassic, CrostonOptimized, CrostonSBA: forecast",
     "sequence-ets-forecast": "DampedETS, ETS: forecast",
     "sequence-theta-forecast": "AutoTheta, DynamicOptimizedTheta, Theta: forecast",
+    # nn-blocks-scatter begin
+    "ops-scatter-segment": "Session: scatter_add, segment_sum, segment_mean, segment_max",
+    # nn-blocks-scatter end
                        }
 PUBLIC_PENDING_LANES = {
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
@@ -341,4 +348,7 @@ PUBLIC_PENDING_LANES = {
     "sequence-optim-adagrad": "no reference",
     "sequence-optim-lamb": "no reference",
     # lane nn-optim end
+    # nn-blocks-scatter begin
+    "ops-scatter-segment": "no reference",
+    # nn-blocks-scatter end
 }

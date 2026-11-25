@@ -81,7 +81,11 @@ comptime PROGRAM_PARAM_STATE_WORDS = 2
 # replay refuses by name.
 comptime PROGRAM_MAX_CODE_V2 = 80
 # 94: the recurrent scan (`lstm`, `gru`, `rnn`; autograd/rules_recurrent.mojo).
-comptime PROGRAM_MAX_CODE = 94
+# nn-blocks-scatter begin
+# 110..129: the nn-blocks session operations of 2026-11-25 (113..116 `scatter_add`, `segment_sum`, `segment_mean`,
+# `segment_max`, autograd/nn_scatter.mojo); a code of that range no operation owns is refused by the replay by name.
+comptime PROGRAM_MAX_CODE = 129
+# nn-blocks-scatter end
 
 
 struct OpsLog(Movable):

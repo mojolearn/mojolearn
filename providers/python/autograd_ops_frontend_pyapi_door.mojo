@@ -74,6 +74,10 @@ from autograd.autograd_ops_frontend_run import (
     _SOP_LM_HEAD_LOSS, _SOP_LM_ROWS, _SOP_LM_PICK, _SOP_LM_ALIVE, _SOP_LM_EMBEDDING, _SOP_CONV_BLOCK,
     _SOP_CONV_LINEAR, _SOP_LSTM, _SOP_GRU, _SOP_RNN,
 )
+# nn-blocks-scatter begin
+from autograd.autograd_ops_frontend_run import _SOP_SCATTER_ADD, _SOP_SEGMENT_SUM, _SOP_SEGMENT_MEAN, _SOP_SEGMENT_MAX
+from autograd.nn_scatter import OPS_SCATTER_ADD, OPS_SEGMENT_SUM
+# nn-blocks-scatter end
 
 
 struct _SessionOpNames(Defaultable, Movable):
@@ -1065,6 +1069,22 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         var metric = 1 if op == _SOP_ACCURACY else (2 if op == _SOP_LOG_LOSS else 3)
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
         return PythonObject(Float64(s[].metric(metric, hs)))
+    # nn-blocks-scatter begin
+    elif op == _SOP_SCATTER_ADD:
+        # args (x, dim, index, src): torch.Tensor.scatter_add's order; index an ids() tensor
+        code = OPS_SCATTER_ADD
+        if not _is_int(args[2]):
+            raise Error("TypeError: scatter_add: index must be an integer tensor made with Session.ids")
+        hs = [_int(args[0], "x", 1), _int(args[2], "index", 1), _int(args[3], "src", 1)]
+        ints.append(_int(args[1], "dim"))
+    elif op == _SOP_SEGMENT_SUM or op == _SOP_SEGMENT_MEAN or op == _SOP_SEGMENT_MAX:
+        # args (data, segment_ids, num_segments); segment_ids an ids() tensor
+        code = OPS_SEGMENT_SUM + (0 if op == _SOP_SEGMENT_SUM else (1 if op == _SOP_SEGMENT_MEAN else 2))
+        if not _is_int(args[1]):
+            raise Error("TypeError: segment_ids must be an integer tensor made with Session.ids")
+        hs = [_int(args[0], "data", 1), _int(args[1], "segment_ids", 1)]
+        ints.append(_int(args[2], "num_segments"))
+    # nn-blocks-scatter end
     if code == 0:
         raise Error("unknown native session operation: " + String(operation))
     return PythonObject(s[].op(code, hs, ints, fs))

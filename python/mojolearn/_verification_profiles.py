@@ -44,6 +44,9 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # nn-conv3d begin
                           'sequence-composed-conv3d', 'sequence-composed-pool3d',
                           # nn-conv3d end
+                          # nn-blocks-scatter begin: ops.Session scatter_add and segment reductions, one seeded backward
+                          'ops-scatter-segment',
+                          # nn-blocks-scatter end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',
