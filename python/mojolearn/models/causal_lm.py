@@ -152,7 +152,26 @@ class CausalLM:
         `model.safetensors.index.json` and its shards).
 
         `device` is None (this installation's device), ``"gpu"`` or ``"cpu"``;
-        ``"auto"`` means the same as None."""
+        ``"auto"`` means the same as None.
+
+        `numeric_profile` is the number format of the matrix products. None
+        uses the inference default, ``"fixed15_v1"`` unless
+        :func:`mojolearn.set_numeric_profile` or the
+        ``MOJOLEARN_NUMERIC_PROFILE`` environment variable sets another.
+        ``"fp32_v1"`` computes every product in float32. A dict sets single
+        parts over a preset, for example
+        ``{"preset": "fixed15_v1", "lm_head": "fp32_v1"}``; the parts are
+        ``q_proj``, ``k_proj``, ``v_proj``, ``o_proj``, ``gate_proj``,
+        ``up_proj``, ``down_proj``, ``lm_head``, ``attn_scores`` and
+        ``attn_context`` (``"fp32_v1"`` only). The model's
+        ``numeric_profile`` attribute reports the canonical form: the preset
+        name, or a dict holding only the overrides that differ from it.
+
+        Examples
+        --------
+        >>> from mojolearn.models import CausalLM
+        >>> lm = CausalLM.load(path, numeric_profile="fp32_v1")  # doctest: +SKIP
+        """
         return _NATIVE.causal_model_load(cls, path,
                                         (weight_format, max_positions, device, numeric_profile),
                                         _NATIVE_CONTEXT)

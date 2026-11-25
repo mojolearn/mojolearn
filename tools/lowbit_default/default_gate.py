@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Check the restored FP32 default on a real model (SmolLM2-360M).
+"""Check the fixed15_v1 inference default on a real model (SmolLM2-360M;
+Andrew, 2026-11-25: fixed15_v1 is the transformer models' default, fp32_v1 the
+opt-out).
 
     python3 tools/lowbit_default/default_gate.py --model /root/models/SmolLM2-360M \
         --phases hash,generate --out <dir>
 
-hash      `CausalLM.load(path)` with NO keyword must print the fp32_v1
-          hash (833c9a8947bdd619...), equal to explicit fp32_v1;
-          explicit fixed15_v1 must retain d37c2ea81d13743a...;
-          and the two explicit FP32 selectors,
+hash      `CausalLM.load(path)` with NO keyword must print the fixed15_v1
+          hash (d37c2ea81d13743a...; only this 16-hex prefix is recorded, so
+          the check is a prefix match), equal to explicit fixed15_v1;
+          explicit fp32_v1 must retain 833c9a8947bdd619...;
+          and the two FP32 opt-outs,
           `set_numeric_profile("fp32_v1")` in this process and
           `MOJOLEARN_NUMERIC_PROFILE=fp32_v1` in a child, the fp32_v1 hash
           with no keyword. Same ids as tools/lowbit_blocks/model_logits.py
           (B=2, L=64, splitmix64 seed 0x6c6f7762). Exit 1 on any mismatch.
 generate  what a user who passes nothing gets from `generate` against what
-          fp32_v1 gave them (the maintainer's condition before the merge):
-          a 512-token prompt at B=1, N new tokens, (a) the default model
-          (fp32_v1) and (b) a model loaded with
+          fp32_v1 gives them: a 512-token prompt at B=1, N new tokens, (a)
+          the default model (fixed15_v1) and (b) a model loaded with
           numeric_profile="fp32_v1", both through the default `generate`
           route (the decode program). One untimed call each, then
           the two alternate, R rounds; medians. Every timed call's ids are
@@ -94,9 +96,9 @@ def main():
         h["env_fp32"] = line[-1].split()[2] if line else "CHILD FAILED: " + r.stderr[-300:]
         h["env_fp32_reports"] = line[-1].split()[1] if line else None
         checks = {
-            "default is fp32_v1": lm.numeric_profile == "fp32_v1",
-            "default equals explicit fp32_v1": h["default"] == h["fp32_v1"],
-            "opt-in retains fixed15 hash": h["fixed15_v1"].startswith(WANT_FIXED15),
+            "default is fixed15_v1": lm.numeric_profile == "fixed15_v1",
+            "default equals explicit fixed15_v1": h["default"] == h["fixed15_v1"],
+            "default hash d37c2ea81d13743a (prefix)": h["default"].startswith(WANT_FIXED15),
             "fp32_v1 hash 833c9a8947bdd619": h["fp32_v1"].startswith(WANT_FP32),
             "set_numeric_profile(fp32_v1) == fp32_v1 bits": h["set_numeric_profile_fp32"] == h["fp32_v1"]
             and h["set_numeric_profile_fp32_reports"] == "fp32_v1",
