@@ -520,7 +520,7 @@ struct BatchSource(Movable):
         for r in range(rows):  # driver-loop: over the batch's rows (their read status)
             if status[r] != 0:
                 raise Error("OSError: BatchSource: reading record " + String(self.order[lo + r])
-                            + " failed (" + ("errno " + String(-status[r]) if status[r] != -5 else "short read") + ")")
+                            + " failed (" + (String("errno ") + String(-status[r]) if status[r] != -5 else String("short read")) + ")")
         self.held_epoch = epoch
         self.held_batch = batch
         self.held_rows = rows
