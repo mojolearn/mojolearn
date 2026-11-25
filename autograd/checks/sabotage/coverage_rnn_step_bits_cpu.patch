@@ -1,13 +1,13 @@
 diff --git a/autograd/rules_recurrent.mojo b/autograd/rules_recurrent.mojo
-index 43bf6ec5e2..a6b33518bd 100644
+index 7af195a97e..60852616d5 100644
 --- a/autograd/rules_recurrent.mojo
 +++ b/autograd/rules_recurrent.mojo
-@@ -310,7 +310,7 @@ def _copy[E: Exec](mut ex: E, dst: FP, src: FP, n: Int) raises:
+@@ -309,7 +309,7 @@ def _copy[E: Exec](mut ex: E, dst: FP, src: FP, n: Int) raises:
  # call at > 64 inputs folds in another order than the whole pass there: sequence-rnn-step-widths and RNN_PARITY's
  # width units must FAIL.
  comptime RNN_STEP_BITS_SABOTAGE_DEVICE = is_defined["MOJOLEARN_RNN_STEP_BITS_SABOTAGE_DEVICE"]()
 -comptime RNN_STEP_BITS_SABOTAGE_HOST = is_defined["MOJOLEARN_RNN_STEP_BITS_SABOTAGE_HOST"]()
-+comptime RNN_STEP_BITS_SABOTAGE_HOST = True  # SABOTAGE: the row-keyed split order back on the host executor
++comptime RNN_STEP_BITS_SABOTAGE_HOST = True  # SABOTAGE: the row-keyed split decision back on the host executor
  
  
  @always_inline
