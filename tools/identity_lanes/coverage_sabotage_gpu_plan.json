@@ -2063,7 +2063,9 @@
   {
    "arm_lanes": {
     "coverage-core-resample_impl": [
-     "resample-utils"
+     "resample-utils",
+     "fn-resample-indices",
+     "fn-resample-resample"
     ]
    },
    "arms": [
@@ -2080,7 +2082,9 @@
    "family": "resample",
    "id": "resample-1",
    "lanes": [
-    "resample-utils"
+    "resample-utils",
+    "fn-resample-indices",
+    "fn-resample-resample"
    ],
    "patches": [
     "core/sabotage/coverage_resample_impl.patch"
