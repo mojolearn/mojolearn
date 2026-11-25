@@ -56,6 +56,9 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # nn-blocks-composed begin: the composed tagger, two steps and a resume (eager, Program.fit)
                           'ops-composed-tagger',
                           # nn-blocks-composed end
+                          # session-ops-pool begin: Session pools (window and adaptive), one seeded step each
+                          'ops-pool-window', 'ops-pool-adaptive',
+                          # session-ops-pool end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',

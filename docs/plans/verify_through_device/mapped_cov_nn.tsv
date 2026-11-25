@@ -316,3 +316,16 @@ mojolearn.ops.Session.segment_sum	mapped	ops-scatter-segment	tools/identity_lane
 mojolearn.ops.Session.segment_mean	mapped	ops-scatter-segment	tools/identity_lanes/nn_scatter.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 mojolearn.ops.Session.segment_max	mapped	ops-scatter-segment	tools/identity_lanes/nn_scatter.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 # nn-blocks-scatter end
+# session-ops-pool begin (max_pool2d / avg_pool2d: their option codes 142 / 143)
+mojolearn.ops.Session.max_pool1d	mapped	ops-pool-window	tools/identity_lanes/session_ops_pool.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.avg_pool1d	mapped	ops-pool-window	tools/identity_lanes/session_ops_pool.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.max_pool2d	mapped	ops-pool-window	tools/identity_lanes/session_ops_pool.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.avg_pool2d	mapped	ops-pool-window	tools/identity_lanes/session_ops_pool.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.max_pool3d	mapped	ops-pool-window	tools/identity_lanes/session_ops_pool.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.avg_pool3d	mapped	ops-pool-window	tools/identity_lanes/session_ops_pool.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.adaptive_avg_pool3d	mapped	ops-pool-window	tools/identity_lanes/session_ops_pool.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.adaptive_avg_pool1d	mapped	ops-pool-adaptive	tools/identity_lanes/session_ops_pool.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.adaptive_avg_pool2d	mapped	ops-pool-adaptive	tools/identity_lanes/session_ops_pool.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.adaptive_max_pool1d	mapped	ops-pool-adaptive	tools/identity_lanes/session_ops_pool.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.adaptive_max_pool2d	mapped	ops-pool-adaptive	tools/identity_lanes/session_ops_pool.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+# session-ops-pool end

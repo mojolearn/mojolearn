@@ -247,3 +247,14 @@ Session.scan	nn-blocks-scan scan over a captured cell: not yet in a release veri
 Session.custom_op	nn-blocks-cbw user-defined backward rule: not yet in a release verification
 Session.custom	nn-blocks-cbw user-defined backward rule: not yet in a release verification
 # nn-blocks-cbw end
+# session-ops-pool begin
+Session.max_pool1d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.avg_pool1d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.max_pool3d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.avg_pool3d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_avg_pool1d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_avg_pool2d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_avg_pool3d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_max_pool1d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_max_pool2d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+# session-ops-pool end
