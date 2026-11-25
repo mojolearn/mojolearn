@@ -1,0 +1,173 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""Model selection's rows out of the `resident()` scope (lane gd-rf-msel,
+2026-11-25): train_test_split's inputs kept ONCE per scope and gathered in
+place.
+
+Before, train_test_split opened a `_Resident` per call (msel_resident_new /
+_close, bindings/msel_common_door.mojo), put every input into it and freed it
+at the end: inside a scope two calls on the same arrays uploaded twice and
+`resident.stats()` showed nothing. Now, inside a scope, on a GPU column:
+
+  * the buffer kept is the CALLER'S (`metric_resident_owner`: the admitted
+    array itself when it reads the caller's buffer, the caller's array when
+    the admission made a word-for-word copy, else nothing is kept and the
+    call takes the per-call route below);
+  * it is put into the scope's x_prep cache of the column's image
+    (`arena_scope_store_put`, prefix "x_prep", the store every GPU image
+    ships and the one member_fold_x and the metric doors key the same X in)
+    once, pinned by the cache: a hit on every later call of the scope;
+  * each side's rows are taken ON THE DEVICE out of that slot
+    (`arena_store_take_rows`: only the int64 row numbers go up) into a fresh
+    slot, read once into the Array the caller receives (`arena_store_read`)
+    and freed.
+
+Outside a scope (one atomic load, `arena_scopes_live`), on the host column,
+for a list or tuple, an input of rows that are not whole 4-byte words, or one
+below the scope's size floor, nothing here runs and the per-call `_Resident`
+route is unchanged. Python objects only at UNPACK (the scope word, the
+admitted metadata, the output allocation) and PACK; the store calls run with
+the interpreter lock released.
+"""
+from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from bindings.py_balanced import py_call, py_get, py_type
+from bindings.arena_cache_run import (
+    ARENA_PREFIX_X_PREP, ArenaCachePut, arena_scopes_live, arena_scope_floor, arena_scope_store_put,
+    arena_store_take_rows, arena_store_read, arena_cache_free,
+)
+from bindings.arena_owner_door import arena_pin, arena_unpin
+from bindings.arena_materialize_native_door import _prepared_info, _empty, _empty_unfilled, _slot
+from bindings.member_scope_door import member_scope_word
+from bindings.metric_resident_source_door import metric_resident_owner
+from bindings.classical_arrays_door import classical_address
+from core.arena_state import ARENA_HANDLE_NONE
+from core.entry_table import EntryRef, entry_ref_unresolved
+from core.prep_entry_table import PrepEntryKey, xp_transport_ref
+
+
+struct MselScopeRows(Movable):
+    """One public operation's view of the calling thread's scope: its handle
+    word (`ARENA_HANDLE_NONE`: none, or a column with no device store), the
+    x_prep transport entry of the operation's GPU column and the scope's size
+    floor in words."""
+    var scope: Int
+    var store: EntryRef
+    var floor: Int
+
+    def __init__(out self):
+        self.scope = ARENA_HANDLE_NONE
+        self.store = entry_ref_unresolved()
+        self.floor = 0
+
+    def active(self) -> Bool:
+        return self.scope != ARENA_HANDLE_NONE
+
+
+def msel_scope_rows(context: PythonObject) raises -> MselScopeRows:
+    """UNPACK, once per public operation: the scope view of `context` (the
+    model-selection operation context). Outside every scope: one atomic
+    load and nothing else. The column is the model-selection helper key's
+    (mode, vendor) (vendor 0: the host column, which keeps no scope here)."""
+    var held = MselScopeRows()
+    if not arena_scopes_live():
+        return held^
+    var scope = member_scope_word(context["family_msel_rows_context"])
+    if scope == ARENA_HANDLE_NONE:
+        return held^
+    var key = py_get(context["family_msel_entries"], PythonObject("msel_native_key"))
+    if key is None or py_type(key) is py_type(PythonObject("")):
+        return held^  # no helper key: the per-call route raises its own words
+    var vendor = Int(py=key[1])
+    if vendor == 0:
+        return held^
+    try:
+        held.store = xp_transport_ref(PrepEntryKey(Int(py=key[0]), vendor))
+    except:
+        return held^  # the column's image ships no x_prep store: the per-call route
+    held.floor = arena_scope_floor(scope)
+    held.scope = scope
+    return held^
+
+
+def _scope_take(rows: MselScopeRows, base_id: Int, row_words: Int, info: PythonObject, indices: PythonObject,
+                rc: PythonObject) raises -> PythonObject:
+    """Rows `indices` (a prepared 1-D int64 Array) of the resident slot
+    `base_id` into a new Array of the base's dtype and trailing shape: taken
+    on the device, read down once, the fold slot freed."""
+    var meta = _prepared_info(indices, rc)
+    if String(meta["dtype"]) != "<i8" or Int(py=meta["ndim"]) != 1:
+        raise Error("TypeError: model-selection rows require one-dimensional int64 indices")
+    var count = Int(py=meta["size"])
+    var shape = Python.list(PythonObject(count))
+    var base_shape = info["shape"]
+    for i in range(1, len(base_shape)):  # driver-loop: the trailing dimensions of the row shape
+        _ = py_call(shape.append, base_shape[i])
+    var b = rc["arena_native_types"]
+    var dtype = String(info["dtype"])
+    if count == 0:
+        return _empty(py_call(b["tuple"], shape), dtype, rc)
+    # Every byte of the output is written by the read below, or the call
+    # raises and the output is dropped: no fill pass.
+    var output = _empty_unfilled(py_call(b["tuple"], shape), dtype, rc)
+    var dst = Int(py=_slot(output, "_addr", rc))
+    var index_address = Int(py=meta["address"])
+    var store = rows.store
+    var words = count * row_words
+    with GILReleased(Python()):
+        var slot = arena_store_take_rows(store, base_id, row_words, index_address, count)
+        try:
+            arena_store_read(store, slot, dst, words)
+        finally:
+            arena_cache_free(store, slot)  # the read waited for the store's context
+    _ = indices  # its int64 words were read through index_address above
+    return output
+
+
+def msel_scope_take_pair(rows: MselScopeRows, source: PythonObject, prepared: PythonObject, train: PythonObject,
+                         test: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`(rows train, rows test)` of one train_test_split input out of the
+    scope (module note), or None when the input is not kept (the caller takes
+    the per-call route). `source` is the caller's argument, `prepared` its
+    admitted Array. Asked only when `rows.active()`."""
+    var rc = context["family_msel_resident_context"]
+    if py_type(prepared) is not rc["array_class"]:
+        return PythonObject(None)
+    var owner = metric_resident_owner(source, prepared)
+    if owner is None:
+        return PythonObject(None)
+    var info = _prepared_info(prepared, rc)
+    var shape = info["shape"]
+    if len(shape) == 0:
+        return PythonObject(None)
+    var n = Int(py=shape[0])
+    var nbytes = Int(py=info["nbytes"])
+    if n <= 0 or nbytes % n != 0:
+        return PythonObject(None)
+    var row_bytes = nbytes // n
+    if row_bytes == 0 or row_bytes % 4 != 0:
+        return PythonObject(None)
+    var words = nbytes // 4
+    if words < rows.floor:
+        return PythonObject(None)
+    var address = Int(py=classical_address(owner))
+    # THE PIN RULE: one reference on the kept buffer's owner; the cache keeps
+    # it when it published this put, else it is dropped here.
+    var pin = arena_pin(owner)
+    var put = ArenaCachePut(-1, False)
+    var scope = rows.scope
+    var store = rows.store
+    try:
+        with GILReleased(Python()):
+            put = arena_scope_store_put(scope, store, String(ARENA_PREFIX_X_PREP), address, words, pin)
+    except error:
+        arena_unpin(pin)
+        raise error^
+    if not put.pinned:
+        arena_unpin(pin)
+    var row_words = row_bytes // 4
+    var first = _scope_take(rows, put.store_id, row_words, info, train, rc)
+    var second = _scope_take(rows, put.store_id, row_words, info, test, rc)
+    _ = owner  # its words are the slot's source; the cache pins it from here
+    _ = prepared
+    return Python.tuple(first, second)
