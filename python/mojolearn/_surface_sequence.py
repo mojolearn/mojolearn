@@ -128,6 +128,7 @@ FAMILIES = (
                         # nn-blocks-composed begin: the composed tagger (tools/identity_lanes/nn_composed.py)
                         "ops-composed-tagger",
                         # nn-blocks-composed end
+                        "ops-batch-source-resume",  # batch-source (tools/identity_lanes/batch_source.py)
                         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -325,6 +326,7 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # nn-blocks-composed begin
     "ops-composed-tagger": "Session: a masked tagger (embedding, scan cell with dropout, parameter groups), resumed",
     # nn-blocks-composed end
+    "ops-batch-source-resume": "Program.fit(source=): streamed shard batches, a mid-epoch save_training, a fresh-process load_training",
                        }
 PUBLIC_PENDING_LANES = {
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
