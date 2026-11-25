@@ -363,7 +363,7 @@ the fact that something raised -- a refusal for the wrong reason is not a pass.
 | `CKPT_REFUSE_MAGIC` | bytes 0..7 are not `MLCKPT01` | a `.trace`, a `.bin` dump, a truncated download or a text sidecar handed to the loader by mistake would otherwise be parsed as a header and produce a shape from noise |
 | `CKPT_REFUSE_VERSION` | `format_version != 2` | a file of another version read by this reader is field-shifted garbage that still has plausible float values in it. There is no migration path and there is not meant to be one |
 | `CKPT_REFUSE_HEADER` | a fixed field is wrong (`header_bytes`, `descriptor_bytes`, `n_arrays`, `elem_bits`, `trailer_bytes`), a size field disagrees with `j_count`/`n_total`, `j_count < 1`, `n_total < 1`, or any reserved field is nonzero | the reserved-must-be-zero rule is what makes a v1 reader safe against a writer that quietly started using one |
-| `CKPT_REFUSE_TRUNCATED` | the file is shorter than the header, or shorter than `64+64+L+12*n+16` | there is no atomic write here. A crash mid-write leaves a short file and the loader must say so, not read the payload it has and zero the rest |
+| `CKPT_REFUSE_TRUNCATED` | the file is shorter than the header, or shorter than `64+64+L+12*n+16` | a truncated copy or download is a short file and the loader must say so (the writer itself replaces the file whole, section 6 item 7), not read the payload it has and zero the rest |
 | `CKPT_REFUSE_TRAILING` | the file is LONGER than the computed length | extra bytes mean the writer and the reader disagree about the format. Ignoring a tail is how two versions coexist silently |
 | `CKPT_REFUSE_FILE_HASH` | recomputed `h_file` differs from the stored one | the transfer or the disk changed a byte. Naming this separately from the content hash is what separates "corrupted in transit" from "different training state" |
 | `CKPT_REFUSE_LAYOUT` | `param_id != j`, `offsets[0] != 0`, offsets not contiguous and ascending, a count `< 1`, the counts do not sum to `n_total`, `buf_initialized` is not 0 or 1, a reserved byte is nonzero, an entry or its name runs past `layout_bytes`, the entries do not end exactly at it, or a name is empty or not printable `[A-Za-z0-9._-]` | a wrong offset gives plausible, in-bounds, wrong numbers that are IDENTICAL on all three vendors, so **no cross-vendor comparison can see it** (plan V7). This is one of the two places that can |
@@ -411,10 +411,13 @@ interchange format. It has no relationship to safetensors, GGUF or a PyTorch
 6. **No optimizer state beyond `m`, `v` and the per-tensor flags.** An
    optimizer with a third moment, an EMA of the weights, or a per-tensor
    trust ratio does not fit and must not be squeezed in.
-7. **No atomicity.** No temp file, no rename, no lock. A crash mid-write
-   leaves a short file that the loader REFUSES as truncated. That is the
-   intended behavior and not a gap to paper over -- a half-written checkpoint
-   that loaded would be the worst outcome available.
+7. **The file is replaced, never overwritten (2026-11-25).** The writer
+   puts the bytes in a new sibling file, flushes it to the disk, closes it
+   and renames it onto the destination in one step; the destination is never
+   opened. An interrupted save leaves the previous checkpoint whole and
+   loadable. There is still no lock: two writers of one path each replace it
+   whole and the last rename wins. The loader still REFUSES a short file (a
+   truncated copy or download).
 8. **No integrity against malice.** FNV-1a64 is not a MAC. Anyone who can edit
    the payload can recompute both hashes. The hashes catch a flipped bit, a
    short transfer and a wrong file; they catch nothing that is trying.

@@ -37,6 +37,10 @@ An optimizer without groups is one group holding every parameter of the table. T
 state buffers; the third (lane fable-review-2: it was refused by name) rides in the extension's floats, so a file
 without one is the bytes it was.
 
+THE FILE IS REPLACED WHOLE (lane fable-finalize): the container writes a sibling temporary, fsyncs, closes and
+renames it onto the destination, so a save that is interrupted leaves the previous checkpoint loadable
+(training/checkpoint.mojo `_save_checkpoint`).
+
 Parallel plan: serial by nature. The file is one ordered write through one descriptor (training/checkpoint.mojo);
 the per-parameter downloads are executor copies the device queues, not host work to split.
 """
@@ -61,6 +65,11 @@ from training.checkpoint import Checkpoint, CKPT_SECTION_PROGRAM_TRAINING, read_
 #   start over, so the first resumed update differs from the uninterrupted one.
 comptime PT_SABOTAGE_DROP_GROUP = is_defined["MOJOLEARN_PT_SABOTAGE_DROP_GROUP"]()
 comptime PT_SABOTAGE_DROP_GROUP_HOST = is_defined["MOJOLEARN_PT_SABOTAGE_DROP_GROUP_HOST"]()
+#   IN_PLACE (lane fable-finalize): Program.save_training opens and overwrites the destination directly, the form
+#   before 2026-11-25, instead of replacing it whole: a hard link taken on the previous checkpoint then shows the NEW
+#   bytes (one file, rewritten) where it must keep the previous checkpoint (the old file, never touched).
+comptime PT_SABOTAGE_IN_PLACE = is_defined["MOJOLEARN_PT_SABOTAGE_IN_PLACE"]()
+comptime PT_SABOTAGE_IN_PLACE_HOST = is_defined["MOJOLEARN_PT_SABOTAGE_IN_PLACE_HOST"]()
 
 comptime _PT_VERSION = 1
 comptime _PT_GROUP_FLOATS = 13
@@ -244,8 +253,13 @@ def program_training_save[E: Exec & Movable & Deinitable, KIND: Int](
         ck.ext_ints.append(Int64(source.bucket))
         ck.ext_ints.append(Int64(1) if source.shuffle else Int64(0))
     s[].ex.sync()
-    var written = save_checkpoint(file, ck)
-    return written.bytes
+    # the file is replaced whole (training/checkpoint.mojo): an interrupted save leaves the previous checkpoint
+    comptime if (PT_SABOTAGE_IN_PLACE and E.IS_DEVICE) or (PT_SABOTAGE_IN_PLACE_HOST and not E.IS_DEVICE):
+        var direct = save_checkpoint(file, ck, True)  # SABOTAGE: the previous checkpoint is overwritten in place
+        return direct.bytes
+    else:
+        var written = save_checkpoint(file, ck)
+        return written.bytes
 
 
 struct ProgramTrainingLoad(Movable):

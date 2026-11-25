@@ -107,9 +107,11 @@ def _checkpoint_cwd() -> Int:
     return cwd
 
 
-def _checkpoint_create(path: String, mut temporary: String, mut failure: ByteCheckpointWriteFailure) raises -> Int:
-    """A fresh name beside `path`, created exclusively with mode 0600: its
-    open descriptor. `temporary` receives the name."""
+def _checkpoint_create(path: String, mut temporary: String, mut failure: ByteCheckpointWriteFailure,
+                       mode: Int = 384) raises -> Int:
+    """A fresh name beside `path`, created exclusively with `mode` (0600
+    unless the caller names another; the process umask applies): its open
+    descriptor. `temporary` receives the name."""
     var cwd = _checkpoint_cwd()
     var flags = 1 | 0x40 | 0x80 | 0x80000  # O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC
     comptime if CompilationTarget.is_macos():
@@ -118,7 +120,7 @@ def _checkpoint_create(path: String, mut temporary: String, mut failure: ByteChe
     var fd = -1
     for attempt in range(16):  # small-loop(temporary names until one is new)
         temporary = path + ".tmp-" + String(Int(external_call["getpid", c_int]())) + "-" + String(stamp + attempt)
-        fd = Int(external_call["openat", c_int, num_fixed_args=3](c_int(cwd), temporary.as_c_string_slice().unsafe_ptr(), c_int(flags), c_int(384)))
+        fd = Int(external_call["openat", c_int, num_fixed_args=3](c_int(cwd), temporary.as_c_string_slice().unsafe_ptr(), c_int(flags), c_int(mode)))
         if fd >= 0:
             break
         var number = posix_errno()
@@ -153,17 +155,21 @@ def _checkpoint_discard(fd: Int, opened: Bool, var temporary: String):
     _ = external_call["unlinkat", c_int](c_int(_checkpoint_cwd()), temporary.as_c_string_slice().unsafe_ptr(), c_int(0))
 
 
-def byte_file_write(path: String, address: Int, count: Int, mut failure: ByteCheckpointWriteFailure) raises:
+def byte_file_write(path: String, address: Int, count: Int, mut failure: ByteCheckpointWriteFailure,
+                    mode: Int = 384) raises:
     """Write the `count` bytes at `address` to `path`, whole or not at all:
-    a temporary beside it (exclusive, mode 0600), fsync, one rename. The
-    bounded JSON checkpoint's file write; the caller keeps the range alive.
+    a temporary beside it (exclusive, mode 0600 unless `mode` names
+    another), fsync, one rename. The file at `path` is never opened: until
+    the rename it holds its previous bytes, after it the new ones. The
+    bounded JSON checkpoint's file write and the checkpoint container's
+    (training/checkpoint.mojo); the caller keeps the range alive.
     Serial by nature: one ordered write through one descriptor."""
     if path.byte_length() == 0 or path.find("\0") >= 0:
         raise Error("Byte-LM checkpoint path is empty or contains NUL")
     if count < 0 or (count > 0 and address == 0):
         raise Error("Byte-LM checkpoint bytes are not a host range")
     var temporary = String("")
-    var fd = _checkpoint_create(path, temporary, failure)
+    var fd = _checkpoint_create(path, temporary, failure, mode)
     var opened = True
     try:
         var start = 0

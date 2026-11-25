@@ -153,7 +153,8 @@ def main() raises:
     ctx.synchronize()
     var final = checkpoint_of(ctx, tb, last, cfg)
     _require_descriptor(final, cfg, last)
-    var hashes = save_checkpoint(output_sink, final)
+    # a descriptor the launcher owns, not a file in a directory: nothing to replace, so the direct write
+    var hashes = save_checkpoint(output_sink, final, True)
     # The receipt is published only after the checkpoint is complete.
     with open(receipt_sink, "w") as fh:
         fh.write(String("{\"schema\":\"mojolearn.training.resume-receipt.v1\",\"status\":\"COMPLETE\",")
