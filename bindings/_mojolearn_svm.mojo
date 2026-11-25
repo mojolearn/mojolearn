@@ -752,11 +752,12 @@ def _iforest_run(r: IFRunRequest) raises -> Int:
             want -= _IF_WANT_WIDE_BASE
     if r.n_train <= 0 or r.n_features <= 0 or r.n_query <= 0:
         raise Error("iforest_run: n_train, n_features and n_query must all be positive")
-    if r.train < 0 and r.device_count > 1:
-        # THE FOLD X WORD (lane vdf-scope-trees4): a fold slot trains one device
-        raise Error("iforest_run: a fold slot training matrix runs on one device")
-    if r.query < 0 and r.device_count > 1:
-        raise Error("iforest_run: a fold slot query runs on one device")
+    # THE FOLD X WORD on a multi-device plan (lane vdf2-tail2): every tree
+    # owner fills its training copy from the fold slot with `fold_x_fill` on
+    # its own context (isolation_forest/multi_gpu.mojo `_fit_tree_shards`:
+    # the training rows are replicated, as the host rows are), and the
+    # sharded scorer copies the query rows device to device per owner
+    # (`_pooled_path_lengths`); no row visits the host.
     var tp = f32_ptr(r.train)
     var qp = f32_ptr(r.query)
     var ip = f64_ptr(r.info)

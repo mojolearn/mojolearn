@@ -102,7 +102,10 @@ comptime XG_RESIDENT_PREDICT = 13
 comptime XG_ORDERED_FIT = 14
 comptime XG_FEATURE_FREQ_FIT = 15
 comptime XG_IMPORTANCES = 16
-comptime XG_OP_COUNT = 17
+#: the first NaN word of a fold slot, or -1 (lane vdf2-tail2: the member's
+#: nan_mode='Forbidden' refusal over a fold X word that has no host words)
+comptime XG_SLOT_NAN = 17
+comptime XG_OP_COUNT = 18
 
 comptime XG_CAP_ROW_MAJOR = 1
 #: the image holds device-resident parsed models (XG_RESIDENT_*)

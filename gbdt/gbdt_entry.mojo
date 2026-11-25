@@ -23,6 +23,7 @@ from gbdt.fit_request import (
     gbdt_outcome_sizes, gbdt_outcome_copy, gbdt_outcome_free, gbdt_string_at,
     XG_PREDICT, XG_PREDICT_MULTI, XG_BINARY, XG_SIGMOID_PAIR, XG_RESIDENT_PREPARE, XG_RESIDENT_PREDICT,
     XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT, XG_IMPORTANCES, XG_CAP_SLOT_X, XG_CAP_FIT_SLOT_X,
+    XG_SLOT_NAN,
 )
 
 
@@ -91,6 +92,14 @@ trait GbdtImage:
     @staticmethod
     def importances(text: String, x: Int, n_rows: Int, n_input: Int, row_major: Bool, weights: Int,
                     n_weights: Int, dst: Int) raises -> Int:
+        ...
+
+    # The first NaN word of the first `count` words of the fold slot that the
+    # negative `x_word` names, or -1 (XG_SLOT_NAN, lane vdf2-tail2: the gbdt
+    # member's nan_mode='Forbidden' refusal over a fold that has no host
+    # words). An image without XG_CAP_FIT_SLOT_X is never asked and refuses.
+    @staticmethod
+    def slot_nan(x_word: Int, count: Int) raises -> Int:
         ...
 
 
@@ -196,6 +205,11 @@ def _run[I: GbdtImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) rai
         _spans("gbdt feature importances", na, 4, np, 5)
         return I.importances(gbdt_string_at(_addr(aa, 0), _int(pp, 0)), _addr(aa, 1), _int(pp, 1), _int(pp, 2),
                              _int(pp, 3) != 0, _addr(aa, 2), _int(pp, 4), _addr(aa, 3))
+    if op == XG_SLOT_NAN:
+        _spans("gbdt fold slot NaN scan", na, 1, np, 1)
+        if _addr(aa, 0) >= 0:
+            raise Error("gbdt fold slot NaN scan: the X word names no fold slot")
+        return I.slot_nan(_addr(aa, 0), _int(pp, 0))
     if op == XG_NUMERIC_MODE:
         return Int(GLOBAL_NUMERIC_MODE)
     if op == XG_FIT or op == XG_FIT_ROWMAJOR:

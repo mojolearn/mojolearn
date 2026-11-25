@@ -128,7 +128,7 @@ from gbdt.fit_request import GbdtFitArgs, gbdt_string_at
 from gbdt.fit_calls import (
     xg_row_major, xg_model_dim, xg_fit, xg_resident, xg_resident_prepare, xg_resident_predict, xg_predict,
     xg_predict_multi, xg_sigmoid_pair, xg_binary, xg_feature_freq_fit, xg_ordered_fit, xg_importances, xg_slot_x,
-    xg_caps,
+    xg_caps, xg_slot_nan,
 )
 from gbdt.fit_request import XG_CAP_RESIDENT, XG_CAP_SLOT_X, XG_CAP_FIT_SLOT_X
 from core.member_fold_x import (
@@ -503,8 +503,8 @@ def _whole(call: _CallPtr) raises:
 # FIT (lane vdf-scope-trees4): the device quantizer is the default of every GPU
 # image (gbdt/gpu_data/sym_feat_switches.mojo GBDT_QUANT_DEVICE), so on an image
 # with XG_CAP_FIT_SLOT_X a raw float fit (no cat_features, no
-# one_hot_features, no eval set, nan_mode not Forbidden: the member's NaN
-# refusal reads host X) hands the fold slot to the ROW-MAJOR fit, whose upload
+# one_hot_features, no eval set; nan_mode='Forbidden' refuses by a device NaN
+# scan of the slot, XG_SLOT_NAN) hands the fold slot to the ROW-MAJOR fit, whose upload
 # is one device-to-device copy (gbdt/train.mojo `_qd_upload_float_columns`), and
 # to the importances (gbdt/gpu_importance.mojo): X never visits the host. Every
 # other fit takes the fold's rows of X on the host (`member_fold_take_f32`, row
@@ -735,7 +735,7 @@ def _fold_op[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr, operation: Int)
     var device: Bool
     if operation == MEMBER_OP_FIT:
         device = ((caps & XG_CAP_FIT_SLOT_X) != 0 and len(slot[].cat_given) == 0 and len(slot[].hot_given) == 0
-                  and call[].eval_x.rows == 0 and slot[].config.nan_mode != "Forbidden")
+                  and call[].eval_x.rows == 0)
     else:
         device = (slot[].fitted and len(slot[].cat_map) == 0 and (caps & XG_CAP_RESIDENT) != 0
                   and (caps & XG_CAP_SLOT_X) != 0)
@@ -1279,8 +1279,17 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
             raise Error("y must be finite")
         raise Error("Input y contains NaN or infinity" + (" (the class labels)" if multi else "")
                     + " (GradientBoosting).")
-    if config.nan_mode == "Forbidden" and not trees_finite_f32(call[].x.data, rows * cols):
-        if _has_nan(call[].x.data, rows * cols):
+    if config.nan_mode == "Forbidden":
+        var has_nan: Bool
+        if call[].x.data < 0:
+            # THE FOLD X WORD (lane vdf2-tail2): the same test as a device
+            # reduction over the fold slot (XG_SLOT_NAN, core/fold_x_scan.mojo:
+            # a NaN refuses, an infinity does not), at the host check's place
+            # in the refusal order; one word comes home, X never does
+            has_nan = xg_slot_nan(entry_ref_gil_free(call[].route.entry), call[].x.data, rows * cols) >= 0
+        else:
+            has_nan = not trees_finite_f32(call[].x.data, rows * cols) and _has_nan(call[].x.data, rows * cols)
+        if has_nan:
             raise Error("mojolearn: nan_mode='Forbidden' but X contains NaN. "
                         + "CatBoost refuses this pair; this implementation would otherwise "
                         + "bin the NaNs silently with no NaN bin. Use "

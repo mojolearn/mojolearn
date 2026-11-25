@@ -307,6 +307,7 @@ def fit_classification_device(
     min_weight_fraction: Float64 = 0.0,
     x_dev_rows: Int = 0,
     codes_addr: Int = 0,
+    codes_dev: Int = 0,
 ) raises -> Forest:
     """`randomforest.cuh:155-195` again, with the split search on the GPU.
 
@@ -368,10 +369,11 @@ def fit_classification_device(
     # `train_classification_device_resident`, with the old name kept as a
     # wrapper for single-tree callers.
     var device_dataset: DeviceDataset
-    if codes_addr != 0:
+    if codes_addr != 0 or codes_dev != 0:
+        # `codes_dev` (lane vdf2-tail2): the codes already on the device
         device_dataset = upload_dataset_codes_i32(
             ctx, x_col_major, codes_addr, n_rows, n_cols, n_classes, x_addr=x_addr,
-            x_row_major=x_row_major, x_dev_rows=x_dev_rows,
+            x_row_major=x_row_major, x_dev_rows=x_dev_rows, codes_dev=codes_dev,
         )
     else:
         device_dataset = upload_dataset_labels_f32(
@@ -513,6 +515,7 @@ def fit_regression_device_f32(
     weights_addr: Int = 0,
     min_weight_fraction: Float64 = 0.0,
     x_dev_rows: Int = 0,
+    y_dev: Int = 0,
 ) raises -> Forest:
     """`fit_regression_device` from the caller's FLOAT labels: the scale's
     `sum |y|` and the DEVIATION 135 quantization run on the device
@@ -524,7 +527,10 @@ def fit_regression_device_f32(
     sample_weight, `n_rows` Float32 words borrowed through this call
     (`upload_dataset_labels_quantized_weighted`). When they are all 1.0 the
     fit is the unweighted one, and `min_weight_fraction` (which the caller
-    did not fold) is folded here, as `fit_classification_device` does."""
+    did not fold) is folded here, as `fit_classification_device` does.
+
+    `y_dev` (lane vdf2-tail2; 0: none): the `n_rows` float32 labels already
+    on the device (XF_FIT_ROWS), `y` then empty."""
     if tree_start < 0 or tree_start + Int(n_trees) > 2147483647:
         raise Error("invalid global tree range")
     error_checking(n_rows, n_cols, n_trees)
@@ -537,12 +543,12 @@ def fit_regression_device_f32(
             ctx, x_col_major, y, n_rows, n_cols, weights_addr,
             min_weight_fraction, scale, x_addr=x_addr, x_row_major=x_row_major,
             drop_zero_rows=not bootstrap,  # lane sk-weq-trees
-            x_dev_rows=x_dev_rows,
+            x_dev_rows=x_dev_rows, y_dev=y_dev,
         )
     else:
         dataset = upload_dataset_labels_quantized(
             ctx, x_col_major, y, n_rows, n_cols, scale, x_addr=x_addr,
-            x_row_major=x_row_major, x_dev_rows=x_dev_rows,
+            x_row_major=x_row_major, x_dev_rows=x_dev_rows, y_dev=y_dev,
         )
     var n_sampled = resolve_n_sampled_rows(
         dataset.n_rows, bootstrap, n_sampled_rows

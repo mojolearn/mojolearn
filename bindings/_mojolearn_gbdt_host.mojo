@@ -444,6 +444,11 @@ struct _GbdtHostImage(GbdtImage):
             into[c] = values[c]
         return len(values)
 
+    @staticmethod
+    def slot_nan(x_word: Int, count: Int) raises -> Int:
+        # XG_SLOT_NAN: the host image answers no XG_CAP_FIT_SLOT_X, so no member hands it a fold X word.
+        raise Error("RuntimeError: the host gbdt image reads no fold X word")
+
 
 def gbdt_host_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
