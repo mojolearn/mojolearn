@@ -26,14 +26,14 @@ THE ADDRESS CONTRACT (the host binding's buffers):
     bpe_gpu_train(text_addr, lengths_addr, [n_docs, n_bytes, vocab_size, min_frequency]) -> handle,
         then bpe_gpu_trained_sizes(handle), bpe_gpu_trained_copy(handle, arena, lengths, left, right):
         `BpeVocabularyTrainer.train` on the GPU, the host trainer's vocabulary merge for merge
-    bpe_gpu_pretokenize(text_addr, bounds_addr, [n_bytes, pattern]) -> count: the pre-tokenizer cut
-        of `mojolearn.models.tokenizer.pretokenize` on the GPU, the host column's boundaries offset
-        for offset (tokenizer/gpu/pretokenize_gpu.mojo)
 
 THE NATIVE ENTRY (lane vdf2-tok): `tokenizer_gpu_entry_v1`, published at module init under this
 image's tier and vendor (core/tokenizer_gpu_entry_table.mojo), is the `device="gpu"` side of
-`mojolearn.lm_corpus.prepare`: the host corpus door resolves it once at its import-time connection
-and its RUN calls it with the GIL released (tokenizer/gpu/corpus_gpu.mojo). No Python object crosses.
+`mojolearn.lm_corpus.prepare`, of `mojolearn.models.Tokenizer(device="gpu")` and of
+`mojolearn.models.tokenizer.pretokenize(device="gpu")` (TOK_GPU_OP_VOCAB_CUT, lane vdl-pretok, which
+replaced the Python-held `bpe_gpu_pretokenize` function): the host doors resolve it once at their
+import-time connection and their RUN calls it with the GIL released (tokenizer/gpu/corpus_gpu.mojo).
+No Python object crosses.
 """
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
@@ -52,7 +52,6 @@ from tokenizer.impl.unicode_class import builtin_unicode_classes
 from tokenizer.gpu.bpe_gpu import (
     BpeGpuClasses, BpeGpuTable, bpe_gpu_ctx, bpe_gpu_encode_batch_into, bpe_gpu_decode_batch_into, bpe_gpu_train_into,
 )
-from tokenizer.gpu.pretokenize_gpu import pretokenize_gpu_into
 from tokenizer.gpu.corpus_gpu import corpus_gpu_entry_dispatch
 from core.native_descriptor_abi import NativeDescriptorError
 from core.shared_slot import SharedSlot
@@ -275,26 +274,6 @@ def bpe_gpu_trained_copy_binding(
     return PythonObject(v.n_tokens())
 
 
-def bpe_gpu_pretokenize_binding(
-    text_addr: PythonObject, bounds_addr: PythonObject, dims: PythonObject,
-) raises -> PythonObject:
-    """`mojolearn.models.tokenizer.pretokenize(..., device="gpu")` (tokenizer/gpu/pretokenize_gpu.mojo
-    `pretokenize_gpu_into`): dims [n_bytes, pattern_code]; the boundaries (int64, room for
-    n_bytes + 1) at `bounds_addr`. Returns their count (lane vdf2-public)."""
-    if Int(py=len(dims)) != 2:
-        raise Error("pretokenize (gpu): dims must be [n_bytes, pattern]")
-    var n = _index(dims[0])
-    var pattern = _index(dims[1])
-    if n < 0:
-        raise Error("pretokenize (gpu): n_bytes must be >= 0, got " + String(n))
-    var text_address = _index(text_addr) if n > 0 else 0
-    var bounds_address = _index(bounds_addr)
-    var count = 0
-    with GILReleased(Python()):
-        count = pretokenize_gpu_into(text_address, n, pattern, bounds_address)
-    return PythonObject(count)
-
-
 struct TokenizerGpuEntryOwner(Defaultable, Movable):
     """An image-lifetime publisher word."""
 
@@ -326,7 +305,6 @@ def build__mojolearn_x_tokenizer() -> PythonObject:
         module.def_function[bpe_gpu_train_binding]("bpe_gpu_train")
         module.def_function[bpe_gpu_trained_sizes_binding]("bpe_gpu_trained_sizes")
         module.def_function[bpe_gpu_trained_copy_binding]("bpe_gpu_trained_copy")
-        module.def_function[bpe_gpu_pretokenize_binding]("bpe_gpu_pretokenize")
         # The native entry (core/tokenizer_gpu_entry_table.mojo) under this image's tier and vendor;
         # a build with no GPU vendor publishes nothing.
         comptime OWNER = SharedSlot[TokenizerGpuEntryOwner, "MojolearnTokenizerGpuEntryOwnerV1"]

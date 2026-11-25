@@ -1,0 +1,22 @@
+diff --git a/tokenizer/gpu/pretokenize_gpu.mojo b/tokenizer/gpu/pretokenize_gpu.mojo
+index 610b9fe5b7..cead2b5961 100644
+--- a/tokenizer/gpu/pretokenize_gpu.mojo
++++ b/tokenizer/gpu/pretokenize_gpu.mojo
+@@ -39,6 +39,7 @@ boundaries and the state words come back once, after the last kernel. No host st
+ data.
+ """
+ from std.atomic import Atomic
++from std.sys.compile import is_defined  # SABOTAGE coverage-tokenizer-gpu_cut (lane vdl-pretok)
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from tokenizer.impl.unicode_class import builtin_unicode_classes
+@@ -447,6 +448,9 @@ def pretokenize_gpu_into(text_addr: Int, n: Int, pattern: Int, bounds_addr: Int)
+     if count < 2 or count > n + 1:
+         raise Error("pretokenize (gpu): the device cut returned " + String(count) + " boundaries for "
+             + String(n) + " bytes")
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage-tokenizer-gpu_cut (lane vdl-pretok): the first interior boundary one byte later, the GPU bindings only
++        if count > 2:
++            bounds.unsafe_store(1, bounds[1] + Int64(1))
+     _ = d_text^
+     _ = d_bounds^
+     _ = d_st^

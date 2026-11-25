@@ -421,14 +421,35 @@ def _(ml, X, yc, yr, Xh=None):
     gbdt/gpu_importance.mojo on a GPU, the same bodies and fold order), light: 8 SymmetricTree trees (RMSE),
     the same on fixture-derived sample weights (the exact integer leaf weights), 8 Depthwise trees (the
     non-symmetric descent), and the classifier adapter (its learner's importances). The digest covers the
-    importances' bytes beside each model's predictions."""
+    importances' bytes beside each model's predictions.
+
+    THE CTR MODELS (lane vd-leftovers, 2026-11-24): a categorical model's importances walk its MODEL columns,
+    which the device column expands on the device (gbdt/gpu_importance.mojo `gbdt_imp_expand_device`, the
+    resident predict's kernels) and the host column on the host (`gbdt_importance_model_x`). Three fits reach
+    the three expansions: simple CTR and one-hot columns (`_gbdt_cat_x`, every column), feature combinations
+    (max_ctr_complexity 2: the tree-CTR columns), and ExperimentalTwoLevelFeatureFreq (the tensor CTR
+    column). Each is a fit whose trees split on its CTR columns, so a wrong model column moves its bytes."""
     w = np.array([(1.0, 2.5, 0.5, 0.75)[i % 4] for i in range(len(X))], dtype=np.float32)
     sym = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4).fit(X, yr)
     weighted = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4).fit(X, yr, sample_weight=w)
     depthwise = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, grow_policy="Depthwise").fit(X, yr)
     clf = ml.GradientBoostingClassifier(n_estimators=8, max_depth=4).fit(X, yc)
+    rows = min(_GBDT_CAT_ROWS, X.shape[0])
+    Xc = _gbdt_cat_x(X[:rows])
+    cat_kw = dict(n_estimators=8, max_depth=4, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0, border_count=128,
+                  leaf_estimation_iterations=1, boosting_type="Plain", random_state=7, loss="RMSE",
+                  **_GBDT_CAT_PLAIN)
+    cols, cats = _GBDT_CAT_ALL
+    simple = ml.GradientBoosting(cat_features=list(cats), **cat_kw).fit(np.ascontiguousarray(Xc[:, cols]), yr[:rows])
+    cols2, cats2 = _GBDT_CAT_MCC2
+    comb = ml.GradientBoosting(cat_features=list(cats2), max_ctr_complexity=2, **cat_kw).fit(
+        np.ascontiguousarray(Xc[:, cols2]), yr[:rows])
+    Xt = _tensor_ctr_x(X)
+    tensor = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(Xt, _tensor_ctr_y(Xt))
     return _fit(dict(sym=_h(sym.feature_importances_), weighted=_h(weighted.feature_importances_),
                      depthwise=_h(depthwise.feature_importances_), clf=_h(clf.feature_importances_),
+                     ctr_simple=_h(simple.feature_importances_), ctr_combination=_h(comb.feature_importances_),
+                     ctr_tensor=_h(tensor.feature_importances_),
                      predict=_h(sym.predict(X))),
                 sym, lambda e: (e.predict(Xh),))
 

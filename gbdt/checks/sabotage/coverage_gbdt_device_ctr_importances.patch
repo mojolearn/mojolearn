@@ -1,0 +1,16 @@
+diff --git a/gbdt/gpu_importance.mojo b/gbdt/gpu_importance.mojo
+index 720ca0a946..df27ccbb95 100644
+--- a/gbdt/gpu_importance.mojo
++++ b/gbdt/gpu_importance.mojo
+@@ -289,7 +289,10 @@ def gbdt_feature_importances_device(
+         stage = gbdt_imp_expand_device(
+             ctx, request.model, request.x_addr, n_rows, n_input, request.row_major, n_cols, d_x
+         )
+-        x_row_major = False
++        # SABOTAGE (coverage-gbdt-device-ctr-importances): the device
++        # expansion's column-major model columns are read as C order, so
++        # every CTR model's bins (and importances) are another cell's
++        x_row_major = True
+     else:
+         # THE FOLD X WORD (lane vdf-scope-trees4, core/fold_x_device.mojo): a
+         # negative address is the fit's fold slot, copied device to device; a

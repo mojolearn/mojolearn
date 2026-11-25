@@ -66,6 +66,7 @@ from core.host_archive_gbdt import HostArchiveGBDT, host_archive_gbdt_text
 from core.host_parallel import host_parallelize
 from gbdt.data.quantization import NAN_TREATMENT_AS_FALSE, NAN_TREATMENT_AS_TRUE
 from gbdt.models.model_text import load_model_text
+from gbdt.models.trained_model import TrainedModel
 from gbdt.models.ctr_value_table import column_plan
 from gbdt.models.non_symmetric_walk_body import ns_node_goes_right, ns_walk_step
 
@@ -501,9 +502,10 @@ def _distinct(values: List[Int]) -> List[Int]:
     return found^
 
 
-def gbdt_importance_plan(text: String, arch: HostArchiveGBDT) raises -> GbdtImportancePlan:
+def gbdt_importance_plan(text: String, arch: HostArchiveGBDT, saved: TrainedModel) raises -> GbdtImportancePlan:
     """The plan of a model text (`arch` its flat host layout,
-    `host_archive_gbdt_text(text)`): the flat arrays and the column map
+    `host_archive_gbdt_text(text)`, and `saved` the product reader's model,
+    `load_model_text(text)`, parsed once by the caller): the flat arrays and the column map
     (identity for raw columns; a simple CTR column its input through
     `column_plan`; a tensor CTR column its source columns; a combination
     column the distinct input features of its map's members)."""
@@ -535,7 +537,6 @@ def gbdt_importance_plan(text: String, arch: HostArchiveGBDT) raises -> GbdtImpo
     plan.leaves = arch.floats["leaves"].copy()
     plan.leaves.resize(n_values, Float32(0.0))
     # THE COLUMN MAP, from the product reader's model (model data only)
-    var saved = load_model_text(text)
     var n_tensors = len(saved.tensor_ctr_registry.features)
     var n_comb = len(saved.combination_ctrs.tables)
     var n_base = plan.n_cols - n_comb
@@ -610,71 +611,64 @@ def gbdt_importance_model_x(
 
 struct GbdtImportanceInput(Movable):
     """The plan and the float32 MODEL columns the walk reads: the caller's X
-    itself (`x_addr`, `row_major` as given) or, for a CTR model, the expanded
-    column-major copy this struct owns (`model_x`).
+    itself (`x_addr`, `row_major` as given) or, for a CTR model on the host
+    column, the expanded column-major copy this struct owns (`model_x`).
 
-    `needs_rows` (lane vdf2-gbdtcat2): a CTR or expanded model fitted on THE
-    FOLD X WORD (`x_addr` negative: device rows, the categorical columns as
-    the fit's dense codes). Its model columns come from the expansion the
-    predict path runs (`gbdt_host_expand_ctr`), whose input is the rows
-    themselves; the device image hands them to `gbdt_importance_fold_rows`,
-    which builds `model_x` from the archive kept here (no second parse)."""
+    `expand_on_device` (lane vd-leftovers, 2026-11-24): a CTR or expanded
+    model on THE DEVICE COLUMN. `x_addr` / `row_major` stay the fit's raw
+    rows (a host address or THE FOLD X WORD, the categorical columns as the
+    fit's dense codes) and the device image expands them on the device from
+    `model` (`gbdt/gpu_importance.mojo` `gbdt_imp_expand_device`: the
+    resident predict's simple, tree-CTR and tensor CTR kernels). No row
+    visits the host. `model` is the product reader's model the plan was
+    built from (one parse)."""
 
     var plan: GbdtImportancePlan
     var model_x: List[Float32]
     var x_addr: Int
     var row_major: Bool
-    var needs_rows: Bool
-    var arch: HostArchiveGBDT
+    var expand_on_device: Bool
+    var model: TrainedModel
 
     def __init__(out self, var plan: GbdtImportancePlan, var model_x: List[Float32], x_addr: Int, row_major: Bool,
-                 needs_rows: Bool, var arch: HostArchiveGBDT):
+                 expand_on_device: Bool, var model: TrainedModel):
         self.plan = plan^
         self.model_x = model_x^
         self.x_addr = x_addr
         self.row_major = row_major
-        self.needs_rows = needs_rows
-        self.arch = arch^
-
-
-def gbdt_importance_fold_rows(mut request: GbdtImportanceInput, rows_addr: Int, n_rows: Int, n_input: Int) raises:
-    """A `needs_rows` request's model columns from the fold's ROW-MAJOR rows
-    at the host `rows_addr` (the slot's words, its categorical columns as
-    the fit's codes): `gbdt_importance_model_x`, then the walk reads them
-    column-major."""
-    if not request.needs_rows:
-        raise Error("gbdt importances: the request reads no fold rows")
-    var mx = gbdt_importance_model_x(request.arch, rows_addr, n_rows, n_input, True)
-    request.x_addr = Int(mx.unsafe_ptr())
-    request.row_major = False
-    request.needs_rows = False
-    swap(request.model_x, mx)
+        self.expand_on_device = expand_on_device
+        self.model = model^
 
 
 def gbdt_importance_input(text: String, x_addr: Int, n_rows: Int, n_input: Int, row_major: Bool,
-                          n_weights: Int) raises -> GbdtImportanceInput:
+                          n_weights: Int, device: Bool) raises -> GbdtImportanceInput:
     """The checks of a request and its plan (both columns): the rows the
     model was fitted on (`n_rows` x `n_input` float32 at `x_addr`, C order
-    when `row_major`), `n_weights` 0 or `n_rows`."""
+    when `row_major`), `n_weights` 0 or `n_rows`. `device`: the device
+    column, which expands a CTR model's columns itself (`expand_on_device`);
+    the host column expands them here, on host rows only."""
     if n_rows <= 0 or n_input <= 0:
         raise Error("gbdt importances: the fit has no rows or no columns")
     if n_weights != 0 and n_weights != n_rows:
         raise Error("gbdt importances: sample weights must be one per row")
     var arch = host_archive_gbdt_text(text)
-    var plan = gbdt_importance_plan(text, arch)
+    var saved = load_model_text(text)
+    var plan = gbdt_importance_plan(text, arch, saved)
     if plan.n_input != n_input:
         raise Error("gbdt importances: the model reads " + String(plan.n_input) + " input columns, the fit "
                     + String(n_input))
     if plan.has_ctr or plan.n_cols != n_input:
+        if device:
+            # the device column (lane vd-leftovers): the raw rows (host or
+            # THE FOLD X WORD) are expanded by the device kernels
+            return GbdtImportanceInput(plan^, List[Float32](), x_addr, row_major, True, saved^)
         if x_addr < 0:
-            # THE FOLD X WORD (lane vdf2-gbdtcat2): a cat_features fold fit's
-            # rows are on the device; the device image fills the model
-            # columns (`gbdt_importance_fold_rows`) before its upload
-            return GbdtImportanceInput(plan^, List[Float32](), x_addr, row_major, True, arch^)
+            # the host column has no fold slot (its image answers no XG_CAP_FIT_SLOT_X)
+            raise Error("gbdt importances: the host column reads host rows (no fold X word)")
         var mx = gbdt_importance_model_x(arch, x_addr, n_rows, n_input, row_major)
         var addr = Int(mx.unsafe_ptr())
-        return GbdtImportanceInput(plan^, mx^, addr, False, False, arch^)
-    return GbdtImportanceInput(plan^, List[Float32](), x_addr, row_major, False, arch^)
+        return GbdtImportanceInput(plan^, mx^, addr, False, False, saved^)
+    return GbdtImportanceInput(plan^, List[Float32](), x_addr, row_major, False, saved^)
 
 
 # ===========================================================================
@@ -874,7 +868,7 @@ def gbdt_feature_importances_host(
     `row_major`, else column-major; a CTR model's categorical columns as the
     fit's dense codes) with `n_weights` (0 or `n_rows`) sample weights at
     `w_addr`. Float32, one per input column."""
-    var request = gbdt_importance_input(text, x_addr, n_rows, n_input, row_major, n_weights)
+    var request = gbdt_importance_input(text, x_addr, n_rows, n_input, row_major, n_weights, False)
     if request.x_addr < 0:
         # the host column has no fold slot (its image answers no XG_CAP_FIT_SLOT_X)
         raise Error("gbdt importances: the host column reads host rows (no fold X word)")
