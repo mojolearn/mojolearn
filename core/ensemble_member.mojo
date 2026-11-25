@@ -2089,6 +2089,16 @@ def _stack_members(slot: _SlotPtr, states: List[Int], offset: Int, rows: VoteRow
         var m = _member_of(slot, u, state, _stack_operation(slot[].stack_kinds[u]), 1.0)
         if len(held) > 0:
             m.class_cols = Int(held.unsafe_ptr())
+            # A lacking fold's state was fitted on its own classes (`held`):
+            # its columns are its own, not the full members' `proba_cols` /
+            # `dec_cols` (k). Lane w3-fix-9-s1 (2026-11-25): the k-wide
+            # destination made the fold member refuse its call ("the
+            # probability buffer holds one row of class probabilities per row
+            # of X", core/forest_member_run.mojo `_predict`), so every stack
+            # with a lacking fold refused (trees-stacking-clf `lacking_member`).
+            # One OUTPUTS question per member per lacking fold.
+            var call = member_call_of(slot[].plans[u], state)
+            m.cols = member_outputs_of(slot[].plans[u], call, m.operation)
         members.append(m)
     return members^
 
