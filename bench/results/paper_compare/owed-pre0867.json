@@ -1023,7 +1023,7 @@
   },
   "identity-nan-canon-off": {
    "define": "MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF",
-   "status": "define in code (core/nan_canon.mojo NAN_CANON_ON): B = the vendor's NaN word in float32 results; A = the default, the one quiet NaN 0x7fc00000. A bit version only in results that hold a NaN. Owed: the cost on the decode row again (it read +0.9 %), and mlp-infer; the switch goes after the release's one verification has recorded the columns.",
+   "status": "define in code (core/nan_canon.mojo NAN_CANON_ON): B = the vendor's NaN word in float32 results; A = the default, the one quiet NaN 0x7fc00000. A bit version only in results that hold a NaN. Owed: the cost on the decode row again (it read +0.9 %) (mlp-infer retired: the CPU host binding is never timed); the switch goes after the release's one verification has recorded the columns.",
    "owed": "DECIDED",
    "evidence": "KEPT (lane ab-prep, 2026-11-23): identity needs the canon; B returns the vendor NaN word, so it gives up identical bits in results that hold a NaN and cannot win (round 3 L40S cost read: decode +0.9 %, gemm 0.917 inside the spread). Not a speed A/B; the _OFF switch stays only for the release verification (pixi check-nan-canon-off-*), core/nan_canon.mojo"
   },
@@ -1377,24 +1377,28 @@
    "kind": "board",
    "lane": [
     "mlp-train-step",
-    "mlp-predict",
-    "mlp-infer"
+    "mlp-predict"
    ],
    "dataset": "*",
    "rows": "full",
-   "decides": "candidate <= 0.8.66 (0.971 ms both vendors); slower = fix the shared tape GEMM, not a model-keyed route"
+   "decides": "candidate <= 0.8.66 (0.971 ms both vendors); slower = fix the shared tape GEMM, not a model-keyed route",
+   "retired_lanes": {
+    "mlp-infer": "retired 2026-11-24 (lane mlp-infer-cell): the CPU host binding (tools/bench_board_neural.py DEVICE_OF 'cpu'); the board never races it (tools/bench_board.py plan_races: our CPU is never timed, AGENTS.md part 3), so the row gave no cell (L40S jobs nvc1-0004, nvc1-0007); its GPU twin rows decide"
+   }
   },
   {
    "id": "transformer-forward-fresh",
    "source": "X4 c0b21c971c (transformer_forward_fresh + FRESH_PREFILL deleted)",
    "kind": "board",
    "lane": [
-    "transformer-forward",
-    "transformer-infer"
+    "transformer-forward"
    ],
    "dataset": "*",
    "rows": "full",
-   "decides": "candidate <= 0.8.66 (0.8.66 was 1.44x regressed vs 0.8.55 on NV): RECOVERED or the prefill op is fixed"
+   "decides": "candidate <= 0.8.66 (0.8.66 was 1.44x regressed vs 0.8.55 on NV): RECOVERED or the prefill op is fixed",
+   "retired_lanes": {
+    "transformer-infer": "retired 2026-11-24 (lane mlp-infer-cell): the CPU host binding (tools/bench_board_neural.py DEVICE_OF 'cpu'); the board never races it (tools/bench_board.py plan_races: our CPU is never timed, AGENTS.md part 3), so the row gave no cell (L40S jobs nvc1-0004, nvc1-0007); its GPU twin rows decide"
+   }
   },
   {
    "id": "cnn",
@@ -1438,15 +1442,17 @@
    "source": "X5 0bc9eaca21, X6 28cbbd4108, X45c (per-call doors, weight epoch key)",
    "kind": "board",
    "lane": [
-    "samba-forward",
-    "samba-infer",
-    "mamba1-infer",
-    "mamba2-infer",
-    "mamba3-infer"
+    "samba-forward"
    ],
    "dataset": "*",
    "rows": "full",
-   "decides": "not slower than 0.8.66 (the per-call weight byte compares are gone)"
+   "decides": "not slower than 0.8.66 (the per-call weight byte compares are gone)",
+   "retired_lanes": {
+    "samba-infer": "retired 2026-11-24 (lane mlp-infer-cell): the CPU host binding (tools/bench_board_neural.py DEVICE_OF 'cpu'); the board never races it (tools/bench_board.py plan_races: our CPU is never timed, AGENTS.md part 3), so the row gave no cell (L40S jobs nvc1-0004, nvc1-0007); its GPU twin rows decide",
+    "mamba1-infer": "retired 2026-11-24 (lane mlp-infer-cell): the CPU host binding (tools/bench_board_neural.py DEVICE_OF 'cpu'); the board never races it (tools/bench_board.py plan_races: our CPU is never timed, AGENTS.md part 3), so the row gave no cell (L40S jobs nvc1-0004, nvc1-0007); its GPU twin rows decide",
+    "mamba2-infer": "retired 2026-11-24 (lane mlp-infer-cell): the CPU host binding (tools/bench_board_neural.py DEVICE_OF 'cpu'); the board never races it (tools/bench_board.py plan_races: our CPU is never timed, AGENTS.md part 3), so the row gave no cell (L40S jobs nvc1-0004, nvc1-0007); its GPU twin rows decide",
+    "mamba3-infer": "retired 2026-11-24 (lane mlp-infer-cell): the CPU host binding (tools/bench_board_neural.py DEVICE_OF 'cpu'); the board never races it (tools/bench_board.py plan_races: our CPU is never timed, AGENTS.md part 3), so the row gave no cell (L40S jobs nvc1-0004, nvc1-0007); its GPU twin rows decide"
+   }
   },
   {
    "id": "graph-backward",
@@ -1685,8 +1691,7 @@
    "kind": "ab",
    "lane": [
     "mlp-train-step",
-    "mlp-predict",
-    "mlp-infer"
+    "mlp-predict"
    ],
    "dataset": "*",
    "rows": "full",
@@ -1697,7 +1702,10 @@
    "decides": "keep the op (A) unless the generic capture is at least as fast on NVIDIA and AMD with quality equal; reference 0.8.66 0.971 ms both vendors",
    "note": "2026-11-24 (lane ab-outcome-3 / o3-nmlp): small-mlp-leaf128-off DECIDED (leaf128 removed, A is now op small_mlp on identical_gemm_into); small-mlp-generic still RUN against that A with the wave-3 sha",
    "owed": "DECIDED",
-   "evidence": "A/B nvc-ab-20261124T215509Z-b82da4 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0007): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0007\""
+   "evidence": "A/B nvc-ab-20261124T215509Z-b82da4 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0007): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0007\"",
+   "retired_lanes": {
+    "mlp-infer": "retired 2026-11-24 (lane mlp-infer-cell): the CPU host binding (tools/bench_board_neural.py DEVICE_OF 'cpu'); the board never races it (tools/bench_board.py plan_races: our CPU is never timed, AGENTS.md part 3), so the row gave no cell (L40S jobs nvc1-0004, nvc1-0007); its GPU twin rows decide"
+   }
   },
   {
    "id": "r1-cnn-ops",
@@ -1999,7 +2007,6 @@
     "lm-forward",
     "transformer-forward",
     "transformer-decode",
-    "transformer-infer",
     "ols",
     "ridge",
     "pca",
@@ -2013,7 +2020,10 @@
    "b_arms": [
     "nv-fma-asm"
    ],
-   "decides": "keep the intrinsic FMA (A) unless the asm helper (B) is at least as fast on NVIDIA; on record NV L40S 0.8.55 -> candidate 4c2340386abc: lm-train-step 35.6 ms (0.8.66) -> 48.9 ms, hdbscan taxi 435 -> 552 ms, knn-reg taxi 11.5 -> 18.9 ms, knn-clf taxi 14.2 -> 21.6 ms, istella knn and hdbscan still regressed; digests must not move in either arm. If A does not compile (Mojo 1.2 rejects llvm.nvvm.fma.rn.f as it rejects mul.rn), build with the define on and record the row as not runnable"
+   "decides": "keep the intrinsic FMA (A) unless the asm helper (B) is at least as fast on NVIDIA; on record NV L40S 0.8.55 -> candidate 4c2340386abc: lm-train-step 35.6 ms (0.8.66) -> 48.9 ms, hdbscan taxi 435 -> 552 ms, knn-reg taxi 11.5 -> 18.9 ms, knn-clf taxi 14.2 -> 21.6 ms, istella knn and hdbscan still regressed; digests must not move in either arm. If A does not compile (Mojo 1.2 rejects llvm.nvvm.fma.rn.f as it rejects mul.rn), build with the define on and record the row as not runnable",
+   "retired_lanes": {
+    "transformer-infer": "retired 2026-11-24 (lane mlp-infer-cell): the CPU host binding (tools/bench_board_neural.py DEVICE_OF 'cpu'); the board never races it (tools/bench_board.py plan_races: our CPU is never timed, AGENTS.md part 3), so the row gave no cell (L40S jobs nvc1-0004, nvc1-0007); its GPU twin rows decide"
+   }
   },
   {
    "id": "wave2-lm-forward-door",
@@ -2142,7 +2152,6 @@
     "lm-forward",
     "transformer-forward",
     "transformer-decode",
-    "transformer-infer",
     "ols",
     "ridge",
     "pca",
@@ -2157,7 +2166,10 @@
     "nv-mul-rn-asm"
    ],
    "decides": "keep the schedulable fma.rn spellings (A) unless the asm mul.rn / mul.rn.ftz (B) is at least as fast on NVIDIA; every NVIDIA identical kernel that calls ftz or identical_mul runs it, the lanes listed are the NV-only regressions on record. Digests must not move in either arm (neighbors/checks/knn_distance_fma_boundary_check.mojo and tools/probe_ftz_hw.mojo judge the words). If A does not compile (Mojo 1.2 rejecting llvm.nvvm.fma.rn.d or llvm.nvvm.fma.rn.ftz.f), build with the define on and record the row as not runnable",
-   "owed": "DECIDED"
+   "owed": "DECIDED",
+   "retired_lanes": {
+    "transformer-infer": "retired 2026-11-24 (lane mlp-infer-cell): the CPU host binding (tools/bench_board_neural.py DEVICE_OF 'cpu'); the board never races it (tools/bench_board.py plan_races: our CPU is never timed, AGENTS.md part 3), so the row gave no cell (L40S jobs nvc1-0004, nvc1-0007); its GPU twin rows decide"
+   }
   },
   {
    "id": "fix-svc-query-resident",
@@ -2403,8 +2415,7 @@
    "source": "restore-run-arms-neural (2026-11-15; RUN #5 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md: mamba2-forward 6.5 ms NV L40S [0.8.55 5.6], mamba-ssm 2.8)",
    "kind": "ab",
    "lane": [
-    "mamba2-forward",
-    "mamba2-infer"
+    "mamba2-forward"
    ],
    "dataset": "*",
    "rows": "full",
@@ -2414,15 +2425,17 @@
    "decides": "NVIDIA L40S only (the NVIDIA-only campaign): promote B (with a _OFF define) when mamba2-forward and mamba2-infer are faster than A and the output digests match A (same chains: no bit change expected; a digest change is a bug in the arm, not a new reference); otherwise delete the arm with a tombstone",
    "status": "PROMOTED 2026-11-24 (lane ab-outcome-3, sub-lane o3-nmlp): mamba2-forward full 2.93 -> 1.98 ms (0.68), digests equal; mamba2-infer was not timed (the old form's owed row ssd-occupancy-off times both)",
    "owed": "DECIDED",
-   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md",
+   "retired_lanes": {
+    "mamba2-infer": "retired 2026-11-24 (lane mlp-infer-cell): the CPU host binding (tools/bench_board_neural.py DEVICE_OF 'cpu'); the board never races it (tools/bench_board.py plan_races: our CPU is never timed, AGENTS.md part 3), so the row gave no cell (L40S jobs nvc1-0004, nvc1-0007); its GPU twin rows decide"
+   }
   },
   {
    "id": "ssd-occupancy-off",
    "source": "ab-outcome-3 / o3-nmlp (2026-11-24): ssd-occupancy-on promoted on A/B nvc-ab-20261124T115722Z-d8f8b2 (mamba2-forward 2.93 -> 1.98 ms, 0.68); the old cell kernels stay behind MOJOLEARN_IDN_SSD_OCCUPANCY_OFF until measured against the new default",
    "kind": "ab",
    "lane": [
-    "mamba2-forward",
-    "mamba2-infer"
+    "mamba2-forward"
    ],
    "dataset": "*",
    "rows": "full",
@@ -2431,7 +2444,10 @@
    ],
    "decides": "NVIDIA L40S only (the NVIDIA-only campaign), wave-3 sha: delete the old cell kernels' device route and the _OFF define with a tombstone when B is no faster than A on mamba2-forward and mamba2-infer (digests must match: same chains; the host column keeps the cell kernels either way); otherwise reopen the promotion",
    "owed": "DECIDED",
-   "evidence": "A/B nvc-ab-20261124T182912Z-977cc8 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0004): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0004\""
+   "evidence": "A/B nvc-ab-20261124T182912Z-977cc8 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0004): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0004\"",
+   "retired_lanes": {
+    "mamba2-infer": "retired 2026-11-24 (lane mlp-infer-cell): the CPU host binding (tools/bench_board_neural.py DEVICE_OF 'cpu'); the board never races it (tools/bench_board.py plan_races: our CPU is never timed, AGENTS.md part 3), so the row gave no cell (L40S jobs nvc1-0004, nvc1-0007); its GPU twin rows decide"
+   }
   },
   {
    "id": "attn-fold-v2",
@@ -3059,8 +3075,7 @@
    "source": "R1 r1-restore-measured-winners (X4 c0b21c971c fresh prefill restored as the OPS_ATTN_STEP prefill arm; transformer_forward_fresh and its defines live again)",
    "kind": "ab",
    "lane": [
-    "transformer-forward",
-    "transformer-infer"
+    "transformer-forward"
    ],
    "dataset": "*",
    "rows": "full",
@@ -3070,7 +3085,10 @@
    ],
    "decides": "keep the prefill arm (A) unless B is at least as fast on NVIDIA and AMD; the session-fresh-off arm (-D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF, the former env arm MOJOLEARN_TRANSFORMER_SESSION_FRESH=0, which no tool read) tests whether 0.8.55's per-call route is what NVIDIA lost (0.8.66 was 1.44x slower than 0.8.55)",
    "owed": "DECIDED",
-   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md",
+   "retired_lanes": {
+    "transformer-infer": "retired 2026-11-24 (lane mlp-infer-cell): the CPU host binding (tools/bench_board_neural.py DEVICE_OF 'cpu'); the board never races it (tools/bench_board.py plan_races: our CPU is never timed, AGENTS.md part 3), so the row gave no cell (L40S jobs nvc1-0004, nvc1-0007); its GPU twin rows decide"
+   }
   },
   {
    "id": "byte-lm-layer-sync-off-lm-train-step",
@@ -5750,7 +5768,6 @@
    "kind": "ab",
    "lane": [
     "gemm",
-    "mlp-infer",
     "transformer-decode"
    ],
    "dataset": "*",
@@ -5760,7 +5777,10 @@
     "identity-nan-canon-off"
    ],
    "owed": "RUN",
-   "decides": "after the promotion of 2026-11-20 (lane fx-verdicts5; cost: gemm 0.917 inside the row's spread, transformer-decode 1.009): keep the default (the candidate) unless the old form (B, arm identity-nan-canon-off) is faster at equal quality and digests; B not faster: delete the old path and its _OFF switch. Before 2026-11-20 this row read: B becomes the default (with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF as the A/B switch until measured on the release) if its cost is within the pair's noise on the NVIDIA L40S, base and arm back to back in one job: the gemm row (the pass reads the 64 MB product once on the host, per chunk, while the copy engine fills the other stage half), the mlp-infer row (one pass over the returned predictions) and one decode row (transformer-decode: no pass on its path, the control). Digests must not move on these rows (their outputs hold no NaN; a moved digest is a defect). Time also the neighbouring shape 2048 x 3072 x 1024 and a non-board product of standard normal draws 3000 x 3000 x 3000 before a flip (no dimension targeting). Before the flip the native check nan_canon must pass on the CPU and GPU columns from a build with the define (exact words against the oracle on +-inf / +-FLT_MAX operands). A loser is deleted with the four tombstone parts and the vendor NaN word stays in the contract (IDENTITY_PATHS row 39)"
+   "decides": "after the promotion of 2026-11-20 (lane fx-verdicts5; cost: gemm 0.917 inside the row's spread, transformer-decode 1.009): keep the default (the candidate) unless the old form (B, arm identity-nan-canon-off) is faster at equal quality and digests; B not faster: delete the old path and its _OFF switch. Before 2026-11-20 this row read: B becomes the default (with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF as the A/B switch until measured on the release) if its cost is within the pair's noise on the NVIDIA L40S, base and arm back to back in one job: the gemm row (the pass reads the 64 MB product once on the host, per chunk, while the copy engine fills the other stage half), the mlp-infer row (one pass over the returned predictions) and one decode row (transformer-decode: no pass on its path, the control). Digests must not move on these rows (their outputs hold no NaN; a moved digest is a defect). Time also the neighbouring shape 2048 x 3072 x 1024 and a non-board product of standard normal draws 3000 x 3000 x 3000 before a flip (no dimension targeting). Before the flip the native check nan_canon must pass on the CPU and GPU columns from a build with the define (exact words against the oracle on +-inf / +-FLT_MAX operands). A loser is deleted with the four tombstone parts and the vendor NaN word stays in the contract (IDENTITY_PATHS row 39)",
+   "retired_lanes": {
+    "mlp-infer": "retired 2026-11-24 (lane mlp-infer-cell): the CPU host binding (tools/bench_board_neural.py DEVICE_OF 'cpu'); the board never races it (tools/bench_board.py plan_races: our CPU is never timed, AGENTS.md part 3), so the row gave no cell (L40S jobs nvc1-0004, nvc1-0007); its GPU twin rows decide"
+   }
   },
   {
    "id": "fast-decomp-matrix-units-board",

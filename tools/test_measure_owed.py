@@ -481,7 +481,37 @@ class InJobBaseCap(unittest.TestCase):
         self.assertLess(j, k)
 
 
+class HostLanes(unittest.TestCase):
+    def test_host_binding_lane_is_named_not_planned(self):
+        # lane mlp-infer-cell, 2026-11-24: L40S jobs nvc1-0004 and nvc1-0007 put mlp-infer (the CPU host binding) in
+        # the board's --lanes, the board planned no race for it (our CPU is never timed) and the report gave no cell
+        # and no reason. A host lane is named in not-planned and left out of the board arguments.
+        fake = fake_planner()
+        fake.NEURAL = types.SimpleNamespace(DEVICE_OF={"gmm": "gpu", "rfe": "cpu"})
+        owed = {"schema": MO.SCHEMA, "b_arms": {"b1": {}}, "rows": [
+            {"id": "r-mix", "kind": "ab", "lane": ["gmm", "rfe"], "dataset": "taxi", "rows": "full",
+             "b_arms": ["b1"]}]}
+        units, smoke, drivers, missing, rowmap, bargs = MO.plan(owed, PAPER, fake, "nvidia", ["b1"])
+        self.assertIn("CPU host binding", missing["r-mix rfe"])
+        self.assertEqual(rowmap["r-mix"], ["algos/gmm/taxi/rows=full"])
+        self.assertNotIn("rfe", bargs[bargs.index("--lanes") + 1].split(","))
+
+
 class CommittedOwed(unittest.TestCase):
+    def test_no_owed_row_lists_a_host_binding_lane(self):
+        # lane mlp-infer-cell, 2026-11-24: an owed row that lists a lane the board never races (our CPU host binding,
+        # bench_board_neural.DEVICE_OF "cpu") can never produce its cell; such a lane is recorded under
+        # retired_lanes with the reason, never left in "lane"
+        import bench_board_neural as NEURAL
+        host = {l for l, d in NEURAL.DEVICE_OF.items() if d == "cpu"}
+        self.assertIn("mlp-infer", host)
+        doc = json.load(open(os.path.join(PC.OUT_DIR, "owed-pre0867.json")))
+        for r in doc["rows"]:
+            self.assertFalse(host & set(MO.as_list(r.get("lane") or [])), r["id"])
+            for l, why in (r.get("retired_lanes") or {}).items():
+                self.assertIn(l, host, r["id"])
+                self.assertIn("never timed", why, r["id"])
+
     def test_owed_file_shape(self):
         doc = json.load(open(os.path.join(PC.OUT_DIR, "owed-pre0867.json")))
         self.assertEqual(doc["schema"], MO.SCHEMA)
