@@ -1295,7 +1295,9 @@ def bpe_gpu_train_into(
     var ctx = bpe_gpu_ctx()
     var ndocs = len(offs_host) - 1
     var merges = BpeMerges(max(2 * (vocab_size - 256), 2))
-    if n == 0 or vocab_size == 256:
+    # vocab_size 256 still pre-tokenizes and counts the groups (no merge pass): train_bpe reports
+    # n_groups at every vocabulary size (bpe_gpu_identity "vocab 256 minf 1: groups", 0 vs 73).
+    if n == 0:
         return fast_vocab_from_merges(merges, 0)
     var d_text = ctx.enqueue_create_buffer[DType.uint8](n)
     var d_offs = ctx.enqueue_create_buffer[DType.int64](ndocs + 1)
@@ -1316,8 +1318,8 @@ def bpe_gpu_train_device(
     """The training of `bpe_gpu_train_into` on device documents: `text` (n > 0 bytes) and `offs`
     (ndocs + 1 offsets) are device pointers (the corpus document cutter's output is consumed in
     place, tokenizer/gpu/corpus_gpu.mojo). The merges land in `merges` (room for
-    2 * (vocab_size - 256) words; vocab_size > 256 and min_frequency >= 1 admitted by the caller);
-    returns the group count."""
+    2 * (vocab_size - 256) words, at least 2; vocab_size >= 256 and min_frequency >= 1 admitted by the
+    caller); returns the group count. At vocab_size 256 only the groups are counted (no merge pass)."""
     var mcap = len(merges.pairs)
     var nblk = _blocks(n)
     # Pre-tokenize: units, then starts (no `<|endoftext|>` recognition: allow 0, flags all zero).
@@ -1378,7 +1380,7 @@ def bpe_gpu_train_device(
         raise Error("RuntimeError: bpe_train (gpu): the pre-token set overflowed")
     var ng = Int(h_g[S_TOTAL])
     var syms = Int(h_l[S_TOTAL])
-    if ng == 0 or syms - ng < 1:
+    if ng == 0 or syms - ng < 1 or vocab_size <= 256:
         return ng
     # The merge loop (`gpu_train_*`, above), fed from the device groups. Pairs ever seen <= 3 *
     # symbols (initial pairs, plus at most 2 new per merge occurrence, each of which removes a

@@ -32,7 +32,7 @@ from core.tsvd_native_device import tsvd_device_native_v1
 from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
 from core.msel_device_x import msel_fold_store, msel_device_x_context
-from core.tsvd_native_api import TSVD_FOLD
+from core.tsvd_native_api import TSVD_FOLD, TSVD_CAPABILITIES, TSVD_CAP_FOLD, TSVD_CAP_RESIDENT
 from core.tsvd_native_fold import tsvd_fold_native_v1
 
 
@@ -242,7 +242,11 @@ def fold_fixture(unit: Int) raises:
         raise Error("fold_fixture: device column only")
     else:
         var driver = TSVDNativeDriver(tsvd_fold_native_v1)
-        require(driver.metadata(0) == 1 and driver.metadata(2) == 16, "TSVD resident fold metadata")
+        # The fold provider answers FOLD and, since 371b88ba2d (lane vdf-scope-neural5: the fold route keeps its
+        # components resident in its own lease store), RESIDENT: core/tsvd_native_fold.mojo capabilities().
+        var tsvd_caps = driver.metadata(TSVD_CAPABILITIES)
+        require(driver.metadata(0) == 1 and tsvd_caps == (TSVD_CAP_FOLD | TSVD_CAP_RESIDENT),
+            "TSVD resident fold metadata: capabilities " + String(tsvd_caps))
         var source = input_values("boundary-6x3", 18)
         var indices: List[Int64] = [5, 4, 3, 2, 1, 0]
         if unit == 1:

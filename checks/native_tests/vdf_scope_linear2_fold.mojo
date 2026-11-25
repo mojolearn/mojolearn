@@ -199,6 +199,11 @@ def _device_case(which: Int) raises:
                     var ob = List[Float32](length=n, fill=0.0)
                     cd_predict_host(ctx, word, _p(coef), _p(oa), n, FD, Float32(0.75))
                     cd_predict_host(ctx, _p(f_order), _p(coef), _p(ob), n, FD, Float32(0.75))
+                    # Keep-alive: `_p(coef)` / `_p(f_order)` were their LAST named uses, so both lists were freed
+                    # before the second call read them (the allocator's free-list word over word 0: "cd
+                    # predictions: word 0 differs" on the L40S, nvc-ab-20261125T123124Z-69db72).
+                    _ = coef^
+                    _ = f_order^
                     _same(oa, ob, "cd predictions")
             elif which == 2:
                 var wb: List[Float32] = [Float32(0.5), Float32(-0.25), Float32(1.5), Float32(2.0), Float32(-0.125)]
@@ -236,6 +241,7 @@ def _device_case(which: Int) raises:
                 var sb = ctx.enqueue_create_buffer[DType.float32](n)
                 qn_decision_function_device(ctx, word, _p(coef), sa, n, FD, True, 2)
                 qn_decision_function_device(ctx, _p(gathered), _p(coef), sb, n, FD, True, 2)
+                _ = coef^  # keep-alive: `_p(coef)` was its last named use ("QN decisions: word 0 differs")
                 var ha = List[Float32](length=n, fill=0.0)
                 var hb = List[Float32](length=n, fill=0.0)
                 ctx.enqueue_copy(dst_ptr=ha.unsafe_ptr(), src_buf=sa)

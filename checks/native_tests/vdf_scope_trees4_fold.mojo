@@ -14,9 +14,11 @@ Host column (CPU_COLUMN_BUILD), the gbdt member's host bookkeeping of a fold (co
 
 Device column (X put once into the fold store, the fold's rows taken on the device; each entry handed
 `fold_x_word(slot)` and, separately, the host gather of the same rows):
-    case 0   gbdt FIT: the GPU image's ROW-MAJOR fit (the device quantizer, now the default) of the fold word ==
-             of the host gather, model text byte for byte, == the COLUMN-MAJOR fit of the host gather (the
-             estimator's other host-input route); the device importances of the fold word == of the host gather
+    case 0   gbdt FIT: under -D MOJOLEARN_GBDT_QUANT_DEVICE (opt-in again since df186b87a8, A/B owed) the GPU
+             image's ROW-MAJOR fit (the device quantizer) of the fold word == of the host gather, model text byte
+             for byte, == the COLUMN-MAJOR fit of the host gather (the estimator's other host-input route); on
+             the default image the row-major fit refuses the fold word in words; on both, the device importances
+             of the fold word == of the host gather
     case 1   DART: the session open (`dart_open`) of the fold word holds the same session X words as the open of
              the host gather (read back from the session registry)
     case 2   IsolationForest: the fit's training upload (`_upload_rowmajor_as_colmajor_device`: the device copy,
@@ -45,6 +47,7 @@ from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
 from gbdt.gbdt_entry import GbdtImage
 from gbdt.mojolearn_gbdt_run import gbdt_fit_native_run
 from gbdt.gpu_importance import gbdt_feature_importances_device
+from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
 from checks.native_tests.gbdt_public_fits import GbdtOpts, GbdtInputs, fit, _DeviceFit
 from xtrees.dart_device import DART_SESSIONS, dart_open, dart_close
 from isolation_forest.impl.isolation_forest import _upload_rowmajor_as_colmajor_device
@@ -308,22 +311,41 @@ def _gbdt_case(slot: Int, gathered: List[Float32], n: Int) raises:
             y[i] = gathered[i * D] * Float32(2.0) - gathered[i * D + 1] + Float32((i % 5)) * Float32(0.25)
         var o = GbdtOpts("RMSE", 4, 3)
         o.deterministic()
-        # the fold word through the row-major fit
-        _FIT_WORD.get_or_create_ptr()[].word = fold_x_word(slot)
-        var from_slot = fit[_RowMajorFit](o, GbdtInputs(gathered.copy(), n, D, y.copy()))
-        # the host gather through the row-major fit, then through the column-major fit
-        _FIT_WORD.get_or_create_ptr()[].word = 0
-        var from_rows = fit[_RowMajorFit](o, GbdtInputs(gathered.copy(), n, D, y.copy()))
-        var from_columns = fit[_DeviceFit](o, GbdtInputs(cm^, n, D, y^))
-        require(from_slot.text == from_rows.text, "gbdt fit: the fold word's model differs from the host rows' model")
-        require(from_rows.text == from_columns.text,
-                "gbdt fit: the row-major model differs from the column-major model")
+        var from_columns = fit[_DeviceFit](o, GbdtInputs(cm^, n, D, y.copy()))
+        comptime if GBDT_QUANT_DEVICE:
+            # the fold word through the row-major fit
+            _FIT_WORD.get_or_create_ptr()[].word = fold_x_word(slot)
+            var from_slot = fit[_RowMajorFit](o, GbdtInputs(gathered.copy(), n, D, y.copy()))
+            # the host gather through the row-major fit, then through the column-major fit
+            _FIT_WORD.get_or_create_ptr()[].word = 0
+            var from_rows = fit[_RowMajorFit](o, GbdtInputs(gathered.copy(), n, D, y.copy()))
+            require(from_slot.text == from_rows.text,
+                    "gbdt fit: the fold word's model differs from the host rows' model")
+            require(from_rows.text == from_columns.text,
+                    "gbdt fit: the row-major model differs from the column-major model")
+        else:
+            # The device quantizer is opt-in (df186b87a8, gbdt/gpu_data/sym_feat_switches.mojo GBDT_QUANT_DEVICE,
+            # A/B owed): the default GPU image answers no XG_CAP_FIT_SLOT_X (gbdt/gbdt_entry.mojo XG_CAPS), the
+            # member takes the host fold gather, and the row-major fit refuses the fold word in words, never
+            # computing from it.
+            _FIT_WORD.get_or_create_ptr()[].word = fold_x_word(slot)
+            var refusal = String("")
+            try:
+                _ = fit[_RowMajorFit](o, GbdtInputs(gathered.copy(), n, D, y.copy()))
+            except error:
+                refusal = String(error)
+            _FIT_WORD.get_or_create_ptr()[].word = 0
+            require("served only by the device quantizer" in refusal,
+                    "gbdt fit: the default image's row-major fit of the fold word was not refused in words: '"
+                    + refusal + "'")
+        _ = y^
+        # the importances read the fold word on every GPU image (gbdt/gpu_importance.mojo fold_x_fill)
         var ctx = process_ctx["MojolearnEstimatorsContextIdenticalV3"]()
         var imp_a = List[Float32](length=D, fill=0.0)
         var imp_b = List[Float32](length=D, fill=0.0)
-        _ = gbdt_feature_importances_device(ctx, from_rows.text, fold_x_word(slot), n, D, True, 0, 0,
+        _ = gbdt_feature_importances_device(ctx, from_columns.text, fold_x_word(slot), n, D, True, 0, 0,
                                             Int(imp_a.unsafe_ptr()))
-        _ = gbdt_feature_importances_device(ctx, from_rows.text, Int(gathered.unsafe_ptr()), n, D, True, 0, 0,
+        _ = gbdt_feature_importances_device(ctx, from_columns.text, Int(gathered.unsafe_ptr()), n, D, True, 0, 0,
                                             Int(imp_b.unsafe_ptr()))
         _same_words(Int(imp_a.unsafe_ptr()), Int(imp_b.unsafe_ptr()), D, "gbdt importances")
         _ = imp_a^

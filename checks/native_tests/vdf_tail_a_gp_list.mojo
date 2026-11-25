@@ -9,7 +9,7 @@ routes exist in every GPU image).
 
 Each case puts a 40 x 4 X once into the fold store (the x_prep transport, as a member's scope does), takes one
 fold's rows (reversed, crossing the base) on the device and hands the GP device entry the slot's word on the LIST
-route; the same entry over the host gather of the same rows is the oracle (the host-input route, whose device and
+route (the query: 9 distinct points off the training lattice, put as their own base and taken reversed); the same entry over the host gather of the same rows is the oracle (the host-input route, whose device and
 CPU columns the release's one verification compares). Equal bytes put the fold route in that column.
 
     case 0   gpr_fit, list route (pointer_route False), X a slot == the gather: L_, alpha_ and the five scalars
@@ -72,10 +72,24 @@ def _fold(n: Int) -> List[Int64]:
     return rows^
 
 
-def _query_rows(q: Int) -> List[Int64]:
+def _query_x(q: Int) -> List[Float32]:
+    """The q query points: distinct, and off the training lattice (multiples of 0.125 plus 0.0625), so no query
+    repeats a training row or another query. The old query rows were rows of X itself: X repeats with period 23
+    in the row number, so every one repeated a fold row (and rows 0 and 8 of the query were the same row), the
+    posterior covariance was singular and gpr_sample refused, as documented (L40S, nvc-ab-20261125T123124Z-69db72).
+    float64 check of this set: posterior covariance smallest eigenvalue 0.15."""
+    var x = List[Float32](length=q * FD, fill=0.0)
+    for r in range(q):  # small-loop(fixture query rows)
+        for j in range(FD):  # small-loop(fixture columns)
+            x[r * FD + j] = (Float32(((r * (j + 2)) % 9) - 4) * Float32(0.5) + Float32(0.0625)
+                + Float32(j) * Float32(0.5))
+    return x^
+
+
+def _query_order(q: Int) -> List[Int64]:
     var rows = List[Int64]()
-    for r in range(q):  # small-loop(fixture: query rows, crossing the fold)
-        rows.append(Int64((r * 5 + 3) % FN))
+    for i in range(q - 1, -1, -1):  # small-loop(fixture: the query slot's rows, reversed)
+        rows.append(Int64(i))
     return rows^
 
 
@@ -140,7 +154,7 @@ def _gpr_fit(x_addr: Int, y: List[Float32], n: Int, kernel: GPKernelStorage) rai
 def _device_case(which: Int) raises:
     var x = _x(FN, FD)
     if which == 5:
-        x[(FN - 2) * FD + 1] = Float32(0.0) / Float32(0.0)  # inside the fold (row FN - 2) and the query (row 38)
+        x[(FN - 2) * FD + 1] = Float32(0.0) / Float32(0.0)  # inside the fold (row FN - 2)
     var y = List[Float32](length=FN, fill=0.0)
     var codes = List[Int32](length=FN, fill=Int32(0))
     for i in range(FN):  # small-loop(fixture targets and class codes)
@@ -155,14 +169,16 @@ def _device_case(which: Int) raises:
         y_fold[r] = y[Int(index[r])]
         codes_fold[r] = codes[Int(index[r])]
     var q = 9
-    var qrows = _query_rows(q)
+    var qsrc = _query_x(q)
     if which == 5:
-        qrows[0] = Int64(FN - 2)
-    var xq = _gather(x, qrows)
+        qsrc[1] = Float32(0.0) / Float32(0.0)  # the query's first point
+    var qrows = _query_order(q)
+    var xq = _gather(qsrc, qrows)
     var store: NativeDescriptorCall = x_prep_transport_device_v1
     var base = native_descriptor_call(store, XP_DEV_PUT, [_a(x)], [FN * FD], [])
     var slot = native_descriptor_call(store, XP_DEV_TAKE_ROWS, [Int(index.unsafe_ptr())], [base, FD, n], [])
-    var qslot = native_descriptor_call(store, XP_DEV_TAKE_ROWS, [Int(qrows.unsafe_ptr())], [base, FD, q], [])
+    var qbase = native_descriptor_call(store, XP_DEV_PUT, [_a(qsrc)], [q * FD], [])
+    var qslot = native_descriptor_call(store, XP_DEV_TAKE_ROWS, [Int(qrows.unsafe_ptr())], [qbase, FD, q], [])
     var word = fold_x_word(slot)
     var qword = fold_x_word(qslot)
     var kernel = _kernel()
@@ -332,6 +348,7 @@ def _device_case(which: Int) raises:
     except error:
         failure = String(error)
     _ = native_descriptor_call(store, XP_DEV_FREE, [], [qslot], [])
+    _ = native_descriptor_call(store, XP_DEV_FREE, [], [qbase], [])
     _ = native_descriptor_call(store, XP_DEV_FREE, [], [slot], [])
     _ = native_descriptor_call(store, XP_DEV_FREE, [], [base], [])
     _ = x^
@@ -339,6 +356,7 @@ def _device_case(which: Int) raises:
     _ = codes^
     _ = index^
     _ = qrows^
+    _ = qsrc^
     _ = gathered^
     _ = xq^
     _ = y_fold^
