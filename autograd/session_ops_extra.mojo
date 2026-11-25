@@ -49,6 +49,11 @@ from autograd.nn_scatter_ops import OP_SCT_KEYS
 from autograd.session_ops_extra_ops import OP_SOX_TOPK_PACK, OP_SOX_TOPK_OUT, OP_SOX_LSE
 from autograd.session_ops_extra_rules import SOX_GATHER_TAG, SOX_LSE_TAG
 from embedding.checks.embedding_oracle import EMB_MAX_POSITIONS
+from autograd.session_ops_extra_sabotage import (
+    SOX_SABOTAGE_SEQ_MASK, SOX_SABOTAGE_SEQ_MASK_HOST, SOX_SABOTAGE_TOPK_ZERO, SOX_SABOTAGE_TOPK_ZERO_HOST,
+    SOX_SABOTAGE_LSE_SETTLE, SOX_SABOTAGE_LSE_SETTLE_HOST, SOX_SABOTAGE_SOFT_CE, SOX_SABOTAGE_SOFT_CE_HOST,
+)
+from autograd.import_ops import IMP_LE
 
 #: Session codes (python/mojolearn/ops.py, the ops door); 186..189 are reserved for this family.
 comptime OPS_SEQUENCE_MASK = 180
@@ -77,6 +82,8 @@ def sox_sequence_mask[E: Exec](mut tape: Tape, mut ex: E, lengths: Tensor, max_l
     ex.launch[OP_SEQ_IOTA](ia, max_length)
     var times = tape.variable(ex, pos, 1, max_length, False)
     var lens = rn_as_shape(tape, ex, tape.detach(ex, lengths), ShapeN.matrix(b, 1))
+    comptime if (SOX_SABOTAGE_SEQ_MASK and E.IS_DEVICE) or (SOX_SABOTAGE_SEQ_MASK_HOST and not E.IS_DEVICE):
+        return imp_binary(tape, ex, times, lens, IMP_LE)  # SABOTAGE: t <= lengths[b]
     return imp_binary(tape, ex, times, lens, IMP_LT)
 
 
@@ -121,6 +128,9 @@ def sox_topk_indices[E: Exec](
     pa.i1 = lines[2]
     pa.i2 = lp
     pa.i3 = 1 if largest else 0
+    pa.i4 = 1
+    comptime if (SOX_SABOTAGE_TOPK_ZERO and E.IS_DEVICE) or (SOX_SABOTAGE_TOPK_ZERO_HOST and not E.IS_DEVICE):
+        pa.i4 = 0  # SABOTAGE: -0.0 kept below +0.0
     ex.launch[OP_SOX_TOPK_PACK](pa, total)
     # the embedding's network over every line at once: a stage's pairs stay inside one aligned block of lp words
     var m = 2
@@ -241,6 +251,9 @@ def sox_logsumexp[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, axis: Int, keep
     a.p0 = src
     a.p1 = out
     a.i0 = cols
+    a.i1 = 1
+    comptime if (SOX_SABOTAGE_LSE_SETTLE and E.IS_DEVICE) or (SOX_SABOTAGE_LSE_SETTLE_HOST and not E.IS_DEVICE):
+        a.i1 = 0  # SABOTAGE: an infinite maximum not settled
     ex.launch[OP_SOX_LSE](a, rows)
     var dims = List[Int]()
     for q in range(xs.ndim):  # small-loop(nd: tensor rank, at most 8): shape metadata, no data
@@ -277,7 +290,10 @@ def sox_soft_cross_entropy[E: Exec](
     var z = rn_as_shape(tape, ex, logits, ShapeN.matrix(rows, cols))
     var t = rn_as_shape(tape, ex, target, ShapeN.matrix(rows, cols))
     var ls = tape.log_softmax(ex, z)
-    var terms = tape.scale(ex, tape.sum(ex, tape.multiply(ex, t, ls), AXIS_COLS), Float32(-1.0))
+    var sign = Float32(-1.0)
+    comptime if (SOX_SABOTAGE_SOFT_CE and E.IS_DEVICE) or (SOX_SABOTAGE_SOFT_CE_HOST and not E.IS_DEVICE):
+        sign = Float32(1.0)  # SABOTAGE: the minus sign lost
+    var terms = tape.scale(ex, tape.sum(ex, tape.multiply(ex, t, ls), AXIS_COLS), sign)
     if weight:
         var w = weight.value()
         var wn = tape.shape_of(w).count()

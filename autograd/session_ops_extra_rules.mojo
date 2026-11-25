@@ -21,6 +21,7 @@ from sequence.ops import FP, Args
 from autograd.tape import BackwardRules
 from autograd.embedding_ops import OP_EMB_FOLD
 from autograd.session_ops_extra_ops import OP_SOX_LSE_VJP
+from autograd.session_ops_extra_sabotage import SOX_SABOTAGE_GATHER_GRAD, SOX_SABOTAGE_GATHER_GRAD_HOST
 
 comptime SOX_GATHER_TAG = 6990
 comptime SOX_LSE_TAG = 6991
@@ -58,6 +59,8 @@ struct SessionOpsExtraRules(BackwardRules, ImplicitlyCopyable, Movable):
             f.p3 = gradients[0]
             f.i0 = 1
             f.i1 = -1
+            comptime if (SOX_SABOTAGE_GATHER_GRAD and E.IS_DEVICE) or (SOX_SABOTAGE_GATHER_GRAD_HOST and not E.IS_DEVICE):
+                f.i1 = 0  # SABOTAGE: flat cell 0 of x's gradient folded as padding (+0.0)
             f.i2 = 0
             ex.launch[OP_EMB_FOLD](f, saved.i1)
             return

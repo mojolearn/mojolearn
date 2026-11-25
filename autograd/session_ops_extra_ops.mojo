@@ -61,14 +61,14 @@ def _sox_infinite(v: Float32) -> Bool:
 
 
 @always_inline
-def sox_order_key(v: Float32, largest: Bool) -> Int:
+def sox_order_key(v: Float32, largest: Bool, zero_equal: Bool = True) -> Int:
     """The int32 sort key of value v: ascending keys are descending values for `largest`, ascending values
     otherwise. v is flushed first; -0.0 and +0.0 are one key; every NaN is one key above +inf (first for
     `largest`, last otherwise, before the padding)."""
     var w = ftz(v)
     if w != w:
         return _SOX_I32_MIN if largest else _SOX_I32_MAX
-    if w == Float32(0.0):
+    if zero_equal and w == Float32(0.0):
         w = Float32(0.0)
     var s = bitcast[DType.int32](w)
     var o = s if s >= Int32(0) else s ^ Int32(0x7FFFFFFF)
@@ -79,7 +79,8 @@ def sox_order_key(v: Float32, largest: Bool) -> Int:
 def op_sox_topk_pack(t: Int, a: Args):
     """Word t of the padded line layout: line l = t // Lp, slot j = t % Lp; x seen as (O, V, I), line l = o I + i.
     keys[t] = the order key of x[(o V + j) I + i] for j < V, else INT32_MAX; values[t] = j. p0 x, p1 keys (int32
-    words), p2 values (int32 words); i0 V, i1 I, i2 Lp, i3 1 for largest."""
+    words), p2 values (int32 words); i0 V, i1 I, i2 Lp, i3 1 for largest, i4 1 (0 only in a sabotage build: -0.0
+    kept below +0.0)."""
     var lp = a.i2
     var line = t // lp
     var j = t - line * lp
@@ -88,7 +89,7 @@ def op_sox_topk_pack(t: Int, a: Args):
         var inner = a.i1
         var o = line // inner
         var i = line - o * inner
-        key = sox_order_key(a.p0.unsafe_load((o * a.i0 + j) * inner + i), a.i3 != 0)
+        key = sox_order_key(a.p0.unsafe_load((o * a.i0 + j) * inner + i), a.i3 != 0, a.i4 != 0)
     _sox_st_i(a.p1, t, key)
     _sox_st_i(a.p2, t, j)
 
@@ -110,7 +111,7 @@ def op_sox_topk_out(t: Int, a: Args):
 
 
 @always_inline
-def sox_lse_row(p: FP, base: Int, cols: Int) -> Float32:
+def sox_lse_row(p: FP, base: Int, cols: Int, settle: Bool = True) -> Float32:
     """log(sum_j exp(x_j)) of the row at p[base .. base + cols): the log-softmax's maximum and log of the shifted
     exponential sum (its fold, its words), then ftz(m + log_total); an infinite maximum is settled (see the file
     header)."""
@@ -122,7 +123,7 @@ def sox_lse_row(p: FP, base: Int, cols: Int) -> Float32:
         m = ld(p, base)
         for k in range(1, cols):
             m = max(m, ld(p, base + k))
-    if _sox_infinite(m):
+    if settle and _sox_infinite(m):
         # an infinite maximum: the row's +inf (or -inf for a row of only -inf), NaN when a NaN is in the row
         for k in range(cols):
             var w = ld(p, base + k)
@@ -141,8 +142,9 @@ def sox_lse_row(p: FP, base: Int, cols: Int) -> Float32:
 
 @always_inline
 def op_sox_lse(t: Int, a: Args):
-    """Row t: out[t] = logsumexp of x's row t. p0 x (rows, cols), p1 out (rows); i0 cols."""
-    st(a.p1, t, sox_lse_row(a.p0, t * a.i0, a.i0))
+    """Row t: out[t] = logsumexp of x's row t. p0 x (rows, cols), p1 out (rows); i0 cols, i1 1 (0 only in a
+    sabotage build: an infinite maximum not settled)."""
+    st(a.p1, t, sox_lse_row(a.p0, t * a.i0, a.i0, a.i1 != 0))
 
 
 @always_inline
