@@ -62,7 +62,8 @@ def test_committed_schemas_are_exactly_the_source_derivation():
     events = ast.literal_eval(literal('_EVENTS'))
     assert events == {name: row['events'] for name, row in SCHEMAS.items()}
     listed = list(ast.literal_eval(literal('_CLASS_SOURCES')))
-    assert sorted(listed) == sorted(SCHEMAS) and len(listed) == 51
+    # 46: the five shuffle and leave-P splitters left the table (72500e5210; their native constructor writes their fields)
+    assert sorted(listed) == sorted(SCHEMAS) and len(listed) == 46
     # LabelEncoder takes `device=` (2026-11-21), so every declared class has a source constructor.
     assert REFUSED == {}
     # The resample results left this connector: each constructor is one call
@@ -100,7 +101,7 @@ def test_install_replaces_each_constructor_with_one_native_call():
         marker = object()
         made = cls(marker, k=marker) if plan['positional'] else cls(k=marker)
         assert calls[-1][0] is made and calls[-1][3] is ns['_CONTEXT'] and calls[-1][4] is cls
-    assert len(calls) == 51
+    assert len(calls) == 46
 
 
 def test_connect_pins_storage_hooks_and_the_declared_release_context():
