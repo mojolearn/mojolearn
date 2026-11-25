@@ -29,6 +29,7 @@ from training.host.samba_ops_oracle import (
     host_samba_linear_forward,
     host_samba_rms_norm_forward,
 )
+from core.numeric_profile_parts_sabotage import np_parts_sabotage_host
 from transformer.host.transformer_block_host import (
     transformer_host_forward,
     transformer_host_weights,
@@ -110,11 +111,14 @@ def _write(addr: Int, values: List[Float32], n: Int) raises:
 def _run_forward(
     a: List[Int], b: Int, l: Int, dm: Int, nh: Int, nkv: Int, hd: Int,
     it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions,
-    int15: Bool = False,
+    parts: Int = 0,
 ) raises -> Int:
     """`a` is the device binding's thirteen: x, the nine weights, k_cache,
     v_cache, y_out, then the eleven optional addresses (zeros when
-    absent). The caches are read at entry and written back."""
+    absent). The caches are read at entry and written back. `parts` is the
+    block's parts mask (core/numeric_profile_parts.mojo; 0 = fp32_v1, the
+    default, unchanged), under the host sabotage arms
+    (core/numeric_profile_parts_sabotage.mojo)."""
     if b <= 0 or l <= 0:
         raise Error("transformer: B and L must be positive")
     if smax <= 0:
@@ -133,7 +137,7 @@ def _run_forward(
     var k_in = read_f32(a[10], cache_n)
     var v_in = read_f32(a[11], cache_n)
     var x = read_f32(a[0], b * l * dm)
-    var out = transformer_host_forward(w, x, b, l, smax, s0, window, k_in, v_in, int15=int15)
+    var out = transformer_host_forward(w, x, b, l, smax, s0, window, k_in, v_in, parts=np_parts_sabotage_host(parts))
     _write(a[12], out.y, b * l * dm)
     _write(a[10], out.k_cache, cache_n)
     _write(a[11], out.v_cache, cache_n)

@@ -1,0 +1,13 @@
+diff --git a/core/numeric_profile_parts_sabotage.mojo b/core/numeric_profile_parts_sabotage.mojo
+index 36ed05a109..07b592f73f 100644
+--- a/core/numeric_profile_parts_sabotage.mojo
++++ b/core/numeric_profile_parts_sabotage.mojo
+@@ -55,7 +55,7 @@ comptime NP_PARTS_SABOTAGE_WRONG_PART_HOST = is_defined["MOJOLEARN_NP_PARTS_SABO
+ comptime NP_PARTS_SABOTAGE_WRONG_PART_DEVICE = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_WRONG_PART_DEVICE"]()
+ comptime NP_PARTS_SABOTAGE_IGNORE_HOST = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_IGNORE_HOST"]()
+ comptime NP_PARTS_SABOTAGE_IGNORE_DEVICE = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_IGNORE_DEVICE"]()
+-comptime NP_PARTS_SABOTAGE_PROGRAM_IGNORE_HOST = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_PROGRAM_IGNORE_HOST"]()
++comptime NP_PARTS_SABOTAGE_PROGRAM_IGNORE_HOST = True
+ comptime NP_PARTS_SABOTAGE_PROGRAM_IGNORE_DEVICE = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_PROGRAM_IGNORE_DEVICE"]()
+ 
+ #: The bits a Transformer block computes: the seven projections and attn_scores.

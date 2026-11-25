@@ -29,6 +29,18 @@ status reads, the gate undoes the writes of bodies past the stop, and the
 token record is kept on the device. Nothing crosses to the host between
 tokens: no per-layer state round trip, no host token loop, no host logits.
 
+Lane fixed15-decode (2026-11-25): a fixed15_v1 layer (any parts mask) is
+one attention step op over weights the program adopts at its open
+(`attn_step_adopt_source`): the profile constructor of the block entries
+(transformer/fixed15_layer_weights.mojo, the same uploads and per-part
+checks as op 35 and the decode session open), the planes of each part the
+mask sets and the float32 weight of each part it clears, behind a
+one-float placeholder weights tensor. A fixed15_v1 head is `OPS_LINEAR15`
+over the adopted head planes (`llama_int15_proj`, the resident session's
+head call). So under the fixed15_v1 default `generate` stays one program on
+the GPU, with the bits of the per-layer route: the same step op over the
+same weights constructor, the same head product.
+
 Weights are keyed by the caller's addresses and the process weight epoch
 (core/weight_epoch.mojo); the state is loaded from the caller's arrays at
 every read and exported once at its end (the caller's arrays are the truth
@@ -50,8 +62,15 @@ from autograd.generation_ops import OPS_LM_PICK, OPS_LM_ALIVE, lm_rows_words, LM
 from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, OPS_ATTN_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE,
     BLOCK_PART_WORDS, block_weight_sizes, block_state_sizes, block_int_words, block_step_reports_to_host,
-    block_offsets, block_guard,
+    block_offsets, block_guard, OPS_LINEAR15, attn_step_adopt_source, linear15_adopt, _attn_dims, _attn_opts,
 )
+from transformer.fixed15_layer_weights import (
+    _int15_entry_parts, _upload_planes, _upload_planes_one, _profile_weights, _lean_for_w,
+)
+from transformer.block_options import BLOCK_OPTION_ADDRS
+from core.numeric_profile_parts_sabotage import np_parts_sabotage_program
+from transformer.impl.llama.modeling_llama import LlamaDeviceWeights
+from max.gpu.host import DeviceContext
 from autograd.program_control import control_prepare, control_run
 from autograd.program_io import ProgramInput
 from autograd.program_loop import LOOP_CHECK_AUTO
@@ -80,20 +99,57 @@ def _ids_src(addr: Int, rows: Int, cols: Int) -> CastIn:
     return CastIn(addr, CAST_KIND_SIGNED, 4, rows, cols, cols * 4, 4)
 
 
+# The fixed15 block entry's address layout (transformer_binding_impl
+# INT15_ENTRY_ADDRS): 13 base slots, the options tail, then the planes.
+comptime _F15_PLANES_AT = 13 + BLOCK_OPTION_ADDRS
+
+
+def _fixed15_layer(ctx: DeviceContext, ints: List[Int], weights: List[Int], planes: List[Int]) raises -> LlamaDeviceWeights:
+    """Lane fixed15-decode: a fixed15_v1 attention layer's device weights
+    from the program descriptor (`weights` in `block_weight_sizes` order:
+    the nine base pieces then the eleven optional ones; `planes` the parts
+    mask and 21 plane addresses), through the block entries' own checks and
+    constructor (`_int15_entry_parts`, `_upload_planes`, `_profile_weights`),
+    so the layer's weights are op 35's. Once per program open."""
+    if len(planes) != 22 or len(weights) != 9 + BLOCK_OPTION_ADDRS:
+        raise Error("CausalLM: a fixed15_v1 layer takes 20 weight pieces and its mask with 21 plane addresses")
+    var dims = _attn_dims(ints)
+    var opts = _attn_opts(ints)
+    var what = String("CausalLM decode program (fixed15_v1 layer)")
+    # [x, the nine base weights, k cache, v cache, y, the optional tail, planes]
+    var a = List[Int](length=_F15_PLANES_AT + 21, fill=0)
+    for i in range(9):  # small-loop(9: the base weight slots): address words, no data
+        a[1 + i] = weights[i]
+    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(11: the optional weight slots): address words, no data
+        a[13 + i] = weights[9 + i]
+    for i in range(21):  # small-loop(21: the seven plane triples): address words, no data
+        a[_F15_PLANES_AT + i] = planes[1 + i]
+    var parts = _int15_entry_parts(a, _F15_PLANES_AT, np_parts_sabotage_program(planes[0]), opts.gated(), what)
+    var p15 = _upload_planes(ctx, dims, opts, a, _F15_PLANES_AT, parts)
+    return _profile_weights(ctx, dims, opts, a, p15^, what)
+
+
 struct CausalLMLayerSpec(Copyable, Movable):
     """One layer of the stack: its step op, the op's integer and float
     arguments, and the host addresses of its weight pieces in
-    `block_weight_sizes` order (0 for an absent optional piece)."""
+    `block_weight_sizes` order (0 for an absent optional piece). `planes`
+    (lane fixed15-decode): empty for a float32 layer; for a fixed15_v1
+    attention layer its parts mask and the 21 plane addresses (three per
+    projection, q k v o gate up down; zeros for a part the mask clears),
+    and then the weight piece of each part the mask sets is 0."""
     var code: Int
     var ints: List[Int]
     var fs: List[Float32]
     var weights: List[Int]
+    var planes: List[Int]
 
-    def __init__(out self, code: Int, var ints: List[Int], var fs: List[Float32], var weights: List[Int]):
+    def __init__(out self, code: Int, var ints: List[Int], var fs: List[Float32], var weights: List[Int],
+                 var planes: List[Int]):
         self.code = code
         self.ints = ints^
         self.fs = fs^
         self.weights = weights^
+        self.planes = planes^
 
 
 struct CausalLMDecodeResult(Movable):
@@ -121,6 +177,9 @@ struct CausalLMProgram(Movable):
     var embed: Int
     var norm: Int
     var head: Int
+    #: lane fixed15-decode: the head is OPS_LINEAR15 over adopted planes
+    #: (`head` is then its placeholder weights tensor)
+    var head15: Bool
     var codes: List[Int]
     var ints: List[List[Int]]
     var fs: List[List[Float32]]
@@ -142,10 +201,14 @@ struct CausalLMProgram(Movable):
     var closed: Bool
 
     def __init__(out self, pe: Int, v: Int, d: Int, pn: Int, eps: Float32, ph: Int, b: Int,
-                 layers: List[CausalLMLayerSpec], n_eos: Int) raises:
+                 layers: List[CausalLMLayerSpec], n_eos: Int, head15: List[Int]) raises:
         """Upload the weights (`pe` the (v, d) table, `pn` the (d) final norm
         or 0 for none, `ph` the (v, d) head or 0 for tied) and allocate the
-        state of every layer for `b` rows (loaded at each read)."""
+        state of every layer for `b` rows (loaded at each read). `head15`:
+        empty, or the fixed15_v1 head's plane triple (hi, lo, exponents of
+        the (v, d) head, tied or not), which then replaces `ph`."""
+        if len(head15) != 0 and len(head15) != 3:
+            raise Error("CausalLM: the decode program's fixed15_v1 head takes three plane addresses")
         if b < 1 or v < 1 or d < 1:
             raise Error("CausalLM: B, vocab and d_model must be positive")
         if pe == 0:
@@ -162,6 +225,7 @@ struct CausalLMProgram(Movable):
         self.embed = 0
         self.norm = 0
         self.head = 0
+        self.head15 = len(head15) == 3
         self.codes = List[Int]()
         self.ints = List[List[Int]]()
         self.fs = List[List[Float32]]()
@@ -175,7 +239,9 @@ struct CausalLMProgram(Movable):
         self.cond = 0
         self.pick_ints = List[Int]()
         self.pick_fs = List[Float32]()
-        self.key = [pe, pn, ph, b]
+        # The version key is the read descriptor's (`causal_program_open`
+        # sets it from the layout `causal_program_matches` compares with).
+        self.key = List[Int]()
         self.closed = False
         try:
             var s = ops_session[DeviceExec, OPS_DEVICE](self.sid)
@@ -190,13 +256,34 @@ struct CausalLMProgram(Movable):
             self.embed = s[].upload(CastIn.f32_c(pe, v, d), False)
             if pn != 0:
                 self.norm = s[].upload(CastIn.f32_c(pn, 1, d), False)
-            self.head = self.embed if ph == 0 else s[].upload(CastIn.f32_c(ph, v, d), False)
+            # lane fixed15-decode: the one-float placeholder weights tensor of
+            # an adopted product (never read by its op)
+            var one: List[Float32] = [Float32(0)]
+            if self.head15:
+                var ctx15 = s[].ex.ctx.copy()
+                self.head = s[].upload(CastIn.f32_c(Int(one.unsafe_ptr()), 1, 1), False)
+                var hp = _upload_planes_one(ctx15, head15, 0, v, d, "head")
+                var head_w = s[].buffer(self.head)
+                linear15_adopt(ctx15, s[].steps, head_w, hp^)
+            else:
+                self.head = self.embed if ph == 0 else s[].upload(CastIn.f32_c(ph, v, d), False)
             for i in range(len(layers)):  # driver-loop: over the model's layers (one packed weight, state and words tensor each)
                 ref spec = layers[i]
                 var code = spec.code
                 var ints = spec.ints.copy()
-                var wsizes = block_weight_sizes(code, ints)
-                var wh = s[].upload_block(code, ints, BLOCK_PART_WEIGHTS, _pieces(spec.weights, wsizes, "weights"),
+                var wh: Int
+                if len(spec.planes) > 0:
+                    if code != OPS_ATTN_STEP:
+                        raise Error("CausalLM: only an attention layer computes under fixed15_v1")
+                    wh = s[].upload(CastIn.f32_c(Int(one.unsafe_ptr()), 1, 1), False)
+                    var ctx15 = s[].ex.ctx.copy()
+                    var w15 = _fixed15_layer(ctx15, ints, spec.weights, spec.planes)
+                    var lean = _lean_for_w(ints[4], w15)
+                    var layer_w = s[].buffer(wh)
+                    attn_step_adopt_source(s[].steps, w15^, layer_w, ints, lean)
+                else:
+                    var wsizes = block_weight_sizes(code, ints)
+                    wh = s[].upload_block(code, ints, BLOCK_PART_WEIGHTS, _pieces(spec.weights, wsizes, "weights"),
                                           List[Int]())
                 # The state tensor is allocated here and loaded at every read
                 # (`load_layer`); its initial contents are the device's zeros.
@@ -225,8 +312,7 @@ struct CausalLMProgram(Movable):
                 self.w.append(wh)
                 self.st.append(sh)
                 self.q.append(qh)
-                for k in range(len(spec.weights)):  # small-loop(spec.weights: a block's weight addresses): key words, no data
-                    self.key.append(spec.weights[k])
+            _ = len(one)  # keep-alive past the placeholder uploads
             var zeros = List[Int32](length=self.n_rows, fill=Int32(0))
             self.rows = s[].upload_ids(_ids_src(Int(zeros.unsafe_ptr()), 1, self.n_rows),
                                        ShapeN.matrix(1, self.n_rows))
@@ -354,7 +440,12 @@ struct CausalLMProgram(Movable):
         if self.norm != 0:
             var eps: List[Float32] = [self.eps]
             x = s[].op(OPS_RMS_NORM, [x, self.norm], List[Int](), eps)
-        var logits = s[].op(OPS_TRANSFORMER_LINEAR, [x, self.head], List[Int](), List[Float32]())
+        var logits: Int
+        if self.head15:
+            var nk: List[Int] = [self.v, self.d]
+            logits = s[].op(OPS_LINEAR15, [x, self.head], nk, List[Float32]())
+        else:
+            logits = s[].op(OPS_TRANSFORMER_LINEAR, [x, self.head], List[Int](), List[Float32]())
         return s[].op(OPS_LM_PICK, [logits, self.rows], self.pick_ints.copy(), self.pick_fs.copy())
 
     def set_policy(mut self, pad: Int, greedy: Bool, top_k: Int, seed: UInt64, temperature: Float32,
@@ -440,8 +531,12 @@ struct CausalLMProgram(Movable):
 # f: [eps, temperature, top_p, then each Mamba-2 layer's dt_lo, dt_hi]
 # a: [embedding, norm, head, ids (b, length) int32, tokens out (b * n) int32
 #     step-major, finished in/out (b) int32, lengths in/out (b) int32,
-#     eos ids..., then per layer: code, n_ints, ints..., n_weights, weights...,
+#     eos ids..., n_head15 (0 or 3), the fixed15_v1 head's hi, lo and
+#     exponent planes, then per layer: code, n_ints, ints..., n_weights,
+#     weights..., n_planes (0 or 22), parts mask and 21 plane addresses,
 #     n_state, state arrays..., n_words, words..., n_reports, reports...]
+#     (lane fixed15-decode: the two plane lists; a fixed15_v1 head sends a
+#     zero head address, a fixed15_v1 layer zero weight slots for its parts)
 # Returns [wrote, forwards, bad token (-1 none), alive, per layer its words...].
 comptime CAUSAL_PROGRAM_P = 13
 comptime CAUSAL_PROGRAM_A = 7
@@ -477,6 +572,7 @@ struct CausalProgramLayout(Movable):
     var words: List[List[Int]]
     var reports: List[List[Int]]
     var eos: List[Int]
+    var head15: List[Int]
     var key: List[Int]
 
     def __init__(out self, a: List[Int], p: List[Int], f: List[Float32]) raises:
@@ -494,11 +590,23 @@ struct CausalProgramLayout(Movable):
         var c = _Cursor(CAUSAL_PROGRAM_A)
         for _ in range(n_eos):  # small-loop(n_eos: the stream's end ids): argument words, no data
             self.eos.append(c.take(a))
+        # lane fixed15-decode: the fixed15_v1 head's plane triple (or none)
+        self.head15 = c.take_list(a)
+        if len(self.head15) != 0 and len(self.head15) != 3:
+            raise Error("CausalLM: decode program descriptor holds a head plane list of "
+                        + String(len(self.head15)) + " words")
+        for k in range(len(self.head15)):  # small-loop(head15: the head's plane triple): key words, no data
+            self.key.append(self.head15[k])
         var fat = 3
         for _ in range(n_layers):  # driver-loop: over the model's layers (descriptor parse)
             var code = c.take(a)
             var ints = c.take_list(a)
             var weights = c.take_list(a)
+            # lane fixed15-decode: [parts mask, 21 plane addresses], or none
+            var planes = c.take_list(a)
+            if len(planes) != 0 and len(planes) != 22:
+                raise Error("CausalLM: decode program descriptor holds a layer plane list of "
+                            + String(len(planes)) + " words")
             var fs = List[Float32]()
             if code == OPS_M2_STEP:
                 if fat + 2 > len(f):
@@ -510,7 +618,12 @@ struct CausalProgramLayout(Movable):
                 self.key.append(ints[k])
             for k in range(len(weights)):  # small-loop(weights: a layer's weight addresses): key words, no data
                 self.key.append(weights[k])
-            self.specs.append(CausalLMLayerSpec(code, ints^, fs^, weights^))
+            # the mask and the planes: a model whose mask or planes changed is
+            # a new program
+            self.key.append(len(planes))
+            for k in range(len(planes)):  # small-loop(planes: the mask and 21 plane addresses): key words, no data
+                self.key.append(planes[k])
+            self.specs.append(CausalLMLayerSpec(code, ints^, fs^, weights^, planes^))
             self.states.append(c.take_list(a))
             self.words.append(c.take_list(a))
             self.reports.append(c.take_list(a))
@@ -519,7 +632,13 @@ struct CausalProgramLayout(Movable):
 def causal_program_open(a: List[Int], p: List[Int], f: List[Float32]) raises -> CausalLMProgram:
     """A new decode program for the read descriptor's model."""
     var layout = CausalProgramLayout(a, p, f)
-    return CausalLMProgram(a[0], p[1], p[2], a[1], f[0], a[2], p[0], layout.specs, p[4])
+    var prog = CausalLMProgram(a[0], p[1], p[2], a[1], f[0], a[2], p[0], layout.specs, p[4], layout.head15)
+    # lane fixed15-decode: the key `causal_program_matches` compares (before,
+    # the constructor kept [embedding, norm, head, b, weights...] while the
+    # layout's key also holds each layer's integers, so no held program ever
+    # matched and every read rebuilt its program and uploaded every weight).
+    prog.key = layout.key.copy()
+    return prog^
 
 
 def causal_program_matches(prog: CausalLMProgram, a: List[Int], p: List[Int], f: List[Float32]) raises -> Bool:

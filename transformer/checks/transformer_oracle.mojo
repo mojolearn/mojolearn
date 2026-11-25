@@ -120,6 +120,11 @@ from gemm.host.neural_gemm import gemm_oracle, gemm_host_rows
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
 # lane/lowbit-blocks (2026-09-29): the profile's host answer, Lane C's.
 from gemm.host.gemm_int15_oracle import gemm_int15_from_f32_oracle
+# lane fixed15-parts-native (2026-11-25): the profile PER PART, the parts mask.
+from core.numeric_profile_parts import (
+    NP_PART_Q, NP_PART_K, NP_PART_V, NP_PART_O, NP_PART_GATE, NP_PART_UP,
+    NP_PART_DOWN, NP_PART_SCORES, np_part_on,
+)
 from std.time import perf_counter_ns
 
 from core.host_lanes import HostF32Ptr, host_block_timing_on, host_f32_uninit, host_tick
@@ -1658,7 +1663,7 @@ def transformer_block_oracle(
     mut cache: TransformerKVCache,
     rope: RopeTable,
     plant: ScorePlant,
-    int15: Bool = False,
+    parts: Int = 0,
 ) raises -> TransformerStages:
     """One `LlamaDecoderLayer.forward` (modeling_llama.py:295-324), stage by
     stage, through the seams.
@@ -1821,9 +1826,9 @@ def transformer_block_oracle(
     # must move `q_proj.out` and it exists because the op numbering is three
     # bare integers (gemm_oracle.mojo:194-198) and a transposed read of a
     # square-ish weight produces a plausible number.
-    st.q_proj_out = _oracle_product(st.norm1_out, w.w_q, m, qw, dm, int15)
-    st.k_proj_out = _oracle_product(st.norm1_out, w.w_k, m, kw, dm, int15)
-    st.v_proj_out = _oracle_product(st.norm1_out, w.w_v, m, kw, dm, int15)
+    st.q_proj_out = _oracle_product(st.norm1_out, w.w_q, m, qw, dm, np_part_on(parts, NP_PART_Q))
+    st.k_proj_out = _oracle_product(st.norm1_out, w.w_k, m, kw, dm, np_part_on(parts, NP_PART_K))
+    st.v_proj_out = _oracle_product(st.norm1_out, w.w_v, m, kw, dm, np_part_on(parts, NP_PART_V))
     host_tick(hton, htk, "fwd.qkv_proj")
     # DEVIATION 2934, `qkv_bias` (Qwen2's `attention_bias=True`): one plain
     # add per cell AFTER the GEMM, recorded INTO the `*_proj.out` stages so
@@ -1997,7 +2002,8 @@ def transformer_block_oracle(
     # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
     # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
-    var fused_attn = ATTN_HOST_FUSED and not int15 and not opts.has_softcap()
+    var scores15 = np_part_on(parts, NP_PART_SCORES)
+    var fused_attn = ATTN_HOST_FUSED and not scores15 and not opts.has_softcap()
     if fused_attn:
         _plant_refuse(len(scores), plant, PLANT_AT_SCORES)
         _plant_refuse(len(masked), plant, PLANT_AT_MASKED)
@@ -2127,7 +2133,7 @@ def transformer_block_oracle(
                     _gather(0)
                 else:
                     host_parallelize(_gather, g_tasks)
-                var cell = _oracle_product(qmat, kmat, l, s, hd, int15)
+                var cell = _oracle_product(qmat, kmat, l, s, hd, scores15)
                 var sbase = (bb * nh + h) * l * s
                 if not opts.has_softcap():
                     # the scale over query rows as spans (the same per-cell lane
@@ -2427,7 +2433,7 @@ def transformer_block_oracle(
     st.attn_ctx = actx^
 
     # ---- S5, o_proj (:280). The flatten before it is a COPY (:279). ------
-    st.o_proj_out = _oracle_product(st.attn_ctx, w.w_o, m, dm, qw, int15)
+    st.o_proj_out = _oracle_product(st.attn_ctx, w.w_o, m, dm, qw, np_part_on(parts, NP_PART_O))
     host_tick(hton, htk, "fwd.o_proj")
     # DEVIATION 2935, `o_bias`: one plain add per cell after the GEMM.
     if opts.o_bias:
@@ -2472,12 +2478,12 @@ def transformer_block_oracle(
     # the activation of `up_proj.out` and feeds `down_proj` directly.
     var gated = opts.gated()
     if gated:
-        st.gate_proj_out = _oracle_product(st.norm2_out, w.w_gate, m, inter, dm, int15)
+        st.gate_proj_out = _oracle_product(st.norm2_out, w.w_gate, m, inter, dm, np_part_on(parts, NP_PART_GATE))
         if opts.mlp_bias:
             var gb = st.gate_proj_out.copy()
             add_bias_into(gb, w.b_gate, m, inter)
             st.gate_proj_out = gb^
-    st.up_proj_out = _oracle_product(st.norm2_out, w.w_up, m, inter, dm, int15)
+    st.up_proj_out = _oracle_product(st.norm2_out, w.w_up, m, inter, dm, np_part_on(parts, NP_PART_UP))
     host_tick(hton, htk, "fwd.gate_up_proj")
     if opts.mlp_bias:
         var ub = st.up_proj_out.copy()
@@ -2515,9 +2521,9 @@ def transformer_block_oracle(
     if gated:
         st.mlp_gated = host_f32_uninit(m * inter)
         _span_mul_par(st.silu_out, st.up_proj_out, m * inter, st.mlp_gated)
-        st.down_proj_out = _oracle_product(st.mlp_gated, w.w_down, m, dm, inter, int15)
+        st.down_proj_out = _oracle_product(st.mlp_gated, w.w_down, m, dm, inter, np_part_on(parts, NP_PART_DOWN))
     else:
-        st.down_proj_out = _oracle_product(st.silu_out, w.w_down, m, dm, inter, int15)
+        st.down_proj_out = _oracle_product(st.silu_out, w.w_down, m, dm, inter, np_part_on(parts, NP_PART_DOWN))
     if opts.mlp_bias:
         var db = st.down_proj_out.copy()
         add_bias_into(db, w.b_down, m, dm)

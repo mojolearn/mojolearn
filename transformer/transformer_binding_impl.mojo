@@ -9,13 +9,25 @@ binding (thin-shell lane, 2026-10-21): same operations, same order.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from core.hostptr import f32_ptr, read_f32, copy_f32, i8_ptr, i32_ptr
+from core.hostptr import f32_ptr, read_f32, copy_f32
 # lane/lowbit-blocks (2026-09-29): the block under numeric_profile="fixed15_v1".
 from transformer.impl.llama.int15_block import (
     Int15Planes,
     LlamaInt15Stage,
-    LlamaInt15Weights,
     llama_int15_proj,
+)
+# lane fixed15-decode (2026-11-25): the caller-buffer uploads and the fixed15
+# block weights (planes per part, the profile constructor) live in one module
+# the CausalLM decode program shares; the names are the ones this file used.
+from transformer.fixed15_layer_weights import (
+    _optional_upload,
+    _upload_addr,
+    _tail_of,
+    _lean_for_w,
+    _upload_planes_one,
+    _int15_entry_parts,
+    _upload_planes,
+    _profile_weights,
 )
 from gemm.checks.gemm_int15 import (
     INT15_PIECE_SABOTAGE,
@@ -108,27 +120,6 @@ from std.math import isfinite
 from transformer.impl.llama.afn_apple_fast import afn_flash_call_count
 
 
-def _optional_upload(
-    ctx: DeviceContext, addr: Int, n: Int, on: Bool, name: String, what: String,
-) raises -> DeviceBuffer[DType.float32]:
-    """One optional tensor: uploaded at its length when its flag is on,
-    a one-element placeholder otherwise; a presence/flag mismatch is refused
-    by the tensor's name HERE, before any device work."""
-    if on:
-        if addr == 0:
-            raise Error(
-                what + ": " + name + " is required by its option and its"
-                " address is null"
-            )
-        return _upload_addr(ctx, addr, n)
-    if addr != 0:
-        raise Error(
-            what + ": " + name + " was passed but its option is off; pass"
-            " the option or drop the tensor"
-        )
-    return _llama_zeros[False](ctx, 1)
-
-
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
 
@@ -139,41 +130,6 @@ def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
 
 def _write_f32(addr: Int, values: List[Float32]) raises:
     copy_f32(values.unsafe_ptr(), _f32_ptr(addr), len(values))
-
-
-def _upload_addr[wait: Bool = True](
-    ctx: DeviceContext, addr: Int, n: Int
-) raises -> DeviceBuffer[DType.float32]:
-    """Copy a live caller buffer, synchronizing before its borrow ends.
-
-    IDENTICAL uses DeviceContext's ordinary host-pointer transfer directly.
-    Other modes retain pinned staging.
-    `wait=False` (lane/neural-apple, 2026-09-28; the direct path only) leaves
-    the copy in flight: the caller's array outlives the call, every reader
-    is enqueued after it on the same in-order `ctx`, and the caller waits
-    before it returns.
-    """
-    var p = _f32_ptr(addr)
-    var n_buf = n
-    if n_buf < 1:
-        n_buf = 1
-    var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
-    # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER (DELETE-OLD-PATH: no A/B recorded) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
-    # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER.patch
-    comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL:
-        if n > 0:
-            ctx.enqueue_copy(dst_buf=dev, src_ptr=p)
-            comptime if wait:
-                ctx.synchronize()
-            return dev^
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
-    ctx.synchronize()
-    if n > 0:
-        unsafe_memcpy(dest=host.unsafe_ptr(), src=p, count=n)
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return dev^
 
 
 def _download_addr[wait: Bool = True](
@@ -331,33 +287,12 @@ def _load_transformer_weights[wait: Bool = True](
     )
 
 
-def _tail_of(a: List[Int], base: Int) -> List[Int]:
-    """The eleven optional addresses out of a base + tail list (zeros when
-    the list is the base alone)."""
-    var t = List[Int]()
-    for i in range(BLOCK_OPTION_ADDRS):
-        if base + i < len(a):
-            t.append(a[base + i])
-        else:
-            t.append(0)
-    return t^
-
-
 def _check_base_addrs(a: List[Int], slots: List[Int], what: String) raises:
     """Null refusals for the base slots a caller must fill (the gate slot is
     checked by `_load_transformer_weights` against the MLP form)."""
     for i in range(len(slots)):  # small-loop(slots: a handful of base address slots): null checks on addresses, not data
         if a[slots[i]] == 0:
             raise Error(what + ": null buffer address at slot " + String(slots[i]))
-
-
-def _lean_for_w(hd: Int, w: LlamaDeviceWeights) -> Bool:
-    """`_lean_for` for weights that may carry the profile's planes: never
-    lean under `fixed15_v1`, as `_transformer_run_session_int15` builds its
-    stages (lane/lowbit-default: the resident sessions under the profile)."""
-    if w.int15:
-        return False
-    return _lean_for(hd, w.opts)
 
 
 # TOMBSTONE: MOJOLEARN_AFN_ATTN_ARENA (removed: dead; no caller built TransformerWorkspace after lanes x45c and x6) with TransformerWorkspace and _workspace_key deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
@@ -622,14 +557,19 @@ def _transformer_run_session_backward(
 #
 # `transformer_session_forward_int15(session, addrs, params)`. The float32
 # entries above keep their lists word for word; this one is separate.
-#   addrs, exactly 45: the 13 of `transformer_forward` with the seven
-#     projection slots (3..9) ZERO (never read), then the 11-address options
-#     tail (always sent), then 21 plane addresses, three per projection in
-#     the order q, k, v, o, gate, up, down: `hi` (int8, rows x cols), `lo`
-#     (int8, rows x cols), `exponents` (int32, rows). An ungated MLP sends
-#     zeros for gate's three.
-#   params, exactly 27: the 10 of `transformer_forward`, then the 17-int
-#     options tail (always sent).
+#   addrs, exactly 45: the 13 of `transformer_forward`, then the 11-address
+#     options tail (always sent), then 21 plane addresses, three per
+#     projection in the order q, k, v, o, gate, up, down: `hi` (int8, rows x
+#     cols), `lo` (int8, rows x cols), `exponents` (int32, rows).
+#   params, exactly 28: the 10 of `transformer_forward`, then the 17-int
+#     options tail (always sent), then the block's PARTS MASK
+#     (core/numeric_profile_parts.mojo; lane fixed15-parts-native,
+#     2026-11-25), which must set a part of the block.
+# PER PART (`_int15_entry_parts`): a projection whose bit is set sends its
+# plane triple and a ZERO float32 slot (3..9); one whose bit is clear sends
+# its float32 weight in its slot and a zero triple, and computes on
+# gemm.fp32.v1. The opposite of either is refused by the projection's name.
+# An ungated MLP sends zeros for gate's slot and its three.
 # The planes are uploaded on the session's first call and kept (the session
 # struct's docstring says why that is sound here). Norms, biases, the cache
 # and x are read per call as in the float32 entries.
@@ -637,69 +577,13 @@ def _transformer_run_session_backward(
 
 comptime INT15_ENTRY_ADDRS = 13 + BLOCK_OPTION_ADDRS + 21
 
-comptime INT15_ENTRY_PARAMS = 10 + BLOCK_OPTION_PARAMS
-
-
-def _upload_i8(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int8]:
-    var dev = ctx.enqueue_create_buffer[DType.int8](n)
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=i8_ptr(addr))
-    return dev^
-
-
-def _upload_i32(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
-    var dev = ctx.enqueue_create_buffer[DType.int32](n)
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=i32_ptr(addr))
-    return dev^
-
-
-def _upload_planes_one(
-    ctx: DeviceContext, a: List[Int], at: Int, rows: Int, cols: Int, name: String
-) raises -> Int15Planes:
-    if a[at] == 0 or a[at + 1] == 0 or a[at + 2] == 0:
-        raise Error("transformer_session_forward_int15: " + name + " planes have a null address")
-    return Int15Planes(
-        _upload_i8(ctx, a[at], rows * cols), _upload_i8(ctx, a[at + 1], rows * cols),
-        _upload_i32(ctx, a[at + 2], rows), rows, cols,
-    )
-
-
-def _upload_planes(
-    ctx: DeviceContext, dims: LlamaDims, opts: BlockOptions, a: List[Int], base: Int
-) raises -> LlamaInt15Weights:
-    var dm = dims.d_model
-    var qw = dims.q_width()
-    var kw = dims.kv_width()
-    var it = dims.intermediate
-    var gated = opts.gated()
-    var gate: Int15Planes
-    if gated:
-        gate = _upload_planes_one(ctx, a, base + 12, it, dm, "gate_proj")
-    else:
-        if a[base + 12] != 0 or a[base + 13] != 0 or a[base + 14] != 0:
-            raise Error("transformer_session_forward_int15: gate_proj planes were passed but the MLP is ungated")
-        gate = Int15Planes(
-            ctx.enqueue_create_buffer[DType.int8](1), ctx.enqueue_create_buffer[DType.int8](1),
-            ctx.enqueue_create_buffer[DType.int32](1), 1, 1,
-        )
-    var out = LlamaInt15Weights(
-        _upload_planes_one(ctx, a, base + 0, qw, dm, "q_proj"),
-        _upload_planes_one(ctx, a, base + 3, kw, dm, "k_proj"),
-        _upload_planes_one(ctx, a, base + 6, kw, dm, "v_proj"),
-        _upload_planes_one(ctx, a, base + 9, dm, qw, "o_proj"),
-        gate^,
-        _upload_planes_one(ctx, a, base + 15, it, dm, "up_proj"),
-        _upload_planes_one(ctx, a, base + 18, dm, it, "down_proj"),
-        gated,
-    )
-    ctx.synchronize()
-    out.check_shapes(dm, qw, kw, it)
-    return out^
+comptime INT15_ENTRY_PARAMS = 10 + BLOCK_OPTION_PARAMS + 1
 
 
 def _transformer_run_session_int15(
     mut session: TransformerSession, a: List[Int], b: Int, l: Int,
     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
-    smax: Int, s0: Int, window: Int, opts: BlockOptions,
+    smax: Int, s0: Int, window: Int, opts: BlockOptions, parts_word: Int,
 ) raises -> Int:
     """`TransformerBlock.forward` under numeric_profile="fixed15_v1" on the
     attention step op (lane x45c; x4b moved the decode sessions): the
@@ -716,19 +600,18 @@ def _transformer_run_session_int15(
             + String(s0) + "; the two sides of this boundary disagree about the state")
     if window < 0:
         raise Error("transformer: window must be >= 0 (0 = full causal)")
-    for i in range(3, 10):  # small-loop(7: the float32 projection slots): address checks, no data
-        if a[i] != 0:
-            raise Error(
-                "transformer_session_forward_int15: float32 projection slot "
-                + String(i) + " must be 0 under the profile (the planes are the weights)"
-            )
+    var pbase = 13 + BLOCK_OPTION_ADDRS
+    var parts = _int15_entry_parts(a, pbase, parts_word, opts.gated(), String("transformer_session_forward_int15"))
     if not session.ctx:
         session.ctx = neural_ctx[_NEURAL_CTX]()
         session.contexts += 1
     ref ctx = session.ctx.value()
-    var pbase = 13 + BLOCK_OPTION_ADDRS
     var t = _tail_of(a, 13)
-    var addrs: List[Int] = [b, smax, window, dm, nh, nkv, hd, it, Int(opts.gated()), a[1], a[2]]
+    # The key: the shape, the mask, every weight and plane address (the
+    # float32 slots of the fp32 parts included).
+    var addrs: List[Int] = [b, smax, window, dm, nh, nkv, hd, it, Int(opts.gated()), parts, a[1], a[2]]
+    for i in range(3, 10):  # small-loop(7: the float32 projection slots): key words, no data
+        addrs.append(a[i])
     for i in range(len(t)):  # small-loop(t: the 11 optional weight addresses): key words, no data
         addrs.append(t[i])
     for i in range(21):  # small-loop(21: the seven plane triples): key words, no data
@@ -740,24 +623,8 @@ def _transformer_run_session_int15(
         session.key15 = WeightKey()
         var key = WeightKey.take(addrs)
         var what = String("transformer_session_forward_int15")
-        var planes = _upload_planes(ctx, dims, opts, a, pbase)
-        var w = LlamaDeviceWeights(
-            ctx, dims, opts,
-            _upload_addr(ctx, a[1], dm),
-            _upload_addr(ctx, a[2], dm),
-            planes^,
-            _optional_upload(ctx, t[0], dims.q_width(), opts.qkv_bias, "q_proj.bias", what),
-            _optional_upload(ctx, t[1], dims.kv_width(), opts.qkv_bias, "k_proj.bias", what),
-            _optional_upload(ctx, t[2], dims.kv_width(), opts.qkv_bias, "v_proj.bias", what),
-            _optional_upload(ctx, t[3], dm, opts.o_bias, "o_proj.bias", what),
-            _optional_upload(ctx, t[4], dm, opts.norm_bias, "input_layernorm.bias", what),
-            _optional_upload(ctx, t[5], dm, opts.norm_bias, "post_attention_layernorm.bias", what),
-            _optional_upload(ctx, t[6], it, opts.mlp_bias, "up_proj.bias", what),
-            _optional_upload(ctx, t[7], dm, opts.mlp_bias, "down_proj.bias", what),
-            _optional_upload(ctx, t[8], it, opts.has_gate_bias(), "gate_proj.bias", what),
-            _optional_upload(ctx, t[9], hd, opts.qk_norm, "q_norm.weight", what),
-            _optional_upload(ctx, t[10], hd, opts.qk_norm, "k_norm.weight", what),
-        )
+        var planes = _upload_planes(ctx, dims, opts, a, pbase, parts)
+        var w = _profile_weights(ctx, dims, opts, a, planes^, what)
         var lean = _lean_for_w(hd, w)
         var ints = attn_step_ints(b, dm, nh, nkv, hd, it, smax, window, opts)
         var words = List[Int]()
@@ -1068,7 +935,7 @@ def _session_open_run(
 
 def _session_open_run_int15(
     mut s: TransformerDecodeSession, a: List[Int], b: Int, dm: Int, nh: Int, nkv: Int,
-    hd: Int, it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions,
+    hd: Int, it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions, parts_word: Int,
 ) raises -> Int:
     """`_session_open_run` under numeric_profile="fixed15_v1"
     (lane/lowbit-default): the weights are the profile constructor's, with
@@ -1086,34 +953,13 @@ def _session_open_run_int15(
             + "], got " + String(s0))
     if window < 0:
         raise Error("transformer decode session: window must be >= 0 (0 = full causal)")
-    for i in range(3, 10):
-        if a[i] != 0:
-            raise Error(
-                "transformer_decode_session_open_int15: float32 projection slot "
-                + String(i) + " must be 0 under the profile (the planes are the weights)"
-            )
+    var what = String("transformer_decode_session_open_int15")
+    var pbase = 13 + BLOCK_OPTION_ADDRS
+    var parts = _int15_entry_parts(a, pbase, parts_word, opts.gated(), what)
     s.ctx = neural_ctx[_NEURAL_CTX]()
     ref ctx = s.ctx.value()
-    var what = String("transformer_decode_session_open_int15")
-    var t = _tail_of(a, 13)
-    var planes = _upload_planes(ctx, dims, opts, a, 13 + BLOCK_OPTION_ADDRS)
-    var w = LlamaDeviceWeights(
-        ctx, dims, opts,
-        _upload_addr(ctx, a[1], dm),
-        _upload_addr(ctx, a[2], dm),
-        planes^,
-        _optional_upload(ctx, t[0], dims.q_width(), opts.qkv_bias, "q_proj.bias", what),
-        _optional_upload(ctx, t[1], dims.kv_width(), opts.qkv_bias, "k_proj.bias", what),
-        _optional_upload(ctx, t[2], dims.kv_width(), opts.qkv_bias, "v_proj.bias", what),
-        _optional_upload(ctx, t[3], dm, opts.o_bias, "o_proj.bias", what),
-        _optional_upload(ctx, t[4], dm, opts.norm_bias, "input_layernorm.bias", what),
-        _optional_upload(ctx, t[5], dm, opts.norm_bias, "post_attention_layernorm.bias", what),
-        _optional_upload(ctx, t[6], it, opts.mlp_bias, "up_proj.bias", what),
-        _optional_upload(ctx, t[7], dm, opts.mlp_bias, "down_proj.bias", what),
-        _optional_upload(ctx, t[8], it, opts.has_gate_bias(), "gate_proj.bias", what),
-        _optional_upload(ctx, t[9], hd, opts.qk_norm, "q_norm.weight", what),
-        _optional_upload(ctx, t[10], hd, opts.qk_norm, "k_norm.weight", what),
-    )
+    var planes = _upload_planes(ctx, dims, opts, a, pbase, parts)
+    var w = _profile_weights(ctx, dims, opts, a, planes^, what)
     var lean = _lean_for_w(hd, w)
     var ints = attn_step_ints(b, dm, nh, nkv, hd, it, smax, window, opts)
     var words = List[Int]()

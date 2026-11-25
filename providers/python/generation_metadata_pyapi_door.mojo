@@ -26,7 +26,9 @@ from bindings.causal_model_config_door import model_dict, model_plain, model_str
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.generation_metadata import GenerationLayerWords
-from core.causal_lm_entry_table import CausalEntryKey, causal_ref, CAUSAL_TABLE_BLOCK, CAUSAL_TABLE_MAMBA
+from core.causal_lm_entry_table import CausalEntryKey, causal_ref, CAUSAL_TABLE_BLOCK, CAUSAL_TABLE_MAMBA, CAUSAL_TABLE_LINALG
+from core.entry_table import EntryRef
+from core.numeric_profile_parts_sabotage import NP_PARTS_SABOTAGE_PROGRAM_IGNORE_HOST
 from core.causal_layer_run import (
     CausalLayerRoute, causal_layer_kind, CAUSAL_LAYER_TRANSFORMER, CAUSAL_LAYER_MAMBA1,
 )
@@ -215,11 +217,37 @@ struct GenerationLayerSnapshot(Copyable, Movable):
     var packed: GenerationWeightSnapshot
     var profile: PythonObject
     var profile_changed: Bool
+    var parts: Int
+    """lane fixed15-parts-native (2026-11-25): the block's parts mask
+    (`_np_parts`, resolved at construction), 0 for fp32_v1 and every Mamba
+    layer."""
+    var fixed15: Bool
+    """The layer runs a fixed15 block entry (host op 34 / device op 35)."""
+    var planes: Bool
+    """The layer runs on its planes (device op 35): `fixed15` on a route
+    that has the planes entry."""
 
     def __init__(out self, block: PythonObject, kind: String, planes: Bool) raises:
+        # `planes`: this route runs the planes entry (a device image with
+        # `forward15`); whether THIS layer does is its own mask's.
         model_dict(block)
         self.block = block
-        self.weights = GenerationWeightSnapshot(block["_w"], 2 if planes else -1)
+        self.parts = 0
+        if kind == "transformer":
+            self.parts = model_integer(py_get(block, "_np_parts", PythonObject(0)))
+        self.fixed15 = self.parts != 0
+        self.planes = planes and self.fixed15
+        if self.planes:
+            # Per part: only a projection with planes leaves its float32 slot 0.
+            var values = Python.list(block["_w"])
+            var triples = block["_int15"]
+            model_sequence(triples)
+            for j in range(len(triples)):  # driver-loop: over the seven projection slots
+                if triples[j] is not None:
+                    values[j + 2] = PythonObject(None)
+            self.weights = GenerationWeightSnapshot(values)
+        else:
+            self.weights = GenerationWeightSnapshot(block["_w"])
         self.profile = PythonObject(None)
         self.profile_changed = False
         var parameters = List[Int]()
@@ -239,7 +267,7 @@ struct GenerationLayerSnapshot(Copyable, Movable):
             for j in range(len(tail)):  # driver-loop: admitted immutable transformer option words
                 parameters.append(model_integer(tail[j]))
             optional = block["_wopt"]
-            if planes:
+            if self.planes:
                 var triples = block["_int15"]
                 model_sequence(triples)
                 for j in range(len(triples)):  # driver-loop: packed weight plane registry
@@ -288,6 +316,10 @@ struct GenerationHeadSnapshot(Copyable, Movable):
     var packed: Bool
     var norm_eps: Float64
     var weights: GenerationWeightSnapshot
+    # Lane fixed15-decode (2026-11-25): the linalg image's entry a packed
+    # head runs through (its quantizer and planes product), resolved once
+    # with the snapshot; None for a float32 head.
+    var linalg: Optional[EntryRef]
 
     def __init__(out self, model: PythonObject, entries: PythonObject, width: Int, vocab: Int,
                  normalize: Bool, packed: Bool) raises:
@@ -310,6 +342,10 @@ struct GenerationHeadSnapshot(Copyable, Movable):
             for k in range(3):  # small-loop(int15 head plane triple)
                 _ = py_call(values.append, planes[k])
         self.weights = GenerationWeightSnapshot(values)
+        self.linalg = None
+        if self.packed:
+            self.linalg = Optional(causal_ref[CAUSAL_TABLE_LINALG](
+                CausalEntryKey(Int(py=entries["entry_mode"]), Int(py=entries["entry_vendor"]))))
 
 
 struct GenerationCallLayers(Copyable, Movable):
@@ -351,6 +387,7 @@ struct GenerationOperationSnapshot(Copyable, Movable):
     var width: Int
     var vocab: Int
     var planes: Bool
+    var fixed15: Bool
     var embedding: GenerationWeightSnapshot
     var head: GenerationHeadSnapshot
     var layers: List[GenerationLayerSnapshot]
@@ -373,10 +410,17 @@ struct GenerationOperationSnapshot(Copyable, Movable):
         self.vocab = model_integer(model_fields["vocab_size"])
         self.embedding = GenerationWeightSnapshot(Python.list(model_fields["_embed"]))
         self.head = GenerationHeadSnapshot(model, entries, self.width, self.vocab, True, True)
-        self.planes = self.head.packed and py_contains(entries, "forward15")
+        # lane fixed15-parts-native: per layer (its own parts mask); `planes`
+        # is whether any layer runs on planes, `fixed15` whether any layer
+        # runs a fixed15 block entry at all (host or device).
+        var route_planes = py_contains(entries, "forward15")
+        self.planes = False
+        self.fixed15 = False
         self.layers = List[GenerationLayerSnapshot]()
         for i in range(len(blocks)):  # driver-loop: capture stable layer metadata once per operation
-            self.layers.append(GenerationLayerSnapshot(blocks[i], self.kind, self.planes))
+            self.layers.append(GenerationLayerSnapshot(blocks[i], self.kind, route_planes))
+            self.planes = self.planes or self.layers[i].planes
+            self.fixed15 = self.fixed15 or self.layers[i].fixed15
         self.layer_route = CausalLayerRoute()
 
     def bind_layer_entry(mut self) raises:
@@ -574,8 +618,13 @@ struct GenerationEngineAdmission(Movable):
         self.state_fields = Python.tuple("_resident_session", "arithmetic_profile", "cached_tokens", "max_tokens", "k_cache", "v_cache", "conv_window", "h", "profile_id", "_nn34_usable", "absolute_position", "buffer_xbc", "buffer_dtraw", "buffered_tokens")
         var entries = snapshot.entries
         self.provider = py_get(entries, "native_block_operations" if snapshot.kind == "transformer" else "native_mamba")
-        if snapshot.head.packed or snapshot.planes or self.provider is None or snapshot.native is None:
-            raise Error("CausalLM: native generation engine requires admitted nonresident fp32 model descriptors")
+        # Lane fixed15-decode (2026-11-25): fixed15_v1 layers and heads are
+        # admitted (any parts mask): a layer runs its fixed15 block entry
+        # (`admit_layer`), the head the linalg calls of the per-layer route
+        # (the caller, after `forward_to`). Before, the engine refused them and
+        # every fixed15_v1 forward took the slower per-layer route.
+        if self.provider is None or snapshot.native is None:
+            raise Error("CausalLM: native generation engine requires admitted nonresident model descriptors")
         self.owners.append(AdmittedNativeExecution(snapshot.native, PythonObject(None), 0, -1, -1, PythonObject(None), 0))
         self.native = NativeGenerationModel(self.owners[0].endpoint(), snapshot.embedding.addresses[0],
             snapshot.head.weights.addresses[0], snapshot.head.weights.addresses[1], snapshot.head.norm_eps,
@@ -592,6 +641,8 @@ struct GenerationEngineAdmission(Movable):
                 self.native.head_refresh, self.native.head_targets)
             self.native.norm = head[0]
             self.native.head = head[1]
+            if snapshot.head.packed:
+                self.native.head15 = [head[2], head[3], head[4]]
         except problem:
             self.native.head_failure = String(problem)
         self.layer_states = self.state["layers"]
@@ -647,6 +698,22 @@ struct GenerationEngineAdmission(Movable):
                     native_layer.refresh_layouts, native_layer.refresh_addresses)
                 var optional = _generation_engine_weights(layer.optional, self.storage,
                     native_layer.refresh_layouts, native_layer.refresh_addresses)
+                # lane fixed15-decode: the layer's own mask decides its entry,
+                # as on the per-layer route (`_run_snapshot`): host op 34 for a
+                # fixed15 layer (the host takes the mask), device op 35 on its
+                # planes, the float32 entries otherwise.
+                var op15 = layer.fixed15 if cpu else layer.planes
+                if layer.fixed15 and not cpu and not layer.planes:
+                    raise Error("CausalLM: a fixed15_v1 layer on the GPU needs the planes entry")
+                comptime if NP_PARTS_SABOTAGE_PROGRAM_IGNORE_HOST:
+                    # SABOTAGE (lane fixed15-decode): the host generation
+                    # ignores the mask and runs every layer on float32.
+                    if cpu:
+                        op15 = False
+                var packed = List[Int]()
+                if op15 and not cpu:
+                    packed = _generation_engine_weights(layer.packed, self.storage,
+                        native_layer.refresh_layouts, native_layer.refresh_addresses)
                 var key_address = 0
                 var value_address = 0
                 if owned:
@@ -686,9 +753,13 @@ struct GenerationEngineAdmission(Movable):
                     -1 if cpu else 0, -1 if cpu else 1, lock_owner, lock.handle))
                 native_layer.endpoint = self.owners[len(self.owners) - 1].endpoint()
                 var addresses = generation_transformer_addresses(0, weights,
-                    key_address, value_address, 0, optional, [])
+                    key_address, value_address, 0, optional, packed)
                 native_layer.addresses = addresses^
-                native_layer.parameters = layer.words.transformer_params(batch, self.length, capacity, cached)
+                if op15:
+                    native_layer.operation = 34 if cpu else 35
+                    native_layer.parameters = layer.words.transformer_params_parts(batch, self.length, capacity, cached, layer.parts)
+                else:
+                    native_layer.parameters = layer.words.transformer_params(batch, self.length, capacity, cached)
             else:
                 var weights = _generation_engine_weights(layer.weights, self.storage,
                     native_layer.refresh_layouts, native_layer.refresh_addresses)

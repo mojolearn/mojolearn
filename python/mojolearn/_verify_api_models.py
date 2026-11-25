@@ -40,6 +40,8 @@ def model_checks(recorder,public,methods):
                 m=models.Checkpoint.open(tmp) if name=='Checkpoint' else models.SafetensorsFile(str(Path(tmp)/'model.safetensors'))
                 assert 'model.embed_tokens.weight' in m and 'missing_verifier_tensor' not in m
                 return {'present':True,'missing':False}
+            # No numeric profile named: the inference default, fixed15_v1 since 2026-11-25
+            # (docs/plans/NUMERIC_PROFILE_PARTS.md); these endpoints' bits changed then, RECORD OWED.
             if name=='ParallelCausalLM':
                 m=models.ParallelCausalLM.load(tmp,layer_devices=(0,))
             else:m=models.CausalLM.load(tmp)

@@ -2,13 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`numeric_profile=`: which arithmetic a model's matrix products run.
 
-    mojolearn.numeric_profile()                          # "fp32_v1"
-    mojolearn.set_numeric_profile("fixed15_v1")          # explicit inference opt-in
+    mojolearn.numeric_profile()                          # "fixed15_v1"
+    mojolearn.set_numeric_profile("fp32_v1")             # the inference opt-out
     mojolearn.models.CausalLM.load(path, numeric_profile="fp32_v1")
+    mojolearn.models.CausalLM.load(path, numeric_profile={"preset": "fixed15_v1", "lm_head": "fp32_v1"})
     mojolearn.numeric_profiles()                         # every registered row
 
-    numeric_profile="fixed15_v1"    optional transformer inference arithmetic
-    numeric_profile="fp32_v1"       the default: every family, every trainer
+    numeric_profile="fixed15_v1"    the transformer models' inference default
+    numeric_profile="fp32_v1"       the opt-out; every other family, every trainer
 
 ITS OWN PARAMETER, NOT A VALUE OF `numeric_mode`. `numeric_mode` is the
 PROMISE (identical, fast). `numeric_profile` is the NUMBER
@@ -16,28 +17,46 @@ FORMAT the matrix products compute in. They are independent: a profile is
 bitwise identical across vendors under `numeric_mode="identical"` exactly
 as `fp32_v1` is, and picking one never changes the mode.
 
-OPT IN (since 2026-09-29). Without an
-explicit keyword, environment or process-level opt-in, every family uses
-fp32_v1. A call that names no profile
-gets:
+THE DEFAULT (Andrew, 2026-11-25: fixed15_v1 is the default inference
+arithmetic of the transformer models on every vendor). Decided on the
+measurements in the `fixed15_v1` row: held-out perplexity of SmolLM2-360M
+changed by +0.0006 % (enwik8) and +0.0033 % (pile_github) against
+`fp32_v1`, and `MEASURED` times it at 0.34 to 0.68 of `fp32_v1`'s on NVIDIA
+and 0.85 to 0.89 on AMD. On Apple it takes 3.40 to 3.65 times as long;
+that cost is accepted, and the `NumericProfileSpeedWarning` still says so
+there. A call that names no profile gets:
   - INFERENCE, in a family the default reaches (`default_for`: the
     transformer models of `mojolearn.models`, `CausalLM` and
-    `ParallelCausalLM`): the process inference default, initially `fp32_v1`.
+    `ParallelCausalLM`): the process inference default, `fixed15_v1`
+    unless `set_numeric_profile` or `MOJOLEARN_NUMERIC_PROFILE` set
+    another.
   - INFERENCE, in any other family (the Mamba models, a bare
     `TransformerBlock`, which is also the trainers' building block):
-    `BASELINE`, `fp32_v1`, exactly as before, and the object's
-    `numeric_profile` attribute says `fp32_v1`. Never refused, never
-    relabelled.
+    `BASELINE`, `fp32_v1`, and the object's `numeric_profile` attribute
+    says `fp32_v1`. Never refused, never relabelled.
   - TRAINING: `TRAINING_DEFAULT`, `fp32_v1`, whatever the inference
     default is.
 A caller who NAMES a profile gets that profile or a refusal by name: a
 family the profile does not compute (`computes`) and a use the row has not
 passed are refused, never widened. `fp32_v1` is the arithmetic every
-identity record before 2026-09-29 was produced under; the old behaviour
-comes back bit for bit with `numeric_profile="fp32_v1"`,
-`set_numeric_profile("fp32_v1")` or `MOJOLEARN_NUMERIC_PROFILE=fp32_v1`
-(which set the INFERENCE default; the training default is `fp32_v1`
-already).
+identity record before 2026-09-29 was produced under; it comes back bit
+for bit with `numeric_profile="fp32_v1"`, `set_numeric_profile("fp32_v1")`
+or `MOJOLEARN_NUMERIC_PROFILE=fp32_v1` (which set the INFERENCE default;
+the training default is `fp32_v1` already).
+
+EACH PART CONFIGURABLE (Andrew, 2026-11-25; docs/plans/NUMERIC_PROFILE_PARTS.md).
+A spec is a profile name (a PRESET) or an exact dict `{"preset": name,
+part: name, ...}` that overrides single products. `PARTS` names the ten
+products in the order of `core/numeric_profile_parts.mojo`; `PART_FORMATS`
+says which profiles each part can compute under (`attn_context` is
+`fp32_v1` only); `FAMILY_PARTS` says which parts a family has (a bare
+`TransformerBlock` has no `lm_head`). An unknown part, a part the family
+does not have, a format the part cannot use, an unregistered name, a
+missing "preset" or a non-str key or value is refused by name; a trainer is
+refused a dict. `resolve` returns the CANONICAL form: overrides equal to
+the preset's own format are dropped, and with none left the preset name.
+The canonical form is what a model reports and what a checkpoint state
+stores; the native plan keeps only the parts mask it resolves to, once.
 
 A NAME IS ONE ARITHMETIC, FOREVER. Every name carries its version. A changed
 arithmetic is a new version (`_v2`), never a new meaning of an old name, and
@@ -83,8 +102,8 @@ A CHECKPOINT CARRIES ITS PROFILE. `state_field` is what a writer stores;
 `adopt_saved` and `check_saved` are what a reader calls. A state with no
 field was written under `fp32_v1` (every state before this module), and a
 writer under `fp32_v1` still stores no field, so the bytes of an `fp32_v1`
-checkpoint do not change; a state written under the opt-in `fixed15_v1`
-carries the field. A reader whose caller named no profile ADOPTS
+checkpoint do not change; a state written under `fixed15_v1` or a
+per-part dict carries the field (the canonical form). A reader whose caller named no profile ADOPTS
 the state's own (`adopt_saved`); one that named another is refused by name.
 A model's weight file (a Hugging Face checkpoint) is not such a state: it
 holds weights, not the results of an arithmetic, and carries no field.
@@ -106,14 +125,16 @@ __all__ = ["DEFAULT", "ENV", "PROFILES", "REJECTED", "MEASURED",
            "set_default_profile", "resolve", "profiles", "measured",
            "state_field", "check_saved", "adopt_saved", "STATE_KEY", "USES",
            "require_training", "BASELINE", "TRAINING_DEFAULT", "FAMILIES",
-           "computes", "default_reaches"]
+           "computes", "default_reaches", "PARTS", "PART_FORMATS",
+           "FAMILY_PARTS", "parts"]
 
 #: The arithmetic every family computes under and every identity record
 #: before 2026-09-29 was produced under.
 BASELINE = "fp32_v1"
-#: The INFERENCE default, restored to fp32_v1 by user request. It reaches only the
-#: families its row names in `default_for`.
-DEFAULT = "fp32_v1"
+#: The INFERENCE default (Andrew, 2026-11-25; module docstring, THE DEFAULT).
+#: It reaches only the families its row names in `default_for`; `fp32_v1` is
+#: the opt-out.
+DEFAULT = "fixed15_v1"
 #: The TRAINING default. No other profile has passed its training gates.
 TRAINING_DEFAULT = "fp32_v1"
 #: The families a caller passes to `resolve`:
@@ -123,6 +144,29 @@ TRAINING_DEFAULT = "fp32_v1"
 FAMILIES = ("transformer", "mamba1", "mamba2", "transformer_block")
 ENV = "MOJOLEARN_NUMERIC_PROFILE"
 STATE_KEY = "numeric_profile"
+
+#: The parts of a spec, the products of a Llama-shaped model, in the bit
+#: order of `core/numeric_profile_parts.mojo` (NP_PART_*).
+PARTS = ("q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj",
+         "lm_head", "attn_scores", "attn_context")
+#: part -> the profiles it can compute under. attn_context (P.V) is fp32_v1
+#: only: under fixed15_v1's per-row rule its scales would depend on the key
+#: span, so decode would not equal prefill.
+PART_FORMATS = {
+    "q_proj": ("fp32_v1", "fixed15_v1"), "k_proj": ("fp32_v1", "fixed15_v1"),
+    "v_proj": ("fp32_v1", "fixed15_v1"), "o_proj": ("fp32_v1", "fixed15_v1"),
+    "gate_proj": ("fp32_v1", "fixed15_v1"), "up_proj": ("fp32_v1", "fixed15_v1"),
+    "down_proj": ("fp32_v1", "fixed15_v1"), "lm_head": ("fp32_v1", "fixed15_v1"),
+    "attn_scores": ("fp32_v1", "fixed15_v1"), "attn_context": ("fp32_v1",),
+}
+#: family -> the parts it has. A family with none takes no part overrides.
+FAMILY_PARTS = {
+    "transformer": PARTS,
+    "transformer_block": ("q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj",
+                          "down_proj", "attn_scores", "attn_context"),
+    "mamba1": (),
+    "mamba2": (),
+}
 
 #: name -> row.
 #:   products   product family -> the GEMM profile it runs (the contract name)
@@ -165,7 +209,7 @@ PROFILES = {
                         "and -0.0010% to +0.0076%); training and a task evaluation are owed",
         "note": "15-bit integer codes with one power-of-two scale per row, exact integer "
                 "sums (the projections, the head and Q.K^T; P.V stays on fp32.v1); the "
-                "opt-in inference profile of the transformer models; the same bits "
+                "default inference profile of the transformer models; the same bits "
                 "on NVIDIA, AMD, Apple and the CPU",
     },
 }
@@ -227,8 +271,11 @@ _CONTEXT = None
 
 
 def canonical(name, what="numeric_profile"):
-    """The name of a registered profile. A rejected arithmetic is refused
-    with its measured reason, anything else with the registered names."""
+    """The canonical form of a spec: the name of a registered profile, or
+    for a per-part dict the preset name when no override differs from the
+    preset's own format, else a dict with "preset" first and the differing
+    overrides in `PARTS` order. A rejected arithmetic is refused with its
+    measured reason, anything else with the registered names."""
     return _CALL("canonical", (name, what), _CONTEXT)
 
 
@@ -294,11 +341,12 @@ def default_profile(use="inference"):
     A numeric profile is the number format the matrix products of the neural
     models compute in. It is independent of the numeric mode: under
     ``numeric_mode="identical"`` every profile gives the same bits across
-    vendors. The default is ``"fp32_v1"`` for inference and training unless the
-    ``MOJOLEARN_NUMERIC_PROFILE`` environment variable or
-    :func:`mojolearn.set_numeric_profile` sets another inference default. The
-    inference default applies only to the families it covers (the transformer
-    models of ``mojolearn.models``); other families use ``"fp32_v1"``.
+    vendors. The inference default is ``"fixed15_v1"`` and the training default
+    is ``"fp32_v1"``. The ``MOJOLEARN_NUMERIC_PROFILE`` environment variable or
+    :func:`mojolearn.set_numeric_profile` sets another inference default, such
+    as ``"fp32_v1"``. The inference default applies only to the families it
+    covers (the transformer models of ``mojolearn.models``); other families use
+    ``"fp32_v1"``.
 
     Parameters
     ----------
@@ -314,6 +362,8 @@ def default_profile(use="inference"):
     --------
     >>> import mojolearn
     >>> mojolearn.numeric_profile()
+    'fixed15_v1'
+    >>> mojolearn.numeric_profile("training")
     'fp32_v1'
     """
     return _CALL("default", (use,), _CONTEXT)
@@ -356,10 +406,21 @@ def resolve(name=None, what="numeric_profile", use="inference", family=None):
     """What a class calls with its keyword. None is the process default for
     `use`, and in a `family` the default does not reach it is `BASELINE`
     (the object reports it: its `numeric_profile` attribute is what this
-    returns). A NAME is validated, and refused by name when the profile is
-    not available for `use` or does not compute `family`; it is never
-    replaced by another profile."""
+    returns). A NAME or a per-part dict is validated and returned in its
+    canonical form (`canonical`); it is refused by name when a profile it
+    names is not available for `use` or does not compute `family`, when a
+    part is unknown, missing from `family` (`FAMILY_PARTS`) or given a
+    format it cannot use (`PART_FORMATS`); a dict is refused for training.
+    It is never replaced by another profile."""
     return _CALL("resolve", (name, what, use, family), _CONTEXT)
+
+
+def parts(spec, family=None):
+    """The whole parts table of a spec: a dict from every part in `PARTS`
+    to the profile it computes under (a preset gives each part its own
+    format; `attn_context` stays `fp32_v1`). Validated as `resolve` does,
+    against `family` when one is given."""
+    return _CALL("parts", (spec, family), _CONTEXT)
 
 
 def require_training(what, name=None):
@@ -397,13 +458,14 @@ def state_field(profile):
     """What a checkpoint writer merges into its state: nothing under
     `fp32_v1` (so an fp32_v1 checkpoint's bytes do not change, and a state
     with no field reads as fp32_v1), the name otherwise; a state written
-    under the opt-in profile `fixed15_v1` carries it."""
+    under `fixed15_v1`, or under a per-part dict, carries its canonical form."""
     return _CALL("state_field", (profile,), _CONTEXT)
 
 
 def check_saved(state, profile, what="state"):
     """Refuse by name a state written under another profile than the one
-    this object computes under. A state with no field is `fp32_v1`."""
+    this object computes under (a name or a per-part dict; canonical forms
+    are compared). A state with no field is `fp32_v1`."""
     return _CALL("check_saved", (state, profile, what), _CONTEXT)
 
 
@@ -412,5 +474,6 @@ def adopt_saved(state, name=None, what="state", use="inference"):
     the state: the caller named nothing, so the state's own profile (a state
     with no field is `fp32_v1`, whatever the process default is now); a
     caller who named a different one is refused by name. The adopted
-    profile must still be available for `use`."""
+    profile must still be available for `use`, and a saved per-part dict is
+    adopted whole (its canonical form)."""
     return _CALL("adopt_saved", (state, name, what, use), _CONTEXT)

@@ -104,6 +104,15 @@ class ParallelCausalLM(_CausalLM):
     @classmethod
     def load(cls, path, *, layer_devices, weight_format='float32', max_positions=None,
              numeric_profile=None):
+        """Load a checkpoint directory with one device index per layer.
+
+        `numeric_profile` is the number format of the matrix products, as in
+        :meth:`mojolearn.models.CausalLM.load`: None uses the inference
+        default, ``"fixed15_v1"`` unless :func:`mojolearn.set_numeric_profile`
+        or ``MOJOLEARN_NUMERIC_PROFILE`` sets another; ``"fp32_v1"`` computes
+        every product in float32; a dict such as
+        ``{"preset": "fixed15_v1", "lm_head": "fp32_v1"}`` sets single parts.
+        """
         return _native_parallel_causal("load", (cls, path, layer_devices, (weight_format, max_positions, numeric_profile)), _CAUSAL_CONTEXT)
 
     def _rpc(self, device, operation, args):

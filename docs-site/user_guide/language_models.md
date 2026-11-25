@@ -1,7 +1,7 @@
 # Language models
 
-mojolearn trains and runs decoder language models in FP32. The trainer runs on the GPU; inference also runs
-on the CPU. Tokenization is part of the model and is chosen before the
+Mojolearn trains decoder language models in FP32. The trainer runs on the GPU; inference also runs
+on the CPU, and the transformer models infer with 15-bit integer matrix products by default (see below). Tokenization is part of the model and is chosen before the
 first step. The names are listed in the [language model API reference](../api/language_models.rst).
 
 | Class | Runs on | Purpose |
@@ -143,9 +143,28 @@ are also available. `weight_format` is `"float32"`, `"bfloat16"` or `"int8"` wei
 | `phi3` | Weights mapped; its SentencePiece tokenizer is refused |
 | `gemma`, `gemma2` | Refused |
 
-Arithmetic is FP32 (`fp32_v1`) by default. `numeric_profile="fixed15_v1"` opts transformer models into
-15-bit integer matrix products; it gives different bits from `fp32_v1`, and it is slower on Apple.
-SmolLM2-360M logits through this loader are recorded equal across NVIDIA, AMD, Apple and the CPU.
+Transformer models (`CausalLM`, `ParallelCausalLM`) compute their matrix products under `fixed15_v1` by
+default: 15-bit integer codes with exact integer sums for the projections, the output head and the attention
+scores, while the attention context, norms, softmax and residuals stay float32. On SmolLM2-360M it changed
+held-out perplexity by +0.0006% (enwik8) and +0.0033% (pile_github) against FP32, and a 512-token prefill
+took 0.34 to 0.68 of FP32's time on NVIDIA and 0.85 to 0.89 on AMD. On Apple it takes longer, and the first
+model that uses it there raises a `NumericProfileSpeedWarning`. Mamba models and training compute in FP32.
+
+`numeric_profile="fp32_v1"` computes every product in FP32, for one model; `mojolearn.set_numeric_profile("fp32_v1")`
+or `MOJOLEARN_NUMERIC_PROFILE=fp32_v1` does it for the process. Each product can also be set on its own with a
+dict over a preset:
+
+```python
+from mojolearn.models import CausalLM
+
+lm = CausalLM.load(path, numeric_profile={"preset": "fixed15_v1", "lm_head": "fp32_v1"})
+lm.numeric_profile        # {'preset': 'fixed15_v1', 'lm_head': 'fp32_v1'}
+```
+
+The parts are `q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj`, `lm_head`,
+`attn_scores` and `attn_context` (`fp32_v1` only). An unknown part, a part the model does not have, or a
+format a part cannot use is refused with its name. `numeric_profile` reports the canonical form: the preset
+name, or a dict holding only the overrides that differ from the preset.
 
 ## Related pages
 

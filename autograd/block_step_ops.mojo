@@ -98,6 +98,7 @@ from mamba.impl.modules.mamba3 import (
     Mamba3DeviceWeights, Mamba3DeviceState, Mamba3DeviceStages, mamba3_block_forward,
     _m3_weight_sizes, _m3_state_sizes, _m3_stage_sizes,
 )
+from transformer.impl.llama.int15_block import Int15Planes, LlamaInt15Stage, llama_int15_proj
 from transformer.impl.llama.modeling_llama import (
     LlamaDims, LlamaDeviceWeights, LlamaKVCache, LlamaRopeTable, LlamaDeviceStages, llama_decoder_layer_forward,
     residual_next_norm_fusion_enabled, LLAMA_FAST_REFUSE_WATERMARK, llama_kv_cache_rewind,
@@ -123,6 +124,12 @@ comptime OPS_ATTN_STEP = 84
 comptime OPS_STEP_FIRST = OPS_M1_STEP
 comptime OPS_STEP_LAST = OPS_ATTN_STEP
 comptime N_STEP_OPS = OPS_STEP_LAST - OPS_STEP_FIRST + 1
+# Lane fixed15-decode (2026-11-25): the fixed15_v1 output head of the CausalLM
+# decode program, hs [x (..., k), weights placeholder], ints [n, k]: the
+# product over planes the program adopted for that weights tensor
+# (`linear15_adopt`), the resident session's head call (`llama_int15_proj`).
+# Not a block step op (its output is (..., n), not x's shape).
+comptime OPS_LINEAR15 = 89
 
 # The parts of a block that `OpsSession.upload_block` packs.
 comptime BLOCK_PART_WEIGHTS = 0
@@ -845,6 +852,41 @@ def _attn_kv_views(ctx: DeviceContext, ex: DeviceExec, s: FP, ints: List[Int], d
 comptime STEP_PARK_CAP = 64
 
 
+struct _AttnSource(Movable):
+    """Lane fixed15-decode (2026-11-25): weights a caller built for every
+    attention entry over the weights tensor `w_addr` with these integers
+    (the fixed15_v1 profile constructor's: norms, biases, the planes of each
+    part the mask sets, the float32 weight of each part it clears). An entry
+    is built over a second handle on them (`LlamaDeviceWeights(shared_from=
+    ...)`) at its first run and again after it is dropped with its state (a
+    decode loop that ran bodies past its stop), never uploaded again. Kept
+    until the weights tensor is forgotten or the scratch is cleared."""
+    var w_addr: Int
+    var ints: List[Int]
+    var lean: Bool
+    var w: LlamaDeviceWeights
+
+    def __init__(out self, w_addr: Int, ints: List[Int], lean: Bool, var w: LlamaDeviceWeights):
+        self.w_addr = w_addr
+        self.ints = ints.copy()
+        self.lean = lean
+        self.w = w^
+
+
+struct _Linear15(Movable):
+    """Lane fixed15-decode: the planes of one fixed15_v1 product adopted for
+    the weights tensor `w_addr` (`OPS_LINEAR15`), and the quantizer and sums
+    scratch its runs share (the resident session's `LlamaInt15Stage`)."""
+    var w_addr: Int
+    var planes: Int15Planes
+    var st: LlamaInt15Stage
+
+    def __init__(out self, ctx: DeviceContext, w_addr: Int, var planes: Int15Planes) raises:
+        self.w_addr = w_addr
+        self.planes = planes^
+        self.st = LlamaInt15Stage(ctx)
+
+
 struct BlockStepScratch(Movable):
     """The resident block structs of one session's step ops, one entry per
     (weights, state) pair, built at the pair's first run, and the parked
@@ -921,6 +963,12 @@ struct BlockStepScratch(Movable):
     #: results). False for the CNN model's sessions, which are opened over
     #: `cnn_ctx()` and share one in-order queue: no wait is added there.
     var cnn_other_queue: Bool
+    #: lane fixed15-decode (2026-11-25): the adopted fixed15_v1 layer weights
+    #: an attention entry is (re)built over (`attn_step_adopt_source`) and
+    #: the adopted fixed15_v1 products (`linear15_adopt`), each keyed by its
+    #: placeholder weights tensor.
+    var attn_src: List[_AttnSource]
+    var lin15: List[_Linear15]
 
     def __init__(out self):
         self.attn_cache_private = False
@@ -946,6 +994,8 @@ struct BlockStepScratch(Movable):
         self.lost_q = List[Int]()
         self.lost_used = List[Int]()
         self.lost_ints = List[List[Int]]()
+        self.attn_src = List[_AttnSource]()
+        self.lin15 = List[_Linear15]()
 
     def drop_lost(mut self, addr: Int):
         """Forget the lost-append record over the state or word at `addr`."""
@@ -1039,6 +1089,18 @@ struct BlockStepScratch(Movable):
         weights or its state were written from outside a step, or freed)."""
         if len(self.lost_s) > 0:
             self.drop_lost(addr)
+        # lane fixed15-decode: an adopted source or product goes only with its
+        # own weights tensor (a state forget keeps it for the rebuilt entry)
+        var j = len(self.attn_src) - 1
+        while j >= 0:  # driver-loop: over adopted fixed15 layer sources
+            if self.attn_src[j].w_addr == addr:
+                _ = self.attn_src.pop(j)
+            j -= 1
+        j = len(self.lin15) - 1
+        while j >= 0:  # driver-loop: over adopted fixed15 products
+            if self.lin15[j].w_addr == addr:
+                _ = self.lin15.pop(j)
+            j -= 1
         if self.count() == 0:
             return
         var i = len(self.m1) - 1
@@ -1077,6 +1139,8 @@ struct BlockStepScratch(Movable):
         self.m2.clear()
         self.m3.clear()
         self.attn.clear()
+        self.attn_src.clear()
+        self.lin15.clear()
         self.lost_s.clear()
         self.lost_q.clear()
         self.lost_used.clear()
@@ -1746,6 +1810,29 @@ def attn_step_entry(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP]
         _expect(OPS_ATTN_STEP, "kv", counts[2], block_part_floats(OPS_ATTN_STEP, ints, BLOCK_PART_STATE))
         _expect(OPS_ATTN_STEP, "state words", counts[3], 1)
         return e
+    if e < 0 and len(sc.attn_src) > 0:
+        # lane fixed15-decode: weights adopted for this weights tensor (the
+        # decode program's fixed15_v1 layers): the entry is built over them,
+        # at the first run and after a drop with its state alike.
+        var src = -1
+        for i in range(len(sc.attn_src)):  # driver-loop: over adopted fixed15 layer sources
+            if sc.attn_src[i].w_addr == Int(bufs[1]) and _same_ints(sc.attn_src[i].ints, ints):
+                src = i
+        if src >= 0:
+            _expect(OPS_ATTN_STEP, "kv", counts[2], block_part_floats(OPS_ATTN_STEP, ints, BLOCK_PART_STATE))
+            _expect(OPS_ATTN_STEP, "state words", counts[3], 1)
+            var ctx = ex.ctx.copy()
+            if len(sc.lost_s) > 0:
+                sc.drop_lost(Int(bufs[2]))
+            # the position is the word's, as a new float32 entry reads it
+            var words = _read_words(ex, bufs[3], 1)
+            var lean = sc.attn_src[src].lean
+            var shared = LlamaDeviceWeights(shared_from=sc.attn_src[src].w)
+            sc.attn.append(_AttnBlock(ctx, ex, shared^, bufs[1], bufs[2], bufs[3], ints, words[0], lean))
+            e = len(sc.attn) - 1
+            comptime if LLAMA_FAST_REFUSE_WATERMARK:
+                _attn_watermark_grant(ctx, sc, e)
+            return e
     _expect(OPS_ATTN_STEP, "weights", counts[1], block_part_floats(OPS_ATTN_STEP, ints, BLOCK_PART_WEIGHTS))
     _expect(OPS_ATTN_STEP, "kv", counts[2], block_part_floats(OPS_ATTN_STEP, ints, BLOCK_PART_STATE))
     _expect(OPS_ATTN_STEP, "state words", counts[3], 1)
@@ -1827,6 +1914,51 @@ def attn_step_adopt(mut ex: DeviceExec, mut sc: BlockStepScratch, var weights: L
         _attn_watermark_grant(ctx, sc, len(sc.attn) - 1)
     var words: List[Int] = [s0]
     _write_words(ex, q, words)
+
+
+def attn_step_adopt_source(mut sc: BlockStepScratch, var weights: LlamaDeviceWeights, w: FP, ints: List[Int],
+                           lean: Bool) raises:
+    """Lane fixed15-decode (2026-11-25): every attention entry over the
+    weights tensor `w` (a placeholder the op never reads) with integers
+    `ints` runs `weights` (the fixed15_v1 profile constructor's), built
+    lazily by `attn_step_entry` over the run's own state and word, so a
+    program adopts once at its open and its entries survive state reloads
+    and drops. `lean` is the caller's (`_lean_for_w`)."""
+    _check_ints(OPS_ATTN_STEP, ints)
+    sc.forget(Int(w))
+    sc.attn_src.append(_AttnSource(Int(w), ints, lean, weights^))
+
+
+def linear15_adopt(ctx: DeviceContext, mut sc: BlockStepScratch, w: FP, var planes: Int15Planes) raises:
+    """Lane fixed15-decode: `OPS_LINEAR15` over the weights tensor `w` (a
+    placeholder) multiplies by `planes` (n x k), the resident session's
+    head planes."""
+    sc.forget(Int(w))
+    sc.lin15.append(_Linear15(ctx, Int(w), planes^))
+
+
+def linear15_run(mut ex: DeviceExec, mut sc: BlockStepScratch, w: FP, x: FP, y_out: FP, m: Int, n: Int,
+                 k: Int) raises:
+    """`OPS_LINEAR15`: y (m x n) = x (m x k) . W^T under fixed15_v1, W the
+    planes adopted for `w`: `llama_int15_proj` (the parallel quantizer on
+    the rows, then the planes product), the call the resident session's
+    head makes, so the bits are that head's. Asynchronous."""
+    var e = -1
+    for i in range(len(sc.lin15)):  # driver-loop: over adopted fixed15 products
+        if sc.lin15[i].w_addr == Int(w):
+            e = i
+    if e < 0:
+        raise Error("ValueError: ops: linear15: no fixed15_v1 planes are adopted for this weights tensor")
+    ref h = sc.lin15[e]
+    if h.planes.rows != n or h.planes.cols != k:
+        raise Error("ValueError: ops: linear15: the adopted planes are " + String(h.planes.rows) + " x "
+                    + String(h.planes.cols) + ", the call " + String(n) + " x " + String(k))
+    var ctx = ex.ctx.copy()
+    var xv = _view(ex, x, m * k)
+    var yv = _view(ex, y_out, m * n)
+    llama_int15_proj(ctx, h.st, yv, xv, h.planes, m, n, k)
+    _ = xv  # keep-alive past the queued product
+    _ = yv
 
 
 def attn_step_restart(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int],

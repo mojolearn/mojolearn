@@ -58,10 +58,13 @@ def _transformer_block_session_operation(op: Int, session: Int, a: List[Int], wo
         if len(a) != INT15_ENTRY_ADDRS or len(p) != INT15_ENTRY_PARAMS:
             raise Error("transformer_session_forward_int15: invalid native descriptor arity")
         _check_base_addrs(a, [0, 1, 2, 10, 11, 12], String("transformer_session_forward_int15"))
+        # The last word is the parts mask (lane fixed15-parts-native); the
+        # options tail sits before it.
+        var parts_word = p.pop()
         var opts = BlockOptions.from_params(p, 10)
         try:
             return _transformer_run_session_int15(owner[], a,
-                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
+                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts, parts_word)
         except problem:
             owner[].clear()
             raise problem
@@ -208,7 +211,10 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
 def transformer_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                          result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= NEURAL_BLOCK_OPERATIONS or nf < 0 or nf > 1 or na < 0 or na > 45 or np < 0 or np > 28:
+        # lane fixed15-decode: 29 words for a session's op 35 (the handle, the
+        # 27 of op 11 and the parts mask), the native generation engine's
+        # fixed15 layer call.
+        if op < 0 or op >= NEURAL_BLOCK_OPERATIONS or nf < 0 or nf > 1 or na < 0 or na > 45 or np < 0 or np > 29:
             raise Error("transformer block native ABI: unknown operation or scalar span")
         if result == 0:
             raise Error("transformer block native ABI: null result")

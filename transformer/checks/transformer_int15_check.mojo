@@ -75,7 +75,15 @@ from transformer.impl.llama.int15_block import (
     Int15Planes,
     LlamaInt15Weights,
     int15_planes_from_f32,
+    int15_planes_placeholder,
     llama_int15_plan_name,
+)
+# lane fixed15-parts-native (2026-11-25): the profile per part.
+from core.numeric_profile_parts import (
+    NP_MASK_FIXED15_V1, NP_PART_COUNT, NP_PART_HEAD, NP_PART_CONTEXT, np_part_name, np_part_on,
+)
+from core.numeric_profile_parts_sabotage import (
+    np_parts_sabotage_device, np_parts_sabotage_host, np_parts_sabotage_name,
 )
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_int15 import Int15QuantWorkspace, int15_sabotage_name
@@ -115,13 +123,32 @@ def hex64(v: UInt64) -> String:
     return out
 
 
+def _planes_or_placeholder(
+    ctx: DeviceContext, parts: Int, which: Int, mut f: DeviceBuffer[DType.float32],
+    rows: Int, cols: Int, mut quant: Int15QuantWorkspace,
+) raises -> Int15Planes:
+    if np_part_on(parts, which):
+        return int15_planes_from_f32(ctx, f, rows, cols, quant)
+    return int15_planes_placeholder(ctx)
+
+
+def _f32_or_placeholder(
+    ctx: DeviceContext, parts: Int, which: Int, v: List[Float32]
+) raises -> DeviceBuffer[DType.float32]:
+    if np_part_on(parts, which):
+        return _zeros(ctx, 1)
+    return _upload(ctx, v)
+
+
 def device_weights(
-    ctx: DeviceContext, dims: LlamaDims, w: TransformerWeights, int15: Bool
+    ctx: DeviceContext, dims: LlamaDims, w: TransformerWeights, parts: Int
 ) raises -> LlamaDeviceWeights:
-    """The default constructor's weights, or the profile constructor's: the
-    seven float32 weights uploaded and quantized on the device by the
-    parallel quantizer, norms uploaded, no optional tensor."""
-    if not int15:
+    """The default constructor's weights (`parts == 0`), or the profile
+    constructor's under the parts mask `parts`: each fixed15 projection's
+    float32 weight uploaded and quantized on the device by the parallel
+    quantizer, each fp32 projection's uploaded as its weight, norms
+    uploaded, no optional tensor."""
+    if parts == 0:
         return LlamaDeviceWeights(
             ctx, dims, RMS_EPS, w.norm1_w, w.norm2_w, w.w_q, w.w_k, w.w_v,
             w.w_o, w.w_gate, w.w_up, w.w_down,
@@ -139,19 +166,34 @@ def device_weights(
     var fu = _upload(ctx, w.w_up)
     var fd = _upload(ctx, w.w_down)
     var planes = LlamaInt15Weights(
-        int15_planes_from_f32(ctx, fq, qw, dm, quant),
-        int15_planes_from_f32(ctx, fk, kw, dm, quant),
-        int15_planes_from_f32(ctx, fv, kw, dm, quant),
-        int15_planes_from_f32(ctx, fo, dm, qw, quant),
-        int15_planes_from_f32(ctx, fg, it, dm, quant),
-        int15_planes_from_f32(ctx, fu, it, dm, quant),
-        int15_planes_from_f32(ctx, fd, dm, it, quant),
+        _planes_or_placeholder(ctx, parts, 0, fq, qw, dm, quant),
+        _planes_or_placeholder(ctx, parts, 1, fk, kw, dm, quant),
+        _planes_or_placeholder(ctx, parts, 2, fv, kw, dm, quant),
+        _planes_or_placeholder(ctx, parts, 3, fo, dm, qw, quant),
+        _planes_or_placeholder(ctx, parts, 4, fg, it, dm, quant),
+        _planes_or_placeholder(ctx, parts, 5, fu, it, dm, quant),
+        _planes_or_placeholder(ctx, parts, 6, fd, dm, it, quant),
         True,
+        parts,
     )
     _ = quant^
+    _ = fq^
+    _ = fk^
+    _ = fv^
+    _ = fo^
+    _ = fg^
+    _ = fu^
+    _ = fd^
     return LlamaDeviceWeights(
         ctx, dims, BlockOptions(), _upload(ctx, w.norm1_w),
         _upload(ctx, w.norm2_w), planes^,
+        _f32_or_placeholder(ctx, parts, 0, w.w_q),
+        _f32_or_placeholder(ctx, parts, 1, w.w_k),
+        _f32_or_placeholder(ctx, parts, 2, w.w_v),
+        _f32_or_placeholder(ctx, parts, 3, w.w_o),
+        _f32_or_placeholder(ctx, parts, 4, w.w_gate),
+        _f32_or_placeholder(ctx, parts, 5, w.w_up),
+        _f32_or_placeholder(ctx, parts, 6, w.w_down),
         _zeros(ctx, 1), _zeros(ctx, 1), _zeros(ctx, 1), _zeros(ctx, 1),
         _zeros(ctx, 1), _zeros(ctx, 1), _zeros(ctx, 1), _zeros(ctx, 1),
         _zeros(ctx, 1), _zeros(ctx, 1), _zeros(ctx, 1),
@@ -159,7 +201,7 @@ def device_weights(
 
 
 def device_card(
-    ctx: DeviceContext, k: Int, int15: Bool
+    ctx: DeviceContext, k: Int, parts: Int
 ) raises -> List[List[Float32]]:
     var c = fixture_case(k)
     var dims = fixture_dims(c)
@@ -167,7 +209,8 @@ def device_card(
     var w = fixture_weights(c)
     var x = fixture_x(c)
     var window = fixture_window(String(c.name))
-    var dw = device_weights(ctx, ld, w, int15)
+    # The device arms act where a device model resolves its mask.
+    var dw = device_weights(ctx, ld, w, np_parts_sabotage_device(parts))
     var kv = LlamaKVCache(ctx, c.b, ld, c.cache_cap, window)
     var rope = LlamaRopeTable(ctx, ld, ROPE_THETA, dims.rope_positions)
     var stages = LlamaDeviceStages(ctx, c.b, c.l, c.cache_cap, ld, window)
@@ -186,26 +229,24 @@ def device_card(
     return out^
 
 
-def host_card(k: Int, int15: Bool) raises -> List[List[Float32]]:
+def host_card(k: Int, parts: Int) raises -> List[List[Float32]]:
     var c = fixture_case(k)
     var dims = fixture_dims(c)
     var w = fixture_weights(c)
     var x = fixture_x(c)
     var cache = TransformerKVCache(c.b, dims, c.cache_cap, fixture_window(String(c.name)))
     var rope = build_rope_table(dims)
-    var st = transformer_block_oracle(w, x, c.b, c.l, cache, rope, ScorePlant.none(), int15)
+    var st = transformer_block_oracle(w, x, c.b, c.l, cache, rope, ScorePlant.none(), np_parts_sabotage_host(parts))
     return oracle_dump(st)
 
 
-def phase_cards(ctx: DeviceContext, int15: Bool) raises -> Int:
+def phase_cards(ctx: DeviceContext, parts: Int, tag: String, cases: List[Int]) raises -> Int:
     var fails = 0
-    var tag = String("profile") if int15 else String("default")
-    var cases = profile_cases()
     for i in range(len(cases)):
         var k = cases[i]
         var c = fixture_case(k)
-        var host = host_card(k, int15)
-        var dev = device_card(ctx, k, int15)
+        var host = host_card(k, parts)
+        var dev = device_card(ctx, k, parts)
         var diffs = compare_dumps(host, dev, False)
         var moved = count_moved(diffs)
         var line = (
@@ -220,8 +261,25 @@ def phase_cards(ctx: DeviceContext, int15: Bool) raises -> Int:
         else:
             fails += 1
             print(line + "  " + String(moved) + " of 30 stages MOVED, first at " + first_moved(diffs))
-        if not int15:
+        if parts == 0:
             print("  int15 default digest case " + String(k) + " " + hex64(digest(dev)))
+    return fails
+
+
+def phase_parts(ctx: DeviceContext) raises -> Int:
+    """PER PART (lane fixed15-parts-native): each block part of fixed15_v1
+    turned back to fp32 in turn (the preset with one override), and one part
+    alone from fp32_v1 (q_proj), host oracle against device, every stage
+    bit-identical. A wrong-part or ignored-override sabotage arm moves a
+    side's digest here (`np_parts_sabotage_name` in the banner)."""
+    var fails = 0
+    var cases: List[Int] = [3, 15]  # base_b3_l16_nrep2, win4_b1_l16_nrep2
+    for part in range(NP_PART_COUNT):  # small-loop(10: the parts)
+        if part == NP_PART_HEAD or part == NP_PART_CONTEXT:
+            continue  # the head is the model's; attn_context is fp32_v1 only
+        var mask = NP_MASK_FIXED15_V1 & ~(1 << part)
+        fails += phase_cards(ctx, mask, String("fixed15_v1 with ") + np_part_name(part) + "=fp32_v1", cases)
+    fails += phase_cards(ctx, 1, String("fp32_v1 with q_proj=fixed15_v1"), cases)
     return fails
 
 
@@ -252,7 +310,7 @@ def device_run_split(
         x = rows_of(xall, b_only, 0, l, l, dm)
         b = 1
     var window = fixture_window(String(c.name))
-    var dw = device_weights(ctx, ld, w, True)
+    var dw = device_weights(ctx, ld, w, NP_MASK_FIXED15_V1)
     var kv = LlamaKVCache(ctx, b, ld, l, window)
     var rope = LlamaRopeTable(ctx, ld, ROPE_THETA, dims.rope_positions)
     var out = List[Float32](length=b * l * dm, fill=Float32(0.0))
@@ -301,7 +359,7 @@ def host_run_split(k: Int, p: Int) raises -> List[Float32]:
             var r = rows_of(x, bb, t0, t0 + n, l, dm)
             for j in range(len(r)):
                 xs.append(r[j])
-        var st = transformer_block_oracle(w, xs, b, n, cache, rope, ScorePlant.none(), True)
+        var st = transformer_block_oracle(w, xs, b, n, cache, rope, ScorePlant.none(), NP_MASK_FIXED15_V1)
         for bb in range(b):
             for t in range(n):
                 for j in range(dm):
@@ -369,14 +427,17 @@ def phase_batch(ctx: DeviceContext) raises -> Int:
 def main() raises:
     print(
         "int15 block check (lane/lowbit-blocks): sabotage=" + int15_sabotage_name()
+        + " parts_sabotage=" + np_parts_sabotage_name()
         + " plan=" + llama_int15_plan_name()
     )
     var ctx = DeviceContext()
     var fails = 0
     print("phase default (no planes; fp32.v1 against its host oracle)")
-    fails += phase_cards(ctx, False)
+    fails += phase_cards(ctx, 0, String("default"), profile_cases())
     print("phase profile (fixed15_v1: projections and S11 int15, P.V fp32)")
-    fails += phase_cards(ctx, True)
+    fails += phase_cards(ctx, NP_MASK_FIXED15_V1, String("profile"), profile_cases())
+    print("phase parts (one part overridden, host oracle against device)")
+    fails += phase_parts(ctx)
     print("phase decode (prefill of p tokens then decode, p in 1, 7, L-1)")
     fails += phase_decode(ctx)
     print("phase batch (B=3 against each row alone)")

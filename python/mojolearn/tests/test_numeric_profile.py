@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """The `numeric_profile=` selector (`mojolearn._numeric_profile`): the
-inference default is fp32_v1 for every family and every trainer;
-fixed15_v1 requires opt-in; a named profile that cannot compute
+inference default is fixed15_v1 for the transformer models (Andrew,
+2026-11-25) and fp32_v1 for every other family and every trainer; fp32_v1
+is the opt-out (keyword, set_numeric_profile, environment); a named
+profile that cannot compute
 is refused by name and never replaced; an arithmetic that failed quality is
 not offered; a checkpoint carries its profile, and a state with none is
 fp32_v1. Lanes lane/lowbit-flag and lane/lowbit-default, 2026-09-29.
@@ -57,15 +59,18 @@ def _closed(g, name="fixed15_v1"):
 
 def test_the_defaults_per_use_and_family(monkeypatch):
     g = _fresh(monkeypatch)
-    assert g.BASELINE == g.DEFAULT == g.TRAINING_DEFAULT == "fp32_v1"
-    assert g.default_profile() == "fp32_v1"
-    assert g.default_profile("inference") == "fp32_v1"
+    assert g.BASELINE == g.TRAINING_DEFAULT == "fp32_v1"
+    assert g.DEFAULT == "fixed15_v1"
+    assert g.default_profile() == "fixed15_v1"
+    assert g.default_profile("inference") == "fixed15_v1"
     assert g.default_profile("training") == "fp32_v1"
     # the families: the transformer models get the default, the rest fp32_v1, reported
-    assert g.resolve(None, family="transformer") == "fp32_v1"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # the Apple speed warning, on a Mac
+        assert g.resolve(None, family="transformer") == "fixed15_v1"
+        assert g.resolve(None) == "fixed15_v1"
     for fam in ("mamba1", "mamba2", "transformer_block"):
         assert g.resolve(None, family=fam) == "fp32_v1", fam
-    assert g.resolve(None) == "fp32_v1"
     # training never sees the inference default
     assert g.resolve(None, use="training") == "fp32_v1"
     assert g.require_training("a trainer") == "fp32_v1"
@@ -74,7 +79,7 @@ def test_the_defaults_per_use_and_family(monkeypatch):
     with pytest.raises(ValueError):
         g.resolve(None, family="gru")
     rows = {r["name"]: r for r in g.profiles()}
-    assert [n for n, r in rows.items() if r["default"]] == ["fp32_v1"]
+    assert [n for n, r in rows.items() if r["default"]] == ["fixed15_v1"]
     assert [n for n, r in rows.items() if r["training_default"]] == ["fp32_v1"]
     assert list(g.PROFILES)[0] == "fp32_v1"
     assert g.PROFILES["fixed15_v1"]["inference"] is True and g.PROFILES["fixed15_v1"]["training"] is False
@@ -86,14 +91,18 @@ def test_the_escape_hatch_gives_fp32_v1_everywhere(monkeypatch):
     for fam in (None,) + g.FAMILIES:
         assert g.resolve(None, family=fam) == "fp32_v1", fam
     g = _fresh(monkeypatch)
-    assert g.set_default_profile("fp32_v1") == "fp32_v1"
+    assert g.set_default_profile("fp32_v1") == "fixed15_v1"
     for fam in (None,) + g.FAMILIES:
         assert g.resolve(None, family=fam) == "fp32_v1", fam
     assert g.set_default_profile("fixed15_v1") == "fp32_v1"
-    assert g.resolve(None, family="transformer") == "fixed15_v1"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assert g.resolve(None, family="transformer") == "fixed15_v1"
     # the environment naming the default is the default
     g = _fresh(monkeypatch, env="fixed15_v1")
-    assert g.resolve(None, family="transformer") == "fixed15_v1"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assert g.resolve(None, family="transformer") == "fixed15_v1"
 
 
 def test_a_named_profile_is_honored_or_refused_by_family(monkeypatch):
@@ -179,7 +188,7 @@ def test_what_failed_quality_is_not_offered_and_says_why(monkeypatch):
         g.check_saved({g.STATE_KEY: "int8_v1"}, "fp32_v1")
     with pytest.raises(ValueError):
         g.adopt_saved({g.STATE_KEY: "int8_v1"})
-    assert g.default_profile() == "fp32_v1"
+    assert g.default_profile() == g.DEFAULT
     g2 = _fresh(monkeypatch, env="int8_v1")
     with pytest.raises(ValueError):
         g2.default_profile()
@@ -287,7 +296,8 @@ def test_the_environment_sets_only_the_starting_value(monkeypatch):
 def test_an_fp32_checkpoint_gains_no_bytes_and_a_fixed15_one_carries_its_name(monkeypatch):
     g = _fresh(monkeypatch)
     assert g.state_field("fp32_v1") == {}
-    assert g.state_field(g.DEFAULT) == {}
+    assert g.state_field(g.BASELINE) == {}
+    assert g.state_field(g.DEFAULT) == {g.STATE_KEY: g.DEFAULT}
     assert g.state_field("fixed15_v1") == {g.STATE_KEY: "fixed15_v1"}
     assert g.STATE_KEY == "numeric_profile"
 
@@ -428,18 +438,18 @@ def _clean_default(ml):
 def test_the_package_exports_the_selector_and_it_is_not_the_mode():
     ml = _package()
     _clean_default(ml)
-    assert ml.numeric_profile() == "fp32_v1"
+    assert ml.numeric_profile() == "fixed15_v1"
     assert ml.numeric_profile("training") == "fp32_v1"
-    assert [r["name"] for r in ml.numeric_profiles() if r["default"]] == ["fp32_v1"]
+    assert [r["name"] for r in ml.numeric_profiles() if r["default"]] == ["fixed15_v1"]
     for name in ("numeric_profile", "set_numeric_profile", "numeric_profiles", "numeric_profile_measured"):
         assert name in ml.__all__
     # its own parameter: choosing a profile does not touch the numeric mode
     before = ml.numeric_mode()
     try:
-        assert ml.set_numeric_profile("fixed15_v1") == "fp32_v1"
+        assert ml.set_numeric_profile("fp32_v1") == "fixed15_v1"
         assert ml.numeric_mode() == before
     finally:
-        ml.set_numeric_profile("fp32_v1")
+        ml.set_numeric_profile("fixed15_v1")
     # and a profile name is not a mode, nor a mode a profile
     with pytest.raises(ValueError):
         ml.set_numeric_profile(before)
@@ -452,7 +462,8 @@ def test_every_trainer_resolves_fp32_v1_under_the_default_and_refuses_fixed15_by
     test files' job, which the default lane's check runs unchanged."""
     ml = _package()
     g = _clean_default(ml)
-    assert ml.numeric_profile() == "fp32_v1"
+    assert ml.numeric_profile() == "fixed15_v1"
+    assert ml.numeric_profile("training") == "fp32_v1"
     from mojolearn import _training_impl as T
     # past the profile line: the next refusal is the empty registry's
     # (the native owner accepts only an exact SGD, Adam or AdamW, so the
@@ -537,7 +548,12 @@ def test_the_loader_refuses_a_profile_before_it_reads_the_path(tmp_path, monkeyp
     with pytest.raises(ValueError) as e:
         CausalLM.load(missing, numeric_profile="int8_v1")
     assert "not offered" in str(e.value)
-    # naming none, or fp32_v1, reaches the path check
+    # a per-part spec is refused by name before the path, too
+    with pytest.raises(ValueError) as e:
+        CausalLM.load(missing, numeric_profile={"preset": "fp32_v1", "no_such_part": "fixed15_v1"})
+    assert "no_such_part" in str(e.value)
+    # naming none (the default, open again), or fp32_v1, reaches the path check
+    monkeypatch.setitem(g.PROFILES, "fixed15_v1", dict(g.PROFILES["fixed15_v1"], inference=True))
     with pytest.raises(FileNotFoundError):
         CausalLM.load(missing)
     with pytest.raises(FileNotFoundError):
@@ -567,29 +583,30 @@ def _bytes(a):
 @pytest.mark.parametrize("arch,tied", _FAMILIES)
 def test_every_family_under_the_default(tmp_path, arch, tied, device):
     """Every model family `mojolearn.models` loads, under the shipped
-    default, naming nothing: every family computes fp32_v1, reports it,
-    and keeps decode == prefill and the batch invariant; a Mamba model
-    computes fp32_v1 exactly as when it is named, reports fp32_v1, and
-    refuses fixed15_v1 by name."""
+    default, naming nothing: a transformer model computes fixed15_v1
+    exactly as when it is named and reports it, a Mamba model computes
+    fp32_v1 exactly as when it is named, reports fp32_v1 and refuses
+    fixed15_v1 by name; every family keeps decode == prefill and the batch
+    invariant."""
     ml = _package()
     _clean_default(ml)
     from mojolearn import _causal_lm_fixtures as fx
     cfg, tensors = fx.family_fixture(arch, tied)
     root = fx._write_checkpoint(str(tmp_path / f"{arch}-{int(tied)}"), cfg, tensors)
-    lm = _load(root, device=device)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # the Apple speed warning, on a Mac
+        lm = _load(root, device=device)
     ref = _load(root, device=device, numeric_profile="fp32_v1")
     assert ref.numeric_profile == "fp32_v1"
     ids = ml.Array.from_list([[1, 7, 3, 11, 5], [2, 9, 2, 4, 8]], "<i4")
     full = lm.forward(ids)
-    assert lm.numeric_profile == "fp32_v1"
-    assert _bytes(full) == _bytes(ref.forward(ids))
     if lm.kind == "transformer":
-        assert all(b.numeric_profile == "fp32_v1" for b in lm.blocks)
-        assert lm._head_int15 is None
-        opted = _load(root, device=device, numeric_profile="fixed15_v1")
-        assert opted.numeric_profile == "fixed15_v1" and opted._head_int15 is not None
-        assert _bytes(opted.forward(ids)) != _bytes(full)
-        # the escape hatch in code: the process default back to fp32_v1 gives fp32_v1's bits
+        assert lm.numeric_profile == "fixed15_v1"
+        named = _load(root, device=device, numeric_profile="fixed15_v1")
+        assert named.numeric_profile == "fixed15_v1"
+        assert _bytes(named.forward(ids)) == _bytes(full)
+        assert _bytes(ref.forward(ids)) != _bytes(full)
+        # the opt-out in code: the process default set to fp32_v1 gives fp32_v1's bits
         prev = ml.set_numeric_profile("fp32_v1")
         try:
             old = _load(root, device=device)
@@ -622,7 +639,8 @@ def test_every_family_under_the_default(tmp_path, arch, tied, device):
 
 def test_the_environment_escape_hatch_in_a_fresh_process(tmp_path):
     """MOJOLEARN_NUMERIC_PROFILE=fp32_v1, set before import: a model that
-    names nothing computes fp32_v1's bits exactly."""
+    names nothing computes fp32_v1's bits exactly; with nothing set it
+    computes the default, fixed15_v1, exactly as when it is named."""
     ml = _package()
     _clean_default(ml)
     import subprocess
@@ -654,10 +672,9 @@ def test_the_environment_escape_hatch_in_a_fresh_process(tmp_path):
     named = run(None, "fp32_v1")
     default = run(None, "-")
     assert hatch[0] == named[0] == "fp32_v1" and hatch[1] == named[1]
-    assert default == named
-    opted = run("fixed15_v1", "-")
-    assert opted == run(None, "fixed15_v1")
-    assert opted[0] == "fixed15_v1" and opted[1] != named[1]
+    assert default == run(None, "fixed15_v1")
+    assert default[0] == "fixed15_v1" and default[1] != named[1]
+    assert run("fixed15_v1", "-") == default
 
 
 def test_a_trainer_state_with_no_field_loads_under_the_new_default():
@@ -667,7 +684,8 @@ def test_a_trainer_state_with_no_field_loads_under_the_new_default():
     carrying fixed15_v1 is refused by name."""
     ml = _package()
     _clean_default(ml)
-    assert ml.numeric_profile() == "fp32_v1"
+    assert ml.numeric_profile() == "fixed15_v1"
+    assert ml.numeric_profile("training") == "fp32_v1"
     try:
         cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2,
                              intermediate=64, tie_embeddings=False)

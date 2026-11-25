@@ -187,6 +187,8 @@ def program_op_name(code: Int) -> String:
         return "lm_head_v2"
     if code == 88:
         return "small_mlp"
+    if code == 89:
+        return "linear15"
     if code == 90:
         return "cnn_conv_block"
     if code == 91:

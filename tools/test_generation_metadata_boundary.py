@@ -219,7 +219,11 @@ def test_stream_reads_hold_the_owners_and_take_state_words():
     assert 'causal_state_layer_unpack(mods, state_held, i, layer_state, kind)' in program
     assert 'var family = mw.program_read' in program
     refusal = public.split('def _program_refusal(', 1)[1].split('def _program_state_pieces(', 1)[0]
-    assert '_native_entries' not in refusal and 'words.norm_eps' in refusal
+    # lane fixed15-decode: the decision is typed (core/causal_owner.mojo
+    # `causal_program_route`); fixed15_v1 heads and layers are served
+    assert '_native_entries' not in refusal and 'causal_program_route(words, s.greedy, s.sampling_policy, len(blocks))' in refusal
+    route = (ROOT / 'core/causal_owner.mojo').read_text().split('def causal_program_route(', 1)[1].split('\ndef ', 1)[0]
+    assert 'words.norm_eps' in route and 'words.head_packed' not in route
     load = public.split('def _resident_load_states(', 1)[1].split('def ', 1)[0]
     assert 'causal_state_layer_unpack(mods, state_held, i, st, CAUSAL_LAYER_TRANSFORMER)' in load
     export = public.split('def _resident_export_states(', 1)[1].split('def _legacy_resident_export(', 1)[0]

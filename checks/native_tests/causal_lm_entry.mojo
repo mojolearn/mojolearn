@@ -217,13 +217,14 @@ def run_case(unit: Int) raises:
         except problem:
             _refuses(problem, "CPU Transformer inference: invalid descriptor arity")
     elif unit == 7:
-        # block op 34 (fixed15_v1) requires both option tails
+        # block op 34 (fixed15_v1) requires both option tails and the parts
+        # mask (lane fixed15-parts-native)
         var none = List[Int]()
         try:
             _ = causal_entry_call(causal_ref[CAUSAL_TABLE_BLOCK](k), CAUSAL_BLOCK_HOST_FORWARD_INT15, none, none, no_floats)
             raise Error("fixed15 block forward accepted an empty descriptor")
         except problem:
-            _refuses(problem, "CPU Transformer inference: invalid descriptor arity")
+            _refuses(problem, "CPU fixed15 Transformer: both option tails and the parts mask are required")
     else:
         # Mamba state op 3 reaches the CPU image's Mamba dispatch
         var none = List[Int]()

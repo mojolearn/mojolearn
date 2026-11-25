@@ -12,6 +12,13 @@ from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_a
 from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
 from bindings.backend_public_native_door import backend_public_operation
 from core.shared_slot import SharedSlot
+from std.sys import is_defined
+
+# SABOTAGE ARM MOJOLEARN_NUMERIC_PROFILE_SABOTAGE_DROP_SAVED (default off; verify's sabotage registry
+# lists it with lane numeric_profile_parts, case "save and reload with a per-part spec"): the
+# saved-state reader (`_saved`) keeps only the "preset" of a saved per-part dict, so a reload that
+# names no profile loses the overrides and its digest differs from the saved model's.
+comptime NP_SABOTAGE_DROP_SAVED = is_defined["MOJOLEARN_NUMERIC_PROFILE_SABOTAGE_DROP_SAVED"]()
 
 
 def _dict(value: PythonObject, key_bytes: Bool = False) raises:
@@ -112,7 +119,8 @@ def _state(context: PythonObject) raises -> PythonObject:
     dicts.append(context)
     dicts.append(fields)
     var cacheable = True
-    var names = Python.tuple("PROFILES", "REJECTED", "MEASURED", "_defaults", "USES", "FAMILIES")
+    var names = Python.tuple("PROFILES", "REJECTED", "MEASURED", "_defaults", "USES", "FAMILIES",
+                             "PARTS", "PART_FORMATS", "FAMILY_PARTS")
     for i in range(len(names)):  # driver-loop: fixed connected profile registries
         if cacheable and not _collect(fields[names[i]], dicts):
             cacheable = False
@@ -128,10 +136,13 @@ def _state_full(context: PythonObject) raises -> PythonObject:
     _dict(context)
     var fields = context["fields"]
     _dict(fields)
-    var names = Python.tuple("PROFILES", "REJECTED", "MEASURED", "_defaults")
+    var names = Python.tuple("PROFILES", "REJECTED", "MEASURED", "_defaults", "PART_FORMATS", "FAMILY_PARTS")
     for i in range(len(names)):  # driver-loop: fixed connected profile registries
         _dict(fields[names[i]])
         _passive(fields[names[i]])
+    if py_type(fields["PARTS"]) is not native_loaded_module("builtins").tuple:
+        raise Error("TypeError: numeric profile parts must be an ordinary tuple")
+    _passive(fields["PARTS"])
     if fields["_defaults"] is not context["defaults"]:
         raise Error("TypeError: numeric profile defaults must retain their connected provider storage")
     var strings = Python.tuple("DEFAULT", "TRAINING_DEFAULT", "BASELINE", "ENV", "STATE_KEY")
@@ -192,6 +203,134 @@ def _available(key: PythonObject, what: String, use: PythonObject, fields: Pytho
                     + "; it is never replaced by " + _repr(fields["BASELINE"]) + " silently." + also
                     + " Use numeric_profile=" + _repr(fields["BASELINE"]) + ".")
     return key
+
+
+# ---------------------------------------------------------------- per-part specs
+# A spec is a profile name or an exact dict {"preset": name, part: name, ...}
+# (docs/plans/NUMERIC_PROFILE_PARTS.md section 2). `_spec` validates one and
+# returns its CANONICAL form: the preset string when no override differs from
+# the preset's own format for that part, else a new dict with "preset" first
+# and the differing overrides in PARTS order. It runs once per model, at
+# construction or load (the native plan keeps the parts mask, never a name).
+
+
+def _joined(names: PythonObject) raises -> String:
+    var result = String()
+    for i in range(len(names)):  # driver-loop: over a few admitted names
+        if i > 0:
+            result += ", "
+        result += _repr(names[i])
+    return result
+
+
+def _preset_format(preset: PythonObject, part: PythonObject, fields: PythonObject) raises -> PythonObject:
+    # The format the preset itself gives `part`: the preset when the part can
+    # use it, else the baseline (fixed15_v1 leaves attn_context on fp32_v1).
+    if py_contains(py_item(fields["PART_FORMATS"], part), preset):
+        return preset
+    return fields["BASELINE"]
+
+
+def _spec(spec: PythonObject, what: String, family: PythonObject, fields: PythonObject) raises -> PythonObject:
+    var b = native_loaded_module("builtins")
+    if py_type(spec) is not b.dict:
+        return _canonical(spec, what, fields)
+    var keys = py_call(b.list, py_call(spec.keys))
+    for i in range(len(keys)):  # driver-loop: admit the few spec keys before any hashed access
+        if py_type(keys[i]) is not b.str:
+            raise Error("TypeError: mojolearn: " + what + " part names must be ordinary str")
+    var preset_key = PythonObject("preset")
+    if not py_contains(spec, preset_key):
+        raise Error("ValueError: mojolearn: a " + what + " dict needs 'preset', a profile name, for example "
+                    + "{'preset': 'fixed15_v1', 'lm_head': 'fp32_v1'}")
+    var preset = _canonical(py_item(spec, preset_key), what + "['preset']", fields)
+    _family(family, fields)
+    var family_parts = PythonObject(None)
+    if family is not None:
+        family_parts = py_get(fields["FAMILY_PARTS"], family)
+        if family_parts is None:
+            family_parts = Python.tuple()
+    var parts = fields["PARTS"]
+    var overrides = Python.dict()
+    for i in range(len(keys)):  # driver-loop: over the few part overrides of one spec
+        var key = keys[i]
+        if String(key) == "preset":
+            continue
+        if not py_contains(parts, key):
+            raise Error("ValueError: mojolearn: " + what + " has no part " + _repr(key) + "; parts: "
+                        + _joined(parts))
+        if family is not None and not py_contains(family_parts, key):
+            raise Error("ValueError: mojolearn: " + what + " part " + _repr(key) + " is not a part of the "
+                        + _repr(family) + " family (its parts: " + _joined(family_parts) + ")")
+        var value = py_item(spec, key)
+        var label = what + "[" + _repr(key) + "]"
+        var fmt = _canonical(value, label, fields)
+        var allowed = py_item(fields["PART_FORMATS"], key)
+        if not py_contains(allowed, fmt):
+            raise Error("ValueError: mojolearn: " + what + " part " + _repr(key) + " cannot use " + _repr(fmt)
+                        + "; it takes " + _joined(allowed))
+        py_setitem(overrides, key, fmt)
+    var result = Python.dict()
+    py_setitem(result, preset_key, preset)
+    var kept = 0
+    for i in range(len(parts)):  # driver-loop: over the ten parts, in table order
+        var part = parts[i]
+        var fmt = py_get(overrides, part)
+        if fmt is None:
+            continue
+        if String(fmt) == String(_preset_format(preset, part, fields)):
+            continue
+        py_setitem(result, part, fmt)
+        kept += 1
+    if kept == 0:
+        return preset
+    return result
+
+
+def _table(spec: PythonObject, fields: PythonObject) raises -> PythonObject:
+    # part -> profile for every part of a CANONICAL spec.
+    var is_dict = py_type(spec) is native_loaded_module("builtins").dict
+    var preset = py_item(spec, PythonObject("preset")) if is_dict else spec
+    var parts = fields["PARTS"]
+    var table = Python.dict()
+    for i in range(len(parts)):  # driver-loop: over the ten parts, in table order
+        var part = parts[i]
+        var fmt = py_get(spec, part) if is_dict else PythonObject(None)
+        if fmt is None:
+            fmt = _preset_format(preset, part, fields)
+        py_setitem(table, part, fmt)
+    return table
+
+
+def _used(spec: PythonObject, fields: PythonObject) raises -> PythonObject:
+    # The distinct profiles a CANONICAL spec names: the name itself, or the
+    # preset and every profile its parts compute under.
+    var b = native_loaded_module("builtins")
+    var used = Python.list()
+    if py_type(spec) is not b.dict:
+        _ = py_call(used.append, spec)
+        return used
+    _ = py_call(used.append, py_item(spec, PythonObject("preset")))
+    var values = py_call(b.list, py_call(_table(spec, fields).values))
+    for i in range(len(values)):  # driver-loop: over the ten parts' profiles
+        if not py_contains(used, values[i]):
+            _ = py_call(used.append, values[i])
+    return used
+
+
+def _available_spec(spec: PythonObject, what: String, use: PythonObject, fields: PythonObject) raises -> PythonObject:
+    # `_available` for a canonical spec: every profile it names must be
+    # available for `use`; a per-part dict is inference only.
+    if py_type(spec) is not native_loaded_module("builtins").dict:
+        return _available(spec, what, use, fields)
+    _use(use, fields)
+    if String(use) != "inference":
+        raise Error("ValueError: mojolearn: " + what + " is a per-part dict, which is for inference only; a trainer "
+                    + "takes a profile name (" + _repr(fields["TRAINING_DEFAULT"]) + ")")
+    var used = _used(spec, fields)
+    for i in range(len(used)):  # driver-loop: over the spec's one or two profiles
+        _ = _available(used[i], what, use, fields)
+    return spec
 
 
 def _environment(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -379,21 +518,39 @@ def _resolve(name: PythonObject, what: String, use: PythonObject, family: Python
                                        and _covers(key, family, "default_for", fields)):
             key = fields["BASELINE"]
     else:
-        key = _canonical(name, what, fields)
-        if family is not None and not _covers(key, family, "computes", fields):
-            var computes = _row_families(key, "computes", fields)
-            var listed = String()
-            for i in range(len(computes)):  # driver-loop: over the row's few family names
-                if i > 0:
-                    listed += ", "
-                listed += _str(computes[i], "profile family")
-            raise Error("NotImplementedError: mojolearn: " + what + "=" + _repr(key)
-                        + " does not compute the " + _repr(family) + " family (it computes " + listed
-                        + "); it is never replaced by " + _repr(fields["BASELINE"])
-                        + " silently. Use numeric_profile=" + _repr(fields["BASELINE"]) + ".")
-    _ = _available(key, what, use, fields)
-    if String(key) != _str(fields["BASELINE"], "profile metadata"):
-        _ = _warn_if_slow(key, _this_vendor(context), fields, context)
+        if py_type(name) is native_loaded_module("builtins").dict:
+            # A per-part dict is inference only: refused for a trainer before
+            # anything in it is read.
+            _use(use, fields)
+            if String(use) != "inference":
+                raise Error("ValueError: mojolearn: " + what + " is a per-part dict, which is for inference only; "
+                            + "a trainer takes a profile name (" + _repr(fields["TRAINING_DEFAULT"]) + ")")
+        key = _spec(name, what, family, fields)
+        var named = _used(key, fields)
+        for n in range(len(named)):  # driver-loop: over the spec's one or two profiles
+            var profile = named[n]
+            if family is not None and not _covers(profile, family, "computes", fields):
+                var computes = _row_families(profile, "computes", fields)
+                var listed = String()
+                for i in range(len(computes)):  # driver-loop: over the row's few family names
+                    if i > 0:
+                        listed += ", "
+                    listed += _str(computes[i], "profile family")
+                raise Error("NotImplementedError: mojolearn: " + what + "=" + _repr(profile)
+                            + " does not compute the " + _repr(family) + " family (it computes " + listed
+                            + "); it is never replaced by " + _repr(fields["BASELINE"])
+                            + " silently. Use numeric_profile=" + _repr(fields["BASELINE"]) + ".")
+    _ = _available_spec(key, what, use, fields)
+    var baseline = _str(fields["BASELINE"], "profile metadata")
+    var used = _used(key, fields)
+    var vendor = PythonObject(None)
+    var asked = False
+    for i in range(len(used)):  # driver-loop: over the spec's one or two profiles
+        if String(used[i]) != baseline:
+            if not asked:
+                vendor = _this_vendor(context)
+                asked = True
+            _ = _warn_if_slow(used[i], vendor, fields, context)
     return key
 
 
@@ -414,14 +571,23 @@ def _saved(state: PythonObject, what: String, fields: PythonObject) raises -> Py
             raise Error("TypeError: mojolearn: " + what + " must be an ordinary dict to carry a numeric profile")
     if saved is None:
         return fields["BASELINE"]
-    return _canonical(saved, what + " " + _str(fields["STATE_KEY"], "profile metadata"), fields)
+    comptime if NP_SABOTAGE_DROP_SAVED:
+        # The sabotage arm (top of file): a saved per-part dict keeps only its preset.
+        if py_type(saved) is b.dict:
+            var preset_only = py_get(saved, PythonObject("preset"))
+            saved = preset_only
+    # A saved spec is a profile name or a per-part dict; both are read back
+    # in their canonical form.
+    return _spec(saved, what + " " + _str(fields["STATE_KEY"], "profile metadata"), PythonObject(None), fields)
 
 
 def _check_saved(state: PythonObject, profile: PythonObject, what: String, fields: PythonObject) raises -> PythonObject:
-    # Was _numeric_profile.check_saved (Python, until 2026-11-15).
+    # Was _numeric_profile.check_saved (Python, until 2026-11-15). Compares
+    # canonical forms, so a dict that only restates its preset equals the
+    # preset name.
     var saved = _saved(state, what, fields)
-    var mine = _canonical(profile, "numeric_profile", fields)
-    if String(saved) != String(mine):
+    var mine = _spec(profile, "numeric_profile", PythonObject(None), fields)
+    if not Bool(py=saved == mine):
         raise Error("ValueError: mojolearn: " + what + " was written under numeric profile " + _repr(saved)
                     + " and this object computes under " + _repr(mine) + "; a run keeps one arithmetic, "
                     + "so build the object with numeric_profile=" + _repr(saved))
@@ -450,7 +616,9 @@ def numeric_profile_operation(operation: String, values: PythonObject, context: 
         py_setitem(fields["_defaults"], values[1], value)
         return previous
     if operation == "canonical" and len(values) == 2:
-        return _canonical(values[0], _label(values[1], "label"), fields)
+        return _spec(values[0], _label(values[1], "label"), PythonObject(None), fields)
+    if operation == "parts" and len(values) == 2:
+        return _table(_spec(values[0], "numeric_profile", values[1], fields), fields)
     if (operation == "computes" or operation == "default_reaches") and len(values) == 2:
         var column = "computes" if operation == "computes" else "default_for"
         return PythonObject(_covers(values[0], values[1], column, fields))
@@ -461,9 +629,13 @@ def numeric_profile_operation(operation: String, values: PythonObject, context: 
         var vendor = _this_vendor(context) if values[1] is None else values[1]
         return _warn_if_slow(key, vendor, fields, context)
     if operation == "state_field" and len(values) == 1:
-        var key = _canonical(values[0], "numeric_profile", fields)
+        # The canonical form is stored: a per-part dict as a fresh dict, a
+        # name unless it is the baseline (an fp32_v1 state gains no bytes).
+        var key = _spec(values[0], "numeric_profile", PythonObject(None), fields)
         var field = Python.dict()
-        if String(key) != _str(fields["BASELINE"], "profile metadata"):
+        if py_type(key) is native_loaded_module("builtins").dict:
+            py_setitem(field, fields["STATE_KEY"], key)
+        elif String(key) != _str(fields["BASELINE"], "profile metadata"):
             py_setitem(field, fields["STATE_KEY"], key)
         return field
     if operation == "check_saved" and len(values) == 3:
@@ -473,7 +645,7 @@ def numeric_profile_operation(operation: String, values: PythonObject, context: 
         var saved = _saved(values[0], what, fields)
         if values[1] is not None:
             _ = _check_saved(values[0], values[1], what, fields)
-        return _available(saved, what + " " + _str(fields["STATE_KEY"], "profile metadata"), values[3], fields)
+        return _available_spec(saved, what + " " + _str(fields["STATE_KEY"], "profile metadata"), values[3], fields)
     raise Error("ValueError: unknown numeric profile operation or argument count")
 
 
