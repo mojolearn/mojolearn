@@ -400,8 +400,7 @@ def _rf_regressor_fit_dart(params: ForestFitArgs) raises -> Int:
     var cols_a = params.y
     # The session is held for this member fit by its own reference (the
     # registry's lock word covers the lookup only; lane fx-gil).
-    var dreg = DART_SESSIONS.get_or_create_ptr()
-    var dsess = dreg[].lease(hid)
+    var dsess = DART_SESSIONS.lease(hid)
     var n = dsess[].n
     var d = dsess[].d
     var k = dsess[].k

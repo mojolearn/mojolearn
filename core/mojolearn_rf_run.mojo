@@ -24,7 +24,7 @@ from ensemble.ada_rounds import (
 )
 from xtrees.ops_device import weighted_sample_on
 from xtrees.ops_device_boost import r2_step_on, samme_step_on
-from xtrees.dart_device import DART_SESSIONS, _DART_CTX
+from xtrees.dart_device import _DART_CTX
 from ensemble.nan_refusal import RF_NAN_REFUSAL, RF_NONFINITE_REFUSAL
 
 from ensemble.device_finite import FOREST_DEVICE_FINITE, ForestFiniteScan

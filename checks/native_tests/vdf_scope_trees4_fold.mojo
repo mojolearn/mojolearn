@@ -332,8 +332,7 @@ def _gbdt_case(slot: Int, gathered: List[Float32], n: Int) raises:
 
 def _dart_session_x(id: Int, n: Int, words: Int) raises -> List[Float32]:
     comptime if not CPU_COLUMN_BUILD:
-        var reg = DART_SESSIONS.get_or_create_ptr()
-        var sess = reg[].lease(id)
+        var sess = DART_SESSIONS.lease(id)
         var ctx = process_ctx["MojolearnXTreesDartContextV3"]()
         var out = List[Float32](length=words, fill=0.0)
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sess[].x)
