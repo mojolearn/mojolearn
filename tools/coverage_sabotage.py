@@ -166,15 +166,22 @@ def _signature(cell):
             for key in HASH_PARTS if key in cell}
 
 
+#: the longest error line a check-sides failure quotes (a whole lane's list of failed members fits)
+_REASON_CAP = 4000
+
+
 def _unstable_reason(cell, repeats):
-    """One short phrase for a cell `_stable` rejects: its verdict and the first
-    line of its error, probe error or first oracle error."""
+    """One phrase for a cell `_stable` rejects: its verdict and the WHOLE first
+    line of its error, probe error or first oracle error (up to _REASON_CAP).
+    The first line is where a lane names every failed member (check-generic-*:
+    one line listing each class); a 160-character cut left the d1641666a4 gate
+    unable to say which sequence class refused (lane w3-fix-9-s2, 2026-11-25)."""
     for field in ("error", "probe_error"):
         if cell.get(field):
-            return f"verdict {cell.get('verdict')}, {field}: {str(cell[field]).splitlines()[0][:160]}"
+            return f"verdict {cell.get('verdict')}, {field}: {str(cell[field]).splitlines()[0][:_REASON_CAP]}"
     errors = [e for e in (cell.get("oracle_errors") or []) if e]
     if errors:
-        return f"verdict {cell.get('verdict')}, oracle error: {str(errors[0]).splitlines()[0][:160]}"
+        return f"verdict {cell.get('verdict')}, oracle error: {str(errors[0]).splitlines()[0][:_REASON_CAP]}"
     return f"verdict {cell.get('verdict')}, {len(cell.get('hashes') or [])} of {repeats} hashes or an unstable part"
 
 
