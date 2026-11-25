@@ -63,6 +63,11 @@ NON_COMPUTING = frozenset((
     "TrainedBpeVocabulary", "ByteLanguageModelConfig", "TensorInfo", "ParameterSampler", "ParameterGrid",
     # a predicate over two integers (whether a microbatch split keeps the bits)
     "accumulation_is_aligned",
+    # tokenizer and corpus readers (w3-integrate-9, 2026-11-25): the name of a
+    # known pattern spelling, the vocabulary match check and the tokenizer it
+    # returns, and the readers of a corpus already tokenized (cached ids and
+    # their vocabulary); pretokenize, prepare and the trainer carry the side
+    "pattern_name", "require_vocabulary", "tokenizer_for", "TokenizedCorpus", "TokenBatches",
 ))
 
 
