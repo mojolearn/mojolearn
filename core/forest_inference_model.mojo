@@ -249,65 +249,96 @@ struct ForestIOWorkspace(Defaultable, Movable):
         self.label_len = rows
 
 
+struct _ForestIOIdle(Movable):
+    """The pool's idle list, in heap storage of its own (`ForestIOPool`,
+    THE TABLE IS BEHIND A POINTER)."""
+
+    var idle: List[ArcPointer[ForestIOWorkspace]]
+
+    def __init__(out self):
+        self.idle = List[ArcPointer[ForestIOWorkspace]]()
+
+
 struct ForestIOPool(Defaultable, Movable):
     """The idle workspaces of one registry. `take` hands the most recently
     returned one to a call (so calls one at a time reuse one workspace and
     find the rows an ensemble staged), or a new one when none is idle;
     `give` returns it. The lock word guards the list step only: no device
-    call, no allocation of a buffer and no launch happens under it."""
+    call, no allocation of a buffer and no launch happens under it.
+
+    THE TABLE IS BEHIND A POINTER (lane gd-dart-threads, 2026-11-25; the
+    form of core/forest_export_run.mojo and core/msel_host.mojo). `idle` was
+    a field read through the method's `self`, which the compiler may load
+    before the lock's compare-and-swap and keep: two concurrent predictions
+    could pop one workspace twice or append to a stale list header. It lives
+    in `_ForestIOIdle`, the one element of the heap List `cell`, reached
+    through `_table()` after the lock. Slots V3."""
     var lock: List[Int64]
-    var idle: List[ArcPointer[ForestIOWorkspace]]
+    #: exactly one `_ForestIOIdle`, never grown, so its address is stable
+    var cell: List[_ForestIOIdle]
 
     def __init__(out self):
         self.lock = List[Int64](length=1, fill=Int64(0))
-        self.idle = List[ArcPointer[ForestIOWorkspace]]()
+        self.cell = List[_ForestIOIdle]()
+        self.cell.append(_ForestIOIdle())
 
-    def take(mut self) raises -> ArcPointer[ForestIOWorkspace]:
-        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+    def _word(self) -> MutPointer[Int64, MutUntrackedOrigin]:
+        return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(self.lock.unsafe_ptr()))
+
+    def _table(self) -> MutPointer[_ForestIOIdle, MutUntrackedOrigin]:
+        return MutPointer[_ForestIOIdle, MutUntrackedOrigin](unsafe_from_address=Int(self.cell.unsafe_ptr()))
+
+    def take(self) raises -> ArcPointer[ForestIOWorkspace]:
+        var table = self._table()
+        var word = self._word()
         shared_slot_lock(word)
         try:
-            if len(self.idle) > 0:
-                return self.idle.pop()
+            if len(table[].idle) > 0:
+                return table[].idle.pop()
         finally:
             shared_slot_unlock(word)
         return ArcPointer[ForestIOWorkspace](ForestIOWorkspace())
 
-    def give(mut self, io: ArcPointer[ForestIOWorkspace]) raises:
-        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+    def give(self, io: ArcPointer[ForestIOWorkspace]) raises:
+        var table = self._table()
+        var word = self._word()
         shared_slot_lock(word)
         try:
-            self.idle.append(io.copy())
+            table[].idle.append(io.copy())
         finally:
             shared_slot_unlock(word)
 
-    def unstage(mut self) raises:
+    def unstage(self) raises:
         """Drop the staged mark of every idle workspace. One held by a
         running call drops its own mark when its rows differ."""
-        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        var table = self._table()
+        var word = self._word()
         shared_slot_lock(word)
         try:
-            for i in range(len(self.idle)):  # driver-loop: over the idle workspaces (at most one per concurrent call)
-                self.idle[i][].unstage()
+            for i in range(len(table[].idle)):  # driver-loop: over the idle workspaces (at most one per concurrent call)
+                table[].idle[i][].unstage()
         finally:
             shared_slot_unlock(word)
 
-    def drop(mut self) raises:
+    def drop(self) raises:
         """Free every idle workspace (the registry's last snapshot left).
         The buffers are destroyed after the lock word is released."""
         var gone = List[ArcPointer[ForestIOWorkspace]]()
-        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        var table = self._table()
+        var word = self._word()
         shared_slot_lock(word)
         try:
-            while len(self.idle) > 0:  # driver-loop: over the idle workspaces
-                gone.append(self.idle.pop())
+            while len(table[].idle) > 0:  # driver-loop: over the idle workspaces
+                gone.append(table[].idle.pop())
         finally:
             shared_slot_unlock(word)
         _ = len(gone)
 
 
-# V2 (lane fx-gil): the slot holds a pool, not one workspace.
-comptime RF_IO = SharedSlot[ForestIOPool, ("MojolearnRFResidentIOIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFResidentIOFastV2"), 2]
-comptime ET_IO = SharedSlot[ForestIOPool, ("MojolearnETResidentIOIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnETResidentIOFastV2"), 2]
+# V2 (lane fx-gil): the slot holds a pool, not one workspace. V3 (lane
+# gd-dart-threads): the pool's idle list behind its pointer.
+comptime RF_IO = SharedSlot[ForestIOPool, ("MojolearnRFResidentIOIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFResidentIOFastV3"), 3]
+comptime ET_IO = SharedSlot[ForestIOPool, ("MojolearnETResidentIOIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnETResidentIOFastV3"), 3]
 comptime RF_CTX_SLOT = (
     "MojolearnRFResidentContextIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else
     "MojolearnRFResidentContextFastV3")

@@ -46,8 +46,8 @@ comptime FAMILY_ET = 1
 # so two host bindings loaded into one process never share a handle space.
 # (Moved unchanged from bindings/_mojolearn_forest_host.mojo: same names,
 # same layout, so the handle space is the one the Python exports used.)
-comptime RF_GROVES = SharedSlot[HostGroveRegistry, "MojolearnForestHostRFGrovesV2", 2]
-comptime ET_GROVES = SharedSlot[HostGroveRegistry, "MojolearnForestHostETGrovesV2", 2]
+comptime RF_GROVES = SharedSlot[HostGroveRegistry, "MojolearnForestHostRFGrovesV3", 3]
+comptime ET_GROVES = SharedSlot[HostGroveRegistry, "MojolearnForestHostETGrovesV3", 3]
 #: Rows per call, so `n_rows * n_cols` stays far from any Int edge.
 comptime FOREST_HOST_MAX_ROWS = 1073741824
 

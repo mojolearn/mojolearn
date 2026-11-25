@@ -291,57 +291,87 @@ struct HostGroveForest(Movable):
                 raise Error("forest inference prototype requires finite Float32 values")
 
 
-struct HostGroveRegistry(Defaultable, Movable):
-    """`ForestRegistry` (`core/forest_inference_model.mojo`): monotonically
-    increasing handles, never pointers. `lock` guards `entries` and
-    `next_id` for one dictionary step; a prediction holds its snapshot by a
-    copy of the `ArcPointer` (`lease`) and walks with no lock, so nothing
-    here relies on the GIL (lane fx-gil, 2026-11-21)."""
+struct _HostGroveTable(Movable):
+    """The grove registry's shared state, in heap storage of its own
+    (`HostGroveRegistry`, THE TABLE IS BEHIND A POINTER)."""
 
-    var lock: List[Int64]
     var entries: Dict[Int, ArcPointer[HostGroveForest]]
     var next_id: Int
 
     def __init__(out self):
-        self.lock = List[Int64](length=1, fill=Int64(0))
         self.entries = Dict[Int, ArcPointer[HostGroveForest]]()
         self.next_id = 1
 
-    def prepare(mut self, var model: HostGroveForest) raises -> Int:
+
+struct HostGroveRegistry(Defaultable, Movable):
+    """`ForestRegistry` (`core/forest_inference_model.mojo`): monotonically
+    increasing handles, never pointers. `lock` guards the table for one
+    dictionary step; a prediction holds its snapshot by a copy of the
+    `ArcPointer` (`lease`) and walks with no lock, so nothing here relies on
+    the GIL (lane fx-gil, 2026-11-21).
+
+    THE TABLE IS BEHIND A POINTER (lane gd-dart-threads, 2026-11-25; the
+    form of core/forest_export_run.mojo and core/msel_host.mojo). `entries`
+    and `next_id` were fields read through the method's `self`, which the
+    compiler may load before the lock's compare-and-swap and keep: two
+    prepares could mint one handle, a lease could probe a Dict another
+    thread was rehashing. They live in `_HostGroveTable`, the one element of
+    the heap List `cell`, reached through `_table()` after the lock. Slots
+    V3."""
+
+    var lock: List[Int64]
+    #: exactly one `_HostGroveTable`, never grown, so its address is stable
+    var cell: List[_HostGroveTable]
+
+    def __init__(out self):
+        self.lock = List[Int64](length=1, fill=Int64(0))
+        self.cell = List[_HostGroveTable]()
+        self.cell.append(_HostGroveTable())
+
+    def _word(self) -> MutPointer[Int64, MutUntrackedOrigin]:
+        return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(self.lock.unsafe_ptr()))
+
+    def _table(self) -> MutPointer[_HostGroveTable, MutUntrackedOrigin]:
+        return MutPointer[_HostGroveTable, MutUntrackedOrigin](unsafe_from_address=Int(self.cell.unsafe_ptr()))
+
+    def prepare(self, var model: HostGroveForest) raises -> Int:
         var kept = ArcPointer[HostGroveForest](model^)
-        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        var table = self._table()
+        var word = self._word()
         shared_slot_lock(word)
         try:
-            if self.next_id == 9223372036854775807:
+            if table[].next_id == 9223372036854775807:
                 raise Error("resident forest handle space exhausted")
-            var handle = self.next_id
-            self.next_id += 1
-            self.entries[handle] = kept.copy()
+            var handle = table[].next_id
+            table[].next_id += 1
+            table[].entries[handle] = kept.copy()
             return handle
         finally:
             shared_slot_unlock(word)
 
-    def lease(mut self, handle: Int) raises -> Optional[ArcPointer[HostGroveForest]]:
+    def lease(self, handle: Int) raises -> Optional[ArcPointer[HostGroveForest]]:
         """The snapshot of `handle`, held for the caller's prediction; empty
         for an unknown or released handle (the caller refuses in its words)."""
         var found = Optional[ArcPointer[HostGroveForest]]()
-        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        var table = self._table()
+        var word = self._word()
         shared_slot_lock(word)
         try:
-            if handle in self.entries:
-                found = self.entries[handle].copy()
+            if handle in table[].entries:
+                found = table[].entries[handle].copy()
         finally:
             shared_slot_unlock(word)
         return found^
 
-    def release(mut self, handle: Int) raises:
+    def release(self, handle: Int) raises:
         var retired = Optional[ArcPointer[HostGroveForest]]()
-        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        var table = self._table()
+        var word = self._word()
         shared_slot_lock(word)
         try:
-            if handle not in self.entries:
+            if handle not in table[].entries:
                 raise Error("unknown or released resident forest handle")
-            retired = self.entries.pop(handle)
+            retired = table[].entries.pop(handle)
         finally:
             shared_slot_unlock(word)
         # freed here, or when the last prediction that holds it returns

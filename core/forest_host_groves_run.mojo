@@ -12,10 +12,10 @@ from core.forest_host_groves_binding_impl import (
 from core.shared_slot import SharedSlot
 
 
-comptime RF_GROVE_REGISTRY = SharedSlot[HostGroveRegistry, "MojolearnRFResidentForestHostV2", 2]
+comptime RF_GROVE_REGISTRY = SharedSlot[HostGroveRegistry, "MojolearnRFResidentForestHostV3", 3]
 
 
-comptime ET_GROVE_REGISTRY = SharedSlot[HostGroveRegistry, "MojolearnETResidentForestHostV2", 2]
+comptime ET_GROVE_REGISTRY = SharedSlot[HostGroveRegistry, "MojolearnETResidentForestHostV3", 3]
 
 
 def forest_prepare_host_native[RF_INPUT: Bool](model: List[Int], features: Int, trees: Int, outputs: Int,
