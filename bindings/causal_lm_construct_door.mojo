@@ -1143,7 +1143,18 @@ def causal_model_load_binding(mut mods: NativeModules, cls: PythonObject, path_v
         raise Error("CausalLM: weight_format must be one of float32, bfloat16 or int8; unsupported weight_format " + format)
     var route = _model_route(mods, options[2], context)
     if options[3] is not None:
-        _model_profile_named(mods, options[3], context)
+        if py_type(options[3]) is bi.str:
+            _model_profile_named(mods, options[3], context)
+        else:
+            # a per-part dict (lane fixed15-parts) is validated by the profile door before any path is read; the
+            # family's own checks follow once the config names it (w3-integrate-11: a dict was refused here as
+            # "must be a profile name")
+            var np_module = py_get(context, PythonObject("numeric_profile_module"))
+            if np_module is None or np_module._CONTEXT is None:
+                raise Error("RuntimeError: CausalLM: the numeric profile operations are not connected")
+            _ = numeric_profile_operation(String("resolve"),
+                Python.tuple(options[3], PythonObject("numeric_profile"), PythonObject("inference"), PythonObject(None)),
+                np_module._CONTEXT)
     var path = native_path(path_value)
     if not native_path_exists(path, True):
         mods.released()

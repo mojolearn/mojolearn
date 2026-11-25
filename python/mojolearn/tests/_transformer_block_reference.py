@@ -72,6 +72,13 @@ def transformer_call(block, x, state, step):
             + [addr(kc, name="k_cache"), addr(vc, name="v_cache"), addr(y, name="y")])
     if planes is not None:
         if not hasattr(ext, "transformer_forward_int15"):
+            # A CPU column: the per-layer fixed15 host forward is the neural host image's entry (the engine
+            # runs it as host op 34; lane fixed15-decode). fixed15_v1 became the inference default
+            # (fixed15-train), so a default-profile model reaches this branch on the CPU box too.
+            from mojolearn import _backend
+            if _backend.vendor() == "cpu":
+                ext = _backend.load_host_module("_mojolearn_neural_host")
+        if not hasattr(ext, "transformer_forward_int15"):
             raise NotImplementedError(f"{what}: this binding has no transformer_forward_int15 entry")
         params = ([b, l, block.d_model, block.n_heads, block.n_kv_heads, block.head_dim,
                    block.intermediate, smax, s0, block.window] + list(block._opts_tail))

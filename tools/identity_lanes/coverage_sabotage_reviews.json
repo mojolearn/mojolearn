@@ -238,12 +238,6 @@
    "why_fault_reaches_check": "autograd/checks/sabotage/coverage_nn_composed_group_state_cpu.patch: lane nn-blocks-composed (2026-11-25), kept by session-ops-verify as the tagger case's arm (composed-tagger.json): the host twin, COMPOSED_SABOTAGE_GROUP_STATE_HOST forced on, so a resumed grouped optimizer drops every later group's state on the host executor only; a device=\"cpu\" session of ops-composed-cases case tagger runs it and REFUSES (the resumed step differs from the uninterrupted one); the On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-5); the clean and restored runs matched.",
    "error_match": "ValueError:\\ groups\\-resume\\ uninterrupted\\ against\\ resumed\\ parameters\\ \\[1\\]\\ a\\ and\\ groups\\-resume\\ uninterrupted\\ against\\ resumed\\ parameters\\ \\[1\\]\\ b\\ differ:\\ 8\\ bytes\\ of\\ 8",
    "patch_sha256": "43977fa6c02e13801137dae93ea7e3a61762204ba4bda6201425cf6c009d9cd5"
-  },
-  "sequential-param-groups/base": {
-   "product_check": "tools/identity_lanes/nn_pgseq.py (lane `sequential-param-groups`): the lane's in-cell oracle that raised `ValueError: lamb ungrouped and lamb groups with the compile settings differ: 203 bytes of 388`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
-   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_nn_composed_group_state_cpu.patch: lane nn-blocks-composed (2026-11-25), kept by session-ops-verify as the tagger case's arm (composed-tagger.json): the host twin, COMPOSED_SABOTAGE_GROUP_STATE_HOST forced on, so a resumed grouped optimizer drops every later group's state on the host executor only; a device=\"cpu\" session of ops-composed-cases case tagger runs it and REFUSES (the resumed step differs from the uninterrupted one); the On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-5); the clean and restored runs matched.",
-   "error_match": "ValueError:\\ lamb\\ ungrouped\\ and\\ lamb\\ groups\\ with\\ the\\ compile\\ settings\\ differ:\\ 203\\ bytes\\ of\\ 388",
-   "patch_sha256": "43977fa6c02e13801137dae93ea7e3a61762204ba4bda6201425cf6c009d9cd5"
   }
  },
  "coverage-autograd-nn_composed_scan_key_cpu": {
@@ -255,12 +249,6 @@
   }
  },
  "coverage-autograd-pgseq_clip_per_group_cpu": {
-  "ops-composed-cases/base": {
-   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: groups-resume uninterrupted against resumed parameters [1] a and groups-resume uninterrupted against resumed parameters [1] b differ: 8 bytes of 8`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
-   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_pgseq_clip_per_group_cpu.patch: lane nn-blocks-pgseq (2026-11-25): the host twin, PGSEQ_SABOTAGE_CLIP_PER_GROUP_HOST forced on: LAMB's clip per group on the host executor only; the lamb parts move on the CPU side and stay on the device side. Not yet measured. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-5); the clean and restored runs matched.",
-   "error_match": "ValueError:\\ groups\\-resume\\ uninterrupted\\ against\\ resumed\\ parameters\\ \\[1\\]\\ a\\ and\\ groups\\-resume\\ uninterrupted\\ against\\ resumed\\ parameters\\ \\[1\\]\\ b\\ differ:\\ 8\\ bytes\\ of\\ 8",
-   "patch_sha256": "68aa1f56ff7c2e43cc34f3a0b03763f2da1f4097e13a3362f1b427887925bee0"
-  },
   "sequential-param-groups/base": {
    "product_check": "tools/identity_lanes/nn_pgseq.py (lane `sequential-param-groups`): the lane's in-cell oracle that raised `ValueError: lamb ungrouped and lamb groups with the compile settings differ: 203 bytes of 388`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
    "why_fault_reaches_check": "autograd/checks/sabotage/coverage_pgseq_clip_per_group_cpu.patch: lane nn-blocks-pgseq (2026-11-25): the host twin, PGSEQ_SABOTAGE_CLIP_PER_GROUP_HOST forced on: LAMB's clip per group on the host executor only; the lamb parts move on the CPU side and stay on the device side. Not yet measured. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-5); the clean and restored runs matched.",
