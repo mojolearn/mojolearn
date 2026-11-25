@@ -1,5 +1,5 @@
 {
- "audit_head": "21abb92fcda6917a49f1b2f9c043016694eb048c",
+ "audit_head": "db5a7f0b63e0e64f2c93100db60a5602ce5869fa",
  "batches": [
   {
    "arm_lanes": {
@@ -506,13 +506,41 @@
   },
   {
    "arm_lanes": {
+    "coverage-embedding-backward_pad_row-gpu": [
+     "nn-ep-embedding-device"
+    ]
+   },
+   "arms": [
+    "coverage-embedding-backward_pad_row-gpu"
+   ],
+   "builds": [
+    "build_embedding"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "embedding",
+   "id": "embedding-1",
+   "lanes": [
+    "nn-ep-embedding-device"
+   ],
+   "patches": [
+    "embedding/checks/sabotage/coverage_emb_backward_pad_row_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
     "coverage-gate-embedding-gather-gpu": [
      "embedding",
      "embedding-sort",
      "nn-ep-embedding",
      "training-primitives",
      "nn-ep-samba-stack",
-     "fn-training-embedding-forward"
+     "fn-training-embedding-forward",
+     "samba-decode-session"
     ]
    },
    "arms": [
@@ -526,14 +554,15 @@
     "device"
    ],
    "family": "embedding",
-   "id": "embedding-1",
+   "id": "embedding-2",
    "lanes": [
     "embedding",
     "embedding-sort",
     "nn-ep-embedding",
     "training-primitives",
     "nn-ep-samba-stack",
-    "fn-training-embedding-forward"
+    "fn-training-embedding-forward",
+    "samba-decode-session"
    ],
    "patches": [
     "embedding/checks/sabotage/gate_gather_gpu.patch"
@@ -558,6 +587,10 @@
      "dbscan-fit-predict",
      "psd-dbscan"
     ],
+    "coverage-glm-ols_predict_device_ulp-gpu": [
+     "ols-no-intercept",
+     "ridge-no-intercept"
+    ],
     "coverage-precise-decomposition-pca_fit_host": [
      "pca",
      "pca-whiten"
@@ -570,6 +603,7 @@
     "coverage-core-estimators_impl",
     "coverage-dbscan-core_device_impl",
     "coverage-gate-dbscan-labels-gpu",
+    "coverage-glm-ols_predict_device_ulp-gpu",
     "coverage-precise-decomposition-pca_fit_host",
     "coverage-x_cluster-e2e_dbscan_metrics"
    ],
@@ -590,6 +624,8 @@
     "dbscan-brute-l1",
     "dbscan-fit-predict",
     "psd-dbscan",
+    "ols-no-intercept",
+    "ridge-no-intercept",
     "pca",
     "pca-whiten",
     "x-cluster-dbscan-metrics"
@@ -598,6 +634,7 @@
     "core/sabotage/coverage_estimators_impl.patch",
     "dbscan/checks/sabotage/coverage_core_device_impl.patch",
     "dbscan/checks/sabotage/gate_labels_gpu.patch",
+    "glm/checks/sabotage/coverage_ols_predict_device_ulp_gpu.patch",
     "decomposition/sabotage/coverage_precise_pca_fit_host.patch",
     "x_cluster/checks/sabotage/e2e_dbscan_metrics.patch"
    ],
@@ -1276,11 +1313,15 @@
   },
   {
    "arm_lanes": {
+    "coverage-cholesky-poolio_logdet-gpu": [
+     "psd-cholesky"
+    ],
     "coverage-gaussian_process-gp_binding_entries": [
      "gp-lml-theta"
     ]
    },
    "arms": [
+    "coverage-cholesky-poolio_logdet-gpu",
     "coverage-gaussian_process-gp_binding_entries"
    ],
    "builds": [
@@ -1292,9 +1333,11 @@
    "family": "gp",
    "id": "gp-1",
    "lanes": [
+    "psd-cholesky",
     "gp-lml-theta"
    ],
    "patches": [
+    "cholesky/checks/sabotage/coverage_chol_poolio_logdet_gpu.patch",
     "gaussian_process/checks/sabotage/coverage_gp_binding_entries.patch"
    ],
    "sides": [
@@ -1303,11 +1346,15 @@
   },
   {
    "arm_lanes": {
+    "coverage-cholesky-profile_jitter-gpu": [
+     "cholesky-profile-jitter"
+    ],
     "coverage-x_neighbors-gp_cov_device_not_self": [
      "x-neighbors-gp-cov"
     ]
    },
    "arms": [
+    "coverage-cholesky-profile_jitter-gpu",
     "coverage-x_neighbors-gp_cov_device_not_self"
    ],
    "builds": [
@@ -1319,9 +1366,11 @@
    "family": "gp",
    "id": "gp-2",
    "lanes": [
+    "cholesky-profile-jitter",
     "x-neighbors-gp-cov"
    ],
    "patches": [
+    "cholesky/checks/sabotage/coverage_chol_profile_jitter_gpu.patch",
     "x_neighbors/checks/sabotage/gp_cov_device_not_self.patch"
    ],
    "sides": [
@@ -1330,6 +1379,9 @@
   },
   {
    "arm_lanes": {
+    "coverage-hdbscan-core_ulp-psd-gpu": [
+     "psd-hdbscan"
+    ],
     "coverage-hdbscan-hdbscan_door_impl": [
      "hdbscan",
      "hdbscan-leaf"
@@ -1339,6 +1391,7 @@
     ]
    },
    "arms": [
+    "coverage-hdbscan-core_ulp-psd-gpu",
     "coverage-hdbscan-hdbscan_door_impl",
     "coverage-x_cluster-e2e_hdbscan_epsilon"
    ],
@@ -1351,11 +1404,13 @@
    "family": "hdbscan",
    "id": "hdbscan-1",
    "lanes": [
+    "psd-hdbscan",
     "hdbscan",
     "hdbscan-leaf",
     "x-cluster-hdbscan-epsilon"
    ],
    "patches": [
+    "x_cluster/checks/sabotage/e2e_hdbscan_core.patch",
     "hdbscan/checks/sabotage/coverage_hdbscan_door_impl.patch",
     "x_cluster/checks/sabotage/e2e_hdbscan_epsilon.patch"
    ],
@@ -1465,10 +1520,14 @@
    "arm_lanes": {
     "coverage-gate-ivf-merge_dist-gpu": [
      "ivf-extend"
+    ],
+    "coverage-ivf-merge_dist-filter-gpu": [
+     "ivf-filter"
     ]
    },
    "arms": [
-    "coverage-gate-ivf-merge_dist-gpu"
+    "coverage-gate-ivf-merge_dist-gpu",
+    "coverage-ivf-merge_dist-filter-gpu"
    ],
    "builds": [
     "build_ivf"
@@ -1479,7 +1538,8 @@
    "family": "ivf",
    "id": "ivf-2",
    "lanes": [
-    "ivf-extend"
+    "ivf-extend",
+    "ivf-filter"
    ],
    "patches": [
     "ivf/checks/sabotage/gate_merge_dist_gpu.patch"
@@ -1602,6 +1662,36 @@
   },
   {
    "arm_lanes": {
+    "coverage-core-rms_scale_negate-gpu": [
+     "psd-causal-lm",
+     "psd-causal-lm-text"
+    ]
+   },
+   "arms": [
+    "coverage-core-rms_scale_negate-gpu"
+   ],
+   "builds": [
+    "build_mamba",
+    "build_transformer"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "mamba",
+   "id": "mamba-1",
+   "lanes": [
+    "psd-causal-lm",
+    "psd-causal-lm-text"
+   ],
+   "patches": [
+    "core/sabotage/coverage_rms_scale_negate_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
     "coverage-gate-mamba-rms_scale-gpu": [
      "hf-causal-lm",
      "hf-causal-lm-stream",
@@ -1644,7 +1734,7 @@
     "device"
    ],
    "family": "mamba",
-   "id": "mamba-1",
+   "id": "mamba-2",
    "lanes": [
     "hf-causal-lm",
     "hf-causal-lm-stream",
@@ -1698,7 +1788,7 @@
     "device"
    ],
    "family": "mamba",
-   "id": "mamba-2",
+   "id": "mamba-3",
    "lanes": [
     "mamba3-decode-session"
    ],
@@ -1725,7 +1815,7 @@
     "device"
    ],
    "family": "mamba",
-   "id": "mamba-3",
+   "id": "mamba-4",
    "lanes": [
     "mamba3-decode-session"
    ],
@@ -1752,7 +1842,7 @@
     "device"
    ],
    "family": "mamba",
-   "id": "mamba-4",
+   "id": "mamba-5",
    "lanes": [
     "mamba3-decode-session"
    ],
@@ -1781,7 +1871,7 @@
     "device"
    ],
    "family": "mamba",
-   "id": "mamba-5",
+   "id": "mamba-6",
    "lanes": [
     "mamba1-decode-session",
     "mamba2-decode-session",
@@ -1796,6 +1886,9 @@
   },
   {
    "arm_lanes": {
+    "coverage-core-spectral_write_embedding-gpu": [
+     "fn-spectral-embedding"
+    ],
     "coverage-gate-umap-epochs_download-gpu": [
      "umap",
      "umap-fit-transform",
@@ -1812,6 +1905,7 @@
     ]
    },
    "arms": [
+    "coverage-core-spectral_write_embedding-gpu",
     "coverage-gate-umap-epochs_download-gpu",
     "coverage-x_cluster-e2e_spectral_laplacian"
    ],
@@ -1824,6 +1918,7 @@
    "family": "metrics",
    "id": "metrics-1",
    "lanes": [
+    "fn-spectral-embedding",
     "umap",
     "umap-fit-transform",
     "x-decomp-umap-options",
@@ -1836,6 +1931,7 @@
     "spectral-embedding-fit-transform"
    ],
    "patches": [
+    "core/sabotage/coverage_spectral_write_embedding_gpu.patch",
     "umap/sabotage/gate_epochs_download_gpu.patch",
     "x_cluster/checks/sabotage/e2e_spectral_laplacian.patch"
    ],
@@ -2331,6 +2427,9 @@
      "lasso-score",
      "psd-cd"
     ],
+    "coverage-solver-cd_gram_coef-lasso-gpu": [
+     "lasso"
+    ],
     "coverage-x_cluster-e2e_agglomerative_roots": [
      "agglomerative",
      "agglomerative-fit-predict",
@@ -2339,6 +2438,7 @@
    },
    "arms": [
     "coverage-gate-solver-cd_gram_coef-gpu",
+    "coverage-solver-cd_gram_coef-lasso-gpu",
     "coverage-x_cluster-e2e_agglomerative_roots"
    ],
    "builds": [
@@ -2355,6 +2455,7 @@
     "elasticnet-score",
     "lasso-score",
     "psd-cd",
+    "lasso",
     "agglomerative",
     "agglomerative-fit-predict",
     "psd-graph-agglomerative"
@@ -2704,6 +2805,76 @@
   },
   {
    "arm_lanes": {
+    "coverage-params-random_state_read": [
+     "generic-params-cluster",
+     "generic-params-decomp",
+     "generic-params-linear",
+     "generic-params-neighbors",
+     "generic-params-other",
+     "generic-params-prep",
+     "generic-params-sequence",
+     "generic-params-trees"
+    ]
+   },
+   "arms": [
+    "coverage-params-random_state_read"
+   ],
+   "builds": [
+    "build_tokenizer_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "tokenizer",
+   "id": "tokenizer-4",
+   "lanes": [
+    "generic-params-cluster",
+    "generic-params-decomp",
+    "generic-params-linear",
+    "generic-params-neighbors",
+    "generic-params-other",
+    "generic-params-prep",
+    "generic-params-sequence",
+    "generic-params-trees"
+   ],
+   "patches": [
+    "bindings/sabotage/coverage_params_random_state_read.patch"
+   ],
+   "sides": [
+    "cpu",
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-sequence-lr_spec_fill_ulp": [
+     "nn-tr-schedules"
+    ]
+   },
+   "arms": [
+    "coverage-sequence-lr_spec_fill_ulp"
+   ],
+   "builds": [
+    "build_tokenizer_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "tokenizer",
+   "id": "tokenizer-5",
+   "lanes": [
+    "nn-tr-schedules"
+   ],
+   "patches": [
+    "sequence/checks/sabotage/coverage_lr_spec_fill_ulp.patch"
+   ],
+   "sides": [
+    "cpu",
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
     "coverage-tokenizer-ranks": [
      "bpe-vocabulary",
      "tokenized-corpus"
@@ -2720,7 +2891,7 @@
     "cpu"
    ],
    "family": "tokenizer",
-   "id": "tokenizer-4",
+   "id": "tokenizer-6",
    "lanes": [
     "bpe-vocabulary",
     "tokenized-corpus"
@@ -2753,7 +2924,7 @@
     "device"
    ],
    "family": "tokenizer",
-   "id": "tokenizer-5",
+   "id": "tokenizer-7",
    "lanes": [
     "optim-sgd",
     "optim-adam-clip",
@@ -2780,7 +2951,8 @@
      "psd-byte-lm-offload",
      "psd-byte-lm-worker",
      "training-device-cross-entropy",
-     "fn-training-cross-entropy"
+     "fn-training-cross-entropy",
+     "cross-entropy-arms"
     ]
    },
    "arms": [
@@ -2806,7 +2978,8 @@
     "psd-byte-lm-offload",
     "psd-byte-lm-worker",
     "training-device-cross-entropy",
-    "fn-training-cross-entropy"
+    "fn-training-cross-entropy",
+    "cross-entropy-arms"
    ],
    "patches": [
     "training/checks/sabotage/gate_ce_divisor_gpu.patch"
@@ -2862,7 +3035,8 @@
      "optim-owner-lifecycle",
      "optim-resident-io",
      "optim-sgd",
-     "samba-optimizer-state"
+     "samba-optimizer-state",
+     "training-param-groups-device"
     ]
    },
    "arms": [
@@ -2894,7 +3068,8 @@
     "optim-owner-lifecycle",
     "optim-resident-io",
     "optim-sgd",
-    "samba-optimizer-state"
+    "samba-optimizer-state",
+    "training-param-groups-device"
    ],
    "patches": [
     "training/checks/sabotage/gate_step_scalars_gpu.patch"
@@ -3324,10 +3499,14 @@
      "x-cluster-optics-fit-predict",
      "generic-attrs-cluster",
      "generic-digest-cluster"
+    ],
+    "coverage-x_cluster-optics-sq_dist_rows-gpu": [
+     "x-cluster-optics"
     ]
    },
    "arms": [
-    "coverage-gate-x_cluster-sq_dist_rows-gpu"
+    "coverage-gate-x_cluster-sq_dist_rows-gpu",
+    "coverage-x_cluster-optics-sq_dist_rows-gpu"
    ],
    "builds": [
     "build_x_cluster"
@@ -3356,10 +3535,38 @@
     "x-cluster-minibatch-partial",
     "x-cluster-optics-fit-predict",
     "generic-attrs-cluster",
-    "generic-digest-cluster"
+    "generic-digest-cluster",
+    "x-cluster-optics"
    ],
    "patches": [
     "x_cluster/checks/sabotage/gate_sq_dist_rows_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-x_cluster-ap_signed_median-gpu": [
+     "x-cluster-ap-precomputed"
+    ]
+   },
+   "arms": [
+    "coverage-x_cluster-ap_signed_median-gpu"
+   ],
+   "builds": [
+    "build_x_cluster"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_cluster",
+   "id": "x_cluster-4",
+   "lanes": [
+    "x-cluster-ap-precomputed"
+   ],
+   "patches": [
+    "x_cluster/checks/sabotage/coverage_ap_signed_median_gpu.patch"
    ],
    "sides": [
     "gpu"
@@ -3385,7 +3592,7 @@
     "device"
    ],
    "family": "x_cluster",
-   "id": "x_cluster-4",
+   "id": "x_cluster-5",
    "lanes": [
     "x-cluster-meanshift",
     "x-cluster-affinity-propagation",
@@ -3417,7 +3624,7 @@
     "device"
    ],
    "family": "x_cluster",
-   "id": "x_cluster-5",
+   "id": "x_cluster-6",
    "lanes": [
     "x-cluster-kmeans-init",
     "x-cluster-minibatch-kmeans"
@@ -4979,7 +5186,8 @@
      "x-prep-variance-threshold-fit-transform",
      "x-prep-da-solvers",
      "generic-attrs-prep",
-     "generic-digest-prep"
+     "generic-digest-prep",
+     "generic-pickle-prep"
     ]
    },
    "arms": [
@@ -5070,7 +5278,8 @@
     "x-prep-variance-threshold-fit-transform",
     "x-prep-da-solvers",
     "generic-attrs-prep",
-    "generic-digest-prep"
+    "generic-digest-prep",
+    "generic-pickle-prep"
    ],
    "patches": [
     "x_prep/seams/sabotage/gate_store_gpu.patch"
@@ -5081,60 +5290,20 @@
   },
   {
    "arm_lanes": {
-    "coverage-autograd-imp_argmax_decode": [
-     "nn-pg-program-decode"
+    "coverage-autograd-composed_attention_scale_gpu": [
+     "sequence-composed-transformer"
+    ],
+    "coverage-autograd-import_reader": [
+     "sequence-onnx-import"
     ],
     "coverage-sequence-ops_impl": [
      "sequence-lamb"
     ]
    },
    "arms": [
-    "coverage-autograd-imp_argmax_decode",
-    "coverage-sequence-ops_impl"
-   ],
-   "builds": [
-    "build_x_sequence",
-    "build_x_sequence_host",
-    "build_runtime_catalog_host",
-    "build_runtime_sequential_host"
-   ],
-   "columns": [
-    "cpu",
-    "device"
-   ],
-   "family": "x_sequence",
-   "id": "x_sequence-1",
-   "lanes": [
-    "nn-pg-program-decode",
-    "sequence-lamb"
-   ],
-   "patches": [
-    "autograd/checks/sabotage/coverage_imp_argmax_decode.patch",
-    "sequence/checks/sabotage/coverage_ops_impl.patch"
-   ],
-   "sides": [
-    "cpu",
-    "gpu"
-   ]
-  },
-  {
-   "arm_lanes": {
-    "coverage-autograd-import_reader": [
-     "sequence-onnx-import"
-    ],
-    "coverage-native-sequence-release": [
-     "sequence-device-release"
-    ],
-    "coverage-sequence-opt_resident": [
-     "sequence-lamb",
-     "sequence-rmsprop",
-     "sequence-adagrad"
-    ]
-   },
-   "arms": [
+    "coverage-autograd-composed_attention_scale_gpu",
     "coverage-autograd-import_reader",
-    "coverage-native-sequence-release",
-    "coverage-sequence-opt_resident"
+    "coverage-sequence-ops_impl"
    ],
    "builds": [
     "build_x_sequence",
@@ -5146,18 +5315,16 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-2",
+   "id": "x_sequence-1",
    "lanes": [
+    "sequence-composed-transformer",
     "sequence-onnx-import",
-    "sequence-device-release",
-    "sequence-lamb",
-    "sequence-rmsprop",
-    "sequence-adagrad"
+    "sequence-lamb"
    ],
    "patches": [
+    "autograd/checks/sabotage/coverage_composed_attention_scale_gpu.patch",
     "autograd/checks/sabotage/coverage_import_reader.patch",
-    "sequence/checks/sabotage/coverage_seq_tensor_free.patch",
-    "sequence/checks/sabotage/coverage_opt_resident.patch"
+    "sequence/checks/sabotage/coverage_ops_impl.patch"
    ],
    "sides": [
     "cpu",
@@ -5166,18 +5333,22 @@
   },
   {
    "arm_lanes": {
+    "coverage-autograd-composed_conv1d_scale_gpu": [
+     "sequence-composed-conv1d"
+    ],
     "coverage-autograd-imported_run": [
      "sequence-onnx-import"
     ],
-    "coverage-sequence-cnn_classifier_program": [
-     "x-cnn-trainer",
-     "x-cnn-trainer-options",
-     "public-cnn-classifier-predict"
+    "coverage-sequence-opt_resident": [
+     "sequence-lamb",
+     "sequence-rmsprop",
+     "sequence-adagrad"
     ]
    },
    "arms": [
+    "coverage-autograd-composed_conv1d_scale_gpu",
     "coverage-autograd-imported_run",
-    "coverage-sequence-cnn_classifier_program"
+    "coverage-sequence-opt_resident"
    ],
    "builds": [
     "build_x_sequence",
@@ -5190,16 +5361,268 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-3",
+   "id": "x_sequence-2",
    "lanes": [
+    "sequence-composed-conv1d",
     "sequence-onnx-import",
-    "x-cnn-trainer",
-    "x-cnn-trainer-options",
-    "public-cnn-classifier-predict"
+    "sequence-lamb",
+    "sequence-rmsprop",
+    "sequence-adagrad"
    ],
    "patches": [
+    "autograd/checks/sabotage/coverage_composed_conv1d_scale_gpu.patch",
     "autograd/checks/sabotage/coverage_imported_run.patch",
-    "sequence/checks/sabotage/coverage_cnn_classifier_program.patch"
+    "sequence/checks/sabotage/coverage_opt_resident.patch"
+   ],
+   "sides": [
+    "cpu",
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-composed_conv3d_scale_gpu": [
+     "sequence-composed-conv3d",
+     "sequence-composed-pool3d"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-composed_conv3d_scale_gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-3",
+   "lanes": [
+    "sequence-composed-conv3d",
+    "sequence-composed-pool3d"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_composed_conv3d_scale_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-composed_leaky_slope_gpu": [
+     "sequence-composed-activations"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-composed_leaky_slope_gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-4",
+   "lanes": [
+    "sequence-composed-activations"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_composed_leaky_slope_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-composed_log_softmax_scale_gpu": [
+     "sequence-composed-log-softmax-ctc"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-composed_log_softmax_scale_gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-5",
+   "lanes": [
+    "sequence-composed-log-softmax-ctc"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_composed_log_softmax_scale_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-composed_loss_scalar_gpu": [
+     "sequence-composed-losses"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-composed_loss_scalar_gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-6",
+   "lanes": [
+    "sequence-composed-losses"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_composed_loss_scalar_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-composed_recurrent_reverse_gpu": [
+     "sequence-composed-recurrent"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-composed_recurrent_reverse_gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-7",
+   "lanes": [
+    "sequence-composed-recurrent"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_composed_recurrent_reverse_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-composed_selective_scan_bc_gpu": [
+     "sequence-composed-mamba1"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-composed_selective_scan_bc_gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-8",
+   "lanes": [
+    "sequence-composed-mamba1"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_composed_selective_scan_bc_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-composed_ssd_scan_params_gpu": [
+     "sequence-composed-mamba2"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-composed_ssd_scan_params_gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-9",
+   "lanes": [
+    "sequence-composed-mamba2"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_composed_ssd_scan_params_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-composed_trapezoid_scan_kq_gpu": [
+     "sequence-composed-mamba3"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-composed_trapezoid_scan_kq_gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-10",
+   "lanes": [
+    "sequence-composed-mamba3"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_composed_trapezoid_scan_kq_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-imp_argmax_decode": [
+     "nn-pg-program-decode"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-imp_argmax_decode"
+   ],
+   "builds": [
+    "build_x_sequence",
+    "build_x_sequence_host",
+    "build_runtime_catalog_host",
+    "build_runtime_sequential_host"
+   ],
+   "columns": [
+    "cpu",
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-11",
+   "lanes": [
+    "nn-pg-program-decode"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_imp_argmax_decode.patch"
    ],
    "sides": [
     "cpu",
@@ -5226,7 +5649,7 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-4",
+   "id": "x_sequence-12",
    "lanes": [
     "sequence-tape-program",
     "sequence-tape-sequential",
@@ -5237,6 +5660,188 @@
    ],
    "sides": [
     "cpu",
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-nn_conv_layers-gpu": [
+     "sequence-nnconv-transpose",
+     "sequence-nnconv-pools",
+     "sequence-nnconv-pads",
+     "sequence-nnconv-upsample",
+     "sequence-nnconv-shuffle"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-nn_conv_layers-gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-13",
+   "lanes": [
+    "sequence-nnconv-transpose",
+    "sequence-nnconv-pools",
+    "sequence-nnconv-pads",
+    "sequence-nnconv-upsample",
+    "sequence-nnconv-shuffle"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_nn_conv_layers_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-nn_mha_scale_ulp-gpu": [
+     "sequence-attention-encoder",
+     "sequence-attention-cross"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-nn_mha_scale_ulp-gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-14",
+   "lanes": [
+    "sequence-attention-encoder",
+    "sequence-attention-cross"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_nn_mha_scale_ulp_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-nn_norms_layers-gpu": [
+     "sequence-norms-resnet1d-gn",
+     "sequence-norms-instance"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-nn_norms_layers-gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-15",
+   "lanes": [
+    "sequence-norms-resnet1d-gn",
+    "sequence-norms-instance"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_nn_norms_layers_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-nn_optim_rate-gpu": [
+     "sequence-optim-rmsprop",
+     "sequence-optim-adagrad",
+     "sequence-optim-lamb"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-nn_optim_rate-gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-16",
+   "lanes": [
+    "sequence-optim-rmsprop",
+    "sequence-optim-adagrad",
+    "sequence-optim-lamb"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_nn_optim_rate_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-ops_scale_factor_gpu": [
+     "nn-cbw-custom-vjp"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-ops_scale_factor_gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-17",
+   "lanes": [
+    "nn-cbw-custom-vjp"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_ops_scale_factor_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-rnv_conv_out_ulp-gpu": [
+     "sequence-blocks-cnn1d",
+     "sequence-blocks-resnet1d",
+     "sequence-blocks-inceptiontime"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-rnv_conv_out_ulp-gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-18",
+   "lanes": [
+    "sequence-blocks-cnn1d",
+    "sequence-blocks-resnet1d",
+    "sequence-blocks-inceptiontime"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_rnv_conv_out_ulp_gpu.patch"
+   ],
+   "sides": [
     "gpu"
    ]
   },
@@ -5258,7 +5863,7 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-5",
+   "id": "x_sequence-19",
    "lanes": [
     "sequence-export-roundtrip"
    ],
@@ -5286,7 +5891,7 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-6",
+   "id": "x_sequence-20",
    "lanes": [
     "sequence-mlp"
    ],
@@ -5320,7 +5925,7 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-7",
+   "id": "x_sequence-21",
    "lanes": [
     "training-mlp-sessions",
     "nn-tr-small-mlp",
@@ -5403,7 +6008,7 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-8",
+   "id": "x_sequence-22",
    "lanes": [
     "check-generic-sequence",
     "fn-layer-norm-backward",
@@ -5466,6 +6071,102 @@
   },
   {
    "arm_lanes": {
+    "coverage-native-sequence-release": [
+     "sequence-device-release"
+    ]
+   },
+   "arms": [
+    "coverage-native-sequence-release"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-23",
+   "lanes": [
+    "sequence-device-release"
+   ],
+   "patches": [
+    "sequence/checks/sabotage/coverage_seq_tensor_free.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-sequence-cell_fwd_state_ulp-gpu": [
+     "sequence-blocks-bigru-lengths",
+     "sequence-blocks-bilstm",
+     "sequence-blocks-gru-lengths",
+     "sequence-blocks-lstm-lengths",
+     "sequence-rnn-bidi-options"
+    ]
+   },
+   "arms": [
+    "coverage-sequence-cell_fwd_state_ulp-gpu"
+   ],
+   "builds": [
+    "build_x_sequence"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-24",
+   "lanes": [
+    "sequence-blocks-bigru-lengths",
+    "sequence-blocks-bilstm",
+    "sequence-blocks-gru-lengths",
+    "sequence-blocks-lstm-lengths",
+    "sequence-rnn-bidi-options"
+   ],
+   "patches": [
+    "sequence/checks/sabotage/coverage_cell_fwd_state_ulp_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-sequence-cnn_classifier_program": [
+     "x-cnn-trainer",
+     "x-cnn-trainer-options",
+     "public-cnn-classifier-predict"
+    ]
+   },
+   "arms": [
+    "coverage-sequence-cnn_classifier_program"
+   ],
+   "builds": [
+    "build_x_sequence",
+    "build_x_sequence_host"
+   ],
+   "columns": [
+    "cpu",
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-25",
+   "lanes": [
+    "x-cnn-trainer",
+    "x-cnn-trainer-options",
+    "public-cnn-classifier-predict"
+   ],
+   "patches": [
+    "sequence/checks/sabotage/coverage_cnn_classifier_program.patch"
+   ],
+   "sides": [
+    "cpu",
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
     "coverage-sequence-opt_public": [
      "sequence-optimizer-state",
      "sequence-adamax",
@@ -5492,7 +6193,7 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-9",
+   "id": "x_sequence-26",
    "lanes": [
     "sequence-optimizer-state",
     "sequence-adamax",
@@ -5512,6 +6213,35 @@
   },
   {
    "arm_lanes": {
+    "coverage-tokenizer-bpe_merge_ties-gpu": [
+     "nn-pg-bpe-decode",
+     "bpe-trainer"
+    ]
+   },
+   "arms": [
+    "coverage-tokenizer-bpe_merge_ties-gpu"
+   ],
+   "builds": [
+    "build_x_tokenizer"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_tokenizer",
+   "id": "x_tokenizer-1",
+   "lanes": [
+    "nn-pg-bpe-decode",
+    "bpe-trainer"
+   ],
+   "patches": [
+    "tokenizer/sabotage/coverage_bpe_merge_ties_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
     "coverage-tokenizer-gpu_cut": [
      "hf-tokenizer"
     ]
@@ -5526,7 +6256,7 @@
     "device"
    ],
    "family": "x_tokenizer",
-   "id": "x_tokenizer-1",
+   "id": "x_tokenizer-2",
    "lanes": [
     "hf-tokenizer"
    ],
@@ -5591,13 +6321,17 @@
      "trees-dart-clf",
      "trees-dart-options",
      "m-dart-score"
+    ],
+    "coverage-xtrees-pshap_marginal-gpu": [
+     "trees-shap-permutation"
     ]
    },
    "arms": [
     "coverage-bindings-msel_r9d_scorers",
     "coverage-gate-xtrees-auxiliary_mean-gpu",
     "coverage-gate-xtrees-onehot-gpu",
-    "coverage-xtrees-device_dart_drop_count"
+    "coverage-xtrees-device_dart_drop_count",
+    "coverage-xtrees-pshap_marginal-gpu"
    ],
    "builds": [
     "build_x_trees_host",
@@ -5624,13 +6358,15 @@
     "trees-dart-reg",
     "trees-dart-clf",
     "trees-dart-options",
-    "m-dart-score"
+    "m-dart-score",
+    "trees-shap-permutation"
    ],
    "patches": [
     "bindings/sabotage/coverage_msel_r9d_scorers.patch",
     "xtrees/checks/sabotage/gate_auxiliary_mean_gpu.patch",
     "xtrees/checks/sabotage/gate_onehot_gpu.patch",
-    "xtrees/checks/sabotage/coverage_xtrees_device_dart_drop_count.patch"
+    "xtrees/checks/sabotage/coverage_xtrees_device_dart_drop_count.patch",
+    "xtrees/checks/sabotage/coverage_pshap_marginal_gpu.patch"
    ],
    "sides": [
     "cpu",
