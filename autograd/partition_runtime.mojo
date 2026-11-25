@@ -245,9 +245,12 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
                     upload_cast(self.workers[0].executor.session.ex, buf, srcs[k])
             if loss_kind != 0:
                 upload_cast(self.workers[0].executor.session.ex, ty, target)
+            # lane rnn-parity-c: the microbatch denominators of the loss fold, one word a microbatch, once a fit
+            var dens = List[Float32](length=self.microbatches, fill=Float32(0))
             for e in range(epochs):  # driver-loop: epochs
                 epoch_order(self.workers[0].executor.session.ex, shuffle, self.seed, self.epoch, n, indices)
                 # the epoch's loss, sum of numerators / sum of denominators (built-in losses: rows x mean, rows)
+                # (`dens` holds a minibatch's microbatch denominators; allocated once a fit, above the epochs)
                 var epoch_fold = LossFold(not num_den, 0, Float32(0))
                 var start = 0
                 while start < n:  # driver-loop: optimizer minibatches
@@ -279,7 +282,6 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
                         self.wave(values, gradients, param_grads, micros, wave, False, True)
                     # the microbatches' denominators: their rows, or the program's second output (each microbatch's
                     # forward values are on the host after the waves), folded in ascending microbatch order
-                    var dens = List[Float32](length=micros, fill=Float32(0))
                     var den_total = Float32(0)
                     for micro in range(micros):  # driver-loop: microbatch denominators
                         if num_den:
