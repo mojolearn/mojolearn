@@ -43,7 +43,11 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.entry_table import entry_op_plain
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
-from core.tokenizer_gpu_entry_table import TOK_GPU_OP_CORPUS_ENCODE, TOK_GPU_OP_CORPUS_TRAIN
+from core.tokenizer_gpu_entry_table import (
+    TOK_GPU_OP_CORPUS_ENCODE, TOK_GPU_OP_CORPUS_TRAIN, TOK_GPU_OP_VOCAB_DECODE, TOK_GPU_OP_VOCAB_ENCODE,
+    TOK_GPU_OP_VOCAB_FREE, TOK_GPU_OP_VOCAB_LOAD,
+)
+from tokenizer.gpu.vocab_gpu import vocab_gpu_decode, vocab_gpu_encode, vocab_gpu_free, vocab_gpu_load
 from tokenizer.encoding import BpeTokenizer
 from tokenizer.impl.ranks import parse_rank_table
 from tokenizer.impl.unicode_class import builtin_unicode_classes
@@ -359,6 +363,22 @@ def corpus_gpu_entry_dispatch(operation: Int, aa: Int, na: Int, pp: Int, np: Int
             if na != 6 or np != 4 or p[1] < 0:
                 raise Error("tokenizer gpu entry: corpus encode takes 6 addresses and 4 words")
             value = corpus_gpu_encode(a[0], p[0], _words(a[1], p[1]), p[2], a[2], p[3], a[3], a[4], a[5])
+        elif op == TOK_GPU_OP_VOCAB_LOAD:
+            if na != 9 or np != 8:
+                raise Error("tokenizer gpu entry: vocab load takes 9 addresses and 8 words")
+            value = vocab_gpu_load(a, p)
+        elif op == TOK_GPU_OP_VOCAB_ENCODE:
+            if na != 3 or np != 2 or p[0] < 0:
+                raise Error("tokenizer gpu entry: vocab encode takes 3 addresses and 2 words")
+            value = vocab_gpu_encode(a[0], a[1], p[0], p[1] != 0, a[2])
+        elif op == TOK_GPU_OP_VOCAB_DECODE:
+            if na != 3 or np != 2 or p[0] < 0 or p[1] < 0:
+                raise Error("tokenizer gpu entry: vocab decode takes 3 addresses and 2 words")
+            value = vocab_gpu_decode(a[0], a[1], p[0], a[2], p[1])
+        elif op == TOK_GPU_OP_VOCAB_FREE:
+            if na != 1:
+                raise Error("tokenizer gpu entry: vocab free takes 1 address")
+            vocab_gpu_free(a[0])
         else:
             raise Error("tokenizer gpu entry: unknown operation " + String(op))
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value

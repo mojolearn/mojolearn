@@ -5,7 +5,8 @@ The GPU tokenizer image (`_mojolearn_x_tokenizer`) publishes ONE entry
 (`tokenizer_gpu_entry_v1` in its binding file, body
 `tokenizer/gpu/corpus_gpu.mojo` `corpus_gpu_entry_dispatch`) at module init,
 through `core/entry_table.mojo`, in the slot of its tier and vendor. The host
-corpus door (`bindings/lm_corpus_public_native_door.mojo`) resolves it ONCE at
+corpus door (`bindings/lm_corpus_public_native_door.mojo`) and the `models.Tokenizer` door
+(`bindings/tokenizer_public_native_door.mojo`, connect_vocab) each resolve it ONCE at
 import-time connection (`bindings/lm_corpus_metadata_door.mojo`
 `corpus_gpu_connect`, reading the image's `x_tokenizer_numeric_mode` and
 `x_tokenizer_vendor`), and the host RUN of `lm_corpus.prepare(device="gpu")`
@@ -32,16 +33,37 @@ THE ABI (`TOKENIZER_GPU_ENTRY_ABI`; addresses and ints are 64-bit words):
       token offset of every split point (int64) and [n_documents, max_id,
       ids_above_255] (int64). The result is the id count.
 
+The `mojolearn.models.Tokenizer` device side (lane vdf2-tokmodel, tokenizer/gpu/vocab_gpu.mojo):
+
+  TOK_GPU_OP_VOCAB_LOAD     addresses [rank_arena, rank_offsets, rank_lengths, rank_buckets, sp_arena,
+                                       sp_offsets, sp_lengths, sp_ids, added_of]
+                            ints [arena_bytes, n_ranks, n_buckets, mask, sp_arena_bytes, n_specials,
+                                  n_added_of, pattern]
+      The host `VocabTokenizer`'s tables (int64 words; the added tokens in the host's order)
+      uploaded once. The result is the table's handle word (freed by TOK_GPU_OP_VOCAB_FREE).
+  TOK_GPU_OP_VOCAB_ENCODE   addresses [handle, text, ids_out]   ints [n, allow_special]
+      `VocabTokenizer.encode` of the n bytes at `text`: ids (int32, room max(n, 1)). The result is
+      the id count.
+  TOK_GPU_OP_VOCAB_DECODE   addresses [handle, ids, bytes_out]  ints [n_ids, cap]
+      The bytes of the n_ids int64 ids (room cap). The result is the byte count, or -1 - p for the
+      first id at position p that is neither an added token nor a rank.
+  TOK_GPU_OP_VOCAB_FREE     addresses [handle]                  ints []
+      The table released. The result is 0.
+
 Publication and lookup are small metadata operations with no independent
 numerical work to split. A layout change takes a new V suffix.
 """
 from core.entry_table import EntryRef, entry_table_publish, entry_table_resolve
 from core.native_descriptor_abi import NativeDescriptorCall
 
-comptime TOKENIZER_GPU_ENTRY_ABI = "mojolearn.tokenizer.gpu.corpus.v1"
+comptime TOKENIZER_GPU_ENTRY_ABI = "mojolearn.tokenizer.gpu.v2"
 comptime TOK_GPU_OP_CORPUS_TRAIN = 0
 comptime TOK_GPU_OP_CORPUS_ENCODE = 1
-comptime TOK_GPU_OP_COUNT = 2
+comptime TOK_GPU_OP_VOCAB_LOAD = 2
+comptime TOK_GPU_OP_VOCAB_ENCODE = 3
+comptime TOK_GPU_OP_VOCAB_DECODE = 4
+comptime TOK_GPU_OP_VOCAB_FREE = 5
+comptime TOK_GPU_OP_COUNT = 6
 
 
 def tokenizer_gpu_vendor_word(vendor: String) -> Int:
