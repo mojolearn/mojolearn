@@ -140,4 +140,6 @@ def rnn_zero_padded[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, lengths: FP, 
     if xs.ndim != 3:
         var x3: List[Int] = [T, B, tape.cols(x)]
         src = rn_as_shape(tape, ex, x, ShapeN.of(x3))
-    return imp_where(tape, ex, cond, zero, src)
+    var z = imp_where(tape, ex, cond, zero, src)
+    # the (T B, D) matrix view rnn_scan_op reads (free)
+    return rn_as_shape(tape, ex, z, ShapeN.matrix(T * B, tape.cols(x)))
