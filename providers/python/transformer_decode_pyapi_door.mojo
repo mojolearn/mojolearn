@@ -464,7 +464,12 @@ def _transformer_decode_weights(fields: PythonObject) raises:
                 if triplet is not None:
                     raise Error("Transformer decode ungated MLP cannot carry packed gate planes")
                 continue
-            if triplet is None or len(triplet) != 3:
+            if triplet is None:
+                # lane fixed15-parts-native: a projection the parts mask
+                # leaves on fp32_v1 has no planes; its float32 weight is
+                # checked with the others and by the native open, by name.
+                continue
+            if len(triplet) != 3:
                 raise Error("Transformer decode packed projections require high/low/exponent planes")
             for plane in range(3):  # small-loop(three integer plane formats)
                 var array = triplet[plane]
@@ -820,7 +825,9 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
         var planes = snapshot.packed.resolve(keep)
         for address in planes:  # driver-loop: packed projection plane addresses
             a.append(address)
-        var p = snapshot.words.transformer_params(batch, 0, Int(py=slots["max_tokens"]), cached)
+        # lane fixed15-parts-native: the fixed15 open carries the block's
+        # parts mask as its last word.
+        var p = snapshot.words.transformer_params_parts(batch, 0, Int(py=slots["max_tokens"]), cached, snapshot.parts) if packed else snapshot.words.transformer_params(batch, 0, Int(py=slots["max_tokens"]), cached)
         var open_p = List[Int]()
         for i in range(len(p)):  # driver-loop: resident shape words omit sequence length
             if i != 1:
