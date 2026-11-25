@@ -1,0 +1,13 @@
+diff --git a/autograd/program_training_checkpoint.mojo b/autograd/program_training_checkpoint.mojo
+index 904ffdad98..75dc1d17ae 100644
+--- a/autograd/program_training_checkpoint.mojo
++++ b/autograd/program_training_checkpoint.mojo
+@@ -78,7 +78,7 @@ comptime PT_SABOTAGE_DROP_GROUP_HOST = is_defined["MOJOLEARN_PT_SABOTAGE_DROP_GR
+ #   IN_PLACE (lane fable-finalize): Program.save_training opens and overwrites the destination directly, the form
+ #   before 2026-11-25, instead of replacing it whole: a hard link taken on the previous checkpoint then shows the NEW
+ #   bytes (one file, rewritten) where it must keep the previous checkpoint (the old file, never touched).
+-comptime PT_SABOTAGE_IN_PLACE = is_defined["MOJOLEARN_PT_SABOTAGE_IN_PLACE"]()
++comptime PT_SABOTAGE_IN_PLACE = True  # SABOTAGE
+ comptime PT_SABOTAGE_IN_PLACE_HOST = is_defined["MOJOLEARN_PT_SABOTAGE_IN_PLACE_HOST"]()
+ #   SOURCE_UNBOUND (lane fable-finalize): Session.load_training(source=) does not compare the source with the saved
+ #   one, so a resume on same-shaped replacement data or with other input fields is accepted where it must be refused.

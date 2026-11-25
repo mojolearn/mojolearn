@@ -872,6 +872,156 @@
    ]
   },
   {
+   "name": "logsumexp-offset",
+   "about": "Session.logsumexp's gradient under a large common offset: rows of scores near 1e8 and -5e7, where float32 rounds the result to the scores themselves (1e8 + log 2 is 1e8). The gradient is the row's softmax, taken from the shifted exponentials and their sum: [0.5, 0.5] for two equal scores (never [1, 1]), the softmax of [0, -8] for scores 8 apart, and each row adds up to one.",
+   "data": {
+    "xo": {
+     "value": [
+      [
+       100000000.0,
+       100000000.0
+      ],
+      [
+       100000000.0,
+       99999992.0
+      ],
+      [
+       -50000000.0,
+       -50000000.0
+      ]
+     ]
+    },
+    "want": {
+     "value": [
+      [
+       0.5,
+       0.5
+      ],
+      [
+       0.9996646498695336,
+       0.00033535013046647816
+      ],
+      [
+       0.5,
+       0.5
+      ]
+     ],
+     "dtype": "float64"
+    },
+    "ones": {
+     "value": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "dtype": "float64"
+    },
+    "out": {
+     "value": [
+      100000000.0,
+      100000000.0,
+      -50000000.0
+     ]
+    }
+   },
+   "do": [
+    {
+     "op": "session",
+     "as": "s",
+     "record": true,
+     "do": [
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@xo"
+       ],
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "sx"
+      },
+      {
+       "op": "call",
+       "fn": "s.logsumexp",
+       "args": [
+        "@sx",
+        1
+       ],
+       "as": "l1"
+      },
+      {
+       "op": "call",
+       "fn": "s.sum",
+       "args": [
+        "@l1"
+       ],
+       "as": "loss"
+      },
+      {
+       "op": "read",
+       "fn": "s.numpy",
+       "of": "@l1",
+       "as": "v"
+      },
+      {
+       "op": "call",
+       "fn": "s.backward",
+       "args": [
+        "@loss"
+       ]
+      },
+      {
+       "op": "read",
+       "fn": "s.grad",
+       "of": "@sx",
+       "as": "g"
+      }
+     ]
+    },
+    {
+     "op": "close",
+     "a": "@v",
+     "b": "@out",
+     "rtol": 0.0,
+     "what": "logsumexp of scores near 1e8 is the scores' own float32 value"
+    },
+    {
+     "op": "close",
+     "a": "@g",
+     "b": "@want",
+     "rtol": 1e-05,
+     "what": "the logsumexp gradient under a large common offset is the row's softmax"
+    },
+    {
+     "op": "np",
+     "fn": "sum",
+     "args": [
+      "@g"
+     ],
+     "kw": {
+      "axis": 1
+     },
+     "as": "gs"
+    },
+    {
+     "op": "close",
+     "a": "@gs",
+     "b": "@ones",
+     "rtol": 1e-06,
+     "what": "each row of the logsumexp gradient adds up to one"
+    },
+    {
+     "op": "digest",
+     "part": "grad",
+     "of": [
+      "@v",
+      "@g"
+     ]
+    }
+   ]
+  },
+  {
    "name": "soft-cross-entropy",
    "about": "Session.cross_entropy with a target distribution (label smoothing and a hard row), mean and weighted, against a float64 oracle -mean(sum(target * log_softmax(logits))); the logits' gradient against central differences of a captured Program; the hard-label call on the same logits keeps its own path.",
    "data": {

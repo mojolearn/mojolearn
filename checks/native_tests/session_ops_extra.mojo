@@ -15,6 +15,8 @@ One test, test_session_ops_extra, runs six independent units across host cores (
   - unit 3, logsumexp along axis 1 of a (4, 5) block (one row of 1000s, one of only -inf): against a float64
     oracle (1000 + log 5; -inf), the gradient against float64 softmax * w (0 on the -inf row) and central
     differences; along axis 0 against the oracle.
+  - unit 3 also, logsumexp's gradient under a large common offset (rows at 1e8 and -5e7: the row's softmax, each
+    row adding up to one; a row moved by 2^20 has the unmoved row's gradient words).
   - unit 4, the soft-target cross-entropy (mean) of (4, 3) logits against a distribution: the loss against
     float64 -mean(sum(t log_softmax(z))), the logits' gradient against float64 (softmax * sum(t) - t) / rows and
     central differences.
@@ -246,6 +248,58 @@ def _lse64(row: List[Float64]) -> Float64:
     return m + log(s)
 
 
+def _lse_offset[E: Exec](mut ex: E) raises -> List[Float32]:
+    """A large common offset leaves logsumexp's gradient unchanged: the rows of x and of x + offset have the same
+    softmax, and float32 rounds 1e8 + log 2 to 1e8, so a gradient taken from the rounded result is [1, 1] where
+    [0.5, 0.5] is right (the defect of 2026-11-25). Rows: two equal scores at 1e8, scores 8 apart at 1e8 (8 is one
+    float32 step there, so both are exact), equal scores at -5e7, and five scores of a few units moved by 2^20
+    (each stays exact in float32, so the shifted row is the unshifted row's softmax to the last bit)."""
+    var x: List[Float32] = [100000000.0, 100000000.0, 100000000.0, 99999992.0, -50000000.0, -50000000.0]
+    var w: List[Float32] = [1.0, 1.0, 1.0]
+    var tape = Tape()
+    var xt = tape.tensor(ex, x, 3, 2, True)
+    var lt = sox_logsumexp(tape, ex, xt, 1, False)
+    var l = tape.values(ex, lt)
+    _weighted_backward(tape, ex, lt, w)
+    var g = tape.gradients(ex, xt)
+    tape.release(ex)
+    _require(len(l) == 3 and len(g) == 6, "logsumexp offset shapes")
+    _require(l[0] == Float32(100000000.0) and l[2] == Float32(-50000000.0), "logsumexp at 1e8 is the rounded score")
+    var e8 = exp(-8.0)
+    var want: List[Float64] = [0.5, 0.5, 1.0 / (1.0 + e8), e8 / (1.0 + e8), 0.5, 0.5]
+    for i in range(6):  # small-loop(fixture)
+        _close("logsumexp gradient under a 1e8 offset, element " + String(i), g[i], want[i], 1.0e-6)
+    for r in range(3):  # small-loop(fixture)
+        _close("logsumexp gradient row " + String(r) + " adds up to one",
+               g[2 * r] + g[2 * r + 1], 1.0, 1.0e-6)
+    # the same row with and without an offset every element absorbs exactly: the same gradient words
+    var small: List[Float32] = [0.25, -1.5, 3.0, 2.0, -0.75]
+    var moved = List[Float32]()
+    for j in range(5):  # small-loop(fixture)
+        moved.append(small[j] + Float32(1048576.0))
+    var both = small.copy()
+    both.extend(moved^)
+    var w2: List[Float32] = [1.0, 1.0]
+    var tape2 = Tape()
+    var bt = tape2.tensor(ex, both, 2, 5, True)
+    var bl = sox_logsumexp(tape2, ex, bt, 1, False)
+    _weighted_backward(tape2, ex, bl, w2)
+    var bg = tape2.gradients(ex, bt)
+    tape2.release(ex)
+    var total = 0.0
+    for j in range(5):  # small-loop(fixture)
+        if bitcast[DType.uint32](bg[j]) != bitcast[DType.uint32](bg[5 + j]):
+            _fail("logsumexp gradient moved under a 2^20 offset at column " + String(j) + ": " + String(bg[j])
+                  + " vs " + String(bg[5 + j]))
+        total += Float64(bg[5 + j])
+    if not (abs(total - 1.0) <= 1.0e-6):
+        _fail("logsumexp gradient of the offset row adds up to " + String(total) + ", want 1")
+    var words = l^
+    words.extend(g^)
+    words.extend(bg^)
+    return words^
+
+
 def run_lse[E: Exec](mut ex: E) raises -> List[Float32]:
     var x = _values(20, UInt64(43), 3.0)
     var ninf = bitcast[DType.float32](UInt32(0xFF800000))
@@ -293,6 +347,7 @@ def run_lse[E: Exec](mut ex: E) raises -> List[Float32]:
     var words = l^
     words.extend(g^)
     words.extend(l0^)
+    words.extend(_lse_offset(ex))
     return words^
 
 

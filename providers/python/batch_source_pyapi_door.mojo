@@ -16,8 +16,15 @@ another binding image (another mode or executor) is replaced. The owner is a cac
 `_position` determine, so a handle rebuilt in a fresh process from the same directory and a saved state is still
 the same source. Releasing the handle closes the descriptors (the owner's destructor, no Python `__del__`).
 
-`_spec` = (path, batch_size, input field codes, target code, shuffle, seed, bucket_batches, fingerprint);
+`_spec` = (path, batch_size, input field codes, target code, shuffle, seed, bucket_batches, fingerprint, sealed);
 `_position` = (epoch, consumed batches of that epoch).
+
+THE RESUME DOORS (lane fable-finalize, 2026-11-25): `Program.save_training(source=)`, `Session.load_training(source=)`
+and `load_state_dict` bind a position to the source's DATA (the fingerprint, which holds the shard index's content
+digests: autograd/batch_source.mojo THE SEAL), its PLAN settings and its ordered input and target FIELDS, through
+the one comparison `program_training_source_refuse`. A source whose index is not sealed is refused by name at
+each of them (`_need_sealed`): its fingerprint is record lengths only, which other data can share.
+`BatchSource.seal(path)` ("seal") writes the digests, natively, once.
 """
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_setitem, py_setattr, py_item
@@ -27,9 +34,9 @@ from core.shared_slot import SharedSlot
 from providers.python.autograd_program_arrays_pyapi_door import is_integer_input, uint64_input
 from autograd.batch_source import (
     BatchSource, BatchSourceSpec, BATCH_SOURCE_FORMAT, BS_FIELD_TARGETS, batch_source_open, batch_source_field,
-    batch_source_field_name,
+    batch_source_field_name, batch_source_seal,
 )
-from autograd.program_training_checkpoint import ProgramTrainingSource
+from autograd.program_training_checkpoint import ProgramTrainingSource, program_training_source_refuse
 from autograd.session_lifetime import SESSION_MODE
 
 
@@ -146,6 +153,7 @@ def batch_source_spec(source: PythonObject) raises -> BatchSourceSpec:
     spec.seed = uint64_input(words[5], "seed")
     spec.bucket = Int(py=words[6])
     spec.fingerprint = uint64_input(words[7], "fingerprint")
+    spec.sealed = Bool(py=words[8])
     spec.epoch = Int(py=at[0])
     spec.consumed = Int(py=at[1])
     return spec^
@@ -163,12 +171,18 @@ def batch_source_reposition(source: PythonObject, epoch: Int, consumed: Int) rai
     py_setattr(source, "_position", Python.tuple(PythonObject(epoch), PythonObject(consumed)))
 
 
-def batch_source_training_part(source: PythonObject) raises -> ProgramTrainingSource:
-    """The source part of a training checkpoint (autograd/program_training_checkpoint.mojo), from the handle."""
+def _need_sealed(spec: BatchSourceSpec, who: String) raises:
+    """Refuse a resume door on a source whose shard index records no content digest (module note THE RESUME
+    DOORS)."""
+    if not spec.sealed:
+        raise Error("ValueError: " + who + ": the shard index under " + spec.path + " records no content digest, "
+                    + "so a resume could not tell these shards from other data of the same shape; call "
+                    + "BatchSource.seal(path) once after writing the shards, then open the source again")
+
+
+def _part_of(spec: BatchSourceSpec) -> ProgramTrainingSource:
+    """The words a resume binds: position, data fingerprint, plan settings and the ordered field mapping."""
     var out = ProgramTrainingSource()
-    if source is None:
-        return out^
-    var spec = batch_source_spec(source)
     out.present = True
     out.epoch = spec.epoch
     out.consumed = spec.consumed
@@ -177,21 +191,32 @@ def batch_source_training_part(source: PythonObject) raises -> ProgramTrainingSo
     out.batch = spec.batch
     out.bucket = spec.bucket
     out.shuffle = spec.shuffle
+    out.inputs = spec.inputs.copy()
+    out.target = spec.target
     return out^
 
 
-def batch_source_restore(source: PythonObject, part: ProgramTrainingSource) raises:
-    """Session.load_training(source=): the saved position on the handle, after checking it is the same data with
-    the same plan settings."""
+def batch_source_training_part(source: PythonObject) raises -> ProgramTrainingSource:
+    """The source part of a training checkpoint (autograd/program_training_checkpoint.mojo), from the handle. A
+    source that is not sealed is refused here, for the save and for the load alike."""
+    var out = ProgramTrainingSource()
+    if source is None:
+        return out^
+    var spec = batch_source_spec(source)
+    _need_sealed(spec, "a training checkpoint with source=")
+    return _part_of(spec)
+
+
+def batch_source_restore(source: PythonObject, part: ProgramTrainingSource, who: String) raises:
+    """A saved position onto the handle (`load_state_dict`), after checking it is the same sealed data, the same
+    plan settings and the same input and target fields (`program_training_source_refuse`)."""
     if source is None:
         return
     if not part.present:
-        raise Error("ValueError: Session.load_training(source=): the checkpoint was saved without a batch source")
+        raise Error("ValueError: " + who + ": the state was saved without a batch source")
     var spec = batch_source_spec(source)
-    if (spec.fingerprint != part.fingerprint or spec.seed != part.seed or spec.batch != part.batch
-            or spec.bucket != part.bucket or spec.shuffle != part.shuffle):
-        raise Error("ValueError: Session.load_training(source=): the source is not the one the checkpoint was saved "
-                    + "with (other data, seed, batch_size, bucket_batches or shuffle)")
+    _need_sealed(spec, who)
+    program_training_source_refuse(_part_of(spec), part, who)
     batch_source_reposition(source, part.epoch, part.consumed)
 
 
@@ -206,12 +231,21 @@ def _state_dict(source: PythonObject) raises -> PythonObject:
     py_setitem(out, PythonObject("batch_size"), PythonObject(spec.batch))
     py_setitem(out, PythonObject("bucket_batches"), PythonObject(spec.bucket))
     py_setitem(out, PythonObject("shuffle"), PythonObject(spec.shuffle))
+    var names = Python.list()
+    for k in range(len(spec.inputs)):  # small-loop(inputs: the source's input fields)
+        _ = py_call(names.append, PythonObject(batch_source_field_name(spec.inputs[k])))
+    py_setitem(out, PythonObject("inputs"), py_call(native_loaded_module("builtins").tuple, names))
+    if spec.target != 0:
+        py_setitem(out, PythonObject("target"), PythonObject(batch_source_field_name(spec.target)))
+    else:
+        py_setitem(out, PythonObject("target"), PythonObject(None))
+    py_setitem(out, PythonObject("sealed"), PythonObject(spec.sealed))
     return out
 
 
 def _load_state_dict(source: PythonObject, state: PythonObject) raises:
     var b = native_loaded_module("builtins")
-    if py_type(state) is not b.dict or len(state) != 8:
+    if py_type(state) is not b.dict or len(state) != 11:
         raise Error("TypeError: BatchSource.load_state_dict takes the dict state_dict returns")
     var spec = batch_source_spec(source)
     var fmt = py_item(state, PythonObject("format"))
@@ -227,9 +261,24 @@ def _load_state_dict(source: PythonObject, state: PythonObject) raises:
     part.batch = _int(py_item(state, PythonObject("batch_size")), "batch_size", 1)
     part.bucket = _int(py_item(state, PythonObject("bucket_batches")), "bucket_batches", 1)
     part.shuffle = _flag(py_item(state, PythonObject("shuffle")), "shuffle")
+    var names = py_item(state, PythonObject("inputs"))
+    if py_type(names) is not b.tuple or len(names) < 1 or len(names) > 64:
+        raise Error("TypeError: BatchSource.load_state_dict: the state's inputs must be a tuple of field names")
+    for k in range(len(names)):  # small-loop(names: the saved input fields)
+        if py_type(names[k]) is not b.str:
+            raise Error("TypeError: BatchSource.load_state_dict: a field name must be a str")
+        part.inputs.append(batch_source_field(String(py=names[k])))
+    var saved_target = py_item(state, PythonObject("target"))
+    if saved_target is not None:
+        if py_type(saved_target) is not b.str or batch_source_field(String(py=saved_target)) != BS_FIELD_TARGETS:
+            raise Error("ValueError: BatchSource.load_state_dict: the state's target must be 'targets' or None")
+        part.target = BS_FIELD_TARGETS
+    if not _flag(py_item(state, PythonObject("sealed")), "sealed"):
+        raise Error("ValueError: BatchSource.load_state_dict: the state was taken on shards whose index records no "
+                    + "content digest; a position is bound to sealed shards (BatchSource.seal(path))")
     if part.consumed > Int(py=source.n_batches):
         raise Error("ValueError: BatchSource.load_state_dict: consumed is past the epoch's batches")
-    batch_source_restore(source, part)
+    batch_source_restore(source, part, "BatchSource.load_state_dict")
     _ = spec^
 
 
@@ -275,12 +324,14 @@ def _open(source: PythonObject, args: PythonObject) raises:
     _drop_owner(source)  # a reopened handle: an owner of its former words is not its source
     py_setattr(source, "_spec", Python.tuple(PythonObject(path), PythonObject(batch), py_call(b.tuple, codes),
                                             PythonObject(target), PythonObject(shuffle), _word_out(seed),
-                                            PythonObject(bucket), _word_out(src.fingerprint)))
+                                            PythonObject(bucket), _word_out(src.fingerprint),
+                                            PythonObject(src.sealed)))
     py_setattr(source, "_position", Python.tuple(PythonObject(0), PythonObject(0)))
     py_setattr(source, "n_records", PythonObject(src.n))
     py_setattr(source, "n_batches", PythonObject(src.n_batches))
     py_setattr(source, "n_features", PythonObject(src.width))
     py_setattr(source, "max_length", PythonObject(src.max_len))
+    py_setattr(source, "sealed", PythonObject(src.sealed))
 
 
 def _next_records(source: PythonObject) raises -> PythonObject:
@@ -297,7 +348,7 @@ def _next_records(source: PythonObject) raises -> PythonObject:
 
 def batch_source_call_py(op: PythonObject, source: PythonObject, args: PythonObject) raises -> PythonObject:
     """The one binding entry of BatchSource: "connect" (import time: the exact class), "open", "state_dict",
-    "load_state_dict", "next_records"."""
+    "load_state_dict", "next_records", "seal" (args (path,); `source` is the class, not a handle)."""
     var b = native_loaded_module("builtins")
     if py_type(op) is not b.str:
         raise Error("TypeError: BatchSource operation must be a str")
@@ -317,4 +368,8 @@ def batch_source_call_py(op: PythonObject, source: PythonObject, args: PythonObj
         return PythonObject(None)
     if name == "next_records":
         return _next_records(source)
+    if name == "seal":
+        if py_type(args) is not b.tuple or len(args) != 1:
+            raise Error("TypeError: BatchSource.seal takes the shard directory")
+        return PythonObject(batch_source_seal(String(py=native_path(args[0]))))
     raise Error("ValueError: unknown BatchSource operation " + name)

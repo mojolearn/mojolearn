@@ -16,13 +16,19 @@ Units (one column each build: the host column with -D MOJOLEARN_COLUMN_CPU=1, el
      uninterrupted; a FRESH session (and a source reopened from the saved position alone) loads it with
      program_training_load and runs two steps: the same next record ids, the same step losses (the dropout masks)
      and the same parameters, word for word.
+     Lane fable-finalize, in the same unit: THE SEAL (a twin directory with other step values under the same record
+     lengths has the same fingerprint unsealed and another one sealed; a resume on it is refused by name, and so
+     are other input fields, another target field and another seed); THE REPLACEMENT (a hard link taken on the
+     first checkpoint still loads as the first checkpoint after a second save to the same name, which then holds
+     the second: the writer replaces the file and never opens the previous one, so an interrupted save cannot
+     destroy it).
   2  ONE OPENING (lane fr2-followups). One opened source serves 100 `Program.fit(source=, steps=1)` calls (the
      handle's native owner keeps it across calls, autograd/batch_source.mojo THE OWNER): the shards are never
      reopened (the same descriptors), every epoch is planned exactly once (the counter is here, not in the product:
      a plan is seen as a new record-order list or a new plan epoch after a call), and after every call the batch
      the next call trains is already read ahead (so a call reads one batch, not the epoch's index and plan).
-Sabotage arms coverage-autograd-batch_source_read_ahead_{gpu,cpu} and coverage-autograd-program_training_drop_group_
-{gpu,cpu} fail unit 1 on their own column.
+Sabotage arms coverage-autograd-batch_source_read_ahead_{gpu,cpu}, coverage-autograd-program_training_drop_group_
+{gpu,cpu} and coverage-autograd-program_training_in_place_{gpu,cpu} fail unit 1 on their own column.
 """
 from std.ffi import c_int, external_call
 from std.memory import bitcast
@@ -38,7 +44,8 @@ from autograd.ops_api import (
 )
 from autograd.optimizer_requests import OpsOptimizerRequest, OpsOptimizerExtras
 from autograd.batch_source import (
-    BatchSource, BatchSourceSpec, BS_FIELD_STEPS, BS_FIELD_LENGTHS, batch_source_open, batch_source_saved,
+    BatchSource, BatchSourceSpec, BS_FIELD_STEPS, BS_FIELD_LENGTHS, BS_FIELD_MASK, BS_FIELD_TARGETS,
+    batch_source_open, batch_source_saved, batch_source_seal,
 )
 from autograd.program_runtime import train_program_source
 from autograd.program_training_checkpoint import program_training_save, program_training_load, ProgramTrainingSource
@@ -96,7 +103,9 @@ def _lengths(shard: Int) -> List[Int]:
     return [2, 1, 3]
 
 
-def _write_shards(root: String) raises:
+def _write_shards(root: String, salt: Int = 0) raises:
+    """The fixture's two shards under `root`, unsealed. Another `salt` gives other step values under the same
+    record lengths (same-shaped replacement data)."""
     for k in range(2):  # driver-loop: over the two shards
         var lengths = _lengths(k)
         var total = 0
@@ -106,7 +115,7 @@ def _write_shards(root: String) raises:
             offsets.append(total)
         var steps = List[Float32]()
         for i in range(total * _F):  # driver-loop: over the shard's step words (a fixed draw)
-            steps.append(Float32(((i * 37 + k * 11) % 17) - 8) / Float32(8))
+            steps.append(Float32(((i * 37 + k * 11 + salt) % 17) - 8) / Float32(8))
         var stem = root + "/part" + String(k)
         _put(stem + ".steps.npy", _npy("<f4", "(" + String(total) + ", " + String(_F) + ")",
                                        Int(steps.unsafe_ptr()), total * _F * 4))
@@ -227,9 +236,41 @@ def _step[E: Exec & Movable & Deinitable](mut s: OpsSession[E], pid: Int, mut sr
     return curve[0]
 
 
+def _load_refused[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: Int, file: String, expect: ProgramTrainingSource, needle: String,
+) raises -> Bool:
+    """Is a load of `file` with the source words `expect` refused with a message holding `needle`?"""
+    try:
+        _ = program_training_load[E, KIND](sid, file, expect)
+    except error:
+        return needle in String(error)
+    return False
+
+
 def run_resume_unit[E: Exec & Movable & Deinitable, KIND: Int](root: String, var first: E, var second: E) raises:
     """`first` runs the uninterrupted side, `second` the fresh one."""
     var file = root + "/run.ckpt"
+    var previous = root + "/run.ckpt.prev"
+    # THE SEAL (lane fable-finalize). A twin directory holds other step values under the same record lengths:
+    # unsealed, the two fingerprints are equal (the defect: a position applied to other data); sealed, they differ.
+    var twin = root + "-twin"
+    _ = external_call["mkdir", c_int](twin.as_c_string_slice().unsafe_ptr(), c_int(448))
+    _write_shards(twin, 3)
+    var plain = batch_source_open(_spec(root, 5))
+    var plain_twin = batch_source_open(_spec(twin, 5))
+    if plain.sealed or plain_twin.sealed or plain.fingerprint != plain_twin.fingerprint:
+        _fail("the twin fixture must be unsealed and share the unsealed fingerprint (same record lengths)")
+    plain.close()
+    plain_twin.close()
+    if batch_source_seal(root) != 2 or batch_source_seal(twin) != 2:
+        _fail("sealing the fixture must seal two shards")
+    var sealed_twin = batch_source_open(_spec(twin, 5))
+    var twin_fingerprint = sealed_twin.fingerprint
+    if not sealed_twin.sealed:
+        _fail("a sealed directory must open as sealed")
+    sealed_twin.close()
+    var later_epoch = -1
+    var later_consumed = -1
     var sid = ops_session_open[E, KIND](first^, False)
     var straight_ids = List[List[Int]]()
     var straight = List[List[Float32]]()
@@ -255,7 +296,17 @@ def run_resume_unit[E: Exec & Movable & Deinitable, KIND: Int](root: String, var
         saved.batch = 2
         saved.bucket = 2
         saved.shuffle = True
+        saved.inputs = [BS_FIELD_STEPS, BS_FIELD_LENGTHS]
+        saved.target = 0
+        if not src.sealed or src.fingerprint == twin_fingerprint:
+            _fail("sealed shards with other content must have another fingerprint")
         _ = program_training_save[E, KIND](sid, m[0], m[1], file, saved)
+        # THE REPLACEMENT (lane fable-finalize). A hard link on the first checkpoint: the second save below must
+        # replace `file` (a new file renamed over the name) and never write into the first checkpoint's file, so
+        # the link keeps the first checkpoint whole whatever happens to the second save.
+        if external_call["link", c_int](file.as_c_string_slice().unsafe_ptr(),
+                                        previous.as_c_string_slice().unsafe_ptr()) != 0:
+            _fail("cannot hard-link the first checkpoint")
         for k in range(2):  # driver-loop: over two uninterrupted steps
             var next = src.pending()
             straight_ids.append(src.records(next[0], next[1]))
@@ -263,6 +314,15 @@ def run_resume_unit[E: Exec & Movable & Deinitable, KIND: Int](root: String, var
             row.extend(_words(s[], m[2], _F))
             row.extend(_words(s[], m[3], 1))
             straight.append(row^)
+        var later_at = batch_source_saved[E.IS_DEVICE](src)
+        var later = saved.copy()
+        later.epoch = later_at[0]
+        later.consumed = later_at[1]
+        later_epoch = later_at[0]
+        later_consumed = later_at[1]
+        if later_epoch == saved.epoch and later_consumed == saved.consumed:
+            _fail("two more steps must move the consumed position")
+        _ = program_training_save[E, KIND](sid, m[0], m[1], file, later)
         src.close()
     except error:
         ops_session_close[E, KIND](sid)
@@ -277,15 +337,33 @@ def run_resume_unit[E: Exec & Movable & Deinitable, KIND: Int](root: String, var
         wrong.fingerprint = 1
         var before = ops_session[E, KIND](fresh)
         var opts_before = len(before[].opts)
-        var refused = False
-        try:
-            _ = program_training_load[E, KIND](fresh, file, wrong)
-        except error:
-            refused = "not the one the checkpoint was saved with" in String(error)
+        var refused = _load_refused[E, KIND](fresh, previous, wrong, "not the data the checkpoint was saved with")
+        # same-shaped replacement data (the sealed twin): refused by name
+        var replaced = saved.copy()
+        replaced.fingerprint = twin_fingerprint
+        if not _load_refused[E, KIND](fresh, previous, replaced, "not the data the checkpoint was saved with"):
+            _fail("a resume on same-shaped replacement data must be refused by name")
+        # a changed field mapping: other input fields, then another target
+        var remapped = saved.copy()
+        remapped.inputs = [BS_FIELD_STEPS, BS_FIELD_MASK]
+        if not _load_refused[E, KIND](fresh, previous, remapped, "are not the fields the checkpoint was trained on"):
+            _fail("a resume with other input fields must be refused by name")
+        var retargeted = saved.copy()
+        retargeted.target = BS_FIELD_TARGETS
+        if not _load_refused[E, KIND](fresh, previous, retargeted, "is not the checkpoint's"):
+            _fail("a resume with another target field must be refused by name")
+        var replanned = saved.copy()
+        replanned.seed = 6
+        if not _load_refused[E, KIND](fresh, previous, replanned, "so its batches would differ"):
+            _fail("a resume with another seed must be refused by name")
         if (not refused or len(before[].opts) != opts_before or len(before[].opt_states) != 0
                 or len(before[].pg_tables) != 0):
             _fail("a load refused for the wrong source must leave the session unchanged")
-        var loaded = program_training_load[E, KIND](fresh, file, ProgramTrainingSource())
+        # the first checkpoint, through the hard link taken before the second save replaced `file`
+        var loaded = program_training_load[E, KIND](fresh, previous, saved)
+        if loaded.source.epoch != saved.epoch or loaded.source.consumed != saved.consumed:
+            _fail("the second save wrote into the first checkpoint's file (position (" + String(loaded.source.epoch)
+                  + ", " + String(loaded.source.consumed) + ")): a save must replace the file, never overwrite it")
         var spec = _spec(root, loaded.source.seed)
         spec.epoch = loaded.source.epoch
         spec.consumed = loaded.source.consumed
@@ -301,6 +379,10 @@ def run_resume_unit[E: Exec & Movable & Deinitable, KIND: Int](root: String, var
             row.extend(_words(s[], loaded.params[1], 1))
             _same("step " + String(k) + " loss and parameters, uninterrupted vs resumed", straight[k], row)
         src.close()
+        # the name itself holds the second checkpoint
+        var second_load = program_training_load[E, KIND](fresh, file, ProgramTrainingSource())
+        if second_load.source.epoch != later_epoch or second_load.source.consumed != later_consumed:
+            _fail("the checkpoint's name does not hold the second save")
     except error:
         ops_session_close[E, KIND](fresh)
         raise error

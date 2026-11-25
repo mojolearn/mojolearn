@@ -27,15 +27,28 @@ the records below live in the extension's integers and floats, in this order (ve
           integer words; the optimizer: grouped (0/1), n_groups, the schedule epoch; per group: kind, nesterov,
           schedule, step_size, centered, n_members, member table indices; per parameter: has_state, step count;
           the source: present (0/1), then epoch, consumed, fingerprint (hi, lo), seed (hi, lo), batch, bucket,
-          shuffle
+          shuffle, n_inputs, the input field codes in capture order, the target field code (0: none)
     floats: the graph's float words; per group: lr, momentum, beta1, beta2, eps, weight_decay, gamma, dampening,
             alpha, lr_decay, initial_accumulator_value, clip_grad_norm, clip_grad_value; per parameter: pw1, pw2,
             mu_prod; then, for each parameter in table order that has a state under a group with a third state
             buffer (RMSprop centered: the gradient average), that buffer's words (the parameter's element count)
 
+THE SOURCE BINDING (lane fable-finalize, 2026-11-25; version 2). A checkpoint saved with a batch source resumes
+only on that source: the same DATA (the fingerprint of a sealed source holds the content digests its shard index
+recorded when the shards were sealed, autograd/batch_source.mojo THE SEAL, so same-shaped replacement data is
+refused; nothing of the corpus is read at save or at load), the same PLAN (seed, batch, bucket, shuffle) and the
+same FIELD MAPPING (the ordered input fields and the target field: a source that would feed "mask" where "lengths"
+was trained is refused). `program_training_source_refuse` is the one comparison; the load calls it before the
+session changes and the handle's restore calls it again. Version 1 files (counts-only fingerprint, no mapping) are
+refused as an unknown version.
+
 An optimizer without groups is one group holding every parameter of the table. The container has slots for two
 state buffers; the third (lane fable-review-2: it was refused by name) rides in the extension's floats, so a file
 without one is the bytes it was.
+
+THE FILE IS REPLACED WHOLE (lane fable-finalize): the container writes a sibling temporary, fsyncs, closes and
+renames it onto the destination, so a save that is interrupted leaves the previous checkpoint loadable
+(training/checkpoint.mojo `_save_checkpoint`).
 
 Parallel plan: serial by nature. The file is one ordered write through one descriptor (training/checkpoint.mojo);
 the per-parameter downloads are executor copies the device queues, not host work to split.
@@ -51,6 +64,7 @@ from autograd.program import (
     PROGRAM_PARAM_STATE_WORDS,
 )
 from autograd.rankn import ShapeN
+from autograd.batch_source import batch_source_field_name, BS_FIELD_STEPS, BS_FIELD_TARGETS
 from core.cast_in import CastIn, CAST_KIND_FLOAT
 from training.checkpoint import Checkpoint, CKPT_SECTION_PROGRAM_TRAINING, read_checkpoint_unchecked, save_checkpoint
 
@@ -61,8 +75,18 @@ from training.checkpoint import Checkpoint, CKPT_SECTION_PROGRAM_TRAINING, read_
 #   start over, so the first resumed update differs from the uninterrupted one.
 comptime PT_SABOTAGE_DROP_GROUP = is_defined["MOJOLEARN_PT_SABOTAGE_DROP_GROUP"]()
 comptime PT_SABOTAGE_DROP_GROUP_HOST = is_defined["MOJOLEARN_PT_SABOTAGE_DROP_GROUP_HOST"]()
+#   IN_PLACE (lane fable-finalize): Program.save_training opens and overwrites the destination directly, the form
+#   before 2026-11-25, instead of replacing it whole: a hard link taken on the previous checkpoint then shows the NEW
+#   bytes (one file, rewritten) where it must keep the previous checkpoint (the old file, never touched).
+comptime PT_SABOTAGE_IN_PLACE = is_defined["MOJOLEARN_PT_SABOTAGE_IN_PLACE"]()
+comptime PT_SABOTAGE_IN_PLACE_HOST = is_defined["MOJOLEARN_PT_SABOTAGE_IN_PLACE_HOST"]()
+#   SOURCE_UNBOUND (lane fable-finalize): Session.load_training(source=) does not compare the source with the saved
+#   one, so a resume on same-shaped replacement data or with other input fields is accepted where it must be refused.
+comptime PT_SABOTAGE_SOURCE_UNBOUND = is_defined["MOJOLEARN_PT_SABOTAGE_SOURCE_UNBOUND"]()
+comptime PT_SABOTAGE_SOURCE_UNBOUND_HOST = is_defined["MOJOLEARN_PT_SABOTAGE_SOURCE_UNBOUND_HOST"]()
 
-comptime _PT_VERSION = 1
+comptime _PT_VERSION = 2
+comptime _PT_SOURCE_FIELDS_MAX = 64
 comptime _PT_GROUP_FLOATS = 13
 
 
@@ -77,8 +101,12 @@ struct ProgramTrainingSource(Copyable, Movable):
     var batch: Int
     var bucket: Int
     var shuffle: Bool
+    var inputs: List[Int]
+    var target: Int
 
     def __init__(out self):
+        self.inputs = List[Int]()
+        self.target = 0
         self.present = False
         self.epoch = 0
         self.consumed = 0
@@ -87,6 +115,47 @@ struct ProgramTrainingSource(Copyable, Movable):
         self.batch = 0
         self.bucket = 0
         self.shuffle = False
+
+
+def _field_names(codes: List[Int]) -> String:
+    var out = String("(")
+    for k in range(len(codes)):  # small-loop(codes: a source's input fields)
+        if k > 0:
+            out += ", "
+        out += batch_source_field_name(codes[k])
+    return out + ")"
+
+
+def _same_fields(a: List[Int], b: List[Int]) -> Bool:
+    if len(a) != len(b):
+        return False
+    for k in range(len(a)):  # small-loop(codes: a source's input fields)
+        if a[k] != b[k]:
+            return False
+    return True
+
+
+def program_training_source_refuse(
+    expect: ProgramTrainingSource, saved: ProgramTrainingSource, who: String,
+) raises:
+    """Refuse, by name, a batch source (`expect`: the handle's words) that is not the one a checkpoint or a saved
+    position (`saved`) was taken with: other data, another plan, or another field mapping (module note THE SOURCE
+    BINDING). The one comparison of every resume door."""
+    if expect.fingerprint != saved.fingerprint:
+        raise Error("ValueError: " + who + ": the source's shards are not the data the checkpoint was saved with "
+                    + "(their content digests or record lengths differ); resume on the shards that were trained")
+    if (expect.seed != saved.seed or expect.batch != saved.batch or expect.bucket != saved.bucket
+            or expect.shuffle != saved.shuffle):
+        raise Error("ValueError: " + who + ": the source is not the one the checkpoint was saved with (another "
+                    + "seed, batch_size, bucket_batches or shuffle), so its batches would differ")
+    if not _same_fields(expect.inputs, saved.inputs):
+        raise Error("ValueError: " + who + ": the source's inputs " + _field_names(expect.inputs)
+                    + " are not the fields the checkpoint was trained on " + _field_names(saved.inputs))
+    if expect.target != saved.target:
+        var mine = batch_source_field_name(expect.target) if expect.target != 0 else String("none")
+        var theirs = batch_source_field_name(saved.target) if saved.target != 0 else String("none")
+        raise Error("ValueError: " + who + ": the source's target (" + mine + ") is not the checkpoint's ("
+                    + theirs + ")")
 
 
 def _hi(v: UInt64) -> Int64:
@@ -127,6 +196,8 @@ def program_training_save[E: Exec & Movable & Deinitable, KIND: Int](
     var p = s[].program(pid)
     var oi = s[]._opt_index(optimizer)
     var grouped = s[].opts[oi].pg >= 0
+    if source.present and (len(source.inputs) < 1 or len(source.inputs) > _PT_SOURCE_FIELDS_MAX):
+        raise Error("ValueError: Program.save_training: the source part names no input field (or too many)")
     # the parameter table: the graph's parameters, each once, in graph order
     var handles = List[Int]()
     var shapes = List[ShapeN]()
@@ -243,9 +314,18 @@ def program_training_save[E: Exec & Movable & Deinitable, KIND: Int](
         ck.ext_ints.append(Int64(source.batch))
         ck.ext_ints.append(Int64(source.bucket))
         ck.ext_ints.append(Int64(1) if source.shuffle else Int64(0))
+        ck.ext_ints.append(Int64(len(source.inputs)))
+        for k in range(len(source.inputs)):  # small-loop(inputs: the source's input fields, in capture order)
+            ck.ext_ints.append(Int64(source.inputs[k]))
+        ck.ext_ints.append(Int64(source.target))
     s[].ex.sync()
-    var written = save_checkpoint(file, ck)
-    return written.bytes
+    # the file is replaced whole (training/checkpoint.mojo): an interrupted save leaves the previous checkpoint
+    comptime if (PT_SABOTAGE_IN_PLACE and E.IS_DEVICE) or (PT_SABOTAGE_IN_PLACE_HOST and not E.IS_DEVICE):
+        var direct = save_checkpoint(file, ck, True)  # SABOTAGE: the previous checkpoint is overwritten in place
+        return direct.bytes
+    else:
+        var written = save_checkpoint(file, ck)
+        return written.bytes
 
 
 struct ProgramTrainingLoad(Movable):
@@ -290,7 +370,7 @@ def program_training_load[E: Exec & Movable & Deinitable, KIND: Int](
     """Read a training checkpoint (module note) into inference session `sid`: new parameter tensors, the program,
     the optimizer with its groups, schedule epoch and every state. Every record is checked before the session
     changes; a failure after that removes what was added. `expect` (present: the caller resumes with a batch
-    source) is that source's data fingerprint and plan settings: they are compared with the saved ones here, before
+    source) is that source's data fingerprint, plan settings and field mapping: they are compared with the saved ones here, before
     the session changes, so a load refused for the wrong source leaves no program, tensor or optimizer behind
     (lane fable-review-2: the door compared them after the load and freed the program and tensors only, so the
     refused load's optimizer, its group members and its group table stayed in the session)."""
@@ -410,16 +490,26 @@ def program_training_load[E: Exec & Movable & Deinitable, KIND: Int](
         if (out.source.epoch < 0 or out.source.consumed < 0 or out.source.batch < 1 or out.source.bucket < 1
                 or (shuffle != 0 and shuffle != 1)):
             raise Error(what + ": invalid source position")
+        var n_inputs = r.take(ck.ext_ints, what)
+        if n_inputs < 1 or n_inputs > _PT_SOURCE_FIELDS_MAX:
+            raise Error(what + ": invalid source field count")
+        for k in range(n_inputs):  # small-loop(inputs: the saved input fields)
+            var code = r.take(ck.ext_ints, what)
+            if code < BS_FIELD_STEPS or code > BS_FIELD_TARGETS:
+                raise Error(what + ": invalid source input field")
+            out.source.inputs.append(code)
+        out.source.target = r.take(ck.ext_ints, what)
+        if out.source.target != 0 and out.source.target != BS_FIELD_TARGETS:
+            raise Error(what + ": invalid source target field")
     if r.at != len(ck.ext_ints) or float_at != len(ck.ext_floats):
         raise Error(what + ": trailing records")
     if expect.present:
         if not out.source.present:
             raise Error("ValueError: Session.load_training(source=): the checkpoint was saved without a batch source")
-        if (expect.fingerprint != out.source.fingerprint or expect.seed != out.source.seed
-                or expect.batch != out.source.batch or expect.bucket != out.source.bucket
-                or expect.shuffle != out.source.shuffle):
-            raise Error("ValueError: Session.load_training(source=): the source is not the one the checkpoint was"
-                        + " saved with (other data, seed, batch_size, bucket_batches or shuffle)")
+        # (the sabotage arms SOURCE_UNBOUND skip this comparison, one side each)
+        comptime if not ((PT_SABOTAGE_SOURCE_UNBOUND and E.IS_DEVICE)
+                         or (PT_SABOTAGE_SOURCE_UNBOUND_HOST and not E.IS_DEVICE)):
+            program_training_source_refuse(expect, out.source, "Session.load_training(source=)")
     var s = ops_session[E, KIND](sid)
     if s[].recording():
         raise Error("ValueError: Session.load_training loads into an inference session (record=False)")

@@ -21,3 +21,8 @@ comptime SOX_SABOTAGE_LSE_SETTLE = is_defined["MOJOLEARN_SESSION_OPS_EXTRA_SABOT
 comptime SOX_SABOTAGE_LSE_SETTLE_HOST = is_defined["MOJOLEARN_SESSION_OPS_EXTRA_SABOTAGE_LSE_SETTLE_HOST"]()
 comptime SOX_SABOTAGE_SOFT_CE = is_defined["MOJOLEARN_SESSION_OPS_EXTRA_SABOTAGE_SOFT_CE"]()
 comptime SOX_SABOTAGE_SOFT_CE_HOST = is_defined["MOJOLEARN_SESSION_OPS_EXTRA_SABOTAGE_SOFT_CE_HOST"]()
+# Added by lane fable-finalize (2026-11-25), caught by the same lane and case file (case logsumexp-offset):
+#   LSE_GRAD: logsumexp's backward takes exp(x - rounded result) instead of the forward's shifted exponential over its
+#     sum (the defect fixed 2026-11-25: scores of 1e8 give a gradient of 1 a column instead of 1 / columns).
+comptime SOX_SABOTAGE_LSE_GRAD = is_defined["MOJOLEARN_SESSION_OPS_EXTRA_SABOTAGE_LSE_GRAD"]()
+comptime SOX_SABOTAGE_LSE_GRAD_HOST = is_defined["MOJOLEARN_SESSION_OPS_EXTRA_SABOTAGE_LSE_GRAD_HOST"]()

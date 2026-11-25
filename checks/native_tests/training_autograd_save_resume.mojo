@@ -43,7 +43,7 @@ from sequence.exec_device import DeviceExec
 from autograd.ops_api import (
     OpsSession, ops_session, ops_session_open, ops_session_close, OPS_HOST, OPS_DEVICE, OPS_MATMUL, OPS_MSE,
 )
-from autograd.optimizer_requests import OpsOptimizerRequest
+from autograd.optimizer_requests import OpsOptimizerRequest, OpsOptimizerExtras
 from autograd.model_checkpoint import ops_save_state, ops_load_state, model_checkpoint_info
 from autograd.model import (
     FIT_STATE_WORDS, LOSS_MSE, LOSS_CROSS_ENTROPY, LOSS_HUBER, TARGET_DENSE, TARGET_CODES, OUT_RAW, OUT_SOFTMAX, OUT_ARGMAX,
@@ -59,7 +59,7 @@ from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, c
 
 
 comptime SEQ_CASES = 7
-comptime SESSION_CASES = 2
+comptime SESSION_CASES = 3
 comptime _N = 120
 comptime _D = 5
 
@@ -246,6 +246,18 @@ def _adam(lr: Float32) -> OpsOptimizerRequest:
                                Float32(0.0), Float32(0.1), Float32(0.0))
 
 
+def _session_optimizer[E: Exec & Movable & Deinitable](mut s: OpsSession[E], unit: Int) raises -> Int:
+    """Case 1: Adam (two state buffers). Case 2 (lane fable-finalize): RMSprop with centered=True and momentum 0.5,
+    the one configuration that keeps all three state buffers (momentum, square average, gradient average); the
+    session checkpoint refused it until record version 2 carried the third buffer."""
+    if unit == 1:
+        return s.optimizer(_adam(0.01))
+    var request = OpsOptimizerRequest(3, False, 0, 1, Float32(0.01), Float32(0.5), Float32(0.9), Float32(0.999),
+                                      Float32(1e-8), Float32(0.0), Float32(0.1), Float32(0.0))
+    var extras = OpsOptimizerExtras(Float32(0.99), True, Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0))
+    return s.optimizer_with(request, extras)
+
+
 def _train[E: Exec & Movable & Deinitable](
     mut s: OpsSession[E], w: Int, opt: Int, xv: List[Float32], yv: List[Float32], steps: Int
 ) raises:
@@ -304,7 +316,7 @@ def run_session_case[E: Exec & Movable & Deinitable, KIND: Int](column: String, 
             raise error
         ops_session_close[E, KIND](lid)
         return
-    require(unit == 1, "unknown session which")
+    require(unit == 1 or unit == 2, "unknown session which")
     var xv = normal(128, 80)
     var yv = normal(64, 81)
     var w0 = normal(8, 82)
@@ -313,19 +325,19 @@ def run_session_case[E: Exec & Movable & Deinitable, KIND: Int](column: String, 
     try:
         var s = ops_session[E, KIND](a)
         var w = tensor(s[], w0, dims2(4, 2), True)
-        var opt = s[].optimizer(_adam(0.01))
+        var opt = _session_optimizer(s[], unit)
         _train(s[], w, opt, xv, yv, 6)
         straight = values(s[], w, dims2(4, 2))
     except error:
         ops_session_close[E, KIND](a)
         raise error
     ops_session_close[E, KIND](a)
-    var path = _path(column, "opt")
+    var path = _path(column, "opt" + String(unit))
     var b = _open[KIND]()
     try:
         var s = ops_session[E, KIND](b)
         var w = tensor(s[], w0, dims2(4, 2), True)
-        var opt = s[].optimizer(_adam(0.01))
+        var opt = _session_optimizer(s[], unit)
         _train(s[], w, opt, xv, yv, 3)
         var hs: List[Int] = [w]
         var counters: List[Int] = [0, 0, 0, 3]
@@ -338,12 +350,12 @@ def run_session_case[E: Exec & Movable & Deinitable, KIND: Int](column: String, 
     var c = _open[KIND]()
     try:
         var s = ops_session[E, KIND](c)
-        var opt = s[].optimizer(_adam(0.01))
+        var opt = _session_optimizer(s[], unit)
         var st = ops_load_state[E, KIND](c, path, True, opt)
         _drop(path)
         _train(s[], st.handles[0], opt, xv, yv, 3)
         require(same_words(values(s[], st.handles[0], dims2(4, 2)), straight),
-                "3 + save + load + 3 Adam steps equal 6 steps")
+                "3 + save + load + 3 optimizer steps equal 6 steps (case 2: all three state buffers restored)")
     except error:
         ops_session_close[E, KIND](c)
         _drop(path)

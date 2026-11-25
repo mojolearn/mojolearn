@@ -99,6 +99,7 @@ from std.memory import bitcast
 
 from core.identity_trace import FNV_OFFSET, fnv1a64_bytes
 from core.sha256 import sha256_hex
+from bindings.byte_checkpoint_native_run import byte_file_write, ByteCheckpointWriteFailure
 
 
 # ===========================================================================
@@ -672,9 +673,14 @@ struct CheckpointHashes(ImplicitlyCopyable, Movable):
 # ===========================================================================
 
 
-def save_checkpoint(path: String, ck: Checkpoint) raises -> CheckpointHashes:
-    """Write `ck` to `path` and return its two hashes."""
-    var saved = _save_checkpoint(path, ck, False)
+def save_checkpoint(path: String, ck: Checkpoint, in_place: Bool = False) raises -> CheckpointHashes:
+    """Write `ck` to `path` and return its two hashes. The file at `path` is
+    replaced whole (`_save_checkpoint`): a save that is interrupted leaves
+    the previous file as it was. `in_place` True opens and overwrites the
+    destination directly: for a destination that is not a file in a
+    directory (a descriptor path the launcher handed over, training/checks/
+    cross_vendor_resume.mojo) and for the sabotage arms."""
+    var saved = _save_checkpoint(path, ck, False, in_place)
     return saved[0]
 
 
@@ -682,10 +688,12 @@ def save_checkpoint_sha256(path: String, ck: Checkpoint) raises -> Tuple[Checkpo
     """`save_checkpoint`, plus the SHA-256 (64 hex digits) of the bytes it
     wrote, taken from the same in-memory body before the write (row N167:
     the verification sidecar re-read the file it had just written)."""
-    return _save_checkpoint(path, ck, True)
+    return _save_checkpoint(path, ck, True, False)
 
 
-def _save_checkpoint(path: String, ck: Checkpoint, want_sha: Bool) raises -> Tuple[CheckpointHashes, String]:
+def _save_checkpoint(
+    path: String, ck: Checkpoint, want_sha: Bool, in_place: Bool,
+) raises -> Tuple[CheckpointHashes, String]:
     """Write `ck` to `path` and return its two hashes (and the file's SHA-256
     when `want_sha`, else "").
 
@@ -697,10 +705,27 @@ def _save_checkpoint(path: String, ck: Checkpoint, want_sha: Bool) raises -> Tup
     size it is the first thing that would have to change, and
     `CHECKPOINT_FORMAT.md` section 6 item 9 says so rather than hiding it.
 
-    **NO ATOMICITY.** No temp file, no rename, no lock. A crash mid-write
-    leaves a short file that `load_checkpoint` REFUSES as truncated, which is
-    the intended behavior: a half-written checkpoint that loaded would be
-    worse than one that did not.
+    **THE FILE IS REPLACED, NEVER OVERWRITTEN** (lane fable-finalize,
+    2026-11-25). The bytes go to a new sibling file (`<path>.tmp-<pid>-<n>`,
+    created exclusively), are flushed to the disk (fsync), the file is closed
+    and only then renamed onto `path` in one step
+    (bindings/byte_checkpoint_native_run.mojo `byte_file_write`, the byte-LM
+    checkpoint's writer). `path` itself is never opened: a crash, a full disk
+    or a signal at any point leaves the previous checkpoint there, whole and
+    loadable, and a reader sees the old file or the new one, never a mix.
+    Before this, `open(path, "w")` truncated the previous checkpoint first,
+    so an interrupted save of a periodic checkpoint destroyed the last good
+    one. A failed write removes its temporary; a killed process leaves it
+    beside the checkpoint (it is not the checkpoint and is never read). The
+    new file is created with mode 0666 less the umask, as `open(path, "w")`
+    created it. This covers every writer of this container: the model,
+    session, program, control, distributed, partition and training
+    checkpoints all end here.
+
+    `in_place` is the direct write, for a destination with no sibling to
+    create (`/proc/self/fd/<n>`: training/checks/cross_vendor_resume.mojo)
+    and for the sabotage arms (autograd/program_training_checkpoint.mojo
+    PT_SABOTAGE_IN_PLACE). No product save passes it.
     """
     if path == "":
         raise Error(
@@ -832,8 +857,19 @@ def _save_checkpoint(path: String, ck: Checkpoint, want_sha: Bool) raises -> Tup
     var sha = String("")
     if want_sha:
         sha = sha256_hex(body)
-    with open(path, "w") as fh:
-        fh.write_bytes(Span(body))
+    if in_place:
+        with open(path, "w") as fh:
+            fh.write_bytes(Span(body))
+    else:
+        var failure = ByteCheckpointWriteFailure()
+        try:
+            byte_file_write(path, Int(body.unsafe_ptr()), len(body), failure, 438)
+        except error:
+            if failure.number == 0:
+                raise error
+            raise Error("OSError: checkpoint: could not write " + path + " (" + failure.operation + " of "
+                        + failure.path + " failed, errno " + String(failure.number)
+                        + "); the file that was there before, if any, is unchanged")
     # `[[mojo-buffer-freed-at-last-use]]`: hold the byte list past the write.
     _ = body
     return (CheckpointHashes(h_all, h_file, want), sha^)

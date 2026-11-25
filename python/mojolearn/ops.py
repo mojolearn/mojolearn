@@ -1617,8 +1617,10 @@ class Session:
             The checkpoint file.
         source : BatchSource or None
             The batch source the training read. It must be opened on the
-            same data with the same ``batch_size``, ``bucket_batches``,
-            ``shuffle`` and ``seed``; its position becomes the saved one
+            same sealed data (:meth:`BatchSource.seal`; other data with
+            the same record lengths is refused) with the same
+            ``batch_size``, ``bucket_batches``, ``shuffle``, ``seed``,
+            ``inputs`` and ``target``; its position becomes the saved one
             (the last batch that was trained, not one read ahead).
 
         Returns
@@ -1653,7 +1655,15 @@ class Session:
         your loop passes to :meth:`permutation` and :meth:`dropout`, so the
         resumed loop draws the same row orders and dropout masks it would
         have drawn without stopping. A file saved on one GPU vendor (or on
-        the CPU) resumes to the same values on another.
+        the CPU) resumes to the same values on another. Every optimizer
+        :meth:`optimizer` creates is covered, with all of its state
+        buffers: ``'sgd'``, ``'adam'``, ``'adamw'``, ``'rmsprop'``
+        (including ``centered=True`` with momentum, which keeps three),
+        ``'adagrad'``, ``'adamax'``, ``'nadam'`` and ``'lion'``. The
+        optimizer's settings and schedule are not in the file: create the
+        optimizer again with the same settings before :meth:`load_state`.
+        The file is written beside ``path`` and moved over it when it is
+        complete, so an interrupted save leaves the previous file intact.
 
         Parameters
         ----------
@@ -3219,6 +3229,30 @@ class Program:
         was trained, never a batch read ahead. :meth:`Session.load_training`
         restores it, in this process or a new one.
 
+        What is saved and restored, exactly:
+
+        - every optimizer :meth:`Session.optimizer` and
+          :meth:`Session.param_group_optimizer` create: ``'sgd'`` (with
+          or without momentum and Nesterov), ``'adam'``, ``'adamw'``,
+          ``'rmsprop'`` (plain, with momentum, centered, and centered
+          with momentum, which keeps three state buffers), ``'adagrad'``,
+          ``'adamax'``, ``'nadam'`` and ``'lion'``, each with its
+          settings, both gradient clips, and all of its state buffers and
+          step counts for every parameter;
+        - the ``'constant'``, ``'step'`` and ``'exponential'`` schedules
+          with the epoch they stand at;
+        - parameter groups: every group's settings and members;
+        - with ``source``: its position, its data fingerprint, its
+          ``seed``, ``batch_size``, ``bucket_batches`` and ``shuffle``,
+          and its ``inputs`` and ``target`` fields. The source must be
+          sealed (:meth:`BatchSource.seal`).
+
+        Not saved: gradients (a checkpoint is taken between steps), the
+        loss curve, and tensors that are not parameters of this program.
+        The file is written beside ``path`` and moved over it when it is
+        complete, so an interrupted save leaves the previous checkpoint at
+        ``path`` intact.
+
         Parameters
         ----------
         path : str or path-like
@@ -3274,7 +3308,10 @@ class BatchSource:
     record's steps, record after record), ``<stem>.offsets.npy`` (int64,
     ``(n + 1,)``: record ``r`` is ``steps[offsets[r]:offsets[r + 1]]``) and,
     optionally, ``<stem>.targets.npy`` (float32, ``(n, W)``). Write them
-    with ``numpy.save``.
+    with ``numpy.save``, then call :meth:`seal` once: it records each
+    shard's content digest in ``index.txt``. A training checkpoint and a
+    saved position are bound to those digests, so training resumes only
+    on the data it was stopped on; they need a sealed directory.
 
     Each batch holds ``batch_size`` records (the last one of a pass may
     hold fewer) padded to the batch's own longest record. With
@@ -3309,6 +3346,8 @@ class BatchSource:
     ----------
     n_records, n_batches, n_features, max_length : int
         Records, batches per pass, F, and the longest record.
+    sealed : bool
+        Whether ``index.txt`` records the shards' content digests.
 
     Examples
     --------
@@ -3320,12 +3359,47 @@ class BatchSource:
                  bucket_batches=1):
         return _BATCH_SOURCE_CALL("open", self, (path, batch_size, inputs, target, shuffle, seed, bucket_batches))
 
+    @classmethod
+    def seal(cls, path):
+        """Record each shard's content digest in ``index.txt``.
+
+        Call it once after the shards are written (and again after any of
+        them is rewritten). Every shard file is read once; ``index.txt`` is
+        replaced with the same shard lines, each ending in
+        ``sha256:<digest>``. A source opened on a sealed directory carries
+        the digests in its fingerprint, so :meth:`Program.save_training`,
+        :meth:`Session.load_training` and :meth:`load_state_dict` refuse
+        other data, including data with the same record lengths.
+
+        Parameters
+        ----------
+        path : str or path-like
+            The shard directory.
+
+        Returns
+        -------
+        int
+            The number of shards sealed.
+
+        Examples
+        --------
+        >>> BatchSource.seal("shards/")  # doctest: +SKIP
+        2
+        """
+        return _BATCH_SOURCE_CALL("seal", cls, (path,))
+
     def state_dict(self):
-        """The position (the last batch trained) and the settings that fix the batch order."""
+        """The position (the last batch trained), the data fingerprint, the settings that fix the batch order
+        and the input and target fields."""
         return _BATCH_SOURCE_CALL("state_dict", self, ())
 
     def load_state_dict(self, state):
-        """Continue from a :meth:`state_dict` taken on the same data with the same settings."""
+        """Continue from a :meth:`state_dict` taken on the same sealed data with the same settings and fields.
+
+        Other data (also data with the same record lengths), another
+        ``seed``, ``batch_size``, ``bucket_batches`` or ``shuffle``, and
+        other ``inputs`` or ``target`` fields are each refused by name.
+        """
         return _BATCH_SOURCE_CALL("load_state_dict", self, (state,))
 
     def next_records(self):
