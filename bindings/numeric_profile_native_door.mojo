@@ -546,11 +546,16 @@ def _resolve(name: PythonObject, what: String, use: PythonObject, family: Python
     var vendor = PythonObject(None)
     var asked = False
     for i in range(len(used)):  # driver-loop: over the spec's one or two profiles
-        if String(used[i]) != baseline:
-            if not asked:
-                vendor = _this_vendor(context)
-                asked = True
-            _ = _warn_if_slow(used[i], vendor, fields, context)
+        # the item named once, compared through String(py=) (w3-integrate-11: `String(used[i])` in the
+        # condition lowered to an LLVM 'operand does not dominate this use' error in three host groups)
+        var item = used[i]
+        var name = String(py=item)
+        if name == baseline:
+            continue
+        if not asked:
+            vendor = _this_vendor(context)
+            asked = True
+        _ = _warn_if_slow(item, vendor, fields, context)
     return key
 
 
