@@ -1847,14 +1847,6 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 t = cross_entropy(self.tape, self.ex, ce_z, ce_c, ints[0])
             else:
                 t = cross_entropy(self.tape, self.ex, x[0], x[1], ints[0])
-        elif code == OPS_WEIGHTED_LOSS:
-            # Lane rnn-parity-B: [prediction, target, weight], ints [loss code 24..28,
-            # reduction], floats [delta]; reached only when weight= is given
-            # (autograd/per_step_ops.mojo).
-            _need("weighted loss", n, 3, 2, ni, 1, nf)
-            if self.int_words[self._slot(hs[2])]:
-                raise Error("ValueError: ops: a loss weight must be a floating-point tensor")
-            t = weighted_loss(self.tape, self.ex, x[0], x[1], x[2], ints[0], ints[1], fs[0])
         elif code == OPS_DETACH:
             _need("detach", n, 1, 0, ni, 0, nf)
             t = self.tape.detach(self.ex, x[0])
@@ -2056,6 +2048,16 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         elif code == OPS_ATTENTION_QKV:
             return self._attention_qkv(hs, ints, fs, x)
         # nn-blocks-qkv end
+        elif code == OPS_WEIGHTED_LOSS:
+            # Lane rnn-parity-B: [prediction, target, weight], ints [loss code 24..28,
+            # reduction], floats [delta]; reached only when weight= is given
+            # (autograd/per_step_ops.mojo). nn-blocks (2026-11-25): moved from
+            # mid-chain (after OPS_CROSS_ENTROPY, where every later operation paid
+            # its compare) to the chain's tail, which no older operation reaches.
+            _need("weighted loss", n, 3, 2, ni, 1, nf)
+            if self.int_words[self._slot(hs[2])]:
+                raise Error("ValueError: ops: a loss weight must be a floating-point tensor")
+            t = weighted_loss(self.tape, self.ex, x[0], x[1], x[2], ints[0], ints[1], fs[0])
         else:
             # nn-blocks-scan / nn-blocks-cbw begin: the scan over a captured cell and a user-defined backward rule,
             # on the chain's no-match path (no other operation pays a compare for them). Both run captured nodes
