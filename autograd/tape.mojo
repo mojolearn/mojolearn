@@ -33,6 +33,11 @@ from autograd.data_ops import OP_AG_DROPOUT_FWD, OP_AG_DROPOUT_VJP, DROPOUT, dro
 from std.memory import unsafe_memcmp
 from autograd.pass1_ops import OP_P1_SCE_VJP
 from autograd.composed_ops import OP_AGC_LINEAR_PAIR
+# session-ops-verify begin: the composed-model lane's runner sabotage switches only (off in every build)
+from autograd.session_ops_verify import (
+    SESSION_OPS_VERIFY_SABOTAGE_DROP_ACCUMULATE, SESSION_OPS_VERIFY_SABOTAGE_DROP_ACCUMULATE_HOST,
+)
+# session-ops-verify end
 from sequence.gemm_tiled import GR_TILE, seq_gemm_route
 from autograd.embedding_ops import (
     EMBEDDING, AG_EMB_PLAN_AUTO, AG_EMB_PLAN_SORT, embedding_refuse_shape, embedding_check_words,
@@ -2849,7 +2854,12 @@ struct Tape(Movable):
                 last_node[parent] = i
                 last_edge[parent] = edge
                 if not first[edge]:
-                    _accumulate(ex, p.grad, contribution, p.rows * p.cols)
+                    # session-ops-verify begin: the runner's sabotage arm (autograd/session_ops_verify.mojo); off
+                    # in every build, so this is the plain accumulate
+                    comptime if not ((SESSION_OPS_VERIFY_SABOTAGE_DROP_ACCUMULATE and E.IS_DEVICE) or (
+                            SESSION_OPS_VERIFY_SABOTAGE_DROP_ACCUMULATE_HOST and not E.IS_DEVICE)):
+                        _accumulate(ex, p.grad, contribution, p.rows * p.cols)
+                    # session-ops-verify end
         self._cursor = scratch_start
         for i in range(len(self._nodes)):  # driver-loop: over graph nodes
             var n = self._nodes[i]
