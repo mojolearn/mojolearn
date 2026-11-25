@@ -210,6 +210,8 @@ from autograd.nn_conv_ops import OP_NNC_FIRST, OP_NNC_LAST, apply_nn_conv
 # lane nn-losses-2: the ctc loss's row scans and its target pack (autograd/nn_ctc_ops.mojo), 5640..5649
 from autograd.nn_ctc_ops import OP_CTC_FIRST, OP_CTC_LAST, apply_nn_ctc
 # nn-losses-2 end
+# lane rnn-parity: the recurrent estimators' fit options (sequence/rnn_options_ops.mojo), 6740..6749
+from sequence.rnn_options_ops import OP_RNO_FIRST, OP_RNO_LAST, apply_rnn_options
 
 
 @always_inline
@@ -784,3 +786,6 @@ def apply[OP: Int](t: Int, a: Args):
         comptime assert OP_CTC_FIRST > OP_SSM_LAST and OP_CTC_FIRST > OP_TFP_LAST and OP_CTC_FIRST > OP_IMP_LAST, "nn-losses-2 opcode range overlaps another family"
         apply_nn_ctc[OP](t, a)
     # nn-losses-2 end
+    elif OP >= OP_RNO_FIRST and OP <= OP_RNO_LAST:
+        comptime assert OP_RNO_FIRST > OP_NN_LAST and OP_RNO_FIRST > OP_CTC_LAST and OP_RNO_FIRST > OP_NNC_LAST and OP_RNO_FIRST > OP_SSM_LAST and OP_RNO_FIRST > OP_TFP_LAST, "rnn-parity opcode range overlaps another family"
+        apply_rnn_options[OP](t, a)
