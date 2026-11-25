@@ -24,6 +24,7 @@ from autograd.losses import REDUCTION_MEAN, REDUCTION_SUM
 from std.memory import bitcast
 from autograd.nn_ctc_ops import OP_CTC_FWD, OP_CTC_VJP, OP_CTC_PACK, OP_CTC_ADMIT, CTC_LABELS
 from autograd.embedding_ops import embedding_first_bad
+from autograd.session_ops_layer_sabotage import SOL_SABOTAGE_CTC_RAW, SOL_SABOTAGE_CTC_RAW_HOST
 
 #: the custom-node tag of the per-row CTC values (autograd/model_blocks.mojo ModelRules, `# nn-losses-2` group)
 comptime NN_CTC_TAG = 3420
@@ -91,6 +92,9 @@ def ctc_loss[E: Exec](
     a.i5 = 1 if zero_infinity else 0
     a.i6 = 1 if grad else 0
     a.i7 = B
+    a.i8 = 0  # the normalized form (nn_ctc_ops.mojo ctc_row_fwd); the backward reads the same word from `saved`
+    comptime if (SOL_SABOTAGE_CTC_RAW and E.IS_DEVICE) or (SOL_SABOTAGE_CTC_RAW_HOST and not E.IS_DEVICE):
+        a.i8 = 1  # SABOTAGE: the raw form of before 2026-11-25
     ex.launch[OP_CTC_FWD](a, B)
     var rows = tape.custom(ex, [log_probs, targets], a.p2, B, 1, NN_CTC_TAG, a)
     if reduction == REDUCTION_SUM:

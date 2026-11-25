@@ -120,7 +120,8 @@ def model_file_execute(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf:
     var addresses = native_descriptor_words(aa, na)
     var ints = native_descriptor_words(pp, np)
     if op == MODEL_SAVE_CHECKPOINT:
-        if na != 6 or np < 4:
+        # lane stream-fits: a seventh address, centered RMSprop's third optimizer state buffer
+        if (na != 6 and na != 7) or np < 4:
             raise Error("native model file: invalid checkpoint save descriptor")
         var n_prog = ints[1]
         var n_ip = ints[2]
@@ -128,7 +129,7 @@ def model_file_execute(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf:
         if n_prog < 0 or n_ip < 0 or n_classes < 0 or np != 4 + n_prog + n_ip + n_classes:
             raise Error("native model file: invalid checkpoint save descriptor")
         var file = _file_text(addresses[0], ints[0])
-        var buffers = _file_words(addresses, 1, 5)
+        var buffers = _file_words(addresses, 1, na - 1)
         return model_save_checkpoint(file, _file_words(ints, 4, n_prog), buffers,
                                      _file_words(ints, 4 + n_prog, n_ip), _file_floats(ff, nf),
                                      _file_words(ints, 4 + n_prog + n_ip, n_classes))
@@ -169,10 +170,11 @@ def model_file_execute(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf:
             scalars[layer_count + i] = info.floats[i]
         return layer_count
     if op == MODEL_LOAD_CHECKPOINT:
-        if na != 7 or np != 1 or nf != 0:
+        # lane stream-fits: an eighth address, centered RMSprop's third optimizer state buffer
+        if (na != 7 and na != 8) or np != 1 or nf != 0:
             raise Error("native model file: invalid checkpoint load descriptor")
         var file = _file_text(addresses[0], ints[0])
-        return model_load_checkpoint(file, _file_words(addresses, 1, 6))
+        return model_load_checkpoint(file, _file_words(addresses, 1, na - 1))
     if op == MODEL_VERIFY_DIGEST:
         if na != 2 or np != 2 or nf != 0:
             raise Error("native model file: invalid digest descriptor")

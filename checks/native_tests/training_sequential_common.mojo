@@ -80,6 +80,7 @@ struct SeqModel(Movable):
     var params: List[Float32]
     var m: List[Float32]
     var v: List[Float32]
+    var w: List[Float32]      # lane stream-fits: the third optimizer state buffer (optimizer_w_; centered RMSprop)
     var state: List[Int64]
     var curve: List[Float32]
     var n_iter: Int
@@ -120,6 +121,7 @@ struct SeqModel(Movable):
         self.params = List[Float32]()
         self.m = List[Float32]()
         self.v = List[Float32]()
+        self.w = List[Float32]()
         self.state = List[Int64]()
         self.curve = List[Float32]()
         self.n_iter = 0
@@ -256,6 +258,7 @@ struct SeqModel(Movable):
             self.params = List[Float32](length=n_params, fill=Float32(0))
             self.m = List[Float32](length=n_params, fill=Float32(0))
             self.v = List[Float32](length=n_params, fill=Float32(0))
+            self.w = List[Float32](length=n_params, fill=Float32(0))
             self.state = List[Int64](length=FIT_STATE_WORDS, fill=Int64(0))
             self.curve = List[Float32](length=epochs, fill=Float32(0))
         var ip: List[Int] = [
@@ -296,7 +299,7 @@ struct SeqModel(Movable):
             sources.append(CastIn.f32_c(0, 1, 1))
         elif len(self.lengths) > 0:
             addrs.append(Int(self.lengths.unsafe_ptr()))
-        self.n_iter = model_fit_native(ex, addrs, sources, prog, ip, fp)
+        self.n_iter = model_fit_native(ex, addrs, sources, prog, ip, fp, state3=Int(self.w.unsafe_ptr()))
         ex.sync()
         self.batch = batch_size
         self.shuffle = shuffled
@@ -334,7 +337,7 @@ struct SeqModel(Movable):
         ]
         var addrs: List[Int] = [
             Int(self.params.unsafe_ptr()), Int(self.m.unsafe_ptr()), Int(self.v.unsafe_ptr()),
-            Int(self.state.unsafe_ptr()), Int(self.curve.unsafe_ptr()),
+            Int(self.state.unsafe_ptr()), Int(self.curve.unsafe_ptr()), Int(self.w.unsafe_ptr()),
         ]
         return model_save_checkpoint(file, self.program(features), addrs, ip, self._fit_floats(), List[Int]())
 
@@ -354,11 +357,12 @@ struct SeqModel(Movable):
         self.params = List[Float32](length=n_params, fill=Float32(0))
         self.m = List[Float32](length=n_params, fill=Float32(0))
         self.v = List[Float32](length=n_params, fill=Float32(0))
+        self.w = List[Float32](length=n_params, fill=Float32(0))
         self.state = List[Int64](length=FIT_STATE_WORDS, fill=Int64(0))
         self.curve = List[Float32](length=max(n_run, 1), fill=Float32(0))
         var addrs: List[Int] = [
             Int(self.params.unsafe_ptr()), Int(self.m.unsafe_ptr()), Int(self.v.unsafe_ptr()),
-            Int(self.state.unsafe_ptr()), Int(self.curve.unsafe_ptr()), 0,
+            Int(self.state.unsafe_ptr()), Int(self.curve.unsafe_ptr()), 0, Int(self.w.unsafe_ptr()),
         ]
         _ = model_load_checkpoint(file, addrs)
         self.n_iter = n_run

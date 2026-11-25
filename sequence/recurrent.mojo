@@ -79,6 +79,11 @@ from autograd.epoch_monitor import EpochMonitor
 from autograd.optim import OP_AGO_SUMSQ_PART, OP_AGO_NORM_ACC, OP_AGH_OPT_SCALED
 from autograd.ops import ag_fold_block
 from std.sys.compile import is_defined
+# lane stream-fits (2026-11-25): the recurrent estimators' fit(source=) / partial_fit(source=)
+from autograd.batch_source import (
+    BatchSource, BS_FIELD_STEPS, BS_FIELD_LENGTHS, BS_FIELD_TARGETS, BATCH_SOURCE_STAGE_WORDS,
+    batch_source_upload, batch_source_fit_saved, source_part_store,
+)
 
 #: nr-small D3 (2026-10-04): under IDENTICAL the recurrent weight and bias
 #: gradients (C = A B over the K = T B time x batch rows, M N cells of one
@@ -915,6 +920,156 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     _ = setup^  # the options' device buffers live through the loop's queued launches
 
 
+def rnn_fit_stream[E: Exec, //, S: RnnStep](
+    mut ex: E, net: Net, task: Int, mut src: BatchSource, total: Int, T: Int, seed: UInt64,
+    Pio: FP, losses: FP, lrs: FP, cfg: OptConfig, init_acc: Float32, loop_words: Int, opts: RnnOptions,
+    saved_out: Int, position_out: Int,
+) raises:
+    """The recurrent estimators' fit(source=) and partial_fit(source=) (lane stream-fits, 2026-11-25): `total`
+    optimizer steps, each on the next batch of `src` (autograd/batch_source.mojo, opened at the position to train
+    from), crossing epochs of the source as they end. Every batch is padded to T steps (the source's longest record)
+    and masked by its records' lengths; it is uploaded batch-first into staging buffers and laid out by the options
+    loop's own gathers through an identity order (one launch each), so a step is `_rnn_options_step`'s, word for
+    word, with the batch's rows where the array fit gathers its rows. The next batch is read from disk right after
+    the step is queued (the device trains while the host reads); the waits bound the host staging (BATCH_SOURCE_
+    STAGE_WORDS). The targets are the source's: one row of St ycols words a record (St = T with
+    output="sequence": a target a step, padded rows past a record's length weigh 0; ycols = n_outputs for a
+    regressor, one class index for a classifier). losses[k] is step k's loss; lrs[k] its rate. With
+    opts.has_state the optimizer state (3 n_params + 4 words) comes in and goes out as in rnn_fit's options loop.
+    saved_out receives the source part the estimator's state keeps (SOURCE_PART_WORDS int64 words: the consumed
+    position and the source's binding words), position_out the consumed (epoch, batch) for the handle.
+
+    CLASS WEIGHTS (opts.has_cw; lane fable-finalize): each batch's rows are weighed by that batch's own labels,
+    one OP_RNO_ROW_WEIGHTS launch over its B St rows after its targets are uploaded (the array fit's kernel and
+    words: weight = class weight of the row's label; with output="sequence" one a step, the steps past a record's
+    length then gathering +0.0). VALIDATION (opts.nv > 0): at the end of every pass over the source (the step
+    that trains its last batch) the validation loss of the parameters (the array fit's `validation_loss`) into
+    the next word of the curve; opts.vcurve receives them, then the passes completed and the best one (the
+    generic EpochMonitor over the curve, tol as given). Nothing is read back inside the loop. Sample weights,
+    initial states, early stopping and restore_best need every row in memory or a decision per epoch: refused by
+    the door and by the caller."""
+    var np_ = net.n_params()
+    var ycols = net.O if task == TASK_MSE else 1
+    var St = T if opts.seq_out else 1
+    var bmax = min(src.spec.batch, src.n)
+    if src.width != net.D:
+        raise Error("ValueError: fit(source=): the source's records have " + String(src.width) + " features; the "
+                    + "network reads " + String(net.D))
+    if T < src.max_len:
+        raise Error("ValueError: fit(source=): the sequences are padded to " + String(T) + " steps; the source's "
+                    + "longest record has " + String(src.max_len))
+    if src.twidth != St * ycols:
+        raise Error("ValueError: fit(source=): each record's target row must hold " + String(St * ycols)
+                    + " words (" + (String("a target a step, padded to the longest record") if opts.seq_out
+                    else String("one target")) + "); the source's targets have width " + String(src.twidth))
+    if total < 1:
+        raise Error("ValueError: fit(source=): no step to train")
+    var sx = ex.alloc(bmax * T * net.D)
+    var sy = ex.alloc(bmax * St * ycols)
+    var sl = ex.alloc(bmax)
+    var sl_opt = Optional[FP](sl)
+    var dord = ex.alloc(bmax)
+    var ia = Args()
+    ia.p0 = dord
+    ex.launch[OP_SEQ_IOTA](ia, bmax)
+    var P = ex.alloc(np_)
+    ex.upload(P, Pio, np_)
+    var Gr = ex.alloc(np_)
+    var s1 = ex.alloc(np_)
+    var s2 = ex.alloc(np_)
+    var s3 = ex.alloc(np_)
+    if init_acc != Float32(0.0):
+        fill(ex, s2, np_, init_acc)
+    var dloss = ex.alloc(total)
+    var w = Work(ex, net, T, bmax, True, True, opts)
+    var loss_ws = loss_scratch(ex, St * bmax * net.O)
+    var st = OptState()
+    var step = S()
+    # the options' setup over one batch's rows (the weights of every padded step 0 through the lengths)
+    var setup = RnnFitSetup(ex, net, task, opts, bmax, St, np_, P, sy, True, w, T, ycols, bmax, True)
+    var best = RnnBest(ex, opts, np_)  # the validation curve's words (nothing kept: restore is refused)
+    var passes = 0
+    var t0 = 0
+    if opts.has_state:
+        ex.upload(s1, opts.state, np_)
+        ex.upload(s2, opts.state + np_, np_)
+        ex.upload(s3, opts.state + 2 * np_, np_)
+        st.pw1 = opts.state.unsafe_load(3 * np_)
+        st.pw2 = opts.state.unsafe_load(3 * np_ + 1)
+        st.mu_prod = opts.state.unsafe_load(3 * np_ + 2)
+        t0 = Int(opts.state.unsafe_load(3 * np_ + 3))
+    ex.sync()
+    var loop_start = fit_loop_start()
+    var staged = 0
+    for k in range(total):  # driver-loop: over optimizer steps (one streamed batch each)
+        var at = src.pending()
+        src.epoch = at[0]
+        src.consumed = at[1]
+        if src.held_epoch != at[0] or src.held_batch != at[1]:
+            src.read(at[0], at[1], T)
+        if staged >= BATCH_SOURCE_STAGE_WORDS:
+            ex.sync()
+            staged = 0
+        var B = src.held_rows
+        staged += batch_source_upload(ex, src, BS_FIELD_STEPS, sx).count()
+        staged += batch_source_upload(ex, src, BS_FIELD_TARGETS, sy).count()
+        staged += batch_source_upload(ex, src, BS_FIELD_LENGTHS, sl).count()
+        if opts.has_cw:
+            # this batch's loss weights from its own labels (rows past B keep an earlier batch's and are not read)
+            var wa = Args()
+            wa.p0 = w.one
+            wa.p1 = sy
+            wa.p2 = setup.cw_dev
+            wa.p3 = setup.wt
+            wa.i0 = St
+            wa.i3 = 1
+            ex.launch[OP_RNO_ROW_WEIGHTS](wa, B * St)
+        _rnn_options_step(ex, step, net, task, opts, setup, w, P, Gr, sx, sy, sl, sl_opt, dord, True,
+                          bmax, T, St, B, 0, ycols, np_, seed, t0 + k, dloss + k, loss_ws)
+        if opts.clip > Float32(0.0):
+            opt_step_clipped(ex, cfg, st, t0 + k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_,
+                             setup.cell)
+        else:
+            opt_step(ex, cfg, st, t0 + k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
+        # this batch is consumed (its step is queued); the next one is read while the device trains this one
+        src.consumed = at[1] + 1
+        if opts.nv > 0 and at[1] + 1 == src.n_batches and passes < opts.epochs:
+            # a pass over the source ends with this step: the validation loss of its parameters (queued; read
+            # back once, after the loop)
+            step.validation_loss(ex, net, task, opts, P, T, w, setup, best.vloss + passes)
+            passes += 1
+        var ahead = src.next_position(at[0], at[1])
+        src.read(ahead[0], ahead[1], T)
+    release_loss_scratch(ex, loss_ws)
+    ex.sync()
+    fit_loop_publish(loop_words, fit_loop_stop(loop_start, total))
+    ex.download(Pio, P, np_)
+    ex.download(losses, dloss, total)
+    if opts.nv > 0:
+        if passes > 0:
+            ex.download(opts.vcurve, best.vloss, passes)
+        var monitor = EpochMonitor(Float64(opts.tol), 0)
+        for e in range(passes):  # driver-loop: over the completed passes (the best one, on the host words)
+            _ = monitor.observe(Float64(opts.vcurve.unsafe_load(e)), e + 1)
+        opts.vcurve.unsafe_store(opts.epochs, Float32(passes))
+        opts.vcurve.unsafe_store(opts.epochs + 1, Float32(monitor.best_epoch))
+    if opts.has_state:
+        ex.download(opts.state, s1, np_)
+        ex.download(opts.state + np_, s2, np_)
+        ex.download(opts.state + 2 * np_, s3, np_)
+        opts.state.unsafe_store(3 * np_, st.pw1)
+        opts.state.unsafe_store(3 * np_ + 1, st.pw2)
+        opts.state.unsafe_store(3 * np_ + 2, st.mu_prod)
+        opts.state.unsafe_store(3 * np_ + 3, Float32(t0 + total))
+    source_part_store(batch_source_fit_saved[E.IS_DEVICE](src),
+                      UnsafePointer[Int64, MutUntrackedOrigin](unsafe_from_address=saved_out))
+    var position = UnsafePointer[Int64, MutUntrackedOrigin](unsafe_from_address=position_out)
+    position[0] = Int64(src.epoch)
+    position[1] = Int64(src.consumed)
+    _ = setup^  # the options' device buffers live through the loop's queued launches
+    _ = sl_opt^
+
+
 struct RnnBest(Movable):
     """Lane rnn-parity: the per-epoch validation losses (`vloss`, one executor word an epoch) and the best
     epoch's parameters and optimizer state (kept on the executor, copied when the generic EpochMonitor says an
@@ -990,11 +1145,15 @@ struct RnnFitSetup(Movable):
     var vones: FP
     var vparts: FP
     var vchunk: Int
+    #: the class weights on the executor, kept only by a streamed fit (`keep_cw`): it weighs each batch's rows by
+    #: that batch's labels (rnn_fit_stream), where an array fit weighs all N rows once here and frees them
+    var cw_dev: FP
 
     def __init__[E: Exec](
         out self, mut ex: E, net: Net, task: Int, opts: RnnOptions, N: Int, St: Int, np_: Int, P: FP, dY: FP,
-        has_lens: Bool, w: Work, T: Int, ycols: Int, bmax: Int,
+        has_lens: Bool, w: Work, T: Int, ycols: Int, bmax: Int, keep_cw: Bool = False,
     ) raises:
+        self.cw_dev = w.one
         self.weighted = opts.weighted(has_lens)
         self.wt = w.one
         self.h0 = w.one
@@ -1050,13 +1209,18 @@ struct RnnFitSetup(Movable):
                 a.i1 = 0
             comptime if RNN_PARITY_SABOTAGE_WEIGHT_HOST and not E.IS_DEVICE:
                 a.i1 = 0
-            ex.launch[OP_RNO_ROW_WEIGHTS](a, N * St)
-            # the uploaded weights are read by the launch above only; freed after it
-            ex.sync()
-            if opts.has_sw:
-                ex.free(a.p0)
-            if opts.has_cw:
-                ex.free(a.p2)
+            if keep_cw and opts.has_cw:
+                # a streamed fit: dY holds no batch yet (its words would index the class weights); each batch's
+                # rows are weighed after its targets are uploaded, from the kept class weights
+                self.cw_dev = a.p2
+            else:
+                ex.launch[OP_RNO_ROW_WEIGHTS](a, N * St)
+                # the uploaded weights are read by the launch above only; freed after it
+                ex.sync()
+                if opts.has_sw:
+                    ex.free(a.p0)
+                if opts.has_cw:
+                    ex.free(a.p2)
         var nh = net.slots() * N * net.H
         if opts.has_h0:
             self.h0 = ex.alloc(nh)

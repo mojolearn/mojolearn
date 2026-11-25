@@ -26,6 +26,12 @@ comptime SOL_SABOTAGE_SMOOTH_L1_BETA = is_defined["MOJOLEARN_SESSION_OPS_LAYER_S
 comptime SOL_SABOTAGE_SMOOTH_L1_BETA_HOST = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_SMOOTH_L1_BETA_HOST"]()
 comptime SOL_SABOTAGE_CTC_REDUCTION = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_CTC_REDUCTION"]()
 comptime SOL_SABOTAGE_CTC_REDUCTION_HOST = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_CTC_REDUCTION_HOST"]()
+# Added by lane stream-fits (2026-11-25), caught by lane ops-composed-cases (case ctc-offset, composed-extra.json):
+#   CTC_RAW: ctc_loss (the tape body Sequential and the session share) scans and differentiates in the raw form of
+#     before 2026-11-25, exp(alpha + beta - lp + nll) on unshifted, unnormalized alphas and betas: under a large
+#     common offset of the log-probabilities the gradient's words move by ulp(nll).
+comptime SOL_SABOTAGE_CTC_RAW = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_CTC_RAW"]()
+comptime SOL_SABOTAGE_CTC_RAW_HOST = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_CTC_RAW_HOST"]()
 comptime SOL_SABOTAGE_SSM_SCALE = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_SSM_SCALE"]()
 comptime SOL_SABOTAGE_SSM_SCALE_HOST = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_SSM_SCALE_HOST"]()
 comptime SOL_SABOTAGE_PIXEL_SHUFFLE = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_PIXEL_SHUFFLE"]()

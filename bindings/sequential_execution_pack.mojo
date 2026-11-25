@@ -7,6 +7,7 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setitem
 from core.cast_in import CastIn
 from autograd.model_execution import model_counts_native
 from autograd.model_descriptor import MODEL_FIT, MODEL_FIT_LABELS, MODEL_PREDICT, MODEL_PREDICT_LABELS, model_descriptor_words
+from autograd.model_descriptor import FIT_SOURCE_MARK, FIT_STATE3_MARK  # lane stream-fits
 from providers.python.autograd_pyapi_door import _ints, model_float64_words, model_admit_addresses
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute
 from bindings.sequential_description_unpack import sequential_fields, SequentialDescription, _integer
@@ -17,7 +18,11 @@ from bindings.sequential_keys_unpack import sequential_keys
 from bindings.sequential_route_door import sequential_route_entries
 from bindings.py_balanced import py_item
 from autograd.model import FIT_STATE_WORDS
-from autograd.nn_optim import NN_SCHED_ARGS
+from autograd.nn_optim import NN_SCHED_ARGS, nn_opt_keeps_third
+# lane stream-fits: Sequential.fit(source=)
+from autograd.batch_source import BS_FIELD_STEPS, BS_FIELD_TARGETS, batch_source_fit_words
+from providers.python.batch_source_pyapi_door import batch_source_spec, batch_source_position_out
+from providers.python.autograd_program_arrays_pyapi_door import is_integer_input
 from bindings.admitted_sequence_door import admit_nd_f32
 from sequence.fit_loop_words import FIT_LOOP_MARK, fit_loop_words
 from bindings.fit_loop_pack import fit_loop_pack
@@ -84,6 +89,8 @@ def sequential_targets(mut mods: NativeModules, model: PythonObject, source: Pyt
 
 
 def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if len(args) > 11 and args[11] is not None:
+        return sequential_fit_source(mods, model, args, context)  # lane stream-fits: fit(source=)
     var nk = sequential_keys()
     var b = native_loaded_module("builtins")
     var fields = sequential_fields(model)
@@ -153,26 +160,17 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     var yd = target_data[1]
     var target = Int(py=target_data[2])
     var classes_full = target_data[3]
-    var params = PythonObject(None)
-    var moment = PythonObject(None)
-    var variance = PythonObject(None)
-    var state = PythonObject(None)
+    var bufs = _sequential_fit_buffers(mods, fields, options, resume, warm, n_params, epochs, context)
+    var params = bufs[0]
+    var moment = bufs[1]
+    var variance = bufs[2]
+    var state = bufs[3]
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var previous = Optional[PythonObject]()
-    var curve = PythonObject(None)
     if resume:
-        params = py_item(fields, nk[].k_params_)
-        moment = py_item(fields, nk[].k_optimizer_m_)
-        variance = py_item(fields, nk[].k_optimizer_v_)
-        state = py_item(fields, nk[].k__fit_state)
         previous = py_present(py_item(fields, nk[].k__curve))
-        curve = sequential_array(mods, Python.tuple(Int(py=py_item(fields, nk[].k_n_iter_)) + epochs), py_item(context, nk[].k_float32), context)
-    else:
-        params = py_item(fields, nk[].k_params_) if warm else sequential_array(mods, Python.tuple(n_params), py_item(context, nk[].k_float32), context)
-        moment = sequential_array(mods, Python.tuple(n_params), py_item(context, nk[].k_float32), context)
-        variance = sequential_array(mods, Python.tuple(n_params), py_item(context, nk[].k_float32), context)
-        state = sequential_array(mods, Python.tuple(FIT_STATE_WORDS), py_item(context, nk[].k_int64), context)
-        curve = sequential_array(mods, Python.tuple(epochs), py_item(context, nk[].k_float32), context)
+    var curve = bufs[4]
+    var third = bufs[5]  # lane stream-fits: centered RMSprop's third state buffer (None for every other optimizer)
     seed = py_call(b.int, seed)
     # nn-losses: the loss word, code + 256 * reduction (autograd/model.mojo LOSS_WORD_REDUCTION)
     var loss_word = Int(py=py_item(context, nk[].k_loss_codes)[py_item(options, nk[].k_loss)]) + 256 * Int(py=py_get(options, nk[].k_reduction, 0))
@@ -248,35 +246,15 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     var native_inputs = model_admit_addresses(addresses, target, False, x_snapshot.source)
     mods.released()
     var native_options = _ints(ip)
-    var native_scalars = model_float64_words(fp)
-    for scalar in native_table:  # driver-loop: reuse already admitted native layer options
-        native_scalars.append(scalar)
-    # lane nn-optim: the schedule's argument words after the layers' (autograd/model_execution.mojo)
-    var sched_args = py_get(options, nk[].k_sched_args)
-    if sched_args is not None:
-        if len(sched_args) != NN_SCHED_ARGS:
-            raise Error("the compile options' schedule arguments are damaged; call compile again")
-        for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
-            native_scalars.append(Float64(py=sched_args[k]))
-    # nn-blocks-pgseq begin: compile's parameter groups, resolved against this model's tensors once per fit call,
-    # after the schedule's words (autograd/nn_pgseq.mojo); a model compiled without groups adds nothing
-    var param_groups = py_get(options, PythonObject("param_groups"))
-    if param_groups is not None:
-        if sched_args is None:
-            for _ in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words, none given)
-                native_scalars.append(0.0)
-        var group_words = pgseq_door_words(param_groups, native_program, native_table)
-        for k in range(len(group_words)):  # driver-loop: over the group words (once per fit call)
-            native_scalars.append(group_words[k])
-        # the per-tensor group table the fit trained with, for training_digest_ (python/mojolearn/_digest_fields.py)
-        py_setitem(fields, PythonObject("_param_groups"), pgseq_words_tuple(group_words))
-    else:
-        py_setitem(fields, PythonObject("_param_groups"), PythonObject(None))
-    # nn-blocks-pgseq end
+    var native_scalars = _sequential_fit_scalars(fields, options, fp, native_program, native_table)
     # lane alm-neural (2026-11-24): the fit loop's record (`fit_loop_`), written once by the trainer after its
     # epoch loop; its address ends the addresses and FIT_LOOP_MARK the options (autograd/model_descriptor.mojo)
     var loop_words = fit_loop_words()
     var native_addresses = native_inputs[0].copy()
+    if third is not None:
+        # lane stream-fits: the third optimizer state buffer, before the loop words (FIT_STATE3_MARK)
+        native_addresses.append(Int(py=sequential_address(third)))
+        native_options.append(FIT_STATE3_MARK)
     native_addresses.append(Int(loop_words.unsafe_ptr()))
     native_options.append(FIT_LOOP_MARK)
     var provider = py_item(entries, nk[].k_native_model_provider)
@@ -318,6 +296,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     _ = lengths^
     _ = val_lengths^  # lane rnn-parity-c: the validation lengths' buffer, read by the native call above
     _ = target_lengths^  # nn-losses-2
+    _ = third  # lane stream-fits: read and written by the native call above
     py_setitem(fields, nk[].k_params_, params)
     py_setitem(fields, nk[].k_n_iter_, n_iter)
     py_setitem(fields, nk[].k_fit_loop_, fit_loop_pack(loop_words))
@@ -341,6 +320,246 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     py_setitem(fields, nk[].k__fit_shuffle, Bool(py=shuffle))
     py_setitem(fields, nk[].k_optimizer_m_, moment)
     py_setitem(fields, nk[].k_optimizer_v_, variance)
+    py_setitem(fields, PythonObject("optimizer_w_"), third)
+    py_setitem(fields, nk[].k__fit_state, state)
+    py_setitem(fields, nk[].k__curve, curve)
+    py_setitem(fields, nk[].k__imported, False)
+    return model
+
+
+def _sequential_fit_buffers(mut mods: NativeModules, fields: PythonObject, options: PythonObject, resume: Bool,
+                            warm: Bool, n_params: Int, epochs: Int, context: PythonObject) raises -> PythonObject:
+    """(params, optimizer_m_, optimizer_v_, _fit_state, the loss curve, optimizer_w_) of a fit call: the fitted
+    ones when resuming (a curve with room for `epochs` more), else new zeros. optimizer_w_ (lane stream-fits) is
+    the third optimizer state buffer of centered RMSprop (autograd/nn_optim.mojo nn_opt_keeps_third), None for
+    every other optimizer. One body for the array and the streamed fit."""
+    var nk = sequential_keys()
+    var f32 = py_item(context, nk[].k_float32)
+    var third = PythonObject(None)
+    var keeps = nn_opt_keeps_third(Int(py=py_item(options, nk[].k_opt)), Int(py=py_item(options, nk[].k_flags)))
+    if resume:
+        if keeps:
+            third = py_get(fields, PythonObject("optimizer_w_"))
+            if third is None:
+                third = sequential_array(mods, Python.tuple(n_params), f32, context)
+        return Python.tuple(py_item(fields, nk[].k_params_), py_item(fields, nk[].k_optimizer_m_),
+                            py_item(fields, nk[].k_optimizer_v_), py_item(fields, nk[].k__fit_state),
+                            sequential_array(mods, Python.tuple(Int(py=py_item(fields, nk[].k_n_iter_)) + epochs),
+                                             f32, context), third)
+    if keeps:
+        third = sequential_array(mods, Python.tuple(n_params), f32, context)
+    var params = py_item(fields, nk[].k_params_) if warm else sequential_array(mods, Python.tuple(n_params), f32,
+                                                                              context)
+    return Python.tuple(params, sequential_array(mods, Python.tuple(n_params), f32, context),
+                        sequential_array(mods, Python.tuple(n_params), f32, context),
+                        sequential_array(mods, Python.tuple(FIT_STATE_WORDS), py_item(context, nk[].k_int64), context),
+                        sequential_array(mods, Python.tuple(epochs), f32, context), third)
+
+
+def _sequential_fit_scalars(fields: PythonObject, options: PythonObject, fp: PythonObject,
+                            native_program: List[Int], native_table: List[Float64]) raises -> List[Float64]:
+    """The fit's float words: the nine option floats, one per layer, the schedule's argument words, then the
+    parameter groups' words (autograd/model_execution.mojo model_fit_setup). Also records `_param_groups`. One body
+    for the array and the streamed fit."""
+    var nk = sequential_keys()
+    var native_scalars = model_float64_words(fp)
+    for scalar in native_table:  # driver-loop: reuse already admitted native layer options
+        native_scalars.append(scalar)
+    # lane nn-optim: the schedule's argument words after the layers' (autograd/model_execution.mojo)
+    var sched_args = py_get(options, nk[].k_sched_args)
+    if sched_args is not None:
+        if len(sched_args) != NN_SCHED_ARGS:
+            raise Error("the compile options' schedule arguments are damaged; call compile again")
+        for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
+            native_scalars.append(Float64(py=sched_args[k]))
+    # nn-blocks-pgseq begin: compile's parameter groups, resolved against this model's tensors once per fit call,
+    # after the schedule's words (autograd/nn_pgseq.mojo); a model compiled without groups adds nothing
+    var param_groups = py_get(options, PythonObject("param_groups"))
+    if param_groups is not None:
+        if sched_args is None:
+            for _ in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words, none given)
+                native_scalars.append(0.0)
+        var group_words = pgseq_door_words(param_groups, native_program, native_table)
+        for k in range(len(group_words)):  # driver-loop: over the group words (once per fit call)
+            native_scalars.append(group_words[k])
+        # the per-tensor group table the fit trained with, for training_digest_ (python/mojolearn/_digest_fields.py)
+        py_setitem(fields, PythonObject("_param_groups"), pgseq_words_tuple(group_words))
+    else:
+        py_setitem(fields, PythonObject("_param_groups"), PythonObject(None))
+    # nn-blocks-pgseq end
+    return native_scalars^
+
+
+def sequential_fit_source(mut mods: NativeModules, model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """Sequential.fit(source=) (lane stream-fits, 2026-11-25). UNPACK: the exact BatchSource handle's words
+    (providers/python/batch_source_pyapi_door.mojo batch_source_spec), the model's description for the source's
+    record shape ((n, max_length, n_features), or (n, n_features) for records of one step), the fit buffers.
+    RUN: one MODEL_FIT call carrying the source's words and path (FIT_SOURCE_MARK, autograd/model_descriptor.mojo):
+    the training image opens the source and runs the streamed instance of the fit loop (autograd/model.mojo
+    model_fit_state_source). PACK: the fitted fields and the consumed position on the handle; the training state
+    (`_fit_state`) holds the position and the source's binding words, so save_checkpoint and a resume in a fresh
+    process continue on the same next batch."""
+    var nk = sequential_keys()
+    var b = native_loaded_module("builtins")
+    var fields = sequential_fields(model)
+    if len(py_item(fields, nk[].k__layers)) == 0:
+        raise Error("add at least one layer before fit")
+    var options = py_item(fields, nk[].k__options)
+    if options is None:
+        raise Error("call compile before fit")
+    if args[0] is not None or args[1] is not None:
+        raise Error("TypeError: Sequential.fit(source=) takes no X or y: the source holds the records and their "
+                    + "targets")
+    if args[3] is not None or args[4] is not None:
+        raise Error("TypeError: Sequential.fit(source=) takes no batch_size or shuffle: they are the source's "
+                    + "(BatchSource(path, batch_size, shuffle=...))")
+    if args[7] is not None or Bool(py=args[8]) or args[9] is not None or args[10] is not None:
+        raise Error("TypeError: Sequential.fit(source=) takes no validation_data, restore_best_weights, lengths or "
+                    + "target_lengths: the lengths are the source's record lengths")
+    var seed = args[5]
+    if not _integer(seed, context) or Bool(py=seed < PythonObject(0)) or Bool(py=seed > py_item(context, nk[].k_uint64_max)):
+        raise Error("seed must be an integer in [0, 2**64)")
+    var resume = Bool(py=args[6])
+    if resume and py_get(fields, nk[].k__fit_state) is None:
+        raise Error("resume=True continues an earlier fit: call fit (or from_checkpoint) first")
+    var epochs = Int(py=py_call(b.int, args[2]))
+    if epochs < 1:
+        raise Error("epochs must be >= 1")
+    var max_steps = 0
+    var steps_in = args[12] if len(args) > 12 else PythonObject(None)
+    if steps_in is not None:
+        if not is_integer_input(steps_in) or Int(py=steps_in) < 1:
+            raise Error("ValueError: Sequential.fit steps must be a positive integer or None")
+        max_steps = Int(py=steps_in)
+    var source = args[11]
+    var spec = batch_source_spec(source)  # the exact connected BatchSource only (no Python iterable or callback)
+    if len(spec.inputs) != 1 or spec.inputs[0] != BS_FIELD_STEPS or spec.target != BS_FIELD_TARGETS:
+        raise Error("ValueError: Sequential.fit(source=) reads a BatchSource opened with inputs=('steps',) and "
+                    + "target='targets'")
+    var n = Int(py=source.n_records)
+    var width = Int(py=source.n_features)
+    var longest = Int(py=source.max_length)
+    var dims = List[Int]()
+    dims.append(n)
+    if longest > 1:
+        dims.append(longest)
+    dims.append(width)
+    var d = longest * width
+    if resume and d != Int(py=py_item(fields, nk[].k_n_features_in_)):
+        raise Error("the source's records have a different feature count from the fitted model")
+    var sample = sequential_sample_shape(mods, model, dims)
+    if resume and not Bool(py=sample == py_get(fields, nk[].k__sample_shape)):
+        raise Error("resume=True takes records of the shape the model was fitted on")
+    var warm = not resume and Bool(py=py_get(fields, nk[].k__imported, False))
+    if warm and (d != Int(py=py_item(fields, nk[].k_n_features_in_)) or not Bool(py=sample == py_get(fields, nk[].k__sample_shape))):
+        raise Error("the source's record shape differs from the imported weights' sample shape")
+    var description_owner = sequential_native_description(mods, model, PythonObject(d), sample)
+    var description = description_owner.downcast_value_ptr[SequentialDescription]()
+    var entries = sequential_entries(model, context)
+    mods.released()
+    ref native_program = description[].program
+    ref native_table = description[].scalars
+    if not description[].counts_ready:
+        var counts = model_counts_native(native_program, native_table)
+        description[].parameter_count = counts[0]
+        description[].output_count = counts[1]
+        description[].counts_ready = True
+    var n_params = description[].parameter_count
+    var n_out = description[].output_count
+    # the targets are the source's: class indices for cross_entropy, nll and bce_with_logits (classes_ is
+    # arange(classes)), else n_out floats a record (the native fit checks both)
+    var loss_name = String(py=py_item(options, nk[].k_loss))
+    var target = 0
+    var n_classes = 0
+    if loss_name == "cross_entropy" or loss_name == "nll":
+        target = 1
+        n_classes = n_out
+    elif loss_name == "bce_with_logits":
+        target = 2
+        n_classes = 2
+    var bufs = _sequential_fit_buffers(mods, fields, options, resume, warm, n_params, epochs, context)
+    var params = bufs[0]
+    var moment = bufs[1]
+    var variance = bufs[2]
+    var state = bufs[3]
+    var curve = bufs[4]
+    var third = bufs[5]
+    var previous = PythonObject(None)
+    if resume:
+        previous = py_item(fields, nk[].k__curve)
+    var big_seed = py_call(b.int, seed)
+    var loss_word = Int(py=py_item(context, nk[].k_loss_codes)[py_item(options, nk[].k_loss)]) + 256 * Int(py=py_get(options, nk[].k_reduction, 0))
+    var ip = Python.list(n, loss_word, target, py_item(options, nk[].k_opt), py_item(options, nk[].k_flags),
+        py_item(options, nk[].k_sched), py_item(options, nk[].k_step_size), spec.batch, epochs,
+        1 if spec.shuffle else 0, big_seed.__and__(4294967295), big_seed.__rshift__(32),
+        py_item(options, nk[].k_n_iter_no_change), 0 if resume or warm else 1, 1 if resume else 0)
+    var fp = Python.list(py_item(options, nk[].k_lr), py_item(options, nk[].k_f1), py_item(options, nk[].k_f2), py_item(options, nk[].k_eps),
+        py_item(options, nk[].k_weight_decay), py_get(options, nk[].k_f7, PythonObject(0.0)), py_item(options, nk[].k_tol), py_item(options, nk[].k_gamma), py_item(options, nk[].k_huber_delta))
+    var native_options = _ints(ip)
+    var native_scalars = _sequential_fit_scalars(fields, options, fp, native_program, native_table)
+    var prev_address = 0 if previous is None else Int(py=sequential_address(previous))
+    var native_addresses: List[Int] = [0, 0, Int(py=sequential_address(params)), Int(py=sequential_address(curve)),
+        Int(py=sequential_address(moment)), Int(py=sequential_address(variance)), Int(py=sequential_address(state)),
+        prev_address]
+    if third is not None:
+        native_addresses.append(Int(py=sequential_address(third)))
+        native_options.append(FIT_STATE3_MARK)
+    # the source's words, its path's bytes and the position-out words (autograd/model_descriptor.mojo
+    # FIT_SOURCE_MARK)
+    var path = spec.path
+    var path_bytes = path.as_bytes()
+    var words = batch_source_fit_words(spec, max_steps)
+    words.append(len(path_bytes))
+    for k in range(len(words)):  # small-loop(the source words)
+        native_options.append(words[k])
+    native_options.append(len(words))
+    native_options.append(FIT_SOURCE_MARK)
+    var position = List[Int64](length=2, fill=Int64(0))
+    native_addresses.append(Int(path_bytes.unsafe_ptr()))
+    native_addresses.append(Int(position.unsafe_ptr()))
+    var loop_words = fit_loop_words()
+    native_addresses.append(Int(loop_words.unsafe_ptr()))
+    native_options.append(FIT_LOOP_MARK)
+    var no_rows: List[CastIn] = [CastIn.f32_c(0, 1, 1), CastIn.f32_c(0, 1, 1)]
+    var provider = py_item(entries, nk[].k_native_model_provider)
+    var descriptor = model_descriptor_words(native_program, native_options, no_rows)
+    var n_iter = neural_descriptor_execute(provider, MODEL_FIT, native_addresses, descriptor, native_scalars)
+    mods.released()
+    # Raw addresses never own data: every buffer the native call read stays alive through it.
+    _ = path_bytes^
+    _ = path
+    _ = curve
+    _ = previous
+    _ = state
+    _ = variance
+    _ = moment
+    _ = params
+    _ = third
+    _ = description_owner^
+    batch_source_position_out(source, Int(position[0]), Int(position[1]))
+    _ = position^
+    py_setitem(fields, nk[].k_params_, params)
+    py_setitem(fields, nk[].k_n_iter_, n_iter)
+    py_setitem(fields, nk[].k_fit_loop_, fit_loop_pack(loop_words))
+    py_setitem(fields, nk[].k_loss_curve_, sequential_curve(curve, n_iter))
+    py_setitem(fields, nk[].k_n_features_in_, d)
+    py_setitem(fields, nk[].k__sample_shape, sample)
+    py_setitem(fields, nk[].k_n_outputs_, n_out)
+    py_setitem(fields, nk[].k__fit_loss, py_item(options, nk[].k_loss))
+    py_setitem(fields, nk[].k__target, target)
+    py_setitem(fields, nk[].k__fit_batch, spec.batch)
+    py_setitem(fields, nk[].k__fit_shuffle, spec.shuffle)
+    py_setitem(fields, nk[].k__y_1d, target == 0 and n_out == 1)
+    if n_classes > 0:
+        # the source's class indices are the labels: classes_ = arange(classes)
+        var classes = sequential_array(mods, Python.tuple(n_classes), py_item(context, nk[].k_int64), context)
+        var cp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(classes)))
+        for k in range(n_classes):  # small-loop(classes: the class labels, PACK)
+            cp[k] = Int64(k)
+        py_setitem(fields, nk[].k_classes_, classes)
+    py_setitem(fields, nk[].k_optimizer_m_, moment)
+    py_setitem(fields, nk[].k_optimizer_v_, variance)
+    py_setitem(fields, PythonObject("optimizer_w_"), third)
     py_setitem(fields, nk[].k__fit_state, state)
     py_setitem(fields, nk[].k__curve, curve)
     py_setitem(fields, nk[].k__imported, False)

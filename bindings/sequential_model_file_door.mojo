@@ -128,10 +128,10 @@ def sequential_file_model_info(entries: PythonObject, file: String) raises -> Tu
 
 def sequential_file_save(entries: PythonObject, file: String, buffers: List[Int], program: List[Int],
                          ip: List[Int], fp: List[Float64], classes: List[Int]) raises -> Int:
-    """Write the checkpoint; `buffers` = [params, m, v, state, curve].
-    Returns the file's byte count."""
-    if len(buffers) != 5:
-        raise Error("RuntimeError: Sequential checkpoint save takes five buffers")
+    """Write the checkpoint; `buffers` = [params, m, v, state, curve] and, for centered RMSprop, its third
+    optimizer state buffer (lane stream-fits). Returns the file's byte count."""
+    if len(buffers) != 5 and len(buffers) != 6:
+        raise Error("RuntimeError: Sequential checkpoint save takes five buffers (six with a third optimizer state)")
     var path = file.as_bytes()
     var addresses: List[Int] = [Int(path.unsafe_ptr())]
     _file_extend(addresses, buffers)
@@ -202,9 +202,10 @@ def sequential_file_info(entries: PythonObject, file: String) raises -> Sequenti
 
 def sequential_file_load(entries: PythonObject, file: String, buffers: List[Int]) raises -> Int:
     """Fill the caller's buffers; `buffers` = [params, m, v, state, curve,
-    classes] (every one but params may be 0). Returns n_params."""
-    if len(buffers) != 6:
-        raise Error("RuntimeError: Sequential checkpoint load takes six buffers")
+    classes] and optionally the third optimizer state buffer (lane
+    stream-fits) (every one but params may be 0). Returns n_params."""
+    if len(buffers) != 6 and len(buffers) != 7:
+        raise Error("RuntimeError: Sequential checkpoint load takes six buffers (seven with a third optimizer state)")
     var path = file.as_bytes()
     var addresses: List[Int] = [Int(path.unsafe_ptr())]
     _file_extend(addresses, buffers)

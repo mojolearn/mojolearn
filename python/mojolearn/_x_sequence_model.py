@@ -124,6 +124,10 @@ class Sequential(_CheckMixin):
         The optimizer's second-moment state, laid out as ``params_`` (Adam's
         running mean of the squared gradient). Not set on a model loaded
         from an export.
+    optimizer_w_ : ndarray of float32 or None
+        The momentum buffer of ``'rmsprop'`` with ``centered=True``, laid
+        out as ``params_`` (its gradient average is ``optimizer_m_``);
+        None for every other optimizer.
     n_iter_ : int
         Number of epochs run.
     fit_loop_ : tuple of (int, float)
@@ -1820,8 +1824,9 @@ class Sequential(_CheckMixin):
 
 
     # ------------------------------------------------------------ training
-    def fit(self, X, y, *, epochs=10, batch_size=None, shuffle=None, seed=0, resume=False,
-            validation_data=None, restore_best_weights=False, lengths=None, target_lengths=None):
+    def fit(self, X=None, y=None, *, epochs=10, batch_size=None, shuffle=None, seed=0, resume=False,
+            validation_data=None, restore_best_weights=False, lengths=None, target_lengths=None, source=None,
+            steps=None):
         """Train the model.
 
         Parameters
@@ -1830,7 +1835,7 @@ class Sequential(_CheckMixin):
             Training inputs: a bool, integer, float16, float32 or float64
             array, used as float32. A 2-D array may have any memory layout;
             an array of 3 or more dimensions (one sample per index of the
-            first axis) must be C-contiguous.
+            first axis) must be C-contiguous. None with ``source``.
         y : array-like
             Targets: (n_samples,) or (n_samples, n_outputs) for ``mse``,
             ``l1``, ``smooth_l1``, ``huber`` and ``kl_div`` (target
@@ -1841,7 +1846,7 @@ class Sequential(_CheckMixin):
             int32 next-token ids for ``token_cross_entropy``; for ``ctc``,
             the ``(n_samples, max_target_length)`` label sequences (class
             indices other than ``blank``), each padded past its target
-            length with any value.
+            length with any value. None with ``source``.
         epochs : int, default 10
             Passes over the data (with ``resume=True``, passes added to
             the ones already run).
@@ -1889,6 +1894,29 @@ class Sequential(_CheckMixin):
             ``ctc`` only (and required there): each sample's number of
             labels, from 0 to the width of ``y``. Not combined with
             ``validation_data``.
+        source : mojolearn.ops.BatchSource or None, default None
+            Train on batches streamed from sharded files on disk instead of
+            ``X`` and ``y``: a source opened with ``inputs=("steps",)`` and
+            ``target="targets"``. Each record is one sample of up to
+            ``max_length`` steps of ``n_features`` values; every batch is
+            padded to the model's sequence length and, for a model with
+            recurrent layers, masked by each record's length (the
+            ``lengths`` of an array fit). The targets are each record's
+            target row: ``n_outputs`` values for ``mse``, ``l1``,
+            ``smooth_l1``, ``huber`` and ``kl_div``, or one class index
+            (``classes_`` is ``0 .. n_classes - 1``) for ``cross_entropy``
+            and ``bce_with_logits``. The batch size, shuffling and order are
+            the source's. One iteration (one ``loss_curve_`` value) is the
+            rest of the source's current epoch; the next batch is read from
+            disk while the current one trains. The training state records
+            the source's consumed position, so :meth:`save_checkpoint`,
+            :meth:`from_checkpoint` and ``fit(source=..., resume=True)``
+            continue with the next batch, in another process too (the
+            shards must be sealed with ``BatchSource.seal``). Not combined
+            with ``validation_data``, early stopping or
+            ``reduce_on_plateau``.
+        steps : int or None, default None
+            With ``source``: train at most this many batches in this call.
 
         Returns
         -------
@@ -1896,7 +1924,7 @@ class Sequential(_CheckMixin):
             The fitted model, with ``params_``, ``loss_curve_``, ``n_iter_``
             and ``n_features_in_`` set (and ``classes_`` for classifiers).
         """
-        return _SEQUENTIAL_ENTRY(self, "fit", (X, y, epochs, batch_size, shuffle, seed, resume, validation_data, restore_best_weights, lengths, target_lengths), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "fit", (X, y, epochs, batch_size, shuffle, seed, resume, validation_data, restore_best_weights, lengths, target_lengths, source, steps), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ weight import
 
@@ -2339,7 +2367,7 @@ def _connect_sequential_bindings():
         "defaultdict_class": defaultdict, "native_default_factories": (list, tuple, dict, OrderedDict, defaultdict, bool, int, float, str, bytes, bytearray),
         "native_value_types": (type(None), str, bytes, bytearray, bool, int, float, range, np.ndarray, Array, array, PosixPath, PurePosixPath, type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([]))),
         "buffer_owner_types": (type(None), bytes, bytearray, array, np.ndarray, mmap.mmap), "ctypes_array_base": ctypes.Array, "array_fields": array_fields,
-        "model_fields": ("numeric_mode", "device", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "optimizer_m_", "optimizer_v_", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
+        "model_fields": ("numeric_mode", "device", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "optimizer_m_", "optimizer_v_", "optimizer_w_", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
         "numeric_dtypes": numeric_dtypes, "buffer_codes": buffer_codes, "scalar_type": np.generic,
         "version": __version__, "uname": os.uname, "class_dtypes": class_dtypes,
         "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber", "token_cross_entropy",

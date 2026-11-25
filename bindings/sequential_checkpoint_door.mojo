@@ -21,7 +21,7 @@ from bindings.py_balanced import py_item
 from autograd.model import FIT_STATE_WORDS, parse_model
 from autograd.model_execution import model_float_words
 from autograd.model_verify import model_input_id_range
-from autograd.nn_optim import NN_SCHED_ARGS
+from autograd.nn_optim import NN_SCHED_ARGS, nn_opt_keeps_third
 # nn-blocks-pgseq begin
 from bindings.nn_pgseq_compile_pack import pgseq_door_words, pgseq_resolved_options, pgseq_words_tuple
 # nn-blocks-pgseq end
@@ -113,11 +113,18 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
         Float64(py=py_item(options, nk[].k_tol)),
         Float64(py=py_item(options, nk[].k_gamma)), Float64(py=py_item(options, nk[].k_huber_delta))]
     var buffers: List[Int] = [Int(py=sequential_address(py_item(fields, nk[].k_params_))), 0, 0, 0, 0]
+    var third = PythonObject(None)  # lane stream-fits: centered RMSprop's third optimizer state buffer
     if not export:
         buffers[1] = Int(py=sequential_address(py_item(fields, nk[].k_optimizer_m_)))
         buffers[2] = Int(py=sequential_address(py_item(fields, nk[].k_optimizer_v_)))
         buffers[3] = Int(py=sequential_address(py_item(fields, nk[].k__fit_state)))
         buffers[4] = Int(py=sequential_address(py_item(fields, nk[].k__curve)))
+        # lane stream-fits: centered RMSprop's third optimizer state buffer (record version 4)
+        if nn_opt_keeps_third(ip[3], ip[4]):
+            third = py_get(fields, PythonObject("optimizer_w_"))
+            if third is None:
+                raise Error("this model's centered RMSprop state has no optimizer_w_; fit it again before saving")
+            buffers.append(Int(py=sequential_address(third)))
     # The classes_ descriptor words (the compiled model ABI's seven).
     var class_words = List[Int]()
     if count > 0:
@@ -154,6 +161,7 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
     mods.released()
     var normalized = native_path(path)
     _ = sequential_file_save(entries, String(normalized), buffers, program, ip, fp, class_words)
+    _ = third^  # the buffer the save read by address
     mods.released()
     _sidecar(mods, model, normalized, entries, context, id_range)
     _ = fields^
@@ -240,6 +248,10 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
     var v = PythonObject(None)
     var state = PythonObject(None)
     var curve = PythonObject(None)
+    var third = PythonObject(None)  # lane stream-fits: centered RMSprop's third optimizer state buffer
+    if not export and nn_opt_keeps_third(ip[2], ip[3]):
+        third = sequential_array(mods, Python.tuple(ip[16]), py_item(context, nk[].k_float32), context)
+        buffers.append(Int(py=sequential_address(third)))
     if not export:
         m = sequential_array(mods, Python.tuple(ip[16]), py_item(context, nk[].k_float32), context)
         v = sequential_array(mods, Python.tuple(ip[16]), py_item(context, nk[].k_float32), context)
@@ -274,5 +286,6 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
     if not export:
         py_setitem(fields, nk[].k_optimizer_m_, m)
         py_setitem(fields, nk[].k_optimizer_v_, v)
+        py_setitem(fields, PythonObject("optimizer_w_"), third)
         py_setitem(fields, nk[].k__curve, curve)
     return model

@@ -151,8 +151,8 @@ class _RecurrentRegressor(_RecurrentBase):
     _estimator_type = "regressor"
     _TASK = 0
 
-    def fit(self, X, y, lengths=None, sample_weight=None, h_0=None, c_0=None, validation_data=None,
-            restore_best=True):
+    def fit(self, X=None, y=None, lengths=None, sample_weight=None, h_0=None, c_0=None, validation_data=None,
+            restore_best=True, *, source=None):
         """Train the network on sequences ``X`` and targets ``y``.
 
         Parameters
@@ -181,6 +181,43 @@ class _RecurrentRegressor(_RecurrentBase):
         restore_best : bool, default True
             With validation, keep the parameters of the epoch with the lowest
             validation loss (``best_epoch_``).
+        source : mojolearn.ops.BatchSource or None, default None
+            Train on sequences streamed from sharded files on disk instead
+            of ``X`` and ``y``: a source opened with ``inputs=("steps",)``
+            and ``target="targets"``. Each record is one sequence; every
+            batch is padded to the source's ``max_length`` and masked by
+            each record's length (the ``lengths`` of an array fit). A
+            record's target row holds one class index (``classes_`` is
+            ``0 .. n_classes - 1``), or with ``output='sequence'`` one for
+            each of the ``max_length`` steps.
+            The batch size, shuffling and order are the source's;
+            ``max_epochs`` passes over it, the next batch read from disk
+            while the current one trains. ``loss_curve_`` holds every
+            step's loss. ``class_weight`` as a dict weighs every record
+            (every step with ``output='sequence'``) by its class.
+            ``validation_data=(X_val, y_val, lengths_val)`` arrays,
+            padded to ``max_length``, give ``validation_loss_`` after
+            every pass over the source and ``best_epoch_``. Not combined
+            with ``sample_weight``, ``class_weight='balanced'``, ``h_0``
+            or ``early_stopping``. :meth:`partial_fit` with ``source``
+            continues from where the last call stopped.
+        source : mojolearn.ops.BatchSource or None, default None
+            Train on sequences streamed from sharded files on disk instead
+            of ``X`` and ``y``: a source opened with ``inputs=("steps",)``
+            and ``target="targets"``. Each record is one sequence; every
+            batch is padded to the source's ``max_length`` and masked by
+            each record's length (the ``lengths`` of an array fit). A
+            record's target row holds ``n_outputs`` values, or with ``output='sequence'``
+            ``n_outputs`` values for each of the ``max_length`` steps.
+            The batch size, shuffling and order are the source's;
+            ``max_epochs`` passes over it, the next batch read from disk
+            while the current one trains. ``loss_curve_`` holds every
+            step's loss. ``validation_data=(X_val, y_val, lengths_val)``
+            arrays, padded to ``max_length``, give ``validation_loss_``
+            after every pass over the source and ``best_epoch_``. Not
+            combined with ``sample_weight``, ``h_0`` or
+            ``early_stopping``. :meth:`partial_fit` with ``source``
+            continues from where the last call stopped.
 
         Returns
         -------
@@ -197,21 +234,30 @@ class _RecurrentRegressor(_RecurrentBase):
         >>> model.predict(X, lengths=lengths).shape
         (64,)
         """
-        return _XSEQ(self, "rnn_fit", (X, y, lengths, sample_weight, h_0, c_0, validation_data, restore_best),
-                     _XSEQ_CONTEXT)
+        return _XSEQ(self, "rnn_fit", (X, y, lengths, sample_weight, h_0, c_0, validation_data, restore_best, False,
+                                       source, None), _XSEQ_CONTEXT)
 
-    def partial_fit(self, X, y, lengths=None, sample_weight=None, h_0=None, c_0=None):
+    def partial_fit(self, X=None, y=None, lengths=None, sample_weight=None, h_0=None, c_0=None, *, source=None,
+                    steps=None):
         """Train one more epoch from the current parameters and optimizer
         state (the first call starts as :meth:`fit` does). Run your own
         loop, one epoch per call; arguments as in :meth:`fit`. For a
         classifier the first call's labels fix ``classes_``; later calls may
         hold any subset of them.
 
+        With ``source`` (a ``mojolearn.ops.BatchSource``, as in :meth:`fit`)
+        each call trains the rest of the source's current epoch, or exactly
+        ``steps`` batches. The estimator keeps the source's consumed
+        position with its optimizer state, so the next call (in another
+        process too, after pickling the estimator) continues with the next
+        batch; the shards must be sealed with ``BatchSource.seal``.
+
         Returns
         -------
         self
         """
-        return _XSEQ(self, "rnn_fit", (X, y, lengths, sample_weight, h_0, c_0, None, True, True), _XSEQ_CONTEXT)
+        return _XSEQ(self, "rnn_fit", (X, y, lengths, sample_weight, h_0, c_0, None, True, True, source, steps),
+                     _XSEQ_CONTEXT)
 
     def predict(self, X, lengths=None, h_0=None, c_0=None):
         """Predicted targets for sequences ``X``.
@@ -263,8 +309,8 @@ class _RecurrentClassifier(_RecurrentBase):
     _estimator_type = "classifier"
     _TASK = 1
 
-    def fit(self, X, y, lengths=None, sample_weight=None, h_0=None, c_0=None, validation_data=None,
-            restore_best=True):
+    def fit(self, X=None, y=None, lengths=None, sample_weight=None, h_0=None, c_0=None, validation_data=None,
+            restore_best=True, *, source=None):
         """Train the network on sequences ``X`` and labels ``y``.
 
         Parameters
@@ -311,21 +357,30 @@ class _RecurrentClassifier(_RecurrentBase):
         >>> model.predict(X, lengths=lengths).shape
         (64,)
         """
-        return _XSEQ(self, "rnn_fit", (X, y, lengths, sample_weight, h_0, c_0, validation_data, restore_best),
-                     _XSEQ_CONTEXT)
+        return _XSEQ(self, "rnn_fit", (X, y, lengths, sample_weight, h_0, c_0, validation_data, restore_best, False,
+                                       source, None), _XSEQ_CONTEXT)
 
-    def partial_fit(self, X, y, lengths=None, sample_weight=None, h_0=None, c_0=None):
+    def partial_fit(self, X=None, y=None, lengths=None, sample_weight=None, h_0=None, c_0=None, *, source=None,
+                    steps=None):
         """Train one more epoch from the current parameters and optimizer
         state (the first call starts as :meth:`fit` does). Run your own
         loop, one epoch per call; arguments as in :meth:`fit`. For a
         classifier the first call's labels fix ``classes_``; later calls may
         hold any subset of them.
 
+        With ``source`` (a ``mojolearn.ops.BatchSource``, as in :meth:`fit`)
+        each call trains the rest of the source's current epoch, or exactly
+        ``steps`` batches. The estimator keeps the source's consumed
+        position with its optimizer state, so the next call (in another
+        process too, after pickling the estimator) continues with the next
+        batch; the shards must be sealed with ``BatchSource.seal``.
+
         Returns
         -------
         self
         """
-        return _XSEQ(self, "rnn_fit", (X, y, lengths, sample_weight, h_0, c_0, None, True, True), _XSEQ_CONTEXT)
+        return _XSEQ(self, "rnn_fit", (X, y, lengths, sample_weight, h_0, c_0, None, True, True, source, steps),
+                     _XSEQ_CONTEXT)
 
     def predict_proba(self, X, lengths=None, h_0=None, c_0=None):
         """Class probabilities for sequences ``X``, shape (n_samples, n_classes),

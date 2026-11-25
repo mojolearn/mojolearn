@@ -1,0 +1,15 @@
+diff --git a/autograd/batch_source.mojo b/autograd/batch_source.mojo
+index 5925f40ac7..dda4e87248 100644
+--- a/autograd/batch_source.mojo
++++ b/autograd/batch_source.mojo
+@@ -118,9 +118,7 @@ comptime BATCH_SOURCE_SABOTAGE_READ_AHEAD_HOST = is_defined["MOJOLEARN_BATCH_SOU
+ # (`batch_source_fit_saved`), on one side each; lane ops-composed-cases (cases sequential-stream-resume and
+ # gru-stream-resume) must REFUSE under either.
+ comptime BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD = is_defined["MOJOLEARN_BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD"]()
+-comptime BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD_HOST = is_defined[
+-    "MOJOLEARN_BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD_HOST"
+-]()
++comptime BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD_HOST = True  # SABOTAGE
+ 
+ 
+ def batch_source_field(name: String) raises -> Int:

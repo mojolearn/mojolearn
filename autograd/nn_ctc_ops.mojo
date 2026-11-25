@@ -20,7 +20,10 @@
 #
 # THE GRADIENT is the derivative in the log-probabilities as independent inputs:
 #   d nll / d lp[t, c] = -(1 / p) sum_{s : l'_s = c} alpha_t(s) beta_t(s) / y_t(c) = -sum_s exp(a + b - lp + nll)
-# (alpha and beta both carry step t's emission, Graves 2006). PyTorch's ctc_loss backward returns this plus
+# (alpha and beta both carry step t's emission, Graves 2006). It is computed in the NORMALIZED form (2026-11-25,
+# ctc_row_fwd / ctc_row_vjp): the scans read lp - M_t (the step's largest log-probability) and normalize each step's
+# states by their log-sum, and the step's gradient is the posterior exp(q_s - log sum q) of its states, so neither
+# the likelihood nor a common offset of the log-probabilities enters a word. PyTorch's ctc_loss backward returns this plus
 # exp(lp[t, c]) (the gradient it would have through a log_softmax); passed back through log_softmax both give the
 # same logits gradient (softmax - q), because q sums to 1 over the classes of each valid step. Steps at or after
 # the input length take gradient 0. A row whose alignment is impossible (nll = +inf) takes gradient 0.
@@ -97,14 +100,63 @@ def ctc_factor(L: Int, reduction: Int) -> Float32:
 
 
 @always_inline
+def ctc_step_shift(lp: FP, base: Int, C: Int, raw: Int) -> Float32:
+    """The step's shift M_t: the largest log-probability of the step's C classes (ascending fold), +0.0 when every
+    class is -inf (the step then makes every state unreachable on its own) or in the raw form (i8 = 1). Every
+    recursion reads lp - M_t: for log-probabilities that all carry a common offset k the subtraction is exact
+    (both words share an exponent range), so the scans see the same words with and without the offset."""
+    if raw != 0:
+        return Float32(0)
+    var ni = ctc_neg_inf()
+    var m = ld(lp, base)
+    for c in range(1, C):
+        var v = ld(lp, base + c)
+        if v > m:
+            m = v
+    if m == ni:
+        return Float32(0)
+    return m
+
+
+@always_inline
+def ctc_states_lse(p: FP, base: Int, n: Int) -> Float32:
+    """log(sum_s exp(p[base + s])) over the n states, folded pairwise in ascending state order (-inf: none
+    reachable)."""
+    var acc = ctc_neg_inf()
+    for s in range(n):
+        acc = ctc_lse2(acc, ld(p, base + s))
+    return acc
+
+
+@always_inline
+def ctc_states_shift(p: FP, base: Int, n: Int, z: Float32):
+    """Subtract the step's normalizer z from each reachable state (-inf states stay -inf)."""
+    var ni = ctc_neg_inf()
+    for s in range(n):
+        var v = ld(p, base + s)
+        if v != ni:
+            st(p, base + s, sub(v, z))
+
+
+@always_inline
 def ctc_row_fwd(b: Int, a: Args):
     """OP_CTC_FWD, thread b = batch row b. p0 log-probabilities (B, T, C), p1 target rows (B, i2), p2 the row's
     loss value (B), p3 alpha scratch (B, T, 2 S + 1), p4 the row's raw negative log-likelihood (B); i0 T, i1 C,
-    i2 the target row width 2 + S, i3 blank, i4 reduction (0 mean, 1 sum), i5 zero_infinity."""
+    i2 the target row width 2 + S, i3 blank, i4 reduction (0 mean, 1 sum), i5 zero_infinity, i8 the raw form (the
+    sabotage arm's unnormalized recursion; 0 in the product).
+
+    THE NORMALIZED FORM (lane stream-fits, 2026-11-25). Step t reads the shifted log-probabilities lp - M_t
+    (ctc_step_shift) and stores its alphas normalized: each step's reachable states minus their log-sum A_t, so
+    every stored alpha is at most 0 and of the magnitude of one step's terms, never of the whole row's likelihood.
+    The row's log-likelihood is the running sum of (M_t + A_t) in ascending t plus the log-sum of the last two
+    states. The backward (ctc_row_vjp) reads these alphas; its occupations never meet the likelihood (before
+    2026-11-25 it took exp(alpha + beta - lp + nll) with alpha, beta and nll at the row's magnitude, so a long
+    sequence or a large common offset moved its words by ulp(nll))."""
     var T = a.i0
     var C = a.i1
     var TW = a.i2
     var blank = a.i3
+    var raw = a.i8
     var SP = 2 * (TW - CTC_LABELS) + 1
     var tb = b * TW
     var tin = Int(ld(a.p1, tb + CTC_IN_LEN))
@@ -120,12 +172,25 @@ def ctc_row_fwd(b: Int, a: Args):
         return
     for s in range(n):
         st(a.p3, ab + s, ni)
-    st(a.p3, ab, ld(a.p0, lb + blank))
+    var m = ctc_step_shift(a.p0, lb, C, raw)
+    st(a.p3, ab, sub(ld(a.p0, lb + blank), m))
     if L > 0:
-        st(a.p3, ab + 1, ld(a.p0, lb + ctc_label(a.p1, tb, 1, blank)))
-    for t in range(1, tin):
+        st(a.p3, ab + 1, sub(ld(a.p0, lb + ctc_label(a.p1, tb, 1, blank)), m))
+    var logp = Float32(0)
+    var reachable = True
+    var z = Float32(0)
+    if raw == 0:
+        z = ctc_states_lse(a.p3, ab, n)
+        if z == ni:
+            reachable = False
+        else:
+            ctc_states_shift(a.p3, ab, n, z)
+    logp = add(m, z)
+    var t = 1
+    while reachable and t < tin:
         var prev = ab + (t - 1) * SP
         var row = ab + t * SP
+        m = ctc_step_shift(a.p0, lb + t * C, C, raw)
         for s in range(n):
             var v = ld(a.p3, prev + s)
             if s >= 1:
@@ -135,12 +200,24 @@ def ctc_row_fwd(b: Int, a: Args):
             if v == ni:
                 st(a.p3, row + s, ni)
             else:
-                st(a.p3, row + s, add(ld(a.p0, lb + t * C + ctc_label(a.p1, tb, s, blank)), v))
-    var last = ab + (tin - 1) * SP
-    var ll = ld(a.p3, last + n - 1)
-    if L > 0:
-        ll = ctc_lse2(ll, ld(a.p3, last + n - 2))
-    var nll = -ll
+                st(a.p3, row + s, add(sub(ld(a.p0, lb + t * C + ctc_label(a.p1, tb, s, blank)), m), v))
+        z = Float32(0)
+        if raw == 0:
+            z = ctc_states_lse(a.p3, row, n)
+            if z == ni:
+                reachable = False
+            else:
+                ctc_states_shift(a.p3, row, n, z)
+        logp = add(logp, add(m, z))
+        t += 1
+    var nll = -ni
+    if reachable:
+        var last = ab + (tin - 1) * SP
+        var ll = ld(a.p3, last + n - 1)
+        if L > 0:
+            ll = ctc_lse2(ll, ld(a.p3, last + n - 2))
+        if ll != ni:
+            nll = -add(logp, ll)
     st(a.p4, b, nll)
     var value = nll
     if a.i5 != 0 and nll == -ni:
@@ -152,12 +229,20 @@ def ctc_row_fwd(b: Int, a: Args):
 def ctc_row_vjp(b: Int, a: Args):
     """OP_CTC_VJP, thread b = batch row b: the gradient of the row's loss value in the log-probabilities into p6
     (B, T, C), every word of the row written (0 where no state of a step carries the class, and at every step from
-    the input length on). p0 .. p4 and i0 .. i5 as OP_CTC_FWD (p3, p4 its outputs), p5 the upstream gradient of
-    the row values (B), p7 beta scratch (B, 2, 2 S + 1)."""
+    the input length on). p0 .. p4 and i0 .. i5, i8 as OP_CTC_FWD (p3, p4 its outputs), p5 the upstream gradient
+    of the row values (B), p7 beta scratch (B, 2, 2 S + 1).
+
+    Normalized form: the betas read lp - M_t and are normalized per step as the alphas are; a step's occupations
+    are q_s = a_s + b_s - (lp_t(c_s) - M_t) over its states with both finite, and the posterior of state s is
+    exp(q_s - Q_t), Q_t their log-sum (ascending pairwise fold). The posteriors of a step add up to one, as the
+    exact ones do (alpha_t(s) beta_t(s) / y_t(c_s) summed over s is the likelihood at every t), so nothing of the
+    row's magnitude enters a word. The raw form (i8 = 1, the sabotage arm) is the pre-2026-11-25 formula
+    exp(alpha + beta - lp + nll) on unshifted, unnormalized scans."""
     var T = a.i0
     var C = a.i1
     var TW = a.i2
     var blank = a.i3
+    var raw = a.i8
     var SP = 2 * (TW - CTC_LABELS) + 1
     var tb = b * TW
     var tin = Int(ld(a.p1, tb + CTC_IN_LEN))
@@ -177,11 +262,13 @@ def ctc_row_vjp(b: Int, a: Args):
     while t >= 0:
         var cur = bb + (t % 2) * SP
         var nxt = bb + ((t + 1) % 2) * SP
+        var row = lb + t * C
+        var m = ctc_step_shift(a.p0, row, C, raw)
         for s in range(n):
             var v = ni
             if t == tin - 1:
                 if s == n - 1 or (L > 0 and s == n - 2):
-                    v = ld(a.p0, lb + t * C + ctc_label(a.p1, tb, s, blank))
+                    v = sub(ld(a.p0, row + ctc_label(a.p1, tb, s, blank)), m)
             else:
                 var nx = ld(a.p7, nxt + s)
                 if s + 1 < n:
@@ -189,18 +276,32 @@ def ctc_row_vjp(b: Int, a: Args):
                 if s + 2 < n and ctc_skip(a.p1, tb, s + 2, blank):
                     nx = ctc_lse2(nx, ld(a.p7, nxt + s + 2))
                 if nx != ni:
-                    v = add(ld(a.p0, lb + t * C + ctc_label(a.p1, tb, s, blank)), nx)
+                    v = add(sub(ld(a.p0, row + ctc_label(a.p1, tb, s, blank)), m), nx)
             st(a.p7, cur + s, v)
-        # the step's gradient: the occupation of each state, added to its class in ascending state order
-        var row = lb + t * C
-        for s in range(n):
-            var al = ld(a.p3, ab + t * SP + s)
-            var be = ld(a.p7, cur + s)
-            if al == ni or be == ni:
-                continue
-            var c = ctc_label(a.p1, tb, s, blank)
-            var e = ftz(identical_exp(add(sub(add(al, be), ld(a.p0, row + c)), nll)))
-            st(a.p6, row + c, add(ld(a.p6, row + c), e))
+        # the step's normalizers: the betas' log-sum, then the occupations' log-sum Q (raw form: Q = -nll)
+        var q = -nll
+        if raw == 0:
+            var zb = ctc_states_lse(a.p7, cur, n)
+            if zb != ni:
+                ctc_states_shift(a.p7, cur, n, zb)
+            q = ni
+            for s in range(n):
+                var al = ld(a.p3, ab + t * SP + s)
+                var be = ld(a.p7, cur + s)
+                if al == ni or be == ni:
+                    continue
+                var c = ctc_label(a.p1, tb, s, blank)
+                q = ctc_lse2(q, sub(add(al, be), sub(ld(a.p0, row + c), m)))
+        # the step's gradient: the posterior of each state, added to its class in ascending state order
+        if q != ni:
+            for s in range(n):
+                var al = ld(a.p3, ab + t * SP + s)
+                var be = ld(a.p7, cur + s)
+                if al == ni or be == ni:
+                    continue
+                var c = ctc_label(a.p1, tb, s, blank)
+                var e = ftz(identical_exp(sub(sub(add(al, be), sub(ld(a.p0, row + c), m)), q)))
+                st(a.p6, row + c, add(ld(a.p6, row + c), e))
         for c in range(C):
             st(a.p6, row + c, mul(coef, ld(a.p6, row + c)))
         t -= 1

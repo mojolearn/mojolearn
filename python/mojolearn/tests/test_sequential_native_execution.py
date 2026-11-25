@@ -13,7 +13,7 @@ from mojolearn._verify_native_runtime import audit_native_call
 # 58536dcfdd added the reduce_on_plateau words FS_PL_LR .. FS_PL_COOL. The native fit writes all
 # of them, so a 12-word oracle buffer was overrun (heap corruption, worker crashes) and its bytes
 # could never equal the public 16-word _fit_state.
-FIT_STATE_WORDS = 16
+FIT_STATE_WORDS = 29  # 16 + the batch source part (lane stream-fits, 2026-11-25)
 
 
 def binding():

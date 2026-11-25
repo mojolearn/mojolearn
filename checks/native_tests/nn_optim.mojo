@@ -14,8 +14,9 @@ autograd/nn_optim.mojo).
   ReduceLROnPlateau, and the linear warmup-then-decay rule, 1e-6 relative.
 - Fits: a 4-16-1 tanh network on a smooth regression, one fit per optimizer and per schedule: the epoch loss
   must fall below a quarter of the first epoch's and every loss, parameter and prediction must be finite;
-  fit(6) + fit(6, resume) must give the bits of fit(12) (lamb, centered rmsprop, adagrad, one_cycle,
-  warm restarts, plateau), and so must fit(6), save_checkpoint, load and resume(6) (lamb, plateau).
+  fit(6) + fit(6, resume) must give the bits of fit(12) (lamb, centered rmsprop with and without momentum,
+  adagrad, one_cycle, warm restarts, plateau), and so must fit(6), save_checkpoint, load and resume(6) (lamb,
+  centered rmsprop with momentum: its third state buffer, plateau).
 - Batch-norm state: a model whose first layer is a batch norm holds the same running statistics, word for
   word, after a fit with lamb (weight decay 0.5), rmsprop or adagrad as after one with plain sgd: the
   statistics depend on the input only, so no optimizer moved them.
@@ -406,6 +407,12 @@ def _fit_cases() -> List[_FitCase]:
     c.append(_FitCase("rmsprop", NN_OPT_RMSPROP, 0, 0.01, 0.0, 0.99, 1e-8, 0.0, 0.0, 0, 0.1, none.copy(), False, False))
     c.append(_FitCase("rmsprop momentum", NN_OPT_RMSPROP, 0, 0.005, 0.0, 0.99, 1e-8, 0.0, 0.5, 0, 0.1, none.copy(), False, False))
     c.append(_FitCase("rmsprop centered", NN_OPT_RMSPROP, 1, 0.01, 0.0, 0.99, 1e-8, 0.0, 0.0, 0, 0.1, none.copy(), True, False))
+    # lane stream-fits: centered with momentum, refused at compile before 2026-11-25 (its third state buffer, the
+    # momentum, is now kept: resume and checkpoint give the uninterrupted bits)
+    # lr 0.005, the plain momentum case's (momentum 0.5 doubles the settled step; lane fable-finalize: 0.01 here was
+    # the no-momentum cases' rate). The quarter-loss bar on this case is unrun; what decides it is the resume and
+    # checkpoint equality below.
+    c.append(_FitCase("rmsprop centered momentum", NN_OPT_RMSPROP, 1, 0.005, 0.0, 0.99, 1e-8, 0.0, 0.5, 0, 0.1, none.copy(), True, True))
     c.append(_FitCase("adagrad", NN_OPT_ADAGRAD, 0, 0.1, 0.01, 0.1, 1e-10, 0.0, 0.0, 0, 0.1, none.copy(), True, False))
     c.append(_FitCase("lamb", NN_OPT_LAMB, lb | NN_LAMB_CLIP, 0.05, 0.9, 0.999, 1e-6, 0.01, 1.0, 0, 0.1, none.copy(), True, True))
     # schedules on adam (opt 1), lr 0.01
@@ -473,6 +480,7 @@ def run_fit_case[E: Exec](mut ex: E, tc: _FitCase, tag: String) raises -> List[F
         _same(tc.name + ": fit(6) + resume(6) against fit(12)", r.params, m.params)
         _same(tc.name + ": resumed optimizer state", r.m, m.m)
         _same(tc.name + ": resumed optimizer state 2", r.v, m.v)
+        _same(tc.name + ": resumed optimizer state 3", r.w, m.w)
     if tc.checkpoint:
         var r = _model(tc)
         _ = r.fit(ex, x, _FN, _FD, y, 1, 0, 6, 32, 1, 3)

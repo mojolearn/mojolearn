@@ -1,5 +1,5 @@
 diff --git a/autograd/session_ops_layer_sabotage.mojo b/autograd/session_ops_layer_sabotage.mojo
-index 601a770730..8d8a20b2cc 100644
+index 6cb6d8d59f..60dea620c7 100644
 --- a/autograd/session_ops_layer_sabotage.mojo
 +++ b/autograd/session_ops_layer_sabotage.mojo
 @@ -23,7 +23,7 @@ comptime SOL_SABOTAGE_MISH_SCALE_HOST = is_defined["MOJOLEARN_SESSION_OPS_LAYER_
@@ -10,4 +10,4 @@ index 601a770730..8d8a20b2cc 100644
 +comptime SOL_SABOTAGE_SMOOTH_L1_BETA_HOST = True  # SABOTAGE
  comptime SOL_SABOTAGE_CTC_REDUCTION = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_CTC_REDUCTION"]()
  comptime SOL_SABOTAGE_CTC_REDUCTION_HOST = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_CTC_REDUCTION_HOST"]()
- comptime SOL_SABOTAGE_SSM_SCALE = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_SSM_SCALE"]()
+ # Added by lane stream-fits (2026-11-25), caught by lane ops-composed-cases (case ctc-offset, composed-extra.json):

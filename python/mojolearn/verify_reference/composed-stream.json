@@ -1,0 +1,520 @@
+{
+ "schema": "mojolearn.composed-cases.v1",
+ "cases": [
+  {
+   "name": "sequential-stream-resume",
+   "about": "Sequential.fit(source=) (lane stream-fits, 2026-11-25): a GRU(3, output='final') -> flatten -> dropout(0.25) -> linear(1) regressor on 7 sealed records of 1 to 4 steps of 2 features in two shards (batch 2, two batches a length bucket, shuffled from seed 5: 4 batches an epoch, each padded to 4 steps and masked by the records' lengths). Uninterrupted: fit(source=, epochs=2), 8 steps. Interrupted: fit(source=, epochs=2, steps=3), stopped mid-epoch AFTER the source read the fourth batch ahead (the handle's consumed position is 3), save_checkpoint, then in a FRESH PROCESS from_checkpoint and fit(source=a new handle at (0, 0), resume=True, epochs=2, steps=5): the checkpoint's consumed position, not the read-ahead, is where it continues, so the parameters and both optimizer buffers are the uninterrupted run's words (the dropout masks are keyed by the step count).",
+   "data": {
+    "three": {
+     "value": 3,
+     "dtype": "int64"
+    }
+   },
+   "do": [
+    {
+     "op": "shards",
+     "as": "root",
+     "lengths": [
+      [
+       1,
+       3,
+       2,
+       4
+      ],
+      [
+       2,
+       1,
+       3
+      ]
+     ],
+     "F": 2,
+     "targets": {
+      "kind": "dense",
+      "width": 1
+     }
+    },
+    {
+     "op": "make",
+     "cls": "ops.BatchSource",
+     "args": [
+      "@root",
+      2
+     ],
+     "kw": {
+      "inputs": {
+       "tuple": [
+        "steps"
+       ]
+      },
+      "target": "targets",
+      "shuffle": true,
+      "seed": 5,
+      "bucket_batches": 2
+     },
+     "as": "sa"
+    },
+    {
+     "op": "make",
+     "cls": "Sequential",
+     "as": "ma"
+    },
+    {
+     "op": "call",
+     "fn": "ma.gru",
+     "args": [
+      3
+     ],
+     "kw": {
+      "output": "final"
+     }
+    },
+    {
+     "op": "call",
+     "fn": "ma.flatten"
+    },
+    {
+     "op": "call",
+     "fn": "ma.dropout",
+     "args": [
+      0.25
+     ]
+    },
+    {
+     "op": "call",
+     "fn": "ma.linear",
+     "args": [
+      1
+     ]
+    },
+    {
+     "op": "call",
+     "fn": "ma.compile",
+     "kw": {
+      "loss": "mse",
+      "optimizer": "adam",
+      "lr": 0.05
+     }
+    },
+    {
+     "op": "call",
+     "fn": "ma.fit",
+     "kw": {
+      "source": "@sa",
+      "epochs": 2
+     }
+    },
+    {
+     "op": "let",
+     "as": "pa",
+     "value": [
+      "@ma.params_",
+      "@ma.optimizer_m_",
+      "@ma.optimizer_v_"
+     ]
+    },
+    {
+     "op": "make",
+     "cls": "ops.BatchSource",
+     "args": [
+      "@root",
+      2
+     ],
+     "kw": {
+      "inputs": {
+       "tuple": [
+        "steps"
+       ]
+      },
+      "target": "targets",
+      "shuffle": true,
+      "seed": 5,
+      "bucket_batches": 2
+     },
+     "as": "sb"
+    },
+    {
+     "op": "make",
+     "cls": "Sequential",
+     "as": "mb"
+    },
+    {
+     "op": "call",
+     "fn": "mb.gru",
+     "args": [
+      3
+     ],
+     "kw": {
+      "output": "final"
+     }
+    },
+    {
+     "op": "call",
+     "fn": "mb.flatten"
+    },
+    {
+     "op": "call",
+     "fn": "mb.dropout",
+     "args": [
+      0.25
+     ]
+    },
+    {
+     "op": "call",
+     "fn": "mb.linear",
+     "args": [
+      1
+     ]
+    },
+    {
+     "op": "call",
+     "fn": "mb.compile",
+     "kw": {
+      "loss": "mse",
+      "optimizer": "adam",
+      "lr": 0.05
+     }
+    },
+    {
+     "op": "call",
+     "fn": "mb.fit",
+     "kw": {
+      "source": "@sb",
+      "epochs": 2,
+      "steps": 3
+     }
+    },
+    {
+     "op": "call",
+     "fn": "sb.state_dict",
+     "as": "sd"
+    },
+    {
+     "op": "array",
+     "of": "@sd.consumed",
+     "dtype": "int64",
+     "as": "cons"
+    },
+    {
+     "op": "same",
+     "a": "@cons",
+     "b": "@three",
+     "what": "three steps leave the source's consumed position at 3 (the fourth batch read ahead, not trained)"
+    },
+    {
+     "op": "path",
+     "name": "seq.ckpt",
+     "as": "ck"
+    },
+    {
+     "op": "call",
+     "fn": "mb.save_checkpoint",
+     "args": [
+      "@ck"
+     ]
+    },
+    {
+     "op": "fresh",
+     "pass": [
+      "ck",
+      "root"
+     ],
+     "keep": [
+      "pc0",
+      "pc1",
+      "pc2"
+     ],
+     "do": [
+      {
+       "op": "make",
+       "cls": "ops.BatchSource",
+       "args": [
+        "@root",
+        2
+       ],
+       "kw": {
+        "inputs": {
+         "tuple": [
+          "steps"
+         ]
+        },
+        "target": "targets",
+        "shuffle": true,
+        "seed": 5,
+        "bucket_batches": 2
+       },
+       "as": "sc"
+      },
+      {
+       "op": "make",
+       "cls": "Sequential.from_checkpoint",
+       "args": [
+        "@ck"
+       ],
+       "as": "mc"
+      },
+      {
+       "op": "call",
+       "fn": "mc.fit",
+       "kw": {
+        "source": "@sc",
+        "resume": true,
+        "epochs": 2,
+        "steps": 5
+       }
+      },
+      {
+       "op": "array",
+       "of": "@mc.params_",
+       "as": "pc0"
+      },
+      {
+       "op": "array",
+       "of": "@mc.optimizer_m_",
+       "as": "pc1"
+      },
+      {
+       "op": "array",
+       "of": "@mc.optimizer_v_",
+       "as": "pc2"
+      }
+     ]
+    },
+    {
+     "op": "same",
+     "a": "@pa",
+     "b": [
+      "@pc0",
+      "@pc1",
+      "@pc2"
+     ],
+     "what": "a fresh-process resume from the mid-epoch checkpoint trains the uninterrupted run's parameters and optimizer state"
+    },
+    {
+     "op": "digest",
+     "part": "stream",
+     "of": [
+      "@pa",
+      "@ma.loss_curve_"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gru-stream-resume",
+   "about": "GRURegressor.partial_fit(source=, steps=) (lane stream-fits, 2026-11-25): output='sequence' with a target at every step (each record's target row holds 4 steps, padded past its length and weighed 0) on 7 sealed records of 1 to 4 steps of 2 features (4 batches an epoch, padded to 4 steps, masked by the lengths). Uninterrupted: partial_fit(source=, steps=8) (two epochs). Interrupted: partial_fit(source=, steps=3), stopped mid-epoch after the read-ahead (consumed position 3), the estimator pickled, then in a FRESH PROCESS unpickled and partial_fit(source=a new handle at (0, 0), steps=5): the estimator's saved position continues it, so the parameters and the optimizer state (its three buffers and step count) are the uninterrupted run's words.",
+   "data": {
+    "three": {
+     "value": 3,
+     "dtype": "int64"
+    }
+   },
+   "do": [
+    {
+     "op": "shards",
+     "as": "root",
+     "lengths": [
+      [
+       1,
+       3,
+       2,
+       4
+      ],
+      [
+       2,
+       1,
+       3
+      ]
+     ],
+     "F": 2,
+     "targets": {
+      "kind": "steps",
+      "width": 1
+     }
+    },
+    {
+     "op": "make",
+     "cls": "ops.BatchSource",
+     "args": [
+      "@root",
+      2
+     ],
+     "kw": {
+      "inputs": {
+       "tuple": [
+        "steps"
+       ]
+      },
+      "target": "targets",
+      "shuffle": true,
+      "seed": 5,
+      "bucket_batches": 2
+     },
+     "as": "sa"
+    },
+    {
+     "op": "make",
+     "cls": "GRURegressor",
+     "kw": {
+      "hidden_size": 4,
+      "output": "sequence",
+      "learning_rate": 0.05,
+      "random_state": 0,
+      "batch_size": 2
+     },
+     "as": "ea"
+    },
+    {
+     "op": "call",
+     "fn": "ea.partial_fit",
+     "kw": {
+      "source": "@sa",
+      "steps": 8
+     }
+    },
+    {
+     "op": "let",
+     "as": "pa",
+     "value": [
+      "@ea.params_",
+      "@ea._optimizer_state_"
+     ]
+    },
+    {
+     "op": "make",
+     "cls": "ops.BatchSource",
+     "args": [
+      "@root",
+      2
+     ],
+     "kw": {
+      "inputs": {
+       "tuple": [
+        "steps"
+       ]
+      },
+      "target": "targets",
+      "shuffle": true,
+      "seed": 5,
+      "bucket_batches": 2
+     },
+     "as": "sb"
+    },
+    {
+     "op": "make",
+     "cls": "GRURegressor",
+     "kw": {
+      "hidden_size": 4,
+      "output": "sequence",
+      "learning_rate": 0.05,
+      "random_state": 0,
+      "batch_size": 2
+     },
+     "as": "eb"
+    },
+    {
+     "op": "call",
+     "fn": "eb.partial_fit",
+     "kw": {
+      "source": "@sb",
+      "steps": 3
+     }
+    },
+    {
+     "op": "call",
+     "fn": "sb.state_dict",
+     "as": "sd"
+    },
+    {
+     "op": "array",
+     "of": "@sd.consumed",
+     "dtype": "int64",
+     "as": "cons"
+    },
+    {
+     "op": "same",
+     "a": "@cons",
+     "b": "@three",
+     "what": "three steps leave the source's consumed position at 3 (the fourth batch read ahead, not trained)"
+    },
+    {
+     "op": "pickle",
+     "dump": "@eb",
+     "as": "pk"
+    },
+    {
+     "op": "fresh",
+     "pass": [
+      "pk",
+      "root"
+     ],
+     "keep": [
+      "pc0",
+      "pc1"
+     ],
+     "do": [
+      {
+       "op": "make",
+       "cls": "ops.BatchSource",
+       "args": [
+        "@root",
+        2
+       ],
+       "kw": {
+        "inputs": {
+         "tuple": [
+          "steps"
+         ]
+        },
+        "target": "targets",
+        "shuffle": true,
+        "seed": 5,
+        "bucket_batches": 2
+       },
+       "as": "sc"
+      },
+      {
+       "op": "pickle",
+       "load": "@pk",
+       "as": "ec"
+      },
+      {
+       "op": "call",
+       "fn": "ec.partial_fit",
+       "kw": {
+        "source": "@sc",
+        "steps": 5
+       }
+      },
+      {
+       "op": "array",
+       "of": "@ec.params_",
+       "as": "pc0"
+      },
+      {
+       "op": "array",
+       "of": "@ec._optimizer_state_",
+       "as": "pc1"
+      }
+     ]
+    },
+    {
+     "op": "same",
+     "a": "@pa",
+     "b": [
+      "@pc0",
+      "@pc1"
+     ],
+     "what": "a fresh-process resume of the pickled estimator trains the uninterrupted run's parameters and optimizer state"
+    },
+    {
+     "op": "digest",
+     "part": "stream",
+     "of": [
+      "@pa",
+      "@ea.loss_curve_"
+     ]
+    }
+   ]
+  }
+ ]
+}

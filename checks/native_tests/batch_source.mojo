@@ -48,7 +48,8 @@ from autograd.batch_source import (
     batch_source_open, batch_source_saved, batch_source_seal,
 )
 from autograd.program_runtime import train_program_source
-from autograd.program_training_checkpoint import program_training_save, program_training_load, ProgramTrainingSource
+from autograd.program_training_checkpoint import program_training_save, program_training_load
+from autograd.batch_source import ProgramTrainingSource
 from bindings.byte_checkpoint_native_run import byte_file_write, ByteCheckpointWriteFailure
 from checks.native_tests.ops_higher_common import tensor
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, CPU_COLUMN_BUILD, require
