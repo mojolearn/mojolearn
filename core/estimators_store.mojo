@@ -28,9 +28,9 @@ comptime ESTIMATORS_STORE_PREFIX = "estimators"
 comptime _DEVCTX_SLOT = ("MojolearnEstimatorsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
                          else "MojolearnEstimatorsContextFastV3")
 
-comptime ESTIMATORS_STORE = SharedSlot[DeviceStore, ("MojolearnEstimatorsStoreIdenticalV1"
+comptime ESTIMATORS_STORE = SharedSlot[DeviceStore, ("MojolearnEstimatorsStoreIdenticalV2"
                                                      if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-                                                     else "MojolearnEstimatorsStoreFastV1")]
+                                                     else "MojolearnEstimatorsStoreFastV2"), 2]
 
 
 def estimators_store_ctx() raises -> DeviceContext:

@@ -145,7 +145,7 @@ def dev_take_rows_binding(
 
 
 def dev_live_binding() raises -> PythonObject:
-    return PythonObject(X_PREP_STORE.get_or_create_ptr()[].live)
+    return PythonObject(X_PREP_STORE.get_or_create_ptr()[].live_count())
 
 
 def _seed(v: PythonObject) raises -> UInt64:

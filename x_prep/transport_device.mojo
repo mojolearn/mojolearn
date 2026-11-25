@@ -50,7 +50,7 @@ def _xp_device_op(op: Int, a: List[Int], p: List[Int]) raises -> Int:
     if op == XP_DEV_TAKE_ROWS:
         return X_PREP_STORE.get_or_create_ptr()[].take_rows(x_prep_ctx(), p[0], p[1], a[0], p[2])
     if op == XP_DEV_LIVE:
-        return Int(X_PREP_STORE.get_or_create_ptr()[].live)
+        return Int(X_PREP_STORE.get_or_create_ptr()[].live_count())
     if op == XP_DEV_READ:
         if p[1] < 0 or (p[1] > 0 and a[0] == 0):
             raise Error("x_prep: invalid read buffer")

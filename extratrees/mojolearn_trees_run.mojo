@@ -99,8 +99,8 @@ comptime _DEVCTX_SLOT = ET_CTX_SLOT
 #: (bindings/_mojolearn_trees.mojo `et_gpu_store_transport_v1`, the x_prep
 #: transport numbering) for a resident scope's cache, and read by
 #: XF_FIT_ROWS and the resident predictions on rows.
-comptime _ET_STORE_NAME = "MojolearnEtStoreIdenticalV1" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnEtStoreFastV1"
-comptime ET_STORE = SharedSlot[DeviceStore, _ET_STORE_NAME, 2]
+comptime _ET_STORE_NAME = "MojolearnEtStoreIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnEtStoreFastV2"
+comptime ET_STORE = SharedSlot[DeviceStore, _ET_STORE_NAME, 3]
 
 
 def et_store_ctx() raises -> DeviceContext:

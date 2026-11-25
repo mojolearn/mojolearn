@@ -35,10 +35,10 @@ from x_prep.store_slot import x_prep_ctx
 
 #: preprocessing/prep_member_store.mojo `PREP_MEMBER_STORE` (same name, same layout word); keep the two in step.
 comptime _PREP_STORE_NAME = (
-    "MojolearnPrepMemberStoreIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    else "MojolearnPrepMemberStoreFastV1"
+    "MojolearnPrepMemberStoreIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojolearnPrepMemberStoreFastV2"
 )
-comptime _PREP_STORE = SharedSlot[DeviceStore, _PREP_STORE_NAME, 2]
+comptime _PREP_STORE = SharedSlot[DeviceStore, _PREP_STORE_NAME, 3]
 #: preprocessing/estimator.mojo `_DEVCTX_SLOT` (the context the member store and the direct kernels use).
 comptime _PREP_CTX_NAME = (
     "MojolearnPreprocessingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

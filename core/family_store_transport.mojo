@@ -38,7 +38,7 @@ def family_store_op(mut store: DeviceStore, ctx: DeviceContext, family: String, 
     if op == XP_DEV_TAKE_ROWS:
         return store.take_rows(ctx, p[0], p[1], a[0], p[2])
     if op == XP_DEV_LIVE:
-        return Int(store.live)
+        return store.live_count()
     if op == XP_DEV_READ:
         # Lane vdf-scope-cluster8, an addition (bindings/arena_cache_run.mojo `arena_store_read`): a slot a fitted
         # state keeps read home once (the export of its training rows block); x_prep's own read, same words.

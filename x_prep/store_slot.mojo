@@ -57,5 +57,5 @@ def x_prep_ctx() raises -> DeviceContext:
 #: The binding's resident input store (core/device_store.mojo; lane
 #: py-shared): `x_prep_dev_put` / `_free` / `_live`, one per tier.
 # V2 (lane linalg-owner, 2026-11-22): DeviceStore gained its lock word
-comptime _STORE_NAME = "MojolearnXPrepStoreIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepStoreFastV2"
-comptime X_PREP_STORE = SharedSlot[DeviceStore, _STORE_NAME, 2]
+comptime _STORE_NAME = "MojolearnXPrepStoreIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepStoreFastV3"
+comptime X_PREP_STORE = SharedSlot[DeviceStore, _STORE_NAME, 3]
