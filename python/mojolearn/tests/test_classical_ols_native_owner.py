@@ -97,21 +97,14 @@ def test_ols_native_preserves_wide_minimum_norm_support_boundary():
     x, y, intercept, weight = fixture("wide_minimum_norm")
     native = LinearRegression(fit_intercept=intercept)
     audit = audit_native_call(native_fit, native, x, y, weight)
-    if CONTEXT["vendor"] == "cpu":
-        # This is a verified refusal, not a skipped correctness fixture: the
-        # owner must reach the same unsupported native kernel without Python.
-        clean(audit, ValueError)
-        assert "lstsq_min_norm" in str(audit.exception)
-        assert "no CPU restatement" in str(audit.exception)
-        assert "coef_" not in vars(native)
-        with pytest.raises(Exception, match="lstsq_min_norm.*no CPU restatement"):
-            LinearRegression(fit_intercept=intercept).fit(x, y, sample_weight=weight)
-        return
+    # Every column fits the wide shape: the CPU column restates
+    # lstsq_min_norm (glm/host/glm_oracle.mojo::host_lstsq_min_norm).
     assert clean(audit) is native
     prediction = clean(audit_native_call(native_predict, native, x))
     # Direct native fixtures check the independent [0.25, 0.5, 0] minimum
     # norm coefficients. Keep this public result/error publication boundary.
     assert np.asarray(native.coef_).shape == (3,)
+    assert np.isfinite(np.asarray(native.coef_)).all()
     assert native.n_features_in_ == 3
     assert np.asarray(prediction).shape == (2,)
 

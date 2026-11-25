@@ -40,12 +40,22 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
                            (`ftz(q / lam)` where `lam > thresh or lam <
                            -thresh`, else 0), `inv <- QS Q^T` by `gemm_nt`,
                            `w <- inv Ab` by `gemv_n`, `w <- S w`.
+  `host_lstsq_min_norm`    `lstsq_min_norm_traced`, `glm/impl/linalg/
+                           detail/lstsq_min_norm.mojo` (DEVIATIONS 550,
+                           2622), in its order: `G <- A A^T` by
+                           `gemm_nt_gram` (the pinned cell, `host_gemm_nt`
+                           with both operands A), the row scales from the
+                           diagonal's bits, `G <- S G S` rows then columns,
+                           the Jacobi with the convergence refusal in its
+                           words, `max|lam|`, the threshold at `n_rows`,
+                           `QS <- Q invS`, `inv <- QS Q^T`, `inv <- S inv
+                           S` rows then columns, `z <- inv b` by `gemv_n`,
+                           `w <- A^T z` by `xty_launch`.
   `host_ols_fit`           `ols_fit_host` then `ols_fit_weighted_traced`,
                            `glm/impl/ols.mojo:298`, unweighted: the guards
                            in their words, the dispatch (`n_cols >
-                           n_rows` is `lstsq_min_norm`, which this file
-                           does NOT restate and refuses BY NAME; `n_cols ==
-                           1` and every other shape is `lstsq_eig`).
+                           n_rows` is `lstsq_min_norm`; `n_cols == 1` and
+                           every other shape is `lstsq_eig`).
   `host_svd_eig`           `svd_eig_traced`, `glm/impl/linalg/detail/svd.mojo:
                            89`: the Gram, the Jacobi, the descending
                            selection sort of indices under a strict `>`
@@ -263,6 +273,104 @@ def host_lstsq_eig(
     return w^
 
 
+def host_lstsq_min_norm(
+    a: List[Float32], b: List[Float32], n_rows: Int, n_cols: Int,
+) raises -> List[Float32]:
+    """`lstsq_min_norm_traced` (`glm/impl/linalg/detail/lstsq_min_norm.mojo`,
+    DEVIATIONS 550 and 2622) without the DeviceContext: `w = A^T (A A^T)^+ b`
+    through the Gram of the ROWS, step for step in the device's order."""
+    if n_rows <= 1:
+        raise Error(
+            "lstsq_min_norm: n_rows must be at least 2; A A^T at n_rows == 1"
+            " is a 1 x 1 Gram and core/gemm.mojo::gemm_nt_gram refuses"
+            " n == 1 by name."
+        )
+    if n_cols <= n_rows:
+        raise Error(
+            "lstsq_min_norm: this route is for n_cols > n_rows only (got"
+            " n_rows " + String(n_rows) + ", n_cols " + String(n_cols)
+            + "). At n_cols <= n_rows the Gram of the COLUMNS is the smaller"
+            " and better-conditioned one and lstsq_eig is the route; taking"
+            " this one there would form an n_rows x n_rows matrix that is"
+            " singular by construction, i.e. the exact defect this file"
+            " exists to avoid, mirrored."
+        )
+
+    # STEP 1. G <- A A^T: `gemm_nt_gram` under IDENTICAL is
+    # `pinned_gemm_nt_gram_kernel` (or its row-sharded owners, the same cell),
+    # one chain per cell over k = n_cols ascending, `rtf_mul_add(ftz(x[i,p]),
+    # ftz(x[j,p]), acc)` closed by `ftz(0 + ftz(acc))`: `host_gemm_nt`'s cell
+    # with both operands A.
+    var gram = host_gemm_nt(a, a, n_rows, n_rows, n_cols)
+
+    # STEP 1b (DEVIATION 2622): S from the diagonal's bits
+    # (`ols_scale_kernel`); G <- S G S, rows first
+    # (`row_vector_binary_mult_kernel`) then columns
+    # (`matrix_vector_binary_mult_kernel`), `ftz(a * b)` each.
+    var diag0 = _diagonal(gram, n_rows)
+    var scale = List[Float32](length=n_rows, fill=Float32(0.0))
+    for i in range(n_rows):
+        scale[i] = host_equilibration_scale(diag0[i])
+    var cells = n_rows * n_rows
+    for idx in range(cells):
+        gram[idx] = ftz(gram[idx] * scale[idx // n_rows])
+    for idx in range(cells):
+        gram[idx] = ftz(gram[idx] * scale[idx % n_rows])
+
+    # STEP 2. Q S Q^T <- G, consumed in place (the eigenvalues on its
+    # diagonal). lane fg-linear L1: the round-robin rounds under
+    # IDN_JACOBI_ROUND_ROBIN (`_eig_rr_device`), else the cyclic replay of
+    # `jacobi_eigh_kernel` (decomposition/host/jacobi_select_host.mojo).
+    var jac = host_symmetric_eigh(gram, n_rows, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+    var q = jac.vectors.copy()
+    var s_vec = _diagonal(gram, n_rows)
+    if not jac.converged:
+        raise Error(
+            "lstsq_min_norm: the device Jacobi did not converge in "
+            + String(JACOBI_SWEEPS)
+            + " sweeps on the "
+            + String(n_rows)
+            + " x "
+            + String(n_rows)
+            + " row Gram A A^T; ||offdiag||_F / ||A A^T||_F is still "
+            + String(jac.rel)
+            + ". An unconverged eigendecomposition is a wrong answer with"
+            " no error, which is why this is checked and not assumed."
+        )
+
+    # STEP 2b (DEVIATION 2622): `ols_device_abs_max` (an order-free max; NaN
+    # and zero never raise it) and `ols_pinv_threshold` at n = n_rows.
+    var max_abs = Float32(0.0)
+    for i in range(n_rows):
+        var mag = abs(s_vec[i])
+        if mag > max_abs:
+            max_abs = mag
+    var thresh = host_pinv_threshold(max_abs, n_rows)
+
+    # STEP 3. QS <- Q invS, `divide_columns_by_nonzero_kernel`.
+    var qs = List[Float32](length=cells, fill=Float32(0.0))
+    for idx in range(cells):
+        var lam = s_vec[idx % n_rows]
+        if lam > thresh or lam < -thresh:
+            qs[idx] = ftz(q[idx] / lam)
+        else:
+            qs[idx] = Float32(0.0)
+
+    # STEP 4. inv <- QS Q^T (`gemm_nt`); STEP 4b: inv <- S inv S, rows then
+    # columns, `ftz(a * b)` each.
+    var inv = host_gemm_nt(qs, q, n_rows, n_rows, n_rows)
+    for idx in range(cells):
+        inv[idx] = ftz(inv[idx] * scale[idx // n_rows])
+    for idx in range(cells):
+        inv[idx] = ftz(inv[idx] * scale[idx % n_rows])
+
+    # STEP 5. z <- inv b (`gemv_n`, the pinned chain per row).
+    var z = host_gemm_nt(inv, b, n_rows, 1, n_rows)
+
+    # STEP 6. w <- A^T z (`xty_launch`, the kernel `lstsq_eig` uses for A^T b).
+    return host_xty_launch(a, z, n_rows, n_cols)
+
+
 def host_ols_fit(
     a: List[Float32], b: List[Float32], n_rows: Int, n_cols: Int,
 ) raises -> List[Float32]:
@@ -274,11 +382,7 @@ def host_ols_fit(
     if n_rows <= 1:
         raise Error("olsFit: number of rows cannot be less than two")
     if n_cols > n_rows:
-        raise Error(
-            "olsFit: n_cols > n_rows selects lstsq_min_norm (DEVIATION 550),"
-            " which has no CPU restatement yet; the host OLS fit covers the"
-            " tall shape (lstsq_eig) only."
-        )
+        return host_lstsq_min_norm(a, b, n_rows, n_cols)
     return host_lstsq_eig(a, b, n_rows, n_cols)
 
 

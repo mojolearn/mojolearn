@@ -222,27 +222,23 @@ def _fit_fixture(api: LinearTestAPI, fixture_id: Int) raises:
     var request = LinearFitRequest(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()),
         Int(weights.unsafe_ptr()) if weight_mode else 0, ca, ma, rows, cols, intercept, 0.25 if ridge else 0.0)
     var result = LinearFitResult()
-    var refused = False
-    try:
-        if ridge:
-            result = linear_ridge_run(api.fit, api.weighted, request)
-        else:
-            var plan = linear_ols_plan(api.fit, rows, cols, "LinearRegression")
-            plan.one_entry = linear_ols_one_entry(plan, api.decomp, intercept, weight_mode != 0)
-            result = linear_ols_run(api.fit, api.decomp, request, plan, api.vendor)
-    except error:
-        if ridge or cid != 11 or api.vendor != 0:
-            raise error
-        refused = String(error).find("lstsq_min_norm") >= 0 and String(error).find("no CPU restatement") >= 0
-        require(refused, "wide CPU OLS refused for an unexpected reason: " + String(error))
+    # The wide case (cid 11, 2 x 3) fits on every column: the CPU column
+    # restates lstsq_min_norm (glm/host/glm_oracle.mojo::host_lstsq_min_norm).
+    if ridge:
+        result = linear_ridge_run(api.fit, api.weighted, request)
+    else:
+        var plan = linear_ols_plan(api.fit, rows, cols, "LinearRegression")
+        plan.one_entry = linear_ols_one_entry(plan, api.decomp, intercept, weight_mode != 0)
+        result = linear_ols_run(api.fit, api.decomp, request, plan, api.vendor)
     for i in range(rows * cols):
         require(bitcast[DType.uint32](x[i]) == bitcast[DType.uint32](original_x[i]), "fit mutated X")
     for i in range(rows):
         require(bitcast[DType.uint32](y[i]) == bitcast[DType.uint32](original_y[i]) and weights[i] == original_weights[i], "fit mutated target/weights")
     require(coef[0] == -999 and coef[cols + 1] == -999 and mean[0] == -999 and mean[cols + 1] == -999, "fit escaped output spans")
-    if not ridge and cid == 11 and api.vendor == 0:
-        require(refused, "wide CPU OLS support contract changed")
-        return
+    if not ridge and cid == 11:
+        for col in range(cols):
+            var c = coef[col + 1]
+            require(c == c and abs(c) < Float32(3.0e38), "wide OLS coefficient " + String(col) + " is not finite")
     var oracle = List[Float64](length=cols + 1, fill=0)
     if ridge:
         oracle = _ridge_oracle(original_x, original_y, weights, rows, cols, intercept)
