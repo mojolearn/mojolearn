@@ -17,6 +17,7 @@ predicted codes become labels in this same call.
 """
 from bindings.neural_labels_native_unpack import neural_encode_labels, neural_decode_labels
 from std.python import Python, PythonObject
+from std.memory import unsafe_memcpy
 from std.python._cpython import GILReleased
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.optimizer_real_unpack import optimizer_real
@@ -515,6 +516,17 @@ def _rnn_f32(source: PythonObject, name: String, context: PythonObject) raises -
     return admit_nd_f32(a, name, False, context)
 
 
+def _rnn_predict_options_of(fields: PythonObject) raises -> RnnFieldOptions:
+    """The prediction's options: output and bidirectional (two field reads; the fit-only options stay at their
+    defaults here)."""
+    var output = _field(fields, "output", PythonObject("final"))
+    var seq_out = _eq(output, "sequence")
+    if not seq_out and not _eq(output, "final"):
+        raise Error("ValueError: output must be 'final' or 'sequence', got " + _repr(output))
+    var dirs = 2 if xseq_truth(_field(fields, "bidirectional", PythonObject(False))) else 1
+    return RnnFieldOptions(seq_out, dirs, 0.0, False, 0.0, False, 0.1, 10, 1e-4, False)
+
+
 def _rnn_state_arg(source: PythonObject, slots: Int, n: Int, hidden: Int, name: String,
                    context: PythonObject) raises -> PythonObject:
     """h_0 / c_0: None, or a float32 (num_layers * num_directions, n_samples, hidden_size) array (PyTorch's h_0
@@ -557,13 +569,6 @@ def _rnn_class_weights(fields: PythonObject, target: PythonObject, n: Int, steps
         dst[c] = plan.words[c]
     _ = words
     return words
-
-
-def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, target: PythonObject,
-             route: XseqRoute, context: PythonObject, lengths_source: PythonObject) raises -> PythonObject:
-    """`_RecurrentBase._fit(X, target)`, with the optional sequence lengths (no further argument)."""
-    return _rnn_fit_full(model, fields, x_source, target, route, context, lengths_source, PythonObject(None),
-                         PythonObject(None), PythonObject(None), PythonObject(None), PythonObject(None), True, False)
 
 
 def _rnn_fit_full(model: PythonObject, fields: PythonObject, x_source: PythonObject, target_in: PythonObject,
@@ -987,8 +992,7 @@ def _rnn_fit_op(model: PythonObject, fields: PythonObject, args: PythonObject, c
                               route, context, False)
         validation = Python.tuple(vd[0], vd[2] if len(vd) == 3 else PythonObject(None))
     var restore = True if _arg(args, 7) is None else xseq_truth(args[7])
-    if fo.plain() and len(args) <= 3:
-        return _rnn_fit(model, fields, args[0], target, route, context, _arg(args, 2))
+    # every option at its default runs the RNN_FIT call of before (_rnn_fit_full's `plain`)
     return _rnn_fit_full(model, fields, args[0], target, route, context, _arg(args, 2), _arg(args, 3), _arg(args, 4),
                          _arg(args, 5), validation, vtarget, restore, partial)
 
@@ -1003,7 +1007,8 @@ def xseq_rnn(model: PythonObject, operation: Int, args: PythonObject, context: P
     # predictions: (X, lengths, h_0, c_0, want_state) (lane rnn-parity: every word after lengths optional)
     var lengths_source = _arg(args, 1)
     var route = xseq_route(model, fields, context)
-    var fo = rnn_field_options(fields)
+    # the two words a prediction needs (output, bidirectional), not the fit's whole option set
+    var fo = _rnn_predict_options_of(fields)
     var h0 = _arg(args, 2)
     var c0 = _arg(args, 3)
     var want_state = xseq_truth(_arg(args, 4))
