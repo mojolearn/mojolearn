@@ -41,6 +41,7 @@ from bindings.x_prep_native_owner_run import XprepCaps
 from core.device_route import (
     DEVICE_GPU, DEVICE_CPU, device_installed, device_cpu_fast, device_mode_code,
 )
+from core.mode_answer import MODE_FAMILY_SCALER, answer_mode_word
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref, scaler_ref
 from core.scaler_native_api import SCALER_OP_DIRECT
@@ -208,8 +209,17 @@ def scaler_route_refuse_fast(model: PythonObject, mode: PythonObject, context: P
     var native = owner.downcast_value_ptr[DeviceRouteOwner]()
     if native[].scope is not context or (native[].route.flags & SCALER_ROUTE_CPU_TABLE) == 0:
         return
-    if py_type(mode) is native[].cls and String(mode) == "fast":
-        device_cpu_fast()
+    if py_type(mode) is native[].cls:
+        var word = String(mode)
+        if word == "fast":
+            # Where the identical set answers `fast` (core/mode_answer.mojo,
+            # MODE_FAMILY_SCALER) the fit ran on the CPU identical set, and a
+            # later vendor_used / transform refused the same word (lane gs-fix:
+            # test_scaler_device_boundary on the L40S GPU install). Answered
+            # first; only a `fast` word pays the slot read.
+            answer_mode_word(word, MODE_FAMILY_SCALER)
+            if word == "fast":
+                device_cpu_fast()
 
 
 def scaler_selection_held(model: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
