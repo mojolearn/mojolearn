@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
-from providers.python.resample_rows_pyapi_door import ResampleRows, resample_rows_indices, resample_rows_gpu, resample_rows_narrow
+from providers.python.resample_rows_pyapi_door import ResampleRows, resample_rows_indices, resample_rows_run
 from bindings.classical_attributes_door import classical_connect_numpy
 
 def rows_compile(source: PythonObject, binding: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -10,10 +10,8 @@ def rows_compile(source: PythonObject, binding: PythonObject, context: PythonObj
     var rows = List[ResampleRows]()
     rows.append(ResampleRows(source, context))
     var indices = resample_rows_indices(binding, rows[0].n, 2, True, PythonObject(0), context)
-    var output = resample_rows_gpu(rows, binding, rows[0].n, 2, True, PythonObject(0), context)
-    if output is None:
-        output = resample_rows_narrow(rows, binding, rows[0].n, 2, PythonObject(0), context)
-    return rows[0].take(indices, context) if output is None else output
+    var output = resample_rows_run(rows, Python.tuple(source), binding, rows[0].n, 2, True, PythonObject(0), context)
+    return rows[0].take(indices, context) if output is None else output[0]
 
 @export
 def PyInit__mojolearn_resample_rows_compile() abi("C") -> PythonObject:

@@ -33,6 +33,7 @@ from bindings.mode_metadata_native_door import _fields
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_connect_once, neural_descriptor_execute
+from providers.python.resample_resident_pyapi_door import rs_resident, rs_resident_slot
 from providers.python.resample_public_pyapi_pack import resample_arguments, resample_result_initialize, resample_result_layout
 from providers.python.resample_rows_operation_pyapi_pack import resample_rows_operation
 from bindings.operation_names_linops import (
@@ -68,7 +69,10 @@ comptime RS_OP_PERMUTATION_SAMPLES = 3
 comptime RS_OP_RESAMPLE_INDICES = 4
 comptime RS_OP_MONTE_CARLO = 5
 comptime RS_OP_NUMERIC_MODE = 6
-comptime RS_OPERATIONS = 7
+#: lane gd-rf-resample: 7 the image's resident store route word
+#: (providers/python/resample_resident_pyapi_door.mojo RS_OP_STORE_ROUTE),
+#: 8 the row resample (providers/python/resample_rows_pyapi_door.mojo).
+comptime RS_OPERATIONS = 9
 
 
 def rs_extension(binding: PythonObject, numeric_mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -101,6 +105,11 @@ def rs_run(provider: PythonObject, op: Int, addresses: List[Int], ints: List[Int
     """One operation of the table, GIL released around it; the kernel's own
     refusal propagates unchanged."""
     _ = neural_descriptor_execute(provider, op, addresses, ints, floats)
+
+
+# The `resident()` scope of these functions (lane gd-rf-resample): `rs_resident`
+# / `rs_resident_slot` in providers/python/resample_resident_pyapi_door.mojo,
+# shared with the row resample door.
 
 
 def _rs_is_int(value: PythonObject) raises -> Bool:
@@ -297,11 +306,16 @@ def _rs_bootstrap(args: PythonObject, context: PythonObject) raises -> PythonObj
     var provider = rs_extension(args[0], args[10], context)
     # ORDER MATCHES resample/resample_native.mojo operation 0.
     # x (the C-order sample, flat), distribution_out, sorted_out, scalars_out;
-    # n, d, statistic, n_resamples, seed, method, alternative, r_first;
+    # n, d, statistic, n_resamples, seed, method, alternative, r_first
+    # [, x's resident store slot: inside a resident() scope only];
     # confidence_level, q_or_prop
-    rs_run(provider, RS_OP_BOOTSTRAP, [x.addr, dist.addr, sdist.addr, scalars.addr],
-           [n, d, Int(py=stat), Int(py=r), Int(py=seed), Int(py=meth), Int(py=alt), Int(py=rf)],
+    var ints: List[Int] = [n, d, Int(py=stat), Int(py=r), Int(py=seed), Int(py=meth), Int(py=alt), Int(py=rf)]
+    var rs = rs_resident(args[0], provider, context)
+    if rs.active():
+        ints.append(rs_resident_slot(rs, data, x))
+    rs_run(provider, RS_OP_BOOTSTRAP, [x.addr, dist.addr, sdist.addr, scalars.addr], ints,
            [Float64(py=cl), Float64(py=qp)])
+    _ = rs^  # the store provider stays connected through the run above
     _ = scalars  # keep the Python object alive through the native call above
     _ = sdist  # keep the Python object alive through the native call above
     _ = dist  # keep the Python object alive through the native call above
@@ -339,11 +353,17 @@ def _rs_permutation_samples(args: PythonObject, context: PythonObject) raises ->
     var provider = rs_extension(args[0], args[8], context)
     # ORDER MATCHES resample/resample_native.mojo operation 3:
     # x, y, null, scalars; n, n_y, n_resamples, seed, alternative, r_first
+    # [, x's and y's resident store slots: inside a resident() scope only]
     var seed = Int(py=rs_int(args[6], "random_state", where))
     var alt = Int(py=rs_code("ALTERNATIVES", args[5], "alternative", where, context))
     var rf = Int(py=rs_int(args[7], "r_first", where))
-    rs_run(provider, RS_OP_PERMUTATION_SAMPLES, [xx.addr, yy.addr, null.addr, scalars.addr],
-           [xx.dim(0), ny, Int(py=r), seed, alt, rf], List[Float64]())
+    var ints: List[Int] = [xx.dim(0), ny, Int(py=r), seed, alt, rf]
+    var rs = rs_resident(args[0], provider, context)
+    if rs.active():
+        ints.append(rs_resident_slot(rs, args[1], xx))
+        ints.append(rs_resident_slot(rs, y, yy) if ny > 0 else -1)
+    rs_run(provider, RS_OP_PERMUTATION_SAMPLES, [xx.addr, yy.addr, null.addr, scalars.addr], ints, List[Float64]())
+    _ = rs^  # the store provider stays connected through the run above
     _ = scalars  # keep the Python object alive through the native call above
     _ = null  # keep the Python object alive through the native call above
     _ = xx  # keep the Python object alive through the native call above
@@ -385,9 +405,15 @@ def _rs_permutation_test(args: PythonObject, context: PythonObject) raises -> Py
     var provider = rs_extension(args[0], args[8], context)
     # ORDER MATCHES resample/resample_native.mojo operation 2:
     # x, y, null_out, scalars_out; n_x, n_y, statistic, n_resamples, seed,
-    # alternative, r_first
-    rs_run(provider, RS_OP_PERMUTATION_TEST, [xx.addr, yy.addr, null.addr, scalars.addr],
-           [xx.dim(0), yy.dim(0), Int(py=stat), Int(py=r), Int(py=seed), Int(py=alt), Int(py=rf)], List[Float64]())
+    # alternative, r_first [, x's and y's resident store slots: inside a
+    # resident() scope only]
+    var ints: List[Int] = [xx.dim(0), yy.dim(0), Int(py=stat), Int(py=r), Int(py=seed), Int(py=alt), Int(py=rf)]
+    var rs = rs_resident(args[0], provider, context)
+    if rs.active():
+        ints.append(rs_resident_slot(rs, args[1], xx))
+        ints.append(rs_resident_slot(rs, args[2], yy))
+    rs_run(provider, RS_OP_PERMUTATION_TEST, [xx.addr, yy.addr, null.addr, scalars.addr], ints, List[Float64]())
+    _ = rs^  # the store provider stays connected through the run above
     _ = scalars  # keep the Python object alive through the native call above
     _ = null  # keep the Python object alive through the native call above
     _ = yy  # keep the Python object alive through the native call above

@@ -54,6 +54,7 @@ from bindings.msel_common_door import (
     msel_numeric_vector, msel_new, msel_read_i64, msel_arange, msel_range_index, msel_index_copy,
     msel_lazy, msel_u64, msel_take_labels, msel_resident_new, msel_resident_take, msel_resident_close,
 )
+from bindings.msel_scope_rows_door import msel_scope_rows, msel_scope_take_pair, msel_scope_codes_slot
 # RUN: every fold computation, on typed values (no Python object).
 from bindings.msel_split_run import msel_fold_rows_fits
 from bindings.msel_split_plan_run import (
@@ -594,8 +595,12 @@ def msel_stratified_split(y: PythonObject, k: Int, shuffle: Bool, random_state: 
             msel_warn(plan.warning, msel_b().UserWarning, context)
         _ = labels  # the codes stay alive through the plan above
         raise Error(msel_seed_refusal())
+    # Inside a resident() scope the codes are kept by the caller's y buffer
+    # and the plan reads that slot (bindings/msel_scope_rows_door.mojo; lane
+    # gd-rf-msel). Outside a scope: one atomic load, -1, the plan as before.
+    var kept = msel_scope_codes_slot(y, route, view, form, k, context)
     with GILReleased(Python()):
-        plan = msel_plan_stratified(route, view, form, k, shuffle, seed)
+        plan = msel_plan_stratified(route, view, form, k, shuffle, seed, kept)
     var pairs = msel_split_finish(pin, plan, context)
     _ = labels  # the codes stay alive through the plan above
     return pairs
@@ -1365,12 +1370,23 @@ def msel_train_test_split(arrays: PythonObject, test_size: PythonObject, train_s
         train = split[0]
         test = split[1]
     var out = Python.list()
+    # Inside a resident() scope on a GPU column each input is kept once by the
+    # CALLER'S buffer in the scope's x_prep cache and both sides are taken from
+    # that slot on the device (bindings/msel_scope_rows_door.mojo; lane
+    # gd-rf-msel). Outside a scope: one atomic load, the route below unchanged.
+    var scoped = msel_scope_rows(context)
     for i in range(len(prepared)):  # driver-loop: gather train/test from the same retained input snapshot
         var value = prepared[i]
         if py_type(value) is b.list or py_type(value) is b.tuple:
             _ = py_call(out.append, msel_take_labels(value, train, context))
             _ = py_call(out.append, msel_take_labels(value, test, context))
             continue
+        if scoped.active():
+            var pair = msel_scope_take_pair(scoped, arrays[i], value, train, test, context)
+            if pair is not None:
+                _ = py_call(out.append, pair[0])
+                _ = py_call(out.append, pair[1])
+                continue
         # pass 3 (rank 316): the input prepared above is stored once in one
         # resident entry and both sides gathered from it (msel_take_any
         # re-materialized it and opened, uploaded and closed a resident per

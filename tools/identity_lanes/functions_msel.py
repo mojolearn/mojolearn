@@ -134,16 +134,46 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("fn-msel-split-descriptor")
 def _(ml, X, yc, yr, Xh=None):
     """split_descriptor: the fold metadata model selection derives for a
-    classifier on 3 and 5 folds, as its key=value bytes in key order."""
+    classifier on 3 and 5 folds, as its key=value bytes in key order.
+
+    LANE FORM (lane gd-rf-msel, 2026-11-25). The function reads X only as a
+    host digest (bindings/msel_cv_door.mojo `_order_digest`, :956) and its row
+    count; nothing launches on X, so there is no device-resident X to find and
+    the arena form's store-hit demand cannot hold. What the function does on the
+    device is the default folds over y (stratified for a classifier,
+    `msel_default_folds`, :181). So on the GPU side the lane checks those
+    folds (the descriptor's fold assignment and the stratified folds
+    themselves, against the host-input call) inside a `resident()` scope over
+    two calls, and FAILS if any call put an input into the scope's x_prep
+    store (X uploaded for no device work, or a door keeping X it never reads)."""
     f = _functions_msel_fx(X)
     ms = ml.model_selection
+    name = "model_selection.split_descriptor"
 
     def text(d):
         return np.frombuffer("|".join(f"{k}={d[k]}" for k in sorted(d)).encode("utf-8"), dtype=np.uint8)
 
-    return _functions_resident(ml, "model_selection.split_descriptor", lambda p: dict(
-        cv3=_functions_d(text(ms.split_descriptor(p(f["X"]), p(f["c"]), estimator=ml.LogisticRegression(), cv=3))),
-        cv5=_functions_d(text(ms.split_descriptor(p(f["X"]), p(f["y"]), estimator=ml.Ridge(), cv=5)))))
+    def run(p):
+        return dict(
+            cv3=_functions_d(text(ms.split_descriptor(p(f["X"]), p(f["c"]), estimator=ml.LogisticRegression(), cv=3))),
+            cv5=_functions_d(text(ms.split_descriptor(p(f["X"]), p(f["y"]), estimator=ml.Ridge(), cv=5))),
+            folds3=_functions_d(_functions_msel_splits(ms.default_folds(p(f["c"]), 3, classifier=True))))
+
+    host = run(_functions_as_given)
+    if _lane_side() != "gpu":
+        return _fit(host)
+    from mojolearn._arena_io import resident
+    with resident(min_words=0):
+        first = run(_functions_as_given)
+        second = run(_functions_as_given)
+        stats = resident.stats() or {}
+    _functions_compare(name, "arena", host, first, "first call in the scope")
+    _functions_compare(name, "arena", host, second, "second call in the scope")
+    uploads, hits = stats.get("x_prep", (0, 0))
+    if int(uploads) or int(hits):
+        raise RuntimeError(f"{name}: an input went into the resident scope's x_prep store, but split_descriptor "
+                           f"reads X only as a host digest and launches nothing on it (stats {stats})")
+    return _fit(host)
 
 
 @lane("fn-msel-scorers")

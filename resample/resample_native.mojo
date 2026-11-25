@@ -23,6 +23,16 @@ kernels are untouched. This file reads no experiment define.
     4   resample_indices     idx                                    n, n_samples, replace, seed
     5   monte_carlo          lower, upper, scalars                  f_id, n_samples, seed, i_first
     6   numeric mode         (none)                                 (none)                                 returns NUMERIC_* code
+    7   store route          (none)                                 (none)                                 returns the store's
+                                                                                                           route word, -1 none
+    8   resample_rows        idx (0: not wanted), then per array    n, n_samples, replace, seed, then per
+                             its source and its output              array its row words (0: not gathered
+                                                                    here) and its store slot (-1: none)
+
+RESIDENT FORMS (lane gd-rf-resample, 2026-11-25): inside a `resident()` scope the door keeps each input array
+once in this image's store (resample/resample_store.mojo, reached through `resample_store_v1`; op 7 says whether
+the image has one and gives its scope route word) and appends the input's slot id to the ints: op 0 takes a
+ninth int, x's slot; op 2 two more (x's, y's), op 3 two more (x's, y's: -1 for a one-sample call). Outside a scope the ints are the table above, unchanged, and the input is uploaded.
 """
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -39,10 +49,11 @@ from resample.mojolearn_resample_run import (
     _permutation_samples_run,
     _mc_run,
 )
-from resample.estimator import resample_indices_replace_into, resample_indices_permute_into
+from resample.estimator import resample_indices_replace_into, resample_indices_permute_into, resample_rows_device
+from resample.resample_store import resample_store_route
 
 comptime RESAMPLE_NATIVE_ABI_NAME = "mojolearn.resample.v1"
-comptime RESAMPLE_NATIVE_OPERATION_COUNT = 7
+comptime RESAMPLE_NATIVE_OPERATION_COUNT = 9
 
 
 def _resample_bootstrap(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -52,7 +63,8 @@ def _resample_bootstrap(a: List[Int], p: List[Int], f: List[Float64]) raises -> 
             + " sorted_out, scalars_out), got "
             + String(len(a))
         )
-    if len(p) != 8 or len(f) != 2:
+    # 9 ints: the resident form, p[8] the store slot of x (module note)
+    if (len(p) != 8 and len(p) != 9) or len(f) != 2:
         raise Error(
             "bootstrap: params must contain 10 values (n, d, statistic,"
             + " n_resamples, seed, method, confidence_level, alternative,"
@@ -73,9 +85,10 @@ def _resample_bootstrap(a: List[Int], p: List[Int], f: List[Float64]) raises -> 
     var r_first = p[7]
     var confidence_level = Float32(f[0])
     var q_or_prop = Float32(f[1])
+    var x_slot = p[8] if len(p) == 9 else -1
     _bootstrap_run(
         xp, n, d, statistic, n_resamples, seed, method, confidence_level,
-        alternative, q_or_prop, r_first, dp, sdp, sp,
+        alternative, q_or_prop, r_first, dp, sdp, sp, x_slot,
     )
     return 0
 
@@ -119,7 +132,8 @@ def _resample_permutation_test(a: List[Int], p: List[Int], f: List[Float64]) rai
             + " null_out, scalars_out), got "
             + String(len(a))
         )
-    if len(p) != 7 or len(f) != 0:
+    # 9 ints: the resident form, p[7] / p[8] the store slots of x / y (module note)
+    if (len(p) != 7 and len(p) != 9) or len(f) != 0:
         raise Error(
             "permutation_test: params must contain 7 values (n_x, n_y,"
             + " statistic, n_resamples, seed, alternative, r_first), got "
@@ -143,14 +157,17 @@ def _resample_permutation_test(a: List[Int], p: List[Int], f: List[Float64]) rai
     var yp = _f32_ptr(a[1])
     var np_ = _f32_ptr(a[2])
     var sp = _f64_ptr(a[3])
+    var x_slot = p[7] if len(p) == 9 else -1
+    var y_slot = p[8] if len(p) == 9 else -1
     _permutation_run(
-        xp, n_x, yp, n_y, statistic, n_resamples, seed, alternative, r_first, np_, sp
+        xp, n_x, yp, n_y, statistic, n_resamples, seed, alternative, r_first, np_, sp, x_slot, y_slot
     )
     return 0
 
 
 def _resample_permutation_samples(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
-    if len(a) != 4 or len(p) != 6 or len(f) != 0:
+    # 8 ints: the resident form, p[6] / p[7] the store slots of x / y (module note)
+    if len(a) != 4 or (len(p) != 6 and len(p) != 8) or len(f) != 0:
         raise Error(
             "permutation_test(samples): addrs must hold 4 addresses and params"
             + " 6 values (n, n_y, n_resamples, seed, alternative, r_first)"
@@ -166,7 +183,9 @@ def _resample_permutation_samples(a: List[Int], p: List[Int], f: List[Float64]) 
     var xp = _f32_ptr(a[0])
     # one sample (n_y == 0): y is unread and its address may be anything
     var yp = _f32_ptr(a[1]) if n_y > 0 else xp
-    _permutation_samples_run(xp, n, yp, n_y, n_resamples, seed, alternative, r_first, np_, sp)
+    var x_slot = p[6] if len(p) == 8 else -1
+    var y_slot = p[7] if len(p) == 8 and n_y > 0 else -1
+    _permutation_samples_run(xp, n, yp, n_y, n_resamples, seed, alternative, r_first, np_, sp, x_slot, y_slot)
     return 0
 
 
@@ -188,6 +207,30 @@ def _resample_resample_indices(a: List[Int], p: List[Int], f: List[Float64]) rai
     else:
         resample_indices_permute_into(n, count, seed, dst)
     return 0
+
+
+def _resample_rows(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
+    """Operation 8 (lane gd-rf-resample, 2026-11-25): `resample(*arrays)`'s
+    rows drawn and gathered on the device (resample/estimator.mojo
+    `resample_rows_device`) into the caller's outputs; the row numbers into
+    a[0] when it is not 0 (the door gathers an array the device cannot hold
+    with them). A store slot (inside a `resident()` scope) is read in place.
+    Returns 1."""
+    var k = (len(a) - 1) // 2
+    if k < 1 or len(a) != 2 * k + 1 or len(p) != 4 + 2 * k or len(f) != 0:
+        raise Error("resample: rows addrs must hold idx and a source and an output per array, params"
+                    + " n, n_samples, replace, seed and two words per array")
+    var srcs = List[Int](capacity=k)
+    var dsts = List[Int](capacity=k)
+    var words = List[Int](capacity=k)
+    var slots = List[Int](capacity=k)
+    for j in range(k):  # small-loop(k: the arrays passed to resample, a handful): addresses and widths, no row data
+        srcs.append(a[1 + 2 * j])
+        dsts.append(a[2 + 2 * j])
+        words.append(p[4 + 2 * j])
+        slots.append(p[5 + 2 * j])
+    resample_rows_device(p[0], p[1], p[2] != 0, UInt64(p[3]), a[0], srcs, dsts, words, slots)
+    return 1
 
 
 def _resample_monte_carlo(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -231,6 +274,12 @@ def resample_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float
         if len(a) != 0 or len(p) != 0 or len(f) != 0:
             raise Error("resample native ABI: metadata takes no descriptors")
         return GLOBAL_NUMERIC_MODE
+    if op == 7:
+        if len(a) != 0 or len(p) != 0 or len(f) != 0:
+            raise Error("resample native ABI: metadata takes no descriptors")
+        return resample_store_route()
+    if op == 8:
+        return _resample_rows(a, p, f)
     raise Error("resample native ABI: unknown operation")
 
 

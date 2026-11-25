@@ -23,6 +23,10 @@ kernels are untouched. This file reads no experiment define.
     4   resample_indices     idx                                    n, n_samples, replace, seed
     5   monte_carlo          lower, upper, scalars                  f_id, n_samples, seed, i_first
     6   numeric mode         (none)                                 (none)                                 returns NUMERIC_* code
+    7   store route          (none)                                 (none)                                 returns -1: no store
+    8   resample_rows        idx (0: not wanted), then per array    n, n_samples, replace, seed, then per
+                             its source and its output              array its row words (0: not gathered
+                                                                    here) and its store slot (always -1)
 """
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -31,6 +35,9 @@ from core.hostptr import i32_ptr, read_f32
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from resample.checks.statistics import MC_DIMS
 from core.resample_impl import resample_store_indices
+from std.memory import unsafe_memcpy
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from resample.host.resample_host import host_resample_indices
 from resample.mojolearn_resample_host_run import (
     _f32_ptr,
@@ -43,7 +50,7 @@ from resample.mojolearn_resample_host_run import (
 )
 
 comptime RESAMPLE_NATIVE_ABI_NAME = "mojolearn.resample.v1"
-comptime RESAMPLE_NATIVE_OPERATION_COUNT = 7
+comptime RESAMPLE_NATIVE_OPERATION_COUNT = 9
 
 
 def _resample_bootstrap(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -181,6 +188,62 @@ def _resample_resample_indices(a: List[Int], p: List[Int], f: List[Float64]) rai
     return 0
 
 
+def _host_take_rows(src: Int, row_bytes: Int, n: Int, idx: List[Int32], count: Int, dst: Int) raises:
+    """`count` rows of `row_bytes` contiguous bytes, row `idx[i]` of the
+    source to output row `i`: one memcpy per row, the rows split across the
+    host's cores (the CPU column's twin of the device gather). A row index
+    outside [0, n) is refused after the join."""
+    if count <= 0 or row_bytes <= 0:
+        return
+    var tasks = host_predict_task_count_work(count, count * row_bytes)
+    var chunk = host_predict_chunk(count, tasks)
+    var failed = List[Int](length=tasks, fill=0)
+    var fp = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(failed.unsafe_ptr()))
+    var rows = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(idx.unsafe_ptr()))
+
+    def _rows_task(c: Int) {imm src, imm row_bytes, imm n, imm rows, imm count, imm dst, imm chunk, imm fp}:
+        var lo = c * chunk
+        var hi = lo + chunk
+        if hi > count:
+            hi = count
+        for i in range(lo, hi):  # driver-loop: byte row gathering, one memcpy per row of one task
+            var row = Int(rows[i])
+            if row < 0 or row >= n:
+                fp[c] = 1
+                return
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst + i * row_bytes),
+                src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=src + row * row_bytes), count=row_bytes)
+
+    host_parallelize(_rows_task, tasks)
+    for c in range(tasks):  # small-loop(tasks: the row tasks, at most one per core): the failure words of the join
+        if fp[c] != 0:
+            raise Error("IndexError: resample returned an invalid row")
+    _ = failed^
+
+
+def _resample_rows(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
+    """Operation 8 on the host image (lane gd-rf-resample, 2026-11-25): the
+    device image's row resample (resample/resample_native.mojo) on the CPU
+    column: op 4's row numbers, each array with row words > 0 gathered here
+    into the caller's output, the row numbers into a[0] when it is not 0.
+    The same rows, so the same bytes. Returns 1."""
+    var k = (len(a) - 1) // 2
+    if k < 1 or len(a) != 2 * k + 1 or len(p) != 4 + 2 * k or len(f) != 0:
+        raise Error("resample: rows addrs must hold idx and a source and an output per array, params"
+                    + " n, n_samples, replace, seed and two words per array")
+    var n = p[0]
+    var count = p[1]
+    var idx = host_resample_indices(n, count, p[2] != 0, UInt64(p[3]))
+    if a[0] != 0:
+        resample_store_indices(i32_ptr(a[0]), idx, count)
+    for j in range(k):  # driver-loop: over the arrays passed to resample (a handful), each gathered in parallel
+        var w = p[4 + 2 * j]
+        if w > 0:
+            _host_take_rows(a[1 + 2 * j], 4 * w, n, idx, count, a[2 + 2 * j])
+    _ = idx^
+    return 1
+
+
 def _resample_monte_carlo(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
     if len(a) != 3:
         raise Error(
@@ -222,6 +285,15 @@ def resample_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float
         if len(a) != 0 or len(p) != 0 or len(f) != 0:
             raise Error("resample native ABI: metadata takes no descriptors")
         return GLOBAL_NUMERIC_MODE
+    if op == 7:
+        # The store route (resample/resample_native.mojo op 7): the host image
+        # has no resident store, so a scope keeps nothing here and the door
+        # never sends a slot id.
+        if len(a) != 0 or len(p) != 0 or len(f) != 0:
+            raise Error("resample native ABI: metadata takes no descriptors")
+        return -1
+    if op == 8:
+        return _resample_rows(a, p, f)
     raise Error("resample native ABI: unknown operation")
 
 

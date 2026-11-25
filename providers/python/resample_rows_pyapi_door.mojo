@@ -12,11 +12,17 @@ from bindings.classical_arrays_door import classical_is_array
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.admitted_input_unpack import AdmittedTypedPin, admitted_typed_once, AdmittedBuf, admitted_dtype_admit, admitted_zeros, admitted_shape_tuple
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_connect_once, neural_descriptor_entry, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_connect_once, neural_descriptor_execute
+from providers.python.resample_resident_pyapi_door import RsResident, rs_resident, rs_resident_slot_at
+from bindings.metric_resident_source_door import metric_exact_buffer
+from bindings.classical_arrays_door import classical_address
 
 # ORDER MATCHES resample/resample_native.mojo (bindings/linalg_ops_resample_door.mojo RS_OP_*).
 comptime _RS_OP_RESAMPLE_INDICES = 4
-comptime _RS_OPERATIONS = 7
+#: lane gd-rf-resample: the row resample, drawn and gathered by the image (on the device in a GPU image).
+comptime _RS_OP_RESAMPLE_ROWS = 8
+comptime _RS_OPERATIONS = 9
+comptime _INT32_MAX = 2147483647
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.resample_rows_gather import resample_gather_rows
 from core.host_parallel import host_parallelize
@@ -75,10 +81,9 @@ struct ResampleRows(Movable):
     var is_array: Bool
     var has_objects: Bool
     var zero_width: Bool
-    var gpu: Bool
     var n: Int
 
-    def __init__(out self, source: PythonObject, context: PythonObject, gpu: Bool = True) raises:
+    def __init__(out self, source: PythonObject, context: PythonObject) raises:
         var nk = resample_keys()
         var b = native_loaded_module("builtins")
         self.source = source
@@ -90,7 +95,6 @@ struct ResampleRows(Movable):
         self.is_array = False
         self.has_objects = False
         self.zero_width = False
-        self.gpu = False
         self.n = 0
         var cls = py_type(source)
         if cls is py_get(context, nk[].k_ndarray):
@@ -122,7 +126,6 @@ struct ResampleRows(Movable):
                 self.layout = BorrowedBufferLayout(max(address, 1) if item == 0 else address,
                     max(item, 1), not Bool(py=self.source.flags.writeable), sizes^, steps^,
                     List[Int](length=len(shape), fill=-1))
-            self.gpu = gpu and String(self.dtype.str) == "<f4" and self.layout.contiguous()
         elif classical_is_array(source, context):
             if py_get(context, nk[].k_ndarray) is None:
                 raise Error("ImportError: mojolearn: resample requires optional NumPy support for Array outputs")
@@ -147,9 +150,6 @@ struct ResampleRows(Movable):
         if len(self.layout.shape) == 0:
             raise Error("TypeError: len() of unsized object")
         self.n = self.layout.shape[0]
-        self.gpu = self.gpu and (len(self.layout.shape) == 1 or len(self.layout.shape) == 2)
-        if len(self.layout.shape) == 2:
-            self.gpu = self.gpu and self.layout.shape[1] > 0 and self.layout.shape[1] <= 2147483647
 
     def _rows_contiguous(self) -> Bool:
         """Whether each row (axes 1..rank-1) is one C-contiguous run of bytes
@@ -167,8 +167,22 @@ struct ResampleRows(Movable):
             stride *= self.layout.shape[axis]
         return True
 
-    def width(self) -> Int:
-        return self.layout.shape[1] if len(self.layout.shape) == 2 else 1
+    def row_words(self) -> Int:
+        """The 4-byte words of one row when the image gathers this array
+        itself (on the device in a GPU image, lane gd-rf-resample): an array
+        of plain values (no object references, not zero-width) whose whole
+        buffer is one C-contiguous run and whose row is a whole number of
+        4-byte words, every dtype alike (a word is copied, never converted).
+        0 otherwise: a sequence, an object array, a strided view or an
+        odd-width row is gathered here with the image's row numbers."""
+        if not self.is_array or self.has_objects or self.zero_width or not self.layout.contiguous():
+            return 0
+        var row_bytes = self.layout.itemsize
+        for axis in range(1, len(self.layout.shape)):  # small-loop(rank: the admitted array's axes)
+            row_bytes *= self.layout.shape[axis]
+        if row_bytes <= 0 or row_bytes % 4 != 0:
+            return 0
+        return row_bytes // 4
 
     def output(self, count: Int, context: PythonObject) raises -> PythonObject:
         var nk = resample_keys()
@@ -263,75 +277,66 @@ def resample_rows_indices(binding: PythonObject, n: Int, count: Int, replace: Bo
     return indices^
 
 
-def resample_rows_gpu(rows: List[ResampleRows], binding: PythonObject, n: Int, count: Int,
+def resample_rows_run(rows: List[ResampleRows], arrays: PythonObject, binding: PythonObject, n: Int, count: Int,
                       replace: Bool, seed: PythonObject, context: PythonObject) raises -> PythonObject:
-    if n <= 0 or count <= 0:
-        return PythonObject(None)
-    var enabled = neural_descriptor_entry(binding, "resample_gpu_gather_enabled", False)
-    if enabled is None or Int(py=py_call(enabled)) == 0:
-        return PythonObject(None)
-    for i in range(len(rows)):  # driver-loop: native eligibility from each input's single metadata snapshot
-        if not rows[i].gpu:
-            return PythonObject(None)
-    var route = neural_descriptor_entry(binding, "resample_gather_gpu" if replace else "resample_permutation_gather_gpu", False)
-    if route is None:
-        return PythonObject(None)
+    """`resample(*arrays)`'s finished rows, in the caller's argument order (lane gd-rf-resample, 2026-11-25).
+    One call of the image's operation 8 draws the rows and gathers every array of plain words
+    (`ResampleRows.row_words`) ON THE DEVICE in a GPU image (resample/estimator.mojo `resample_rows_device`;
+    the host image gathers them on the CPU column), straight into the outputs allocated here; the row numbers
+    come home only when an array needs them here (a sequence, an object array, a strided or odd-width one).
+    Inside a `resident()` scope each array that is the caller's own buffer is kept once in the image's store
+    and read there in place. Before, every non-Apple-FAST GPU call drew the rows on the device, downloaded
+    them and gathered every array on the host. The rows are copies: the bytes do not change."""
+    var provider = neural_descriptor_connect_once(binding, "resample_native_api_v1", "mojolearn.resample.v1",
+                                                  _RS_OPERATIONS)
+    var rs = rs_resident(binding, provider, context)
     var outputs = Python.list()
     var output_pins = List[AdmittedBorrowedBuffer]()
-    var addresses = Python.list()
-    var params = Python.list(n, count, seed)
-    for i in range(len(rows)):  # driver-loop: retain every output allocation through the compiled gather
+    var addresses: List[Int] = [0]
+    var ints: List[Int] = [n, count, 1 if replace else 0, Int(py=seed)]
+    var here = False
+    for i in range(len(rows)):  # driver-loop: over the arrays passed to resample (a handful): metadata and outputs
+        var w = rows[i].row_words()
+        if w > 0 and (n > _INT32_MAX // w or count > _INT32_MAX // w):
+            w = 0  # the gather kernels index words with int32
+        if w == 0:
+            here = True
+            py_call(outputs.append, PythonObject(None))
+            addresses.append(0)
+            addresses.append(0)
+            ints.append(0)
+            ints.append(-1)
+            continue
         var output = rows[i].output(count, context)
         output_pins.append(AdmittedBorrowedBuffer(output, True))
         py_call(outputs.append, output)
-        py_call(addresses.append, rows[i].layout.address)
-        py_call(addresses.append, output_pins[len(output_pins) - 1].layout.value().address)
-        py_call(params.append, rows[i].width())
-    var done = Int(py=py_call(route, addresses, params))
+        addresses.append(rows[i].layout.address)
+        addresses.append(output_pins[len(output_pins) - 1].layout.value().address)
+        ints.append(w)
+        ints.append(_rows_slot(rs, arrays[i], rows[i], n * w))
+    if here:
+        var indices = admitted_zeros([count], "<i4", context)
+        addresses[0] = indices.addr
+        _ = neural_descriptor_execute(provider, _RS_OP_RESAMPLE_ROWS, addresses, ints, List[Float64]())
+        for i in range(len(rows)):  # driver-loop: finish the arrays the image does not gather, in argument order
+            if outputs[i] is None:
+                py_setitem(outputs, PythonObject(i), rows[i].take(indices, context))
+        _ = indices^
+    else:
+        _ = neural_descriptor_execute(provider, _RS_OP_RESAMPLE_ROWS, addresses, ints, List[Float64]())
     _ = output_pins^
+    _ = rs^  # the store provider stays connected through the run above
     _ = rows
-    return outputs if done != 0 else PythonObject(None)
+    return outputs
 
 
-def resample_rows_narrow(rows: List[ResampleRows], binding: PythonObject, n: Int, count: Int,
-                         seed: PythonObject, context: PythonObject) raises -> PythonObject:
-    # Retain the existing optional fast gather path. No new tuning/default.
-    if n <= 0 or count <= 0:
-        return PythonObject(None)
-    var defines = neural_descriptor_entry(binding, "resample_fast_defines", False)
-    if defines is None or (Int(py=py_call(defines)) & 128) == 0:
-        return PythonObject(None)
-    var route = neural_descriptor_entry(binding, "resample_gather_narrow", False)
-    if route is None:
-        return PythonObject(None)
-    var bound = Int(py=py_call(neural_descriptor_entry(binding, "resample_gather_narrow_bytes")))
-    var indices = admitted_zeros([count], "<i4", context)
-    var outputs = Python.list()
-    var output_pins = List[AdmittedBorrowedBuffer]()
-    var addresses = Python.list(indices.addr)
-    var params = Python.list(n, count, seed)
-    for i in range(len(rows)):  # driver-loop: retain the existing byte-width eligibility from snapshot metadata
-        var width = rows[i].width() if rows[i].gpu else 0
-        if 4 * width > bound:
-            width = 0
-        var output = PythonObject(None)
-        var src = 0
-        var dst = 0
-        if width > 0:
-            output = rows[i].output(count, context)
-            output_pins.append(AdmittedBorrowedBuffer(output, True))
-            src = rows[i].layout.address
-            dst = output_pins[len(output_pins) - 1].layout.value().address
-        py_call(outputs.append, output)
-        py_call(addresses.append, src)
-        py_call(addresses.append, dst)
-        py_call(params.append, width)
-    var done = Int(py=py_call(route, addresses, params))
-    _ = output_pins^
-    if done < 0:
-        return PythonObject(None)
-    var result = Python.list()
-    for i in range(len(rows)):  # driver-loop: finish rows not handled by the retained compiled narrow route
-        py_call(result.append, outputs[i] if ((done >> i) & 1) != 0 else rows[i].take(indices, context))
-    _ = indices^
-    return result
+def _rows_slot(rs: RsResident, original: PythonObject, row: ResampleRows, words: Int) raises -> Int:
+    """The resident store slot of the caller's array `original` (inside a `resident()` scope), when the rows
+    gathered are its own buffer: an exact ndarray or mojolearn Array whose data address is the admitted
+    layout's (a pandas or Torch argument is converted per call and never kept); -1 otherwise."""
+    if not rs.active() or not metric_exact_buffer(original):
+        return -1
+    var address = Int(py=classical_address(original))
+    if address != row.layout.address:
+        return -1
+    return rs_resident_slot_at(rs, original, address, words)

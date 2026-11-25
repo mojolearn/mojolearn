@@ -2367,12 +2367,9 @@ SABOTAGE_NA_ENTRIES = {
 
 # lane verify-coverage-20261024, after the arms' run on 9b04b92c5 (decisions in
 # plan VERIFY_COVERAGE_20261024 (git history), "Arm decisions")
-_RESAMPLE_OFF = ("compiled out of identical builds: RESAMPLE_GPU_GATHER is the fast tier or the opt-in "
-                 "MOJOLEARN_CLASSICAL_C11_DRAW_GATHER, RESAMPLE_FAST_GATHER_NARROW the fast tier; in identical "
-                 "the entry returns its not-taken flag (coverage-resample-gather MISSED on 9b04b92c5 for that reason)")
 SABOTAGE_NA_ENTRIES.update({
-    "resample_gather_gpu": _RESAMPLE_OFF, "resample_permutation_gather_gpu": _RESAMPLE_OFF,
-    "resample_gather_narrow": _RESAMPLE_OFF,
+    # resample_gather_gpu / resample_permutation_gather_gpu / resample_gather_narrow: deleted with the host
+    # row gather (lane gd-resident-functions, 2026-11-25: resample.resample gathers on the device, op 8).
     "xn_softmax64": "fast tier only: registered only under NC_PROBA64 (x_neighbors/proba64_nc.mojo, fast builds)",
     "nonzero_f32_count": ("the capacity count before the COO fill; a wrong count makes the fill refuse "
                           "(stale count), and the fill's values carry coverage-core-dense_coo"),
