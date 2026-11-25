@@ -166,6 +166,15 @@ comptime _SOP_CONV_LINEAR = 145
 comptime _SOP_LSTM = 146
 comptime _SOP_GRU = 147
 comptime _SOP_RNN = 148
+# nn-blocks-pg begin: optimizer parameter groups (providers/python/nn_pg_pyapi_door.mojo); a range of its own,
+# clear of the shared sequence above
+comptime _SOP_PG_OPTIMIZER = 1110
+comptime _SOP_PG_LEARNING_RATES = 1111
+comptime _SOP_PG_STATE_DICT = 1112
+comptime _SOP_PG_LOAD_STATE_DICT = 1113
+comptime _SOP_PG_FIRST = _SOP_PG_OPTIMIZER
+comptime _SOP_PG_LAST = _SOP_PG_LOAD_STATE_DICT
+# nn-blocks-pg end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -321,6 +330,12 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["lstm"] = _SOP_LSTM
         self.codes["gru"] = _SOP_GRU
         self.codes["rnn"] = _SOP_RNN
+        # nn-blocks-pg begin
+        self.codes["param_group_optimizer"] = _SOP_PG_OPTIMIZER
+        self.codes["learning_rates"] = _SOP_PG_LEARNING_RATES
+        self.codes["optimizer_state_dict"] = _SOP_PG_STATE_DICT
+        self.codes["load_optimizer_state_dict"] = _SOP_PG_LOAD_STATE_DICT
+        # nn-blocks-pg end
 
 
 # One table per process (identical contents in every extension that links this file).

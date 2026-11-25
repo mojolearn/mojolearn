@@ -74,6 +74,12 @@ from autograd.autograd_ops_frontend_run import (
     _SOP_LM_HEAD_LOSS, _SOP_LM_ROWS, _SOP_LM_PICK, _SOP_LM_ALIVE, _SOP_LM_EMBEDDING, _SOP_CONV_BLOCK,
     _SOP_CONV_LINEAR, _SOP_LSTM, _SOP_GRU, _SOP_RNN,
 )
+# nn-blocks-pg begin: optimizer parameter groups and the shared optimizer UNPACK / PACK
+from autograd.autograd_ops_frontend_run import _SOP_PG_FIRST, _SOP_PG_LAST
+from providers.python.nn_pg_pyapi_door import (
+    pg_session_call_py, ops_optimizer_unpack, ops_optimizer_state_pack, ops_optimizer_state_unpack,
+)
+# nn-blocks-pg end
 
 
 struct _SessionOpNames(Defaultable, Movable):
@@ -428,30 +434,10 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         s[].zero_grad()
         return PythonObject(None)
     if op == _SOP_OPTIMIZER:
-        # UNPACK: exact supported scalar/container admission precedes every
-        # conversion; no user conversion hook can enter optimizer execution.
-        program_admit_value(args)
-        var codes = ops_optimizer_codes(String(args[0]), String(args[8]))
-        var request = OpsOptimizerRequest(codes[0], Bool(py=args[3]), codes[1],
-            _int(args[9], "step_size", 1), _float(args[1], "lr"), _float(args[2], "momentum"),
-            _float(args[4], "beta1"), _float(args[5], "beta2"), _float(args[6], "eps"),
-            _float(args[7], "weight_decay"), _float(args[10], "gamma"), Float32(0))
-        # lane fx-ops-session-blocks: args[11..16] = alpha, centered, lr_decay,
-        # initial_accumulator_value, clip_grad_norm, clip_grad_value (None: no
-        # clip); a clip given must be positive.
-        var clip_norm = Float32(0)
-        var clip_value = Float32(0)
-        if not _nil(args[15]):
-            clip_norm = _float(args[15], "clip_grad_norm")
-            if not (clip_norm > Float32(0)):
-                raise Error("ValueError: clip_grad_norm must be positive")
-        if not _nil(args[16]):
-            clip_value = _float(args[16], "clip_grad_value")
-            if not (clip_value > Float32(0)):
-                raise Error("ValueError: clip_grad_value must be positive")
-        var extras = OpsOptimizerExtras(_float(args[11], "alpha"), Bool(py=args[12]), _float(args[13], "lr_decay"),
-            _float(args[14], "initial_accumulator_value"), clip_norm, clip_value)
-        return PythonObject(s[].optimizer_with(request, extras))
+        # UNPACK in providers/python/nn_pg_pyapi_door.mojo (nn-blocks-pg: shared with
+        # param_group_optimizer; the same words)
+        var unpacked = ops_optimizer_unpack(args)
+        return PythonObject(s[].optimizer_with(unpacked[0], unpacked[1]))
     if op == _SOP_STEP or op == _SOP_SCHEDULER_STEP or op == _SOP_LEARNING_RATE or op == _SOP_OPTIMIZER_STATE or op == _SOP_LOAD_OPTIMIZER_STATE:
         var opt = _int(args[0], "optimizer", 1)
         var oi = s[]._opt_index(opt)
@@ -465,69 +451,11 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             return PythonObject(Float64(s[].learning_rate(opt)))
         if op == _SOP_OPTIMIZER_STATE:
             var snapshot = s[].optimizer_state_value(opt, _int(args[1], "param", 1))
-            # PACK the native snapshot directly into the documented mapping.
-            var state = Python.dict()
-            py_setitem(state, "step", snapshot.step)
-            if snapshot.kind == 3 or snapshot.kind == 4:
-                # RMSprop / Adagrad (sequence/ops.mojo OPT_RMSPROP 3,
-                # OPT_ADAGRAD 4), torch's state names
-                if snapshot.first != 0:
-                    py_setitem(state, "momentum_buffer", snapshot.first)
-                if snapshot.second != 0:
-                    py_setitem(state, "square_avg" if snapshot.kind == 3 else "sum", snapshot.second)
-                if snapshot.third != 0:
-                    py_setitem(state, "grad_avg", snapshot.third)
-            elif snapshot.kind != 0:
-                py_setitem(state, "beta1_power", Float64(snapshot.beta1_power))
-                py_setitem(state, "beta2_power", Float64(snapshot.beta2_power))
-                if snapshot.kind == 9:
-                    # NAdam (sequence/ops.mojo OPT_NADAM): the running mu product
-                    py_setitem(state, "mu_product", Float64(snapshot.mu_product))
-                if snapshot.first != 0:
-                    py_setitem(state, "exp_avg", snapshot.first)
-                if snapshot.second != 0:
-                    # Adamax (OPT_ADAMAX 8) keeps the infinity norm there
-                    py_setitem(state, "exp_inf" if snapshot.kind == 8 else "exp_avg_sq", snapshot.second)
-            elif snapshot.first != 0:
-                py_setitem(state, "momentum_buffer", snapshot.first)
-            return state
-        var state = args[2]
-        program_admit_value(state)
-        var step = _int(py_item(state, nk[].k_step), "step", 0)
-        var first = 0
-        var second = 0
-        var beta1 = Float32(1)
-        var beta2 = Float32(1)
-        var mu = Float32(1)
-        var opt_kind = s[].opts[oi].cfg.kind
-        var third = 0
-        if opt_kind == 0:
-            if py_contains(state, nk[].k_momentum_buffer):
-                first = _int(py_item(state, nk[].k_momentum_buffer), "momentum_buffer", 1)
-        elif opt_kind == 3 or opt_kind == 4:
-            if py_contains(state, nk[].k_momentum_buffer):
-                first = _int(py_item(state, nk[].k_momentum_buffer), "momentum_buffer", 1)
-            if opt_kind == 3:
-                if py_contains(state, nk[].k_square_avg):
-                    second = _int(py_item(state, nk[].k_square_avg), "square_avg", 1)
-            elif py_contains(state, nk[].k_sum):
-                second = _int(py_item(state, nk[].k_sum), "sum", 1)
-            if py_contains(state, nk[].k_grad_avg):
-                third = _int(py_item(state, nk[].k_grad_avg), "grad_avg", 1)
-        else:
-            if py_contains(state, nk[].k_exp_avg):
-                first = _int(py_item(state, nk[].k_exp_avg), "exp_avg", 1)
-            if opt_kind == 8:
-                # Adamax: the keys `optimizer_state` returns for it
-                if py_contains(state, nk[].k_exp_inf):
-                    second = _int(py_item(state, nk[].k_exp_inf), "exp_inf", 1)
-            elif py_contains(state, nk[].k_exp_avg_sq):
-                second = _int(py_item(state, nk[].k_exp_avg_sq), "exp_avg_sq", 1)
-            beta1 = Float32(py=state["beta1_power"])
-            beta2 = Float32(py=state["beta2_power"])
-            if opt_kind == 9:
-                mu = Float32(py=py_item(state, nk[].k_mu_product))
-        var request = OpsOptimizerRestoreRequest(step, first, second, third, beta1, beta2, mu)
+            # PACK the native snapshot directly into the documented mapping
+            # (providers/python/nn_pg_pyapi_door.mojo, shared with optimizer_state_dict).
+            return ops_optimizer_state_pack(snapshot)
+        # UNPACK in providers/python/nn_pg_pyapi_door.mojo (shared with load_optimizer_state_dict)
+        var request = ops_optimizer_state_unpack(args[2], s[].opts[oi].cfg.kind)
         s[].load_optimizer_state(opt, _int(args[1], "param", 1), request)
         return PythonObject(None)
     if op == _SOP_MAMBA_BLOCK or op == _SOP_ATTENTION_BLOCK:
@@ -1065,6 +993,10 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         var metric = 1 if op == _SOP_ACCURACY else (2 if op == _SOP_LOG_LOSS else 3)
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
         return PythonObject(Float64(s[].metric(metric, hs)))
+    # nn-blocks-pg begin
+    if op >= _SOP_PG_FIRST and op <= _SOP_PG_LAST:
+        return pg_session_call_py[E](s, op, args)
+    # nn-blocks-pg end
     if code == 0:
         raise Error("unknown native session operation: " + String(operation))
     return PythonObject(s[].op(code, hs, ints, fs))

@@ -3319,11 +3319,28 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.opts[o - 1].epoch = epoch
         self._pg_scheduler_step(o - 1)
 
-    def pg_load_group(mut self, o: Int, gi: Int, request: OpsOptimizerRequest, extras: OpsOptimizerExtras) raises:
+    def pg_group_request(self, o: Int, gi: Int) raises -> Tuple[OpsOptimizerRequest, OpsOptimizerExtras]:
+        """Group gi's settings as the request that builds them (the base a
+        loaded group's keys are applied over)."""
+        var g = self._pg_index(o)
+        if gi < 0 or gi >= len(self.pg_tables[g].members):
+            raise Error("ValueError: ops: optimizer " + String(o) + " has no parameter group " + String(gi))
+        var m = self.opts[self.pg_tables[g].members[gi]]
+        var c = m.cfg
+        var request = OpsOptimizerRequest(c.kind, c.nesterov, m.sched, m.sched_step, c.lr, c.momentum, c.beta1,
+                                          c.beta2, c.eps, c.weight_decay, m.gamma, c.dampening)
+        var extras = OpsOptimizerExtras(c.alpha, c.centered, c.lr_decay, c.init_acc,
+                                        c.clip if c.clip_global else Float32(0), c.clip_value)
+        return (request, extras)
+
+    def pg_load_group(
+        mut self, o: Int, gi: Int, request: OpsOptimizerRequest, extras: OpsOptimizerExtras, commit: Bool,
+    ) raises:
         """Replace group gi's settings (a loaded state dict's group): the
         same checks as construction; the kind, the schedule, the clips and the
         state buffers the group keeps (`optimizer_slots`) must not change, so
-        its retained state stays valid."""
+        its retained state stays valid. `commit` False checks only (the
+        caller checks every group before it changes any)."""
         var g = self._pg_index(o)
         if gi < 0 or gi >= len(self.pg_tables[g].members):
             raise Error("ValueError: ops: optimizer " + String(o) + " has no parameter group " + String(gi))
@@ -3345,7 +3362,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if entry.cfg.init_acc != now.cfg.init_acc and len(self.opt_state_indices[m]) > 0:
             raise Error("ValueError: ops: param_groups[" + String(gi) + "] of the loaded state changes "
                         + "initial_accumulator_value after its state was made")
-        self.opts[m].cfg = entry.cfg
+        if commit:
+            self.opts[m].cfg = entry.cfg
     # nn-blocks-pg end
 
 
