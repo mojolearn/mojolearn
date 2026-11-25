@@ -856,6 +856,10 @@ class _SmokeHarness:
     def _exc_text(self, stage, exc):
         return f"{stage or ''}{type(exc).__name__}: {exc}"
 
+    def call_lane(self, lane, ml, side, X, yc, yr, held):
+        # the harness's one lane call on a side (vd-verify): the package as given
+        return self.LANES[lane](ml, X, yc, yr, held), None
+
 
 class _Fit:
     def __init__(self, parts, probe=None, est=None):
@@ -866,7 +870,7 @@ def _smoke(body):
     import numpy as np
     h = _SmokeHarness(body)
     data = (np.zeros((4, 2)), np.zeros(4), np.zeros(4))
-    return h, va.smoke_cell(h, None, "probe", "base", data, np.zeros((2, 2)))
+    return h, va.smoke_cell(h, None, "probe", "base", data, np.zeros((2, 2)), side="cpu")
 
 
 def test_smoke_runs_two_full_fits_and_not_two_probes_of_one():
@@ -1651,6 +1655,8 @@ def test_shipped_verifier_hashes_like_the_harness():
     for row in report["cells"]:
         if row["lane"].startswith("portable:"):
             continue
+        if row.get("side") == "gpu" and row["value"] == va.vd.NO_GPU:
+            continue  # the GPU side of a CPU-only install: the column records the CPU side
         cell = harness_cells[f"{row['lane']}/{row['fixture']}"]
         if cell.get("verdict") == "REFUSED":
             assert row["value"] is None, row

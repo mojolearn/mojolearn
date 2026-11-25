@@ -138,12 +138,13 @@ def test_extended_probes_reuse_fit_and_detect_drift(flags):
         EXTRA_PARTS={p: () for p in ('stepfull', 'batchgrad', 'batchscale', 'ragged')},
         _train_hash=lambda f: '0123456789abcdef',
         _probe_fit=lambda *args: ('n/a:function', 'n/a:no-save', None, None),
-        _probe_batch=lambda *args: ('n/a:test', None), _probe_part=probe)
+        _probe_batch=lambda *args: ('n/a:test', None), _probe_part=probe,
+        one_sided_na=lambda *args: None, device_view=lambda ml, side, lane: ml)
     h.RLPAIR = {'x': object()}
     h._probe_rlpair = lambda *args: (probes.append('rlpair') or 'n/a:test', None, [])
     args = cli.build_parser().parse_args(['verify', *flags])
     result = va.run_cell(h, None, 'x', 'base', (None, None, None), np.zeros((2, 2)), 2,
-                         extra_parts=va._extra_parts(args))
+                         extra_parts=va._extra_parts(args), side='cpu')
     assert len(fits) == 2
     assert probes == ['stepfull', 'batchgrad', 'batchscale', 'ragged', 'rlpair'] * 2
     value, error = result['batchgrad']
@@ -322,8 +323,9 @@ def test_failed_reload_refuses_the_model_part_even_when_saved_bytes_match():
         EXTRA_PARTS={'stepfull':()},_train_hash=lambda f:digest,
         _probe_fit=lambda *a:(digest,digest,None,'model: reload failed'),
         _probe_batch=lambda *a:('n/a:function',None),
-        _probe_part=lambda *a:('n/a:no-decode-state',None,[]))
-    parts=va.run_cell(h,None,'x','base',(None,None,None),np.zeros((1,1)),2)
+        _probe_part=lambda *a:('n/a:no-decode-state',None,[]),
+        one_sided_na=lambda *a:None,device_view=lambda ml,side,lane:ml)
+    parts=va.run_cell(h,None,'x','base',(None,None,None),np.zeros((1,1)),2,side='cpu')
     assert parts['train']==(digest,None)
     assert parts['model']==(None,'model: reload failed')
     rows=va.judge_rows([dict(lane='x',fixture='base',part='model',value=parts['model'][0],error=parts['model'][1])],
