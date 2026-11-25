@@ -155,13 +155,16 @@ def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nn
     _cc_identity_relabel_host(lab, info, n, True)
 
 
-def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
+def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int, scope_block: Int) raises:
     """connected_components' min-label rounds as the sparse walk of
     x_neighbors/cc_sparse.mojo (lane neural-pass22): the same rounds over the
     graph's edges, the same labels and round count; x_neighbors/checks/graph_check.mojo
     holds it and the device's `op_cc_iterate` to the oracle's min-label rounds.
     From the identity labels; out, the relabelled components and info[1] =
-    their count + 1 (`_cc_identity_relabel_host`)."""
+    their count + 1 (`_cc_identity_relabel_host`). `scope_block` is the
+    device image's `resident()` scope word (x_neighbors/iter_device.mojo);
+    the host column reads A where it is and keeps nothing resident."""
+    _ = scope_block
     _cc_identity_relabel_host(lab, info, n, False)
     cc_iterate_sparse(FP(unsafe_from_address=a), IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n)
     _cc_identity_relabel_host(lab, info, n, True)

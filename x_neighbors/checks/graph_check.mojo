@@ -208,14 +208,14 @@ def main() raises:
     for i in range(n):
         dc[i] = Int32(-5)
     var dinfo = zi(2)
-    op_cc_iterate(fa(g), ia(dc), ia(dinfo), n)
+    op_cc_iterate(fa(g), ia(dc), ia(dinfo), n, 0)
     same("5217 connected components device (iter_device.op_cc_iterate)", count_diff_i32(dc, want[0]))
     same("5217 connected components device count", 0 if Int(dinfo[1]) == want[1] + 1 else 1)
     var hc = zi(n)
     for i in range(n):
         hc[i] = Int32(-5)
     var hinfo = zi(2)
-    h_cc_iterate(fa(g), ia(hc), ia(hinfo), n)
+    h_cc_iterate(fa(g), ia(hc), ia(hinfo), n, 0)
     same("5217 connected components host (iter_host.op_cc_iterate)", count_diff_i32(hc, want[0]))
     same("5217 connected components host count", 0 if Int(hinfo[1]) == want[1] + 1 else 1)
     same("5217 connected components device == host", count_diff_i32(dc, hc))

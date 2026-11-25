@@ -21,11 +21,13 @@ Two ways a door hands the input over:
   entry (the metrics image's, resolved from its published table): the scope's
   cache of `prefix` on that store answers the slot id here (a hit, or one
   put), and the image reads the slot (spectral_embedding).
-- the scope word and the pin token travel in the image request and the image
-  puts or finds the input in ITS OWN store (core/scope_store_slot.mojo); the
-  image writes one int32 "kept" word, and the door drops a pin the cache did
-  not keep (`function_scope_settle`) after the call (connected_components,
-  refine, kpss_test, select_d).
+- a `ScopeBlock` (three Int words per input on the door's stack: scope word,
+  pin token, "kept") travels as ONE optional int of the image request (its
+  address; 0 outside a scope) and the image puts or finds the input in ITS
+  OWN store (core/scope_store_slot.mojo); the image sets "kept" when the
+  cache took the pin, and the door drops every pin the cache did not keep
+  (`ScopeBlock.settle`) after the call (connected_components, refine,
+  kpss_test, select_d).
 
 A context connected without the scope keys keeps nothing resident. Nothing
 here is reached per row or per element.
@@ -96,8 +98,49 @@ struct FunctionScope(Movable):
         return put.store_id
 
 
-def function_scope_settle(pin: Int, kept: Int32):
-    """After an image call that received `pin`: drop the pin unless the
-    image's scope cache kept it (`kept` != 0). With the GIL."""
-    if pin != 0 and kept == 0:
-        arena_unpin(pin)
+comptime SCOPE_BLOCK_INPUTS = 3
+
+
+struct ScopeBlock(Movable):
+    """The scope words an image request carries for up to
+    SCOPE_BLOCK_INPUTS inputs (core/scope_store_slot.mojo numbering: per
+    input the scope word, the pin token and the "kept" word), on the
+    door's stack: no allocation. `address()` is 0 when no input is kept,
+    so outside a scope the request carries 0 and the image reads nothing."""
+    var words: Array[Int, 3 * SCOPE_BLOCK_INPUTS]
+    var pinned: Bool
+
+    def __init__(out self):
+        self.words = Array[Int, 3 * SCOPE_BLOCK_INPUTS](fill=0)
+        for i in range(SCOPE_BLOCK_INPUTS):  # small-loop(the block's fixed input count): 3
+            self.words[3 * i] = -1
+        self.pinned = False
+
+    def keep(mut self, index: Int, scope: FunctionScope, source: PythonObject, value: PythonObject,
+             words: Int) raises:
+        """Input `index` (admitted `value` from the argument `source`, `words`
+        4-byte words) is kept resident when the scope keeps its buffer."""
+        var pin = scope.pin(source, value, words)
+        if pin == 0:
+            return
+        self.words[3 * index] = scope.scope
+        self.words[3 * index + 1] = pin
+        self.words[3 * index + 2] = 0
+        self.pinned = True
+
+    def address(self) -> Int:
+        if not self.pinned:
+            return 0
+        return Int(self.words.unsafe_ptr())
+
+    def settle(mut self):
+        """After the image call (also when it raised), with the GIL: drop
+        every pin the image's scope cache did not keep."""
+        if not self.pinned:
+            return
+        for i in range(SCOPE_BLOCK_INPUTS):  # small-loop(the block's fixed input count): 3
+            var pin = self.words[3 * i + 1]
+            if pin != 0 and self.words[3 * i + 2] == 0:
+                arena_unpin(pin)
+            self.words[3 * i + 1] = 0
+        self.pinned = False

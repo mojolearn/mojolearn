@@ -74,6 +74,8 @@ from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _a
 from x_neighbors.items import knn_impute_tie_mean_item, knn_impute_tie_mean_listed
 from x_neighbors.items import XN_TREE, xn_tree_slot
 from core.fold_x_device import fold_x_fill
+from core.scope_store_slot import scope_input_block
+from x_neighbors.xn_store import xn_scope_buffer
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
@@ -716,7 +718,7 @@ def cc_label_init_kernel(lab: IP, n: Int32):
         lab.unsafe_store(v, Int32(v))
 
 
-def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
+def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int, scope_block: Int) raises:
     """connected_components on a dense adjacency, on the device (lane
     hr2-graph-embed, 2026-10-02; before, the default was the host's sparse
     walk, x_neighbors/cc_sparse.mojo): A uploaded once, then hooking
@@ -728,9 +730,20 @@ def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     labels and the driver's p2m_relabel operation, a second upload and
     download): out, `lab` holds the components numbered in order of first
     appearance (the host column's words), info[0] the device's round count
-    and info[1] the number of components + 1. `lab` is output only."""
+    and info[1] the number of components + 1. `lab` is output only.
+    `scope_block` (lane gd-resident-2): 0, or the address of the door's
+    scope block (core/scope_store_slot.mojo); inside the caller's
+    `resident()` scope A is then the image store's resident slot
+    (x_neighbors/xn_store.mojo: found, or put once per scope), read in place
+    by the hook kernel, which never writes A: no upload after the scope's
+    first call."""
+    var given = scope_input_block(scope_block, 0)
     var ctx = xn_ctx()
-    var d_a = _buf(ctx, a, n * n, True)
+    var d_a: DeviceBuffer[DType.float32]
+    if given.wanted() and a > 0 and n > 0:
+        d_a = xn_scope_buffer(given, a, n * n)
+    else:
+        d_a = _buf(ctx, a, n * n, True)
     var d_l = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
     var d_c = ctx.enqueue_create_buffer[DType.int32](1)
     var hb = ctx.enqueue_create_host_buffer[DType.int32](max(n, 1))
