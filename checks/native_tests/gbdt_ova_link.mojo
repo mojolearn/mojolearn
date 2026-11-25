@@ -119,6 +119,10 @@ struct _DeviceFit(GbdtImage):
                     n_weights: Int, dst: Int) raises -> Int:
         raise Error("AttributeError: mojolearn: this check image has no gbdt feature importances")
 
+    @staticmethod
+    def slot_nan(x_word: Int, count: Int) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image reads no fold X word")
+
 
 def _inputs(classes: Int, weighted: Bool) -> GbdtInputs:
     """`_ova(classes)`'s X (column-major, 2 features) and y; the weights when asked."""

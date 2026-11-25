@@ -38,6 +38,7 @@ from core.gbdt_member import _fold_keys, _fold_pairs
 from core.shared_slot import SharedSlot
 from max.gpu.host import DeviceContext
 from core.fold_x_device import FOLD_X_STORE, fold_x_word
+from core.fold_x_scan import fold_x_first_nan
 from core.neural_context import process_ctx
 from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
 from gbdt.gbdt_entry import GbdtImage
@@ -254,6 +255,10 @@ struct _RowMajorFit(GbdtImage):
     def importances(text: String, x: Int, n_rows: Int, n_input: Int, row_major: Bool, weights: Int,
                     n_weights: Int, dst: Int) raises -> Int:
         raise Error("AttributeError: mojolearn: this check image has no gbdt feature importances")
+
+    @staticmethod
+    def slot_nan(x_word: Int, count: Int) raises -> Int:
+        return fold_x_first_nan(process_ctx["MojolearnEstimatorsContextIdenticalV3"](), x_word, count)
 
 
 def _device_case(which: Int) raises:

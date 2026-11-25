@@ -2815,6 +2815,10 @@ struct _HostFit(GbdtImage):
                     n_weights: Int, dst: Int) raises -> Int:
         raise Error("AttributeError: mojolearn: this check image has no gbdt feature importances")
 
+    @staticmethod
+    def slot_nan(x_word: Int, count: Int) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image reads no fold X word")
+
 
 # ---- The device column (was gbdt_public_fits_gpu_suite.mojo) ----
 # The common GradientBoosting fit cases on the device column.
@@ -2886,6 +2890,10 @@ struct _DeviceFit(GbdtImage):
     def importances(text: String, x: Int, n_rows: Int, n_input: Int, row_major: Bool, weights: Int,
                     n_weights: Int, dst: Int) raises -> Int:
         raise Error("AttributeError: mojolearn: this check image has no gbdt feature importances")
+
+    @staticmethod
+    def slot_nan(x_word: Int, count: Int) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image reads no fold X word")
 
 
 def _host_unit(unit: Int) raises:
