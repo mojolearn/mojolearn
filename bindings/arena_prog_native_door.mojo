@@ -30,7 +30,8 @@ from bindings.py_typed_call import py_call_typed
 from bindings.native_error_class import error_without_class
 from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.classical_arrays_door import classical_address, classical_same_buffer
+from bindings.classical_arrays_door import classical_address
+from bindings.metric_resident_source_door import metric_resident_owner
 from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.x_prep_native_owner_door import xprep_address, XprepResident, xprep_resident_none, xprep_resident_of
 from bindings.x_prep_native_inputs_door import _values, _rows_fields, _dense_values
@@ -486,16 +487,20 @@ def metrics_run_plan_entries(plan: MetricProgramPlan, inputs: List[PythonObject]
                                   context)
 
 
-def metric_reads_source(src: UInt64, args: PythonObject, i: Int, value: PythonObject) raises -> Bool:
-    """Whether buffer input `i` (`value`, admitted) may be kept resident by
-    identity: unmarked in `src`, or reading the very buffer of the door
-    call's argument it was admitted from (`args`); a converted copy is a
-    per-call temporary (lane vdf-xm-wire2). Asked only inside a scope, at
-    the floor: outside `resident()` nothing here runs."""
+def metric_reads_source(src: UInt64, args: PythonObject, i: Int, value: PythonObject) raises -> PythonObject:
+    """The buffer a scope keeps resident for buffer input `i` (`value`,
+    admitted): `value` when unmarked in `src` or reading the very buffer of
+    the door call's argument it was admitted from (`args`); that ARGUMENT
+    when admission copied it word for word (lane gd-resident-functions: a
+    1-D admission copies even an exact-dtype buffer, so the copy's new
+    address per call never hit; bindings/metric_resident_source_door.mojo);
+    None for a converted copy, a per-call temporary (lane vdf-xm-wire2).
+    Asked only inside a scope, at the floor: outside `resident()` nothing
+    here runs."""
     var a = metric_input_source(src, i)
     if a < 0:
-        return True
-    return classical_same_buffer(args[a], value)
+        return value
+    return metric_resident_owner(args[a], value)
 
 
 def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], given: List[Int], temps: UInt64,
@@ -575,8 +580,10 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
                     pass  # outside resident() and not a DeviceRows: a host input, copied as before
                 elif rows:
                     slot = metric_rows_gather(value, store.value(), owned, resident, context)
-                elif resident.keeps(False, size_i) and metric_reads_source(src, args, i, value):
-                    slot = resident.slot(value, Int(py=classical_address(value)), size_i)
+                elif resident.keeps(False, size_i):
+                    var keep = metric_reads_source(src, args, i, value)
+                    if keep is not None:
+                        slot = resident.slot(keep, Int(py=classical_address(keep)), size_i)
             if slot >= 0 and len(slots) == 0:
                 slots = List[Int](length=i, fill=-1)
             if len(slots) > 0:
