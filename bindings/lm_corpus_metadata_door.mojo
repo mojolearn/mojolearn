@@ -16,7 +16,7 @@ from core.native_json_value import (JsonDoc, json_add_array, json_add_bool, json
 from bindings.lm_keys_unpack import lm_keys
 from bindings.py_balanced import py_item
 from core.entry_table import EntryRef, entry_ref_unresolved
-from core.tokenizer_gpu_entry_table import tokenizer_gpu_resolve, tokenizer_gpu_vendor_word
+from bindings.tokenizer_gpu_connect_unpack import tokenizer_gpu_entry_connect
 
 
 struct CorpusConnection(Defaultable, Movable):
@@ -59,17 +59,7 @@ def corpus_gpu_connect(backend_fields: PythonObject, gpu: PythonObject) raises:
         raise Error("TypeError: corpus connection requires the GPU tokenizer connection tuple")
     ref slot = CORPUS_GPU_CONNECTION.get_or_create_ptr()[]
     slot.cpu_only = py_get(backend_fields, PythonObject("_CPU_ONLY")) is not None
-    if py_type(gpu[0]) is bi.str:
-        slot.refusal = String(py=gpu[0])
-        return
-    try:
-        var module = gpu[0]
-        var mode = Int(py=py_call(module.x_tokenizer_numeric_mode))
-        var vendor = tokenizer_gpu_vendor_word(String(py=py_call(module.x_tokenizer_vendor)))
-        slot.entry = tokenizer_gpu_resolve(mode, vendor)
-        slot.refusal = String("")
-    except error:
-        slot.refusal = String("ImportError: device='gpu' needs the GPU tokenizer binding, which is not connected: ") + String(error)
+    slot.refusal = tokenizer_gpu_entry_connect(gpu, slot.entry)
 
 
 def corpus_context() raises -> PythonObject:

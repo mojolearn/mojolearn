@@ -46,23 +46,25 @@ from tokenizer.impl.pretokenize import PATTERN_GPT2, PATTERN_LLAMA3, PATTERN_QWE
 from tokenizer.fast.bpe_device import BPE_TPB, S_LEN, S_TOTAL
 from tokenizer.gpu.bpe_gpu import (
     CL_L, CL_N, CL_O, CL_S, CL_X, I32P, I64P, U8P, BpeGpuClasses, bpe_gpu_ctx, gpu_unit_kernel,
-    gpu_start_kernel, _gtid, _blocks, _decode_cp, _width, _prev_unit, _up8, _up64, _p8, _p32, _p64, _scan,
+    gpu_start_kernel, _gtid, _blocks, _doc_of, _decode_cp, _width, _prev_unit, _up8, _up64, _p8, _p32, _p64, _scan,
 )
 
 
 # ------------------------------------------------------------------ kernels
 
 
-def gpu_cut_runflag_kernel(ustart: U8P, ucls: U8P, n: Int64, flag: I32P):
+def gpu_cut_runflag_kernel(ustart: U8P, ucls: U8P, offs: I64P, ndocs: Int64, n: Int64, flag: I32P):
     """One thread per byte: 1 where a run starts (a unit whose previous unit has another class, or
-    an invalid unit, or the first unit), 0 elsewhere (inside a unit or a run)."""
+    an invalid unit, or the first unit of its segment), 0 elsewhere (inside a unit or a run). The
+    segments are the `ndocs` pieces at `offs` (one for the plain cut; the text between added tokens
+    for `Tokenizer.encode(allow_special=True)`): a run never crosses a segment's end."""
     var b = _gtid()
     if b >= Int(n):
         return
     if ustart[b] == 0:
         flag.unsafe_store(b, Int32(0))
         return
-    var q = _prev_unit(ustart, ucls, 0, b)
+    var q = _prev_unit(ustart, ucls, Int(offs[_doc_of(offs, Int(ndocs), b)]), b)
     var k = Int(ucls[b])
     var start = q < 0 or k == CL_X or Int(ucls[q]) != k
     flag.unsafe_store(b, Int32(1) if start else Int32(0))
@@ -142,24 +144,25 @@ def _contraction_end_ci(text: U8P, n: Int, i: Int) -> Int:
 
 
 @always_inline
-def _crlf_end(pfx2: I32P, ncpos: I32P, n: Int, j: Int) -> Int:
-    """The first byte at or after `j` that is neither CR nor LF (n when none)."""
-    if j >= n:
-        return n
+def _crlf_end(pfx2: I32P, ncpos: I32P, n: Int, hi: Int, j: Int) -> Int:
+    """The first byte at or after `j` that is neither CR nor LF, within the segment ending at `hi`
+    (hi when none; `n` is the whole text's length, the scan's total)."""
+    if j >= hi:
+        return hi
     var before = Int(pfx2[j])
     if before >= Int(pfx2[n]):
-        return n
-    return Int(ncpos[before])
+        return hi
+    return min(Int(ncpos[before]), hi)
 
 
 @always_inline
 def _llama_end(
-    text: U8P, n: Int, i: Int, digits: Int, ulen: U8P, ucls: U8P, runend: I32P, pfx: I32P, lastu: I32P,
-    lastcr: I32P, pfx2: I32P, ncpos: I32P,
+    text: U8P, n: Int, hi: Int, i: Int, digits: Int, ulen: U8P, ucls: U8P, runend: I32P, pfx: I32P,
+    lastu: I32P, lastcr: I32P, pfx2: I32P, ncpos: I32P,
 ) -> Int:
-    """`pretoken_end_llama` at the unit start `i`, alternative for alternative, from the run
-    tables. Always > i."""
-    var e = _contraction_end_ci(text, n, i)
+    """`pretoken_end_llama` at the unit start `i` of the segment ending at `hi` (the host scans each
+    segment alone), alternative for alternative, from the run tables. Always in (i, hi]."""
+    var e = _contraction_end_ci(text, hi, i)
     if e > 0:
         return e
     var k0 = Int(ucls[i])
@@ -168,14 +171,14 @@ def _llama_end(
     # 2.  [^\r\n\p{L}\p{N}]?\p{L}+
     if k0 == CL_L:
         return Int(runend[i])
-    if k0 != CL_X and cp0 != 0x0A and cp0 != 0x0D and k0 != CL_N and i + w0 < n:
+    if k0 != CL_X and cp0 != 0x0A and cp0 != 0x0D and k0 != CL_N and i + w0 < hi:
         if Int(ucls[i + w0]) == CL_L:
             return Int(runend[i + w0])
     # 3.  \p{N}{1,digits}
     if k0 == CL_N:
         var j = i
         var count = 0
-        while j < n and count < digits:
+        while j < hi and count < digits:
             if Int(ucls[j]) != CL_N:
                 break
             j += Int(ulen[j])
@@ -183,10 +186,10 @@ def _llama_end(
         return j
     # 4.   ?[^\s\p{L}\p{N}]+[\r\n]*
     var start = i
-    if cp0 == 0x20 and i + 1 < n and Int(ucls[i + 1]) == CL_O:
+    if cp0 == 0x20 and i + 1 < hi and Int(ucls[i + 1]) == CL_O:
         start = i + 1
     if start > i or k0 == CL_O:
-        return _crlf_end(pfx2, ncpos, n, Int(runend[start]))
+        return _crlf_end(pfx2, ncpos, n, hi, Int(runend[start]))
     # 5.  \s*[\r\n]+, 6.  \s+(?!\S), 7.  \s+
     if k0 == CL_S:
         var r = Int(pfx[i + 1]) - 1
@@ -194,7 +197,7 @@ def _llama_end(
         if cr >= i:
             return cr + 1
         var ws_end = Int(runend[i])
-        if ws_end == n:
+        if ws_end == hi:
             return ws_end
         var last = Int(lastu[r])
         if last > i:
@@ -205,11 +208,14 @@ def _llama_end(
 
 
 def gpu_cut_llama_next_kernel(
-    text: U8P, n: Int64, digits: Int64, ustart: U8P, ulen: U8P, ucls: U8P, runend: I32P, pfx: I32P,
-    lastu: I32P, lastcr: I32P, pfx2: I32P, ncpos: I32P, nxt: I32P,
+    text: U8P, offs: I64P, ndocs: Int64, n: Int64, digits: Int64, ustart: U8P, ulen: U8P, ucls: U8P,
+    runend: I32P, pfx: I32P, lastu: I32P, lastcr: I32P, pfx2: I32P, ncpos: I32P, spk: I32P, splen: I64P,
+    has_sp: Int64, nxt: I32P,
 ):
     """One thread per position p in [0, n]: the scan's step from p (a unit start), p itself
-    elsewhere (never reached from 0), n at n (the chain's end holds)."""
+    elsewhere (never reached from 0), n at n (the chain's end holds). With `has_sp`, an added
+    token chosen at p (spk[p] = its index, -1 elsewhere) is one step of its own length: the chain
+    walks segment, token, segment, ... as the host's split does."""
     var p = _gtid()
     var m = Int(n)
     if p > m:
@@ -217,7 +223,13 @@ def gpu_cut_llama_next_kernel(
     if p == m or ustart[p] == 0:
         nxt.unsafe_store(p, Int32(p))
         return
-    var end = _llama_end(text, m, p, Int(digits), ulen, ucls, runend, pfx, lastu, lastcr, pfx2, ncpos)
+    if has_sp != 0:
+        var r = Int(spk[p])
+        if r >= 0:
+            nxt.unsafe_store(p, Int32(p + Int(splen[r])))
+            return
+    var hi = Int(offs[_doc_of(offs, Int(ndocs), p) + 1])
+    var end = _llama_end(text, m, hi, p, Int(digits), ulen, ucls, runend, pfx, lastu, lastcr, pfx2, ncpos)
     nxt.unsafe_store(p, Int32(end))
 
 
@@ -301,6 +313,60 @@ def cut_chain_marks(ctx: DeviceContext, nxt: I32P, on: DeviceBuffer[DType.int32]
     _ = jump_b^
 
 
+def cut_llama_marks(
+    ctx: DeviceContext, text: U8P, offs: I64P, ndocs: Int, n: Int, digits: Int, ustart: U8P, ulen: U8P,
+    ucls: U8P, spk: I32P, splen: I64P, has_sp: Bool, on: DeviceBuffer[DType.int32], st: I32P,
+) raises:
+    """The Llama 3 / Qwen 2 piece starts of the `n` device bytes at `text`, whose units are already
+    computed over the `ndocs` segments at `offs`: `on` (n + 1 words) marks every piece start and n.
+    The runs, the CR/LF tables, the per-unit step (segment-aware: a step never passes its segment's
+    end) and the pointer-jumping chain (`cut_chain_marks`); with `has_sp` the added tokens chosen
+    at `spk` (lengths `splen`) are pieces of their own. Shared by the plain cut and the GPU
+    `Tokenizer.encode` (tokenizer/gpu/vocab_gpu.mojo); returns synchronized."""
+    var nblk = _blocks(n)
+    var nblk1 = _blocks(n + 1)
+    var flag = ctx.enqueue_create_buffer[DType.int32](n)
+    var pfx = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var runpos = ctx.enqueue_create_buffer[DType.int32](n)
+    var runend = ctx.enqueue_create_buffer[DType.int32](n)
+    var lastu = ctx.enqueue_create_buffer[DType.int32](n)
+    var lastcr = ctx.enqueue_create_buffer[DType.int32](n)
+    var flag2 = ctx.enqueue_create_buffer[DType.int32](n)
+    var pfx2 = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var ncpos = ctx.enqueue_create_buffer[DType.int32](n)
+    var nxt = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    lastcr.enqueue_fill(Int32(-1))
+    ctx.enqueue_function[gpu_cut_runflag_kernel](ustart, ucls, offs, Int64(ndocs), Int64(n), _p32(flag),
+                                                 grid_dim=nblk, block_dim=BPE_TPB)
+    _scan(ctx, _p32(flag), _p32(pfx), st, n)
+    ctx.enqueue_function[gpu_cut_runpos_kernel](_p32(flag), _p32(pfx), Int64(n), _p32(runpos),
+                                                grid_dim=nblk, block_dim=BPE_TPB)
+    ctx.enqueue_function[gpu_cut_runinfo_kernel](
+        text, ustart, ulen, _p32(flag), _p32(pfx), _p32(runpos), Int64(n), _p32(runend),
+        _p32(lastu), _p32(lastcr), grid_dim=nblk, block_dim=BPE_TPB,
+    )
+    ctx.enqueue_function[gpu_cut_notcrlf_kernel](text, Int64(n), _p32(flag2), grid_dim=nblk, block_dim=BPE_TPB)
+    _scan(ctx, _p32(flag2), _p32(pfx2), st, n)
+    ctx.enqueue_function[gpu_cut_runpos_kernel](_p32(flag2), _p32(pfx2), Int64(n), _p32(ncpos),
+                                                grid_dim=nblk, block_dim=BPE_TPB)
+    ctx.enqueue_function[gpu_cut_llama_next_kernel](
+        text, offs, Int64(ndocs), Int64(n), Int64(digits), ustart, ulen, ucls, _p32(runend), _p32(pfx),
+        _p32(lastu), _p32(lastcr), _p32(pfx2), _p32(ncpos), spk, splen, Int64(1) if has_sp else Int64(0),
+        _p32(nxt), grid_dim=nblk1, block_dim=BPE_TPB,
+    )
+    cut_chain_marks(ctx, _p32(nxt), on, n + 1)
+    _ = flag^
+    _ = pfx^
+    _ = runpos^
+    _ = runend^
+    _ = lastu^
+    _ = lastcr^
+    _ = flag2^
+    _ = pfx2^
+    _ = ncpos^
+    _ = nxt^
+
+
 def pretokenize_gpu_device(
     ctx: DeviceContext, classes: BpeGpuClasses, text: U8P, n: Int, pattern: Int, bounds: I64P, st: I32P,
 ) raises:
@@ -337,46 +403,9 @@ def pretokenize_gpu_device(
         ctx.synchronize()
         _ = tflag^
     else:
-        var digits = 3 if pattern == PATTERN_LLAMA3 else 1
-        var flag = ctx.enqueue_create_buffer[DType.int32](n)
-        var pfx = ctx.enqueue_create_buffer[DType.int32](n + 1)
-        var runpos = ctx.enqueue_create_buffer[DType.int32](n)
-        var runend = ctx.enqueue_create_buffer[DType.int32](n)
-        var lastu = ctx.enqueue_create_buffer[DType.int32](n)
-        var lastcr = ctx.enqueue_create_buffer[DType.int32](n)
-        var flag2 = ctx.enqueue_create_buffer[DType.int32](n)
-        var pfx2 = ctx.enqueue_create_buffer[DType.int32](n + 1)
-        var ncpos = ctx.enqueue_create_buffer[DType.int32](n)
-        var nxt = ctx.enqueue_create_buffer[DType.int32](n + 1)
-        lastcr.enqueue_fill(Int32(-1))
-        ctx.enqueue_function[gpu_cut_runflag_kernel](_p8(ustart), _p8(ucls), Int64(n), _p32(flag),
-                                                     grid_dim=nblk, block_dim=BPE_TPB)
-        _scan(ctx, _p32(flag), _p32(pfx), st, n)
-        ctx.enqueue_function[gpu_cut_runpos_kernel](_p32(flag), _p32(pfx), Int64(n), _p32(runpos),
-                                                    grid_dim=nblk, block_dim=BPE_TPB)
-        ctx.enqueue_function[gpu_cut_runinfo_kernel](
-            text, _p8(ustart), _p8(ulen), _p32(flag), _p32(pfx), _p32(runpos), Int64(n), _p32(runend),
-            _p32(lastu), _p32(lastcr), grid_dim=nblk, block_dim=BPE_TPB,
-        )
-        ctx.enqueue_function[gpu_cut_notcrlf_kernel](text, Int64(n), _p32(flag2), grid_dim=nblk, block_dim=BPE_TPB)
-        _scan(ctx, _p32(flag2), _p32(pfx2), st, n)
-        ctx.enqueue_function[gpu_cut_runpos_kernel](_p32(flag2), _p32(pfx2), Int64(n), _p32(ncpos),
-                                                    grid_dim=nblk, block_dim=BPE_TPB)
-        ctx.enqueue_function[gpu_cut_llama_next_kernel](
-            text, Int64(n), Int64(digits), _p8(ustart), _p8(ulen), _p8(ucls), _p32(runend), _p32(pfx),
-            _p32(lastu), _p32(lastcr), _p32(pfx2), _p32(ncpos), _p32(nxt), grid_dim=nblk1, block_dim=BPE_TPB,
-        )
-        cut_chain_marks(ctx, _p32(nxt), on, n + 1)
-        _ = flag^
-        _ = pfx^
-        _ = runpos^
-        _ = runend^
-        _ = lastu^
-        _ = lastcr^
-        _ = flag2^
-        _ = pfx2^
-        _ = ncpos^
-        _ = nxt^
+        # One segment, no added token: the special arguments are never read (has_sp 0).
+        cut_llama_marks(ctx, text, _p64(d_offs), 1, n, 3 if pattern == PATTERN_LLAMA3 else 1, _p8(ustart),
+                        _p8(ulen), _p8(ucls), _p32(on), _p64(d_offs), False, on, st)
     _scan(ctx, _p32(on), _p32(pfx_on), st, n + 1)
     ctx.enqueue_function[gpu_cut_pack_kernel](_p32(on), _p32(pfx_on), Int64(n + 1), bounds,
                                               grid_dim=nblk1, block_dim=BPE_TPB)
