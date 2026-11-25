@@ -630,6 +630,7 @@ def fit_extra_trees_classifier_device(
     weights_addr: Int = 0,
     x_dev_rows: Int = 0,
     codes_addr: Int = 0,
+    codes_dev: Int = 0,
 ) raises -> FitResult:
     """`ExtraTreesClassifier.fit` with the split search on the GPU.
 
@@ -695,6 +696,7 @@ def fit_extra_trees_classifier_device(
         ),
         x_dev_rows=x_dev_rows,
         codes_addr=codes_addr,
+        codes_dev=codes_dev,  # lane vdf2-tail2: the codes on the device (XF_FIT_ROWS)
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
@@ -735,6 +737,7 @@ def fit_extra_trees_regressor_device(
     tree_start: Int = 0,
     weights_addr: Int = 0,
     x_dev_rows: Int = 0,
+    y_dev: Int = 0,
 ) raises -> FitResult:
     """`ExtraTreesRegressor.fit` with the split search on the GPU.
 
@@ -803,6 +806,7 @@ def fit_extra_trees_regressor_device(
             config.min_weight_fraction_leaf if weights_addr != 0 else 0.0
         ),
         x_dev_rows=x_dev_rows,
+        y_dev=y_dev,  # lane vdf2-tail2: the labels on the device (XF_FIT_ROWS)
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)

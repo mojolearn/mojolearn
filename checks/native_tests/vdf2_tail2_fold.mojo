@@ -15,10 +15,17 @@ Device column (X put once into the fold store, the fold's rows taken on the devi
              is the same code with `MOJOLEARN_PAR_DEVICES=0,1`): the fit from the fold word (each owner's
              `fold_x_fill`, the sharded scorer's device-to-device copy for the contamination offset) == the fit from
              the host gather: offset_ and every score_samples word (identical only: the sharded fit requires it)
+    case 2   forest labels on the device (XF_FIT_ROWS with y's pin): the base's labels put into the RF / ET image
+             stores, the fold's rows taken on the device (`rf_store_rows_y`, `et_store_take_column`) == the host
+             gather of the same rows, every word; the ET dataset's class ids from device codes
+             (`upload_dataset_codes_i32(codes_dev=)`) and its quantized labels and scale from device targets
+             (`upload_dataset_labels_quantized(y_dev=)`, `upload_dataset_labels_quantized_weighted(y_dev=)`) ==
+             the host-label uploads, every word
 
 FAIL-PROOF EDITS (each must fail the named case): in `fx_nan_word_kernel` test `v != v or v > 1e30` (device 0,
 infinity arm); keep the HIGHEST hit with Atomic.max (device 0, first-word arm); in `_pooled_path_lengths` copy from
-word 1 of the rows (device 1); in `_fit_tree_shards` pass `src_addr=0` to owners after the first (device 1).
+word 1 of the rows (device 1); in `_fit_tree_shards` pass `src_addr=0` to owners after the first (device 1); in
+`_labels_into` copy `n - 1` words (device 2); in `rf_store_rows_y` take with row width 2 (device 2).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, CPU_COLUMN_BUILD, require
@@ -31,6 +38,12 @@ from core.neural_context import process_ctx
 from core.device_plan import DevicePlan
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from isolation_forest.estimator import IsolationForestEstimator as IFEstimator
+from max.gpu.host import DeviceBuffer
+from core.mojolearn_rf_run import RF_STORE, rf_store_ctx, rf_store_rows_y
+from extratrees.mojolearn_trees_run import ET_STORE, et_store_ctx, et_store_take_column
+from extratrees.impl.decisiontree.batched_levelalgo.builder import (
+    upload_dataset_codes_i32, upload_dataset_labels_quantized, upload_dataset_labels_quantized_weighted,
+)
 
 comptime N = 240
 comptime D = 3
@@ -184,12 +197,125 @@ def _iforest_plan_case() raises:
             raise Error(failure)
 
 
+def _read_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int) raises -> List[Int32]:
+    var out = List[Int32](length=n, fill=0)
+    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=buf.create_sub_buffer[DType.int32](0, n))
+    ctx.synchronize()
+    return out^
+
+
+def _labels_case() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var index = _fold(N)
+        var n = len(index)
+        var codes = List[Int32](length=N, fill=0)
+        var targets = List[Float32](length=N, fill=0.0)
+        var weights = List[Float32](length=N, fill=1.0)
+        for r in range(N):  # small-loop(fixture base rows)
+            codes[r] = Int32((r * 7) % 3)
+            targets[r] = Float32((r * 13) % 17) * Float32(0.375) - Float32(2.5)
+            weights[r] = Float32(1 + (r % 4)) * Float32(0.5)
+        var codes_fold = List[Int32](length=n, fill=0)
+        var targets_fold = List[Float32](length=n, fill=0.0)
+        var weights_fold = List[Float32](length=n, fill=0.0)
+        for r in range(n):  # small-loop(oracle gather)
+            codes_fold[r] = codes[Int(index[r])]
+            targets_fold[r] = targets[Int(index[r])]
+            weights_fold[r] = weights[Int(index[r])]
+        # RF: the store take of the codes and of the targets == the host gather
+        var rctx = rf_store_ctx()
+        var rstore = RF_STORE.get_or_create_ptr()
+        var rc = rstore[].put(rctx, Int(codes.unsafe_ptr()), N)
+        var rt = rstore[].put(rctx, Int(targets.unsafe_ptr()), N)
+        var dyc = rctx.enqueue_create_buffer[DType.int32](n)
+        var dyt = rctx.enqueue_create_buffer[DType.float32](n)
+        rf_store_rows_y[DType.int32](rctx, fold_x_word(rc), Int(index.unsafe_ptr()), n, dyc)
+        rf_store_rows_y[DType.float32](rctx, fold_x_word(rt), Int(index.unsafe_ptr()), n, dyt)
+        var got_c = _read_i32(rctx, dyc, n)
+        var got_t = List[Float32](length=n, fill=0.0)
+        rctx.enqueue_copy(dst_ptr=got_t.unsafe_ptr(), src_buf=dyt)
+        rctx.synchronize()
+        for r in range(n):  # small-loop(oracle compare)
+            require(got_c[r] == codes_fold[r], "RF device codes: row " + String(r) + " differs")
+            require(got_t[r] == targets_fold[r], "RF device targets: row " + String(r) + " differs")
+        rstore[].free(rctx, rc)
+        rstore[].free(rctx, rt)
+        _ = dyc^
+        _ = dyt^
+        # ET: the store take, then the dataset uploads from device labels == from host labels
+        var ectx = et_store_ctx()
+        var estore = ET_STORE.get_or_create_ptr()
+        var ec = estore[].put(ectx, Int(codes.unsafe_ptr()), N)
+        var et = estore[].put(ectx, Int(targets.unsafe_ptr()), N)
+        var tc = et_store_take_column(ectx, fold_x_word(ec), Int(index.unsafe_ptr()), n)
+        var tt = et_store_take_column(ectx, fold_x_word(et), Int(index.unsafe_ptr()), n)
+        var failure = String("")
+        try:
+            var xf = _gather(_x(N, D), index, D)  # row-major fold rows
+            var xcm = List[Float32](length=n * D, fill=0.0)
+            for i in range(n):  # small-loop(fixture transpose)
+                for j in range(D):  # small-loop(fixture transpose)
+                    xcm[j * n + i] = xf[i * D + j]
+            var codes_dev = Int(estore[]._held(tc, n).unsafe_ptr())
+            var y_dev = Int(estore[]._held(tt, n).unsafe_ptr())
+            var a = upload_dataset_codes_i32(ectx, xcm.copy(), Int(codes_fold.unsafe_ptr()), Int32(n), Int32(D), 3)
+            var b = upload_dataset_codes_i32(ectx, xcm.copy(), 0, Int32(n), Int32(D), 3, codes_dev=codes_dev)
+            var ia = _read_i32(ectx, a.d_labels, n)
+            var ib = _read_i32(ectx, b.d_labels, n)
+            for r in range(n):  # small-loop(oracle compare)
+                require(ia[r] == ib[r], "ET class ids from device codes: row " + String(r) + " differs")
+            var sa = Float64(0.0)
+            var sb = Float64(0.0)
+            var qa = upload_dataset_labels_quantized(ectx, xcm.copy(), targets_fold.copy(), Int32(n), Int32(D), sa)
+            var qb = upload_dataset_labels_quantized(ectx, xcm.copy(), List[Float32](), Int32(n), Int32(D), sb,
+                                                     y_dev=y_dev)
+            require(sa == sb, "ET quantized labels: the scale differs")
+            var la = _read_i32(ectx, qa.d_labels, n)
+            var lb = _read_i32(ectx, qb.d_labels, n)
+            for r in range(n):  # small-loop(oracle compare)
+                require(la[r] == lb[r], "ET quantized labels from device targets: row " + String(r) + " differs")
+            var wa = Float64(0.0)
+            var wb = Float64(0.0)
+            var pa = upload_dataset_labels_quantized_weighted(ectx, xcm.copy(), targets_fold.copy(), Int32(n),
+                                                              Int32(D), Int(weights_fold.unsafe_ptr()), 0.0, wa)
+            var pb = upload_dataset_labels_quantized_weighted(ectx, xcm.copy(), List[Float32](), Int32(n), Int32(D),
+                                                              Int(weights_fold.unsafe_ptr()), 0.0, wb, y_dev=y_dev)
+            require(wa == wb, "ET weighted labels: the scale differs")
+            var ma = _read_i32(ectx, pa.d_labels, n)
+            var mb = _read_i32(ectx, pb.d_labels, n)
+            for r in range(n):  # small-loop(oracle compare)
+                require(ma[r] == mb[r], "ET weighted labels from device targets: row " + String(r) + " differs")
+            _ = a^
+            _ = b^
+            _ = qa^
+            _ = qb^
+            _ = pa^
+            _ = pb^
+        except error:
+            failure = String(error)
+        estore[].free(ectx, tc)
+        estore[].free(ectx, tt)
+        estore[].free(ectx, ec)
+        estore[].free(ectx, et)
+        _ = index^
+        _ = codes^
+        _ = targets^
+        _ = weights^
+        _ = codes_fold^
+        _ = targets_fold^
+        _ = weights_fold^
+        if failure.byte_length() > 0:
+            raise Error(failure)
+
+
 def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         if which == 0:
             _nan_case()
         elif which == 1:
             _iforest_plan_case()
+        else:
+            _labels_case()
 
 
 def test_device_fixtures() raises:
@@ -197,7 +323,7 @@ def test_device_fixtures() raises:
         def body(which: Int) raises:
             _device_case(which)
 
-        check_cases_serial("vdf2_tail2_fold device", 2, body)
+        check_cases_serial("vdf2_tail2_fold device", 3, body)
 
 
 def main() raises:

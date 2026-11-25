@@ -12,6 +12,7 @@ from std.memory import unsafe_memcpy
 from core.hostptr import copy_f32, list_f32, list_i32
 from ensemble.device_layout import device_has_nan_f32, upload_forest_x, forest_x_from_device_rows
 from core.device_store import DeviceStore
+from core.fold_x_word import fold_x_slot
 from ensemble.dart_member import launch_dart_member_x, launch_dart_member_y
 from ensemble.ada_rounds import (
     AdaState,
@@ -135,6 +136,37 @@ def rf_store_rows_x(ctx: DeviceContext, store_id: Int, idx_addr: Int, n_rows: In
         raise problem^
     store[].free(ctx, taken)
     return dx^
+def rf_store_rows_y[LT: DType](ctx: DeviceContext, y_word: Int, idx_addr: Int, n_rows: Int,
+                               dst: DeviceBuffer[LT]) raises:
+    """XF_FIT_ROWS's labels (lane vdf2-tail2): a NEGATIVE `params.y` word
+    (THE FOLD X WORD numbering, core/fold_x_word.mojo) names the store slot
+    of the WHOLE base's labels (one 4-byte word a row: int32 codes or float32
+    targets, put once per scope under the member's `y_pin`); rows `idx`
+    (`n_rows` host int64 words at `idx_addr`) are taken on the device and
+    copied into `dst` as their bytes (the same words the host gather
+    uploaded). The taken slot is freed before return (also on a raise)."""
+    if y_word >= 0:
+        raise Error("rf_fit_rows: the label word names no store slot")
+    if n_rows < 1:
+        raise Error("rf_fit_rows: invalid shape")
+    var store = RF_STORE.get_or_create_ptr()
+    var taken = store[].take_rows(ctx, fold_x_slot(y_word), 1, idx_addr, n_rows)
+    try:
+        var raw = store[]._held(taken, n_rows)
+        var view = DeviceBuffer[LT](
+            ctx, MutPointer[Scalar[LT], MutAnyOrigin](unsafe_from_address=Int(raw.unsafe_ptr())), n_rows,
+            owning=False,
+        )
+        ctx.enqueue_copy(dst_buf=dst.create_sub_buffer[LT](0, n_rows), src_buf=view)
+        ctx.synchronize()
+        _ = view^
+        _ = raw^  # the copy above read the taken rows
+    except problem:
+        store[].free(ctx, taken)
+        raise problem^
+    store[].free(ctx, taken)
+
+
 comptime CLT = DType.int32
 comptime RLT = DType.float32
 comptime ClsObj = ClassificationObjectiveFunction[DT, CLT, ClassificationBin]
@@ -1028,13 +1060,17 @@ def _rf_classifier_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params
     var ctx = process_ctx[_DEVCTX_SLOT]()
     bt.stop_host("bind_ctx_create", t_s)
     t_s = bt.start()
-    var hy = ctx.enqueue_create_host_buffer[CLT](n_rows)
+    # lane vdf2-tail2: a negative label word on XF_FIT_ROWS is the store
+    # slot of the base's codes (taken on the device below: no host labels)
+    var y_dev = ROWS and params.y < 0
+    var hy = ctx.enqueue_create_host_buffer[CLT](1 if y_dev else n_rows)
     ctx.synchronize()
     bt.stop_host("bind_pinned_alloc", t_s)
     t_s = bt.start()
     # DEVIATION 2481: bulk typed copies preserve every input bit while
     # avoiding scalar stores into pinned memory.
-    unsafe_memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
+    if not y_dev:
+        unsafe_memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
     bt.stop_host("bind_host_copy", t_s)
     t_s = bt.start()
     # cpu-gpu-cleanup t-forest: X goes to the device as the caller's
@@ -1062,7 +1098,10 @@ def _rf_classifier_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params
     # sk-weq-trees: the rows the fit sees (fewer when zero weights drop)
     var n_fit = n_rows
     var dy = ctx.enqueue_create_buffer[CLT](n_rows)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    if y_dev:
+        rf_store_rows_y[CLT](ctx, params.y, params.x, n_rows, dy)
+    else:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
     # The host weights drive sampling; non-bootstrap objectives read the
     # device weights at original row IDs. Keep both alive through fitting.
     var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
@@ -1195,13 +1234,17 @@ def _rf_regressor_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params:
     var ctx = process_ctx[_DEVCTX_SLOT]()
     bt.stop_host("bind_ctx_create", t_s)
     t_s = bt.start()
-    var hy = ctx.enqueue_create_host_buffer[RLT](n_rows)
+    # lane vdf2-tail2: a negative label word on XF_FIT_ROWS is the store
+    # slot of the base's targets (taken on the device below: no host labels)
+    var y_dev = ROWS and params.y < 0
+    var hy = ctx.enqueue_create_host_buffer[RLT](1 if y_dev else n_rows)
     ctx.synchronize()
     bt.stop_host("bind_pinned_alloc", t_s)
     t_s = bt.start()
     # DEVIATION 2481: bulk typed copies preserve every input bit while
     # avoiding scalar stores into pinned memory.
-    copy_f32(yp, hy.unsafe_ptr(), n_rows)
+    if not y_dev:
+        copy_f32(yp, hy.unsafe_ptr(), n_rows)
     bt.stop_host("bind_host_copy", t_s)
     t_s = bt.start()
     # cpu-gpu-cleanup t-forest, as in the classifier: device upload,
@@ -1224,7 +1267,10 @@ def _rf_regressor_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params:
     # sk-weq-trees: the rows the fit sees (fewer when zero weights drop)
     var n_fit = n_rows
     var dy = ctx.enqueue_create_buffer[RLT](n_rows)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    if y_dev:
+        rf_store_rows_y[RLT](ctx, params.y, params.x, n_rows, dy)
+    else:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
     var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
     comptime if FOREST_DEVICE_FINITE:
         var fscan = ForestFiniteScan(ctx)
