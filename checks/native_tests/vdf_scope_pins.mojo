@@ -53,6 +53,12 @@ def _same(a: List[Float32], b: List[Float32], label: String) raises:
         require(a[i].to_bits() == b[i].to_bits(), label + ": word " + String(i) + " differs")
 
 
+def _drop_error(context: Int, address: Int, count: Int) abi("C") -> NoneType:
+    """The refusal's words are not read here (the return code says it refused)."""
+    _ = context
+    return None
+
+
 def _host_case(which: Int) raises:
     if which == 0:
         var plan = MemberPlan()
@@ -73,7 +79,7 @@ def _host_case(which: Int) raises:
         require(member_y_pin_settle(call) == 0, "no token, no take")
         return
     # case 1: the solver host column refuses a fold y word and a fold weights word
-    var sink = NativeDescriptorError()
+    var sink: NativeDescriptorError = _drop_error
     var result = 0
     var x = List[Float32](length=8, fill=1.0)
     var out = List[Float32](length=8, fill=0.0)
