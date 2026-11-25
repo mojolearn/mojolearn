@@ -62,8 +62,10 @@ _require_numpy('mojolearn.ops')
 from . import _backend
 from ._distributed_program import DistributedProgram as _DistributedProgram
 from ._partitioned_program import PartitionedProgram as _PartitionedProgram
+# A developer testing tool for custom_op backward rules (python/mojolearn/_gradcheck.py).
+from ._gradcheck import gradcheck, GradcheckError
 
-__all__ = ["Session", "Program"]
+__all__ = ["Session", "Program", "gradcheck", "GradcheckError"]
 
 # autograd/ops_api.mojo OPS_*
 _OP = {
@@ -2068,6 +2070,8 @@ class Session:
         Use it for a gradient that differs from the forward's: a
         straight-through estimator, gradient reversal, a clipped gradient, or
         a numerically stable gradient of a custom activation.
+
+        Check a rule with :func:`gradcheck` before training with it.
 
         Example
         -------
