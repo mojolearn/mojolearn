@@ -299,9 +299,13 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("fn-metrics-auc")
 def _(ml, X, yc, yr, Xh=None):
-    """auc over a monotone x (sorted positive values) and a positive y."""
-    x = np.ascontiguousarray(np.sort(_functions_pos(X, 512, 3, "fm:auc:x")))
-    y = _functions_pos(X, 512, 4, "fm:auc:y")
+    """auc over a monotone x (sorted positive values) and a positive y, in
+    float64, the dtype auc reads: a float32 input is cast into a per-call copy
+    (a temporary, never resident), so the resident run passes the function's
+    own dtype (lane gd-resident-functions; the check is unchanged: a door that
+    copies these buffers makes no store hit and fails)."""
+    x = np.ascontiguousarray(np.sort(_functions_pos(X, 512, 3, "fm:auc:x")).astype(np.float64))
+    y = np.ascontiguousarray(_functions_pos(X, 512, 4, "fm:auc:y").astype(np.float64))
     return _functions_resident(ml, "metrics.auc", lambda p: dict(auc=_functions_d(ml.metrics.auc(p(x), p(y)))))
 
 
