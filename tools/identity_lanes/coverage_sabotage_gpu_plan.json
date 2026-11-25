@@ -1,5 +1,5 @@
 {
- "audit_head": "71982149e2115780673ecb6a3084f0ff2ed45374",
+ "audit_head": "21abb92fcda6917a49f1b2f9c043016694eb048c",
  "batches": [
   {
    "arm_lanes": {
@@ -5081,20 +5081,60 @@
   },
   {
    "arm_lanes": {
-    "coverage-autograd-import_reader": [
-     "sequence-onnx-import"
-    ],
-    "coverage-native-sequence-release": [
-     "sequence-device-release"
+    "coverage-autograd-imp_argmax_decode": [
+     "nn-pg-program-decode"
     ],
     "coverage-sequence-ops_impl": [
      "sequence-lamb"
     ]
    },
    "arms": [
+    "coverage-autograd-imp_argmax_decode",
+    "coverage-sequence-ops_impl"
+   ],
+   "builds": [
+    "build_x_sequence",
+    "build_x_sequence_host",
+    "build_runtime_catalog_host",
+    "build_runtime_sequential_host"
+   ],
+   "columns": [
+    "cpu",
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-1",
+   "lanes": [
+    "nn-pg-program-decode",
+    "sequence-lamb"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_imp_argmax_decode.patch",
+    "sequence/checks/sabotage/coverage_ops_impl.patch"
+   ],
+   "sides": [
+    "cpu",
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-import_reader": [
+     "sequence-onnx-import"
+    ],
+    "coverage-native-sequence-release": [
+     "sequence-device-release"
+    ],
+    "coverage-sequence-opt_resident": [
+     "sequence-lamb",
+     "sequence-rmsprop",
+     "sequence-adagrad"
+    ]
+   },
+   "arms": [
     "coverage-autograd-import_reader",
     "coverage-native-sequence-release",
-    "coverage-sequence-ops_impl"
+    "coverage-sequence-opt_resident"
    ],
    "builds": [
     "build_x_sequence",
@@ -5106,16 +5146,18 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-1",
+   "id": "x_sequence-2",
    "lanes": [
     "sequence-onnx-import",
     "sequence-device-release",
-    "sequence-lamb"
+    "sequence-lamb",
+    "sequence-rmsprop",
+    "sequence-adagrad"
    ],
    "patches": [
     "autograd/checks/sabotage/coverage_import_reader.patch",
     "sequence/checks/sabotage/coverage_seq_tensor_free.patch",
-    "sequence/checks/sabotage/coverage_ops_impl.patch"
+    "sequence/checks/sabotage/coverage_opt_resident.patch"
    ],
    "sides": [
     "cpu",
@@ -5131,17 +5173,11 @@
      "x-cnn-trainer",
      "x-cnn-trainer-options",
      "public-cnn-classifier-predict"
-    ],
-    "coverage-sequence-opt_resident": [
-     "sequence-lamb",
-     "sequence-rmsprop",
-     "sequence-adagrad"
     ]
    },
    "arms": [
     "coverage-autograd-imported_run",
-    "coverage-sequence-cnn_classifier_program",
-    "coverage-sequence-opt_resident"
+    "coverage-sequence-cnn_classifier_program"
    ],
    "builds": [
     "build_x_sequence",
@@ -5154,20 +5190,16 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-2",
+   "id": "x_sequence-3",
    "lanes": [
     "sequence-onnx-import",
     "x-cnn-trainer",
     "x-cnn-trainer-options",
-    "public-cnn-classifier-predict",
-    "sequence-lamb",
-    "sequence-rmsprop",
-    "sequence-adagrad"
+    "public-cnn-classifier-predict"
    ],
    "patches": [
     "autograd/checks/sabotage/coverage_imported_run.patch",
-    "sequence/checks/sabotage/coverage_cnn_classifier_program.patch",
-    "sequence/checks/sabotage/coverage_opt_resident.patch"
+    "sequence/checks/sabotage/coverage_cnn_classifier_program.patch"
    ],
    "sides": [
     "cpu",
@@ -5194,7 +5226,7 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-3",
+   "id": "x_sequence-4",
    "lanes": [
     "sequence-tape-program",
     "sequence-tape-sequential",
@@ -5226,7 +5258,7 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-4",
+   "id": "x_sequence-5",
    "lanes": [
     "sequence-export-roundtrip"
    ],
@@ -5254,7 +5286,7 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-5",
+   "id": "x_sequence-6",
    "lanes": [
     "sequence-mlp"
    ],
@@ -5288,7 +5320,7 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-6",
+   "id": "x_sequence-7",
    "lanes": [
     "training-mlp-sessions",
     "nn-tr-small-mlp",
@@ -5319,7 +5351,6 @@
      "nn-ep-sequential-dense",
      "nn-ep-sequential-lm",
      "nn-pg-imported-program",
-     "nn-pg-program-decode",
      "nn-pg-session-blocks",
      "nn-tr-seqopt-state",
      "public-theta-variants",
@@ -5372,7 +5403,7 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-7",
+   "id": "x_sequence-8",
    "lanes": [
     "check-generic-sequence",
     "fn-layer-norm-backward",
@@ -5385,7 +5416,6 @@
     "nn-ep-sequential-dense",
     "nn-ep-sequential-lm",
     "nn-pg-imported-program",
-    "nn-pg-program-decode",
     "nn-pg-session-blocks",
     "nn-tr-seqopt-state",
     "public-theta-variants",
@@ -5462,7 +5492,7 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-8",
+   "id": "x_sequence-9",
    "lanes": [
     "sequence-optimizer-state",
     "sequence-adamax",
