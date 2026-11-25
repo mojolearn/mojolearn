@@ -12,9 +12,8 @@ One body per operation, every piece an existing one:
     product itself (no repeated k or v is ever written; their gradients sum the group in the product's fixed
     chain);
   - the masked softmax is one row launch (autograd/nn_qkv_ops.mojo OP_QKV_SOFTMAX), whose row softmax is the
-    tape softmax's body; its node is recorded with the classic attention layer's tag NN_TAG_SOFTMAX, whose rule
-    is the softmax VJP times the scale (autograd/nn_attention.mojo NNAttentionRules, reached from the
-    session's StepOpRules).
+    tape softmax's body; its node is recorded with QKV_TAG_SOFTMAX, whose rule is the classic attention
+    layer's softmax VJP times the scale (autograd/nn_qkv_rules.mojo QkvRules, reached from ImportRules).
 Launches: forward 3 (scores product, masked softmax, context product; grouped heads with a q that is itself a
 pending view: one copy more). Backward: the softmax VJP, two product VJPs per product (the operands that want
 a gradient), and k's permute view handing its gradient back.
@@ -33,8 +32,7 @@ from std.collections import Array
 from autograd.rankn import ShapeN, RN_MAX_RANK
 from autograd.rankn_api import rn_shape
 from autograd.rankn_bmm import rankn_matmul
-from autograd.nn_attention import NN_TAG_SOFTMAX
-from autograd.nn_qkv_rules import QKV_TAG_SOFTMAX_MASK
+from autograd.nn_qkv_rules import QKV_TAG_SOFTMAX, QKV_TAG_SOFTMAX_MASK
 from autograd.import_api import imp_expand
 from autograd.nn_qkv_ops import OP_QKV_SOFTMAX, QKV_CAUSAL, QKV_MASK_BOOL, QKV_MASK_ADD
 
@@ -190,7 +188,7 @@ def qkv_attention[E: Exec](
     if mask_full:
         probs = tape.custom_nd(ex, [scores, mask_full.value()], output, tape.shape_of(scores), QKV_TAG_SOFTMAX_MASK, a)
     else:
-        probs = tape.custom_nd(ex, [scores], output, tape.shape_of(scores), NN_TAG_SOFTMAX, a)
+        probs = tape.custom_nd(ex, [scores], output, tape.shape_of(scores), QKV_TAG_SOFTMAX, a)
     if G == 1:
         return rankn_matmul(tape, ex, probs, v)
     var v5: List[Int] = [B, Hkv, 1, Lk, dv]

@@ -1630,8 +1630,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             self.oplog.add(code, hs, ints, fs, h)
         return h
 
-    def _op_run(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
-        """`op` without the log: the eager call and a program's replay."""
+    def _op_run[nested: Bool = False](mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+        """`op` without the log: the eager call and a program's replay (`nested`: a custom operation's own
+        nodes, `_op_run_tensors[nested]`)."""
         # Move capacity into the call, so the native operation can mutate self
         # without borrowing session-owned operand storage. Resolve every handle
         # afresh; only allocation capacity survives success or failure.
@@ -1640,22 +1641,19 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         try:
             for i in range(len(hs)):  # small-loop(hs: an op's input handles, three or a concat's list): handle lookup, no data
                 x.append(self.tensor(hs[i]))
-            return self._op_run_tensors(code, hs, ints, fs, x)
-        except err:
-            # nn-blocks-scan begin: OPS_SCAN is in no dispatch chain, so no other operation pays a compare for it:
-            # its code falls through `_op_run_tensors` to "unknown operation code" (no work done, nothing
-            # launched) and is taken here, on the error edge only. `_scan` replays its cell through
-            # `_op_run_tensors`, never through this method, so the two never call each other (AGENTS.md part 6).
-            if code != OPS_SCAN:
-                raise err
-            # nn-blocks-scan end
+            return self._op_run_tensors[nested](code, hs, ints, fs, x)
         finally:
             x.clear()
             swap(x, self.op_tensors)
-        return self._scan(hs, ints, fs)  # nn-blocks-scan: reached only for OPS_SCAN (above)
 
-    def _op_run_tensors(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
-        """Execute with this call's freshly checked native tensor references."""
+    def _op_run_tensors[nested: Bool = False](
+        mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]
+    ) raises -> Int:
+        """Execute with this call's freshly checked native tensor references.
+        `nested` (nn-blocks-zerocost): True for a scan cell's nodes (`_scan_call`) and a custom operation's
+        forward and backward nodes (`_program_op[nested=True]`), whose instance has no OPS_SCAN and no
+        OPS_CUSTOM_VJP branch, so `_scan`, `_cbw_forward` and `_cbw_apply` never reach themselves (AGENTS.md
+        part 6)."""
         var n = len(x)
         var ni = len(ints)
         var nf = len(fs)
@@ -1689,10 +1687,6 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # Lane r1-restore-measured-winners: the byte LM trainer's tuned
             # embedding backward, one custom node (autograd/lm_embedding_op.mojo).
             return self._lm_embedding(hs, ints, fs, x)
-        # nn-blocks-qkv begin
-        if code == OPS_ATTENTION_QKV:
-            return self._attention_qkv(hs, ints, fs, x)
-        # nn-blocks-qkv end
         if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR or code == OPS_TRANSFORMER_SOFTMAX:
             # These primitive signatures have at most two handles. Their
             # arity validation below rejects any additional operands.
@@ -1853,14 +1847,6 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 t = cross_entropy(self.tape, self.ex, ce_z, ce_c, ints[0])
             else:
                 t = cross_entropy(self.tape, self.ex, x[0], x[1], ints[0])
-        elif code == OPS_WEIGHTED_LOSS:
-            # Lane rnn-parity-B: [prediction, target, weight], ints [loss code 24..28,
-            # reduction], floats [delta]; reached only when weight= is given
-            # (autograd/per_step_ops.mojo).
-            _need("weighted loss", n, 3, 2, ni, 1, nf)
-            if self.int_words[self._slot(hs[2])]:
-                raise Error("ValueError: ops: a loss weight must be a floating-point tensor")
-            t = weighted_loss(self.tape, self.ex, x[0], x[1], x[2], ints[0], ints[1], fs[0])
         elif code == OPS_DETACH:
             _need("detach", n, 1, 0, ni, 0, nf)
             t = self.tape.detach(self.ex, x[0])
@@ -2057,12 +2043,32 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             t = nn_segment(self.tape, self.ex, x[0], self.tape.value_of(self.ex, x[1]), self.shapes[sg_slot].count(),
                            ints[0], code - OPS_SEGMENT_SUM)
         # nn-blocks-scatter end
-        # nn-blocks-cbw begin: a user-defined backward rule (reached only by
-        # codes no branch above took: no compare on another operation's path)
-        elif code == OPS_CUSTOM_VJP:
-            return self._cbw_forward(hs, ints, fs, x)
-        # nn-blocks-cbw end
+        # nn-blocks-qkv begin: attention over q, k, v (reached only by codes no branch above took; nn-blocks-zerocost
+        # moved it here from ahead of the primitive checks, where every later operation paid its compare)
+        elif code == OPS_ATTENTION_QKV:
+            return self._attention_qkv(hs, ints, fs, x)
+        # nn-blocks-qkv end
+        elif code == OPS_WEIGHTED_LOSS:
+            # Lane rnn-parity-B: [prediction, target, weight], ints [loss code 24..28,
+            # reduction], floats [delta]; reached only when weight= is given
+            # (autograd/per_step_ops.mojo). nn-blocks (2026-11-25): moved from
+            # mid-chain (after OPS_CROSS_ENTROPY, where every later operation paid
+            # its compare) to the chain's tail, which no older operation reaches.
+            _need("weighted loss", n, 3, 2, ni, 1, nf)
+            if self.int_words[self._slot(hs[2])]:
+                raise Error("ValueError: ops: a loss weight must be a floating-point tensor")
+            t = weighted_loss(self.tape, self.ex, x[0], x[1], x[2], ints[0], ints[1], fs[0])
         else:
+            # nn-blocks-scan / nn-blocks-cbw begin: the scan over a captured cell and a user-defined backward rule,
+            # on the chain's no-match path (no other operation pays a compare for them). Both run captured nodes
+            # (a cell, a custom op's programs) through the `nested` instance, which has neither branch, so no
+            # function reaches itself (AGENTS.md part 6); cbw_bind and scan_check_cell refuse the nesting itself.
+            comptime if not nested:
+                if code == OPS_SCAN:
+                    return self._scan(hs, ints, fs)
+                if code == OPS_CUSTOM_VJP:
+                    return self._cbw_forward(hs, ints, fs, x)
+            # nn-blocks-scan / nn-blocks-cbw end
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):
             # elementwise and row-wise ops keep x's full shape (a free view
@@ -2914,12 +2920,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     def _scan_call(
         mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], mut x: List[Tensor],
     ) raises -> Int:
-        """One existing operation inside a scan: `_op_run` without the scan branch (so a scan never re-enters
-        it), the operand list `x` the scan's own reused capacity."""
+        """One existing operation inside a scan: `_op_run_tensors` without the scan branch (nested, so a scan
+        never re-enters it), the operand list `x` the scan's own reused capacity."""
         x.clear()
         for i in range(len(hs)):  # small-loop(hs: one node's input handles): handle lookup, no data
             x.append(self.tensor(hs[i]))
-        return self._op_run_tensors(code, hs, ints, fs, x)
+        return self._op_run_tensors[nested=True](code, hs, ints, fs, x)
 
     def _scan(mut self, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
         """OPS_SCAN: [xs (steps, ...), state_1 .. state_k, (lengths), param_1 .. param_m], ints and floats the
@@ -3384,7 +3390,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         the session)."""
         return self.opt_states[i]
 
-    def _program_op(mut self, node: Int, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+    def _program_op[nested: Bool = False](
+        mut self, node: Int, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]
+    ) raises -> Int:
         var start = 0
         if self.program_trace.enabled:
             start = Int(perf_counter_ns())
@@ -3394,7 +3402,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             start = Int(perf_counter_ns())
         var h: Int
         try:
-            h = self._op_run(code, hs, ints, fs)
+            h = self._op_run[nested](code, hs, ints, fs)
         except err:
             var context = String("program node ") + String(node) + " (" + program_op_name(code) + ") inputs=["
             for j in range(len(hs)):  # driver-loop: over failed node's input shapes
@@ -3958,7 +3966,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             args.clear()
             for j in range(op.forward.a_at[k], op.forward.a_at[k + 1]):  # small-loop(args: a node's input refs): handle lookup
                 args.append(values[op.forward.args[j]])
-            var h = self._program_op(k, op.forward.code[k], args, op.f_ints[k], op.f_fs[k])
+            var h = self._program_op[nested=True](k, op.forward.code[k], args, op.f_ints[k], op.f_fs[k])
             temps.append(h)
             values.append(h)
         # every forward output; one the forward returns unchanged from its
@@ -3972,7 +3980,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if rf < n_in:
                 args.clear()
                 args.append(h)
-                h = self._op_run(OPS_COPY, args, no_ints, no_fs)
+                h = self._op_run[nested=True](OPS_COPY, args, no_ints, no_fs)
                 temps.append(h)
             outs.append(h)
         if recording:
@@ -4101,7 +4109,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             args.clear()
             for j in range(op.backward.a_at[k], op.backward.a_at[k + 1]):  # small-loop(args: a node's input refs): handle lookup
                 args.append(values[op.backward.args[j]])
-            var h = self._program_op(k, op.backward.code[k], args, op.b_ints[k], op.b_fs[k])
+            var h = self._program_op[nested=True](k, op.backward.code[k], args, op.b_ints[k], op.b_fs[k])
             temps.append(h)
             values.append(h)
         for j in range(len(op.grad_inputs)):  # driver-loop: over the differentiable inputs

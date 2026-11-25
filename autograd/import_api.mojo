@@ -51,10 +51,10 @@ from autograd.rankn_ops import rn_copy_strided
 from autograd.rankn_fold import rankn_max_argmax
 from autograd.rankn_fold_ops import OP_RN_REDUCE_PART
 from autograd.rankn_api import RankNRules, rn_shape
-# nn-blocks-scatter begin: scatter_add and the segment reductions' tags (6810..6813), known to every backward
+# nn-blocks-scatter begin: scatter_add and the segment reductions' tags (198..201), known to every backward
 from autograd.nn_scatter import NnScatterRules
 # nn-blocks-scatter end
-# nn-blocks-qkv begin: Session.attention's masked softmax tags (6710, 6850), known to every backward
+# nn-blocks-qkv begin: Session.attention's masked softmax tags (202, 203), known to every backward
 from autograd.nn_qkv_rules import QkvRules
 # nn-blocks-qkv end
 from autograd.import_ops import (
@@ -72,6 +72,9 @@ comptime IMP_TAG_EXPAND = 194
 comptime IMP_TAG_ARGMAX = 195
 comptime IMP_TAG_PAD = 196
 comptime IMP_TAG_CUMSUM = 197
+# 198..201 autograd/nn_scatter.mojo (NnScatterRules), 202..203 autograd/nn_qkv_rules.mojo (QkvRules): lane
+# nn-blocks' backward rules, placed in this range so ImportRules reaches them only where an import tag never goes
+# (after the import tags' own compares, inside the range), and every other node pays nothing for them.
 
 
 # ---------------------------------------------------------------- shapes
@@ -669,16 +672,10 @@ struct ImportRules(BackwardRules):
 
     def supports(self, tag: Int) -> Bool:
         if tag >= IMP_TAG_FIRST and tag <= IMP_TAG_LAST:
+            # nn-blocks: the two owns tests come after every import tag's compare
             return (tag == IMP_TAG_UNARY or tag == IMP_TAG_BINARY or tag == IMP_TAG_EXPAND
-                    or tag == IMP_TAG_ARGMAX or tag == IMP_TAG_PAD or tag == IMP_TAG_CUMSUM)
-        # nn-blocks-scatter begin
-        if NnScatterRules.owns(tag):
-            return True
-        # nn-blocks-scatter end
-        # nn-blocks-qkv begin
-        if QkvRules.owns(tag):
-            return True
-        # nn-blocks-qkv end
+                    or tag == IMP_TAG_ARGMAX or tag == IMP_TAG_PAD or tag == IMP_TAG_CUMSUM
+                    or NnScatterRules.owns(tag) or QkvRules.owns(tag))
         return RankNRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
@@ -690,28 +687,15 @@ struct ImportRules(BackwardRules):
                 return not unary_has_gradient(saved.i1)
             if tag == IMP_TAG_BINARY:
                 return edge == 2 or not binary_has_gradient(saved.i1)
+            # nn-blocks (198..203): NnScatterRules and QkvRules write every destination word, so False here is
+            # their answer too; their zeroed_destination stays False to keep this true
             return tag == IMP_TAG_ARGMAX
-        # nn-blocks-scatter begin
-        if NnScatterRules.owns(tag):
-            return NnScatterRules().zeroed_destination(tag, saved, edge)
-        # nn-blocks-scatter end
-        # nn-blocks-qkv begin
-        if QkvRules.owns(tag):
-            return QkvRules().zeroed_destination(tag, saved, edge)
-        # nn-blocks-qkv end
         return RankNRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
         if tag >= IMP_TAG_FIRST and tag <= IMP_TAG_LAST:
+            # nn-blocks (198..203): NnScatterRules' and QkvRules' writes_total is False too
             return False
-        # nn-blocks-scatter begin
-        if NnScatterRules.owns(tag):
-            return NnScatterRules().writes_total(tag, saved, edge)
-        # nn-blocks-scatter end
-        # nn-blocks-qkv begin
-        if QkvRules.owns(tag):
-            return QkvRules().writes_total(tag, saved, edge)
-        # nn-blocks-qkv end
         return RankNRules().writes_total(tag, saved, edge)
 
     def apply[E: Exec](
@@ -750,14 +734,17 @@ struct ImportRules(BackwardRules):
             _scan_into(ex, upstream, gradients[0], saved.p10, saved.i1, saved.i2, saved.i3,
                        1 - saved.i4, saved.i5)
         elif tag >= IMP_TAG_FIRST and tag <= IMP_TAG_LAST:
+            # the range's former "unknown tag" path, which no import tag reaches: lane nn-blocks' tags
+            # nn-blocks-scatter begin
+            if NnScatterRules.owns(tag):
+                NnScatterRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+                return
+            # nn-blocks-scatter end
+            # nn-blocks-qkv begin
+            if QkvRules.owns(tag):
+                QkvRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+                return
+            # nn-blocks-qkv end
             raise Error("import rules: unknown tag")
-        # nn-blocks-scatter begin
-        elif NnScatterRules.owns(tag):
-            NnScatterRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
-        # nn-blocks-scatter end
-        # nn-blocks-qkv begin
-        elif QkvRules.owns(tag):
-            QkvRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
-        # nn-blocks-qkv end
         else:
             RankNRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)

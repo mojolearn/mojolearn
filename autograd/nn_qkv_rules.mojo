@@ -6,10 +6,10 @@ wrapper (CbwRules) and a Sequential's ModelRules. A recorded (create_graph) back
 refuses every custom-rule node (the batched products included): autograd/higher_ops.mojo higher_family.
 
   tag                    inputs                      rule
-  NN_TAG_SOFTMAX (6710)  [scores]                    the classic attention layer's tag and rule: d scores =
-                                                     scale * softmax VJP (one OP_NN_ATTN_SOFTMAX_VJP launch)
+  QKV_TAG_SOFTMAX (202)  [scores]                    the classic attention layer's rule (NN_TAG_SOFTMAX's): d
+                                                     scores = scale * softmax VJP (one OP_NN_ATTN_SOFTMAX_VJP launch)
   QKV_TAG_SOFTMAX_MASK   [scores, the float mask      the same launch for d scores; a second launch of the same
-  (6850)                 expanded to the scores'      body with scale 1 for d mask (the mask is added after the
+  (203)                  expanded to the scores'      body with scale 1 for d mask (the mask is added after the
                          shape]                       scale, so dL/dmask = dL/d(scaled scores + mask)); the
                                                      expand's own rule sums it back over the broadcast axes
 
@@ -19,12 +19,16 @@ times f0); a masked word and every word of a fully masked row hold y = 0, so the
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args
 from autograd.tape import BackwardRules
-from autograd.nn_attention import NN_TAG_SOFTMAX
 from autograd.nn_attention_ops import OP_NN_ATTN_SOFTMAX_VJP
 
-#: the masked softmax node of an attention whose float mask takes a gradient (a tag of lane nn-blocks-qkv's
-#: range 6840..6859; no opcode of the range uses it)
-comptime QKV_TAG_SOFTMAX_MASK = 6850
+#: The two tags sit in the import family's tag range (192..207, autograd/import_api.mojo IMP_TAG_*; 198..203
+#: belong to nn-blocks), whose only branch that no import tag reaches is where ImportRules dispatches them: a
+#: backward node of any other tag pays no compare for them (lane nn-blocks-zerocost, 2026-11-25; they were 6710
+#: and 6850, tested ahead of RankNRules on every node).
+#: the masked softmax node of an attention (no mask, or one that takes no gradient)
+comptime QKV_TAG_SOFTMAX = 202
+#: the masked softmax node of an attention whose float mask takes a gradient
+comptime QKV_TAG_SOFTMAX_MASK = 203
 
 
 def _vjp_into[E: Exec](mut ex: E, output: FP, upstream: FP, dst: FP, cols: Int, rows: Int, factor: Float32) raises:
@@ -44,13 +48,14 @@ struct QkvRules(BackwardRules, ImplicitlyCopyable, Movable):
 
     @staticmethod
     def owns(tag: Int) -> Bool:
-        return tag == NN_TAG_SOFTMAX or tag == QKV_TAG_SOFTMAX_MASK
+        return tag == QKV_TAG_SOFTMAX or tag == QKV_TAG_SOFTMAX_MASK
 
     def supports(self, tag: Int) -> Bool:
         return Self.owns(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         # every launch writes every word of its destination
+        # ImportRules answers False for 198..203 without asking (its import-range branch): keep False
         return False
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:

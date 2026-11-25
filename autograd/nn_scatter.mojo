@@ -2,7 +2,7 @@
 # SCATTER_ADD AND THE SEGMENT REDUCTIONS ON THE TAPE (lane nn-blocks-scatter, 2026-11-25).
 #
 # Session codes 113..116 (autograd/ops_api.mojo, the `# nn-blocks-scatter` group), kernel codes 6800..6819
-# (autograd/nn_scatter_ops.mojo), custom tags 6810..6813 (NnScatterRules below, reached through ImportRules, so every
+# (autograd/nn_scatter_ops.mojo), custom tags 198..201 (NnScatterRules below, reached through ImportRules, so every
 # backward that differentiates a session or a captured program, Program.fit and Sequential's ModelRules included,
 # knows them). 117 is reserved for this family and unused.
 #
@@ -68,13 +68,16 @@ comptime SEGMENT_SUM = 0
 comptime SEGMENT_MEAN = 1
 comptime SEGMENT_MAX = 2
 
-#: Custom tags of the four nodes (NnScatterRules).
-comptime NN_SCATTER_ADD_TAG = 6810
-comptime NN_SEGMENT_SUM_TAG = 6811
-comptime NN_SEGMENT_MEAN_TAG = 6812
-comptime NN_SEGMENT_MAX_TAG = 6813
-comptime NN_SCT_TAG_FIRST = 6810
-comptime NN_SCT_TAG_LAST = 6813
+#: Custom tags of the four nodes (NnScatterRules). They sit in the import family's tag range (192..207,
+#: autograd/import_api.mojo IMP_TAG_*; 198..203 belong to nn-blocks), whose only branch that no import tag reaches is
+#: where ImportRules dispatches them: a backward node of any other tag pays no compare for them (lane
+#: nn-blocks-zerocost, 2026-11-25; they were 6810..6813, tested ahead of RankNRules on every node).
+comptime NN_SCATTER_ADD_TAG = 198
+comptime NN_SEGMENT_SUM_TAG = 199
+comptime NN_SEGMENT_MEAN_TAG = 200
+comptime NN_SEGMENT_MAX_TAG = 201
+comptime NN_SCT_TAG_FIRST = 198
+comptime NN_SCT_TAG_LAST = 201
 
 # Every launch count and Args integer stays inside the device executor's Int32 range, and a flat key or a sort key
 # (the id bound itself marks padding) is an int32 word.
@@ -250,7 +253,7 @@ def nn_segment[E: Exec](
 
 @fieldwise_init
 struct NnScatterRules(BackwardRules, ImplicitlyCopyable, Movable):
-    """The VJPs of scatter_add and the segment reductions (tags 6810..6813). Each rule writes every word of every
+    """The VJPs of scatter_add and the segment reductions (tags 198..201). Each rule writes every word of every
     destination once (zeroed_destination False); the tape adds the destination into the input's gradient, so an
     input used along several paths gets every contribution."""
 
@@ -262,6 +265,7 @@ struct NnScatterRules(BackwardRules, ImplicitlyCopyable, Movable):
         return tag >= NN_SCT_TAG_FIRST and tag <= NN_SCT_TAG_LAST
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        # ImportRules answers False for 198..203 without asking (its import-range branch): keep False
         return False
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
