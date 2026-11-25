@@ -94,6 +94,12 @@ from autograd.optimizer_requests import (
     ops_optimizer_request, ops_optimizer_restore_request,
 )
 from autograd.model import SCHED_CONSTANT, SCHED_STEP, SCHED_EXPONENTIAL, epoch_lr
+# nn-blocks-pg begin: optimizer parameter groups (autograd/nn_pg.mojo)
+from autograd.nn_pg import (
+    ParamGroupTable, pg_check_membership, PG_SABOTAGE_CLIP_PER_GROUP, PG_SABOTAGE_CLIP_PER_GROUP_HOST,
+    PG_SABOTAGE_GROUP_LR, PG_SABOTAGE_GROUP_LR_HOST,
+)
+# nn-blocks-pg end
 # Rank-N tensors (lane ag-rankn-python, plan AUTOGRAD_RANKN (git history)): the
 # core's shape metadata and views, the fold / bmm / layout / conv lanes'
 # entries, and the shared glue (autograd/rankn_api.mojo).
@@ -322,12 +328,15 @@ def _seed(lo: Int, hi: Int) raises -> UInt64:
 struct _OpsOptimizer(ImplicitlyCopyable, Movable):
     """One optimizer of a session: its OP_OPT configuration (packed as
     Sequential.compile packs it), its learning-rate schedule
-    (autograd/model.mojo SCHED_*) and the schedule's epoch."""
+    (autograd/model.mojo SCHED_*) and the schedule's epoch. `pg`: -1 for an
+    ordinary optimizer, else the index of its parameter-group table
+    (`OpsSession.pg_tables`, autograd/nn_pg.mojo; lane nn-blocks-pg)."""
     var cfg: OptimizerConfig
     var sched: Int
     var sched_step: Int
     var gamma: Float32
     var epoch: Int
+    var pg: Int
 
 
 @fieldwise_init
@@ -403,6 +412,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     #: position reads, so a bounded loop shadows only the position word
     #: (autograd/program_control.mojo), never the cache itself.
     var append_state: Dict[Int, Int]
+    #: lane nn-blocks-pg: the parameter-group tables of the grouped
+    #: optimizers (autograd/nn_pg.mojo), indexed by `_OpsOptimizer.pg`
+    var pg_tables: List[ParamGroupTable]
 
     def __init__(out self, var ex: Self.E, record: Bool):
         self.ex = ex^
@@ -434,6 +446,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.buffer_kind = Dict[Int, Int]()
         self.steps = BlockStepScratch()
         self.append_state = Dict[Int, Int]()
+        self.pg_tables = List[ParamGroupTable]()
 
     # ------------------------------------------------------------ handles
     def _slot(self, h: Int) raises -> Int:
@@ -1190,6 +1203,21 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         (autograd/optimizer_requests.mojo OpsOptimizerExtras): RMSprop
         (`request.momentum` is its momentum) and Adagrad, and the gradient
         clips applied inside `step`."""
+        var entry = self._optimizer_entry(request, extras)
+        self.opts.append(entry)
+        # Failed control-checkpoint restore pops opts before its caller retires
+        # partial parameter states. Keep that index addressable during cleanup,
+        # then reuse its table on the next creation instead of accumulating an
+        # orphan table for each failed restore. Index storage is bounded by the
+        # optimizer-count high-water mark; ordinary creation still adds one.
+        if len(self.opt_state_indices) < len(self.opts):
+            self.opt_state_indices.append(Dict[Int, Int]())
+        return len(self.opts)
+
+    def _optimizer_entry(self, request: OpsOptimizerRequest, extras: OpsOptimizerExtras) raises -> _OpsOptimizer:
+        """The validated configuration and schedule of one optimizer (lane
+        nn-blocks-pg: split from `optimizer_with` so a parameter group's
+        member and a loaded group's settings pass the same checks)."""
         var kind = request.kind
         # Lane fx-ops-session-blocks (2026-11-18): Lion, Adamax and NAdam are
         # OP_OPT kinds (sequence/ops.mojo op_opt) whose whole configuration
@@ -1267,15 +1295,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             cfg.clip_global = True
         cfg.clip_value = extras.clip_grad_value
         var sched_step = request.step_size if sched == SCHED_STEP else 1
-        self.opts.append(_OpsOptimizer(cfg, sched, sched_step, gamma, 0))
-        # Failed control-checkpoint restore pops opts before its caller retires
-        # partial parameter states. Keep that index addressable during cleanup,
-        # then reuse its table on the next creation instead of accumulating an
-        # orphan table for each failed restore. Index storage is bounded by the
-        # optimizer-count high-water mark; ordinary creation still adds one.
-        if len(self.opt_state_indices) < len(self.opts):
-            self.opt_state_indices.append(Dict[Int, Int]())
-        return len(self.opts)
+        return _OpsOptimizer(cfg, sched, sched_step, gamma, 0, -1)
 
     def _opt_index(self, o: Int) raises -> Int:
         if o < 1 or o > len(self.opts):
@@ -1291,6 +1311,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         """Advance optimizer `o`'s schedule by one epoch."""
         var oi = self._opt_index(o)
         self.opts[oi].epoch += 1
+        if self.opts[oi].pg >= 0:
+            self._pg_scheduler_step(oi)  # nn-blocks-pg: every group's rate
 
     def _param_slot(self, h: Int, what: String) raises -> Int:
         var slot = self._slot(h)
@@ -1368,6 +1390,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             raise Error("ops: step needs a recording session (Session(record=True))")
         if len(hs) < 1:
             raise Error("ops: step takes at least one parameter")
+        if self.opts[oi].pg >= 0:
+            self._pg_step(oi, hs)  # nn-blocks-pg: a grouped optimizer
+            return
         var slots = List[Int](capacity=len(hs))
         var grads = List[FP](capacity=len(hs))
         var seen = Dict[Int, Int]()
@@ -1444,6 +1469,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         until reset, and 0 for one it does not use). A parameter never
         stepped reads step 0 and zero buffers."""
         var oi = self._opt_index(o)
+        if self.opts[oi].pg >= 0:
+            # nn-blocks-pg: the parameter's group member keeps its state
+            oi = self._pg_member(oi, h, "optimizer_state")
         var slot = self._param_slot(h, "optimizer_state")
         var si = self._state_of(oi, h, self.rows[slot] * self.cols[slot])
         var r = self.opt_states[si]
@@ -1471,6 +1499,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if state.step < 0:
             raise Error("ops: the optimizer state's step count must be >= 0")
         var oi = self._opt_index(o)
+        if self.opts[oi].pg >= 0:
+            # nn-blocks-pg: the parameter's group member keeps its state
+            oi = self._pg_member(oi, h, "load_optimizer_state")
         var slot = self._param_slot(h, "load_optimizer_state")
         var n = self.rows[slot] * self.cols[slot]
         var si = self._state_of(oi, h, n)
@@ -2907,8 +2938,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         return self.tape._nodes[self.tensor(h)._index].grad_ready
 
     def optimizer_settings(self, o: Int) raises -> _OpsOptimizer:
-        """A copy of optimizer o's configuration and schedule."""
-        return self.opts[self._opt_index(o)]
+        """A copy of optimizer o's configuration and schedule (one group:
+        a partitioned or distributed program trains one configuration)."""
+        return self.opts[self._opt_index_single(o, "a partitioned or distributed program")]
 
     def optimizer_state_index(self, o: Int, h: Int) raises -> Int:
         """The index of (optimizer o, parameter handle h)'s retained state, or
@@ -3101,6 +3133,269 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 raise Error("ops: roc_auc takes one score column")
             return roc_auc(self.ex, yt, pv, rows)
         raise Error("ops: unknown metric code " + String(kind))
+
+    # nn-blocks-pg begin: optimizer parameter groups (autograd/nn_pg.mojo)
+    def _opt_index_single(self, o: Int, what: String) raises -> Int:
+        """`_opt_index` for a surface that trains ONE configuration: an
+        optimizer with parameter groups is refused by name."""
+        var oi = self._opt_index(o)
+        if self.opts[oi].pg >= 0:
+            raise Error("ValueError: ops: " + what + " takes an optimizer without parameter groups; optimizer "
+                        + String(o) + " has parameter groups (update its parameters with Session.step)")
+        return oi
+
+    def param_group_optimizer(
+        mut self, request: OpsOptimizerRequest, extras: OpsOptimizerExtras,
+        group_requests: List[OpsOptimizerRequest], group_extras: List[OpsOptimizerExtras], groups: List[List[Int]],
+    ) raises -> Int:
+        """A new optimizer with parameter groups; returns its id (>= 1).
+
+        `request` / `extras` are the optimizer-wide settings (its kind, its
+        schedule, the gradient clips); group g's settings are
+        `group_requests[g]` / `group_extras[g]` (the door fills them from the
+        optimizer-wide ones and the group's own keys) and its parameters are
+        `groups[g]`. Every setting and every membership is checked before any
+        optimizer is added: a refusal leaves the session unchanged. Each group
+        becomes a member optimizer of its own (an id after the returned one);
+        the table is resolved here, once (autograd/nn_pg.mojo)."""
+        var n = len(groups)
+        if len(group_requests) != n or len(group_extras) != n:
+            raise Error("ops: param_group_optimizer takes one setting per parameter group")
+        var table = pg_check_membership(groups)
+        for g in range(n):  # driver-loop: over parameter groups (construction, once)
+            for i in range(len(groups[g])):  # driver-loop: over one group's parameters (construction, once)
+                _ = self._param_slot(groups[g][i], "param_group_optimizer")
+            var r = group_requests[g]
+            var x = group_extras[g]
+            if (r.kind != request.kind or r.schedule != request.schedule or r.step_size != request.step_size
+                    or r.gamma != request.gamma or x.clip_grad_norm != extras.clip_grad_norm
+                    or x.clip_grad_value != extras.clip_grad_value):
+                raise Error("ops: param_groups[" + String(g) + "] differs from the optimizer in an optimizer-wide "
+                            + "setting (kind, schedule or clip)")
+        var head = self._optimizer_entry(request, extras)
+        var entries = List[_OpsOptimizer](capacity=n)
+        for g in range(n):  # driver-loop: over parameter groups (validation before any change)
+            var entry = self._optimizer_entry(group_requests[g], group_extras[g])
+            entries.append(entry)
+        var first = len(self.opts)
+        head.pg = len(self.pg_tables)
+        self.opts.append(head)
+        for g in range(n):  # driver-loop: over parameter groups (one member optimizer each)
+            table.members.append(len(self.opts))
+            self.opts.append(entries[g])
+        while len(self.opt_state_indices) < len(self.opts):  # driver-loop: over new optimizers' index tables
+            self.opt_state_indices.append(Dict[Int, Int]())
+        self.pg_tables.append(table^)
+        return first + 1
+
+    def _pg_index(self, o: Int) raises -> Int:
+        """The table index of grouped optimizer o."""
+        var oi = self._opt_index(o)
+        var g = self.opts[oi].pg
+        if g < 0:
+            raise Error("ValueError: ops: optimizer " + String(o) + " has no parameter groups")
+        return g
+
+    def _pg_group(self, oi: Int, h: Int, what: String) raises -> Int:
+        """The group index of parameter h in grouped optimizer oi."""
+        ref table = self.pg_tables[self.opts[oi].pg]
+        if h not in table.group_of:
+            raise Error("ValueError: ops: " + what + ": the parameter is in no parameter group of optimizer "
+                        + String(oi + 1))
+        return table.group_of[h]
+
+    def _pg_member(self, oi: Int, h: Int, what: String) raises -> Int:
+        """The member optimizer index (opts) of parameter h's group."""
+        var gi = self._pg_group(oi, h, what)
+        return self.pg_tables[self.opts[oi].pg].members[gi]
+
+    def _pg_scheduler_step(mut self, oi: Int):
+        """Every group member at the grouped optimizer's epoch: one schedule
+        scales every group's rate (torch's schedulers scale every group)."""
+        var g = self.opts[oi].pg
+        var epoch = self.opts[oi].epoch
+        for k in range(len(self.pg_tables[g].members)):  # driver-loop: over parameter groups
+            var m = self.pg_tables[g].members[k]
+            self.opts[m].epoch = epoch
+
+    def _pg_rates(self, oi: Int) -> List[Float32]:
+        """Each group's learning rate at the schedule's current epoch, once
+        per step (a host scalar of each group, never data)."""
+        var g = self.opts[oi].pg
+        var ngroups = len(self.pg_tables[g].members)
+        var rates = List[Float32](capacity=ngroups)
+        for k in range(ngroups):  # driver-loop: over parameter groups (one rate each)
+            var op = self.opts[self.pg_tables[g].members[k]]
+            rates.append(epoch_lr(op.cfg.lr, op.sched, op.sched_step, op.gamma, op.epoch))
+        comptime if (PG_SABOTAGE_GROUP_LR and Self.E.IS_DEVICE) or (PG_SABOTAGE_GROUP_LR_HOST and not Self.E.IS_DEVICE):
+            for k in range(ngroups):  # driver-loop: over parameter groups
+                rates[k] = rates[0]  # SABOTAGE: every group steps at group 0's rate
+        return rates^
+
+    def _pg_step(mut self, oi: Int, hs: List[Int]) raises:
+        """`step` of a grouped optimizer: each listed parameter updated by its
+        group's member (its settings, its rate, its own state), the
+        member's ordinary launches (autograd/nn_pg.mojo). With
+        clip_grad_norm, ONE norm over every listed gradient of every group,
+        in the order `hs` lists them, and ONE coefficient for all.
+        Every parameter is checked before any is updated."""
+        var rates = self._pg_rates(oi)
+        var slots = List[Int](capacity=len(hs))
+        var grads = List[FP](capacity=len(hs))
+        var groups_of = List[Int](capacity=len(hs))
+        var members_of = List[Int](capacity=len(hs))
+        var seen = Dict[Int, Int]()
+        var g = self.opts[oi].pg
+        for i in range(len(hs)):  # driver-loop: over the step's parameters
+            var slot = self._param_slot(hs[i], "step")
+            if slot in seen:
+                raise Error("ops: step lists a parameter twice")
+            seen[slot] = i
+            var gi = self._pg_group(oi, hs[i], "step")
+            slots.append(slot)
+            groups_of.append(gi)
+            members_of.append(self.pg_tables[g].members[gi])
+            grads.append(self.tape.gradient(self.tensors[slot]))
+        var head_cfg = self.opts[oi].cfg
+        if optimizer_clips(head_cfg):
+            # The clip across the step's tensors of EVERY group: the fold of
+            # autograd/optim.mojo `clip_norm_accumulate` (the norm in the first
+            # tensor's cell), then each tensor's update reads that one
+            # coefficient (`step_lr_clipped`, one launch a tensor).
+            var sis = List[Int](capacity=len(slots))
+            for i in range(len(slots)):  # driver-loop: over the step's parameters
+                sis.append(self._state_of(members_of[i], hs[i], self.rows[slots[i]] * self.cols[slots[i]]))
+            var cells = List[FP](capacity=len(slots))
+            var cell = self.opt_states[sis[0]].cell
+            for i in range(len(slots)):  # driver-loop: over the step's parameters
+                comptime if (PG_SABOTAGE_CLIP_PER_GROUP and Self.E.IS_DEVICE) or (
+                        PG_SABOTAGE_CLIP_PER_GROUP_HOST and not Self.E.IS_DEVICE):
+                    if i > 0 and groups_of[i] != groups_of[i - 1]:
+                        cell = self.opt_states[sis[i]].cell  # SABOTAGE: a norm of each group's own
+                cells.append(cell)
+            if head_cfg.clip_global:
+                for i in range(len(slots)):  # driver-loop: over the step's parameters (the norm's fold order)
+                    var first = i == 0
+                    var last = i == len(slots) - 1
+                    comptime if (PG_SABOTAGE_CLIP_PER_GROUP and Self.E.IS_DEVICE) or (
+                            PG_SABOTAGE_CLIP_PER_GROUP_HOST and not Self.E.IS_DEVICE):
+                        first = i == 0 or groups_of[i] != groups_of[i - 1]
+                        last = i == len(slots) - 1 or groups_of[i + 1] != groups_of[i]
+                    var sv = self._state_view(sis[i])
+                    clip_norm_accumulate(self.ex, head_cfg, sv, grads[i], self.rows[slots[i]] * self.cols[slots[i]],
+                                         cells[i], first, last)
+            for i in range(len(slots)):  # driver-loop: over the step's parameters
+                var cslot = slots[i]
+                var cfg = self.opts[members_of[i]].cfg
+                var ct = self.opt_states[sis[i]].t + 1
+                var cst = self._state_view(sis[i])
+                step_lr_clipped(self.ex, cfg, cst, FP(unsafe_from_address=self.owned[cslot]), grads[i],
+                                self.rows[cslot] * self.cols[cslot], ct, rates[groups_of[i]], cells[i])
+                self.steps_forget(self.owned[cslot])  # the weights moved: a step op re-checks them
+                self.opt_states[sis[i]].t = ct
+                self.opt_states[sis[i]].pw1 = cst.pw1
+                self.opt_states[sis[i]].pw2 = cst.pw2
+                self.opt_states[sis[i]].mu_prod = cst.mu_prod
+            return
+        for i in range(len(slots)):  # driver-loop: over the step's parameters
+            var slot = slots[i]
+            var n = self.rows[slot] * self.cols[slot]
+            var si = self._state_of(members_of[i], hs[i], n)
+            var t = self.opt_states[si].t + 1
+            var st = self._state_view(si)
+            var cfg = self.opts[members_of[i]].cfg
+            step_lr(self.ex, cfg, st, FP(unsafe_from_address=self.owned[slot]), grads[i], n, t, rates[groups_of[i]])
+            self.steps_forget(self.owned[slot])  # the weights moved: a step op re-checks them
+            self.opt_states[si].t = t
+            self.opt_states[si].pw1 = st.pw1
+            self.opt_states[si].pw2 = st.pw2
+            self.opt_states[si].mu_prod = st.mu_prod
+
+    def pg_groups(self, o: Int) raises -> Int:
+        """The number of parameter groups of grouped optimizer o."""
+        return len(self.pg_tables[self._pg_index(o)].members)
+
+    def pg_group_params(self, o: Int, gi: Int) raises -> List[Int]:
+        """Group gi's parameter handles, in the order the group listed them."""
+        var g = self._pg_index(o)
+        if gi < 0 or gi >= len(self.pg_tables[g].members):
+            raise Error("ValueError: ops: optimizer " + String(o) + " has no parameter group " + String(gi))
+        var out = List[Int]()
+        for k in range(self.pg_tables[g].starts[gi], self.pg_tables[g].starts[gi + 1]):  # driver-loop: over one group's parameters
+            out.append(self.pg_tables[g].params[k])
+        return out^
+
+    def pg_group_config(self, o: Int, gi: Int) raises -> OptimizerConfig:
+        """Group gi's configuration (its base learning rate and settings)."""
+        var g = self._pg_index(o)
+        if gi < 0 or gi >= len(self.pg_tables[g].members):
+            raise Error("ValueError: ops: optimizer " + String(o) + " has no parameter group " + String(gi))
+        return self.opts[self.pg_tables[g].members[gi]].cfg
+
+    def pg_learning_rates(self, o: Int) raises -> List[Float32]:
+        """Every group's learning rate at the schedule's current epoch."""
+        _ = self._pg_index(o)
+        return self._pg_rates(o - 1)
+
+    def pg_epoch(self, o: Int) raises -> Int:
+        """The schedule's epoch of grouped optimizer o (every group's)."""
+        _ = self._pg_index(o)
+        return self.opts[o - 1].epoch
+
+    def pg_set_epoch(mut self, o: Int, epoch: Int) raises:
+        """Set the schedule's epoch of grouped optimizer o and every group."""
+        _ = self._pg_index(o)
+        if epoch < 0:
+            raise Error("ValueError: ops: the schedule's epoch must be >= 0")
+        self.opts[o - 1].epoch = epoch
+        self._pg_scheduler_step(o - 1)
+
+    def pg_group_request(self, o: Int, gi: Int) raises -> Tuple[OpsOptimizerRequest, OpsOptimizerExtras]:
+        """Group gi's settings as the request that builds them (the base a
+        loaded group's keys are applied over)."""
+        var g = self._pg_index(o)
+        if gi < 0 or gi >= len(self.pg_tables[g].members):
+            raise Error("ValueError: ops: optimizer " + String(o) + " has no parameter group " + String(gi))
+        var m = self.opts[self.pg_tables[g].members[gi]]
+        var c = m.cfg
+        var request = OpsOptimizerRequest(c.kind, c.nesterov, m.sched, m.sched_step, c.lr, c.momentum, c.beta1,
+                                          c.beta2, c.eps, c.weight_decay, m.gamma, c.dampening)
+        var extras = OpsOptimizerExtras(c.alpha, c.centered, c.lr_decay, c.init_acc,
+                                        c.clip if c.clip_global else Float32(0), c.clip_value)
+        return (request, extras)
+
+    def pg_load_group(
+        mut self, o: Int, gi: Int, request: OpsOptimizerRequest, extras: OpsOptimizerExtras, commit: Bool,
+    ) raises:
+        """Replace group gi's settings (a loaded state dict's group): the
+        same checks as construction; the kind, the schedule, the clips and the
+        state buffers the group keeps (`optimizer_slots`) must not change, so
+        its retained state stays valid. `commit` False checks only (the
+        caller checks every group before it changes any)."""
+        var g = self._pg_index(o)
+        if gi < 0 or gi >= len(self.pg_tables[g].members):
+            raise Error("ValueError: ops: optimizer " + String(o) + " has no parameter group " + String(gi))
+        var m = self.pg_tables[g].members[gi]
+        var entry = self._optimizer_entry(request, extras)
+        var now = self.opts[m]
+        var head = self.opts[o - 1]
+        if (entry.cfg.kind != now.cfg.kind or entry.sched != now.sched or entry.sched_step != now.sched_step
+                or entry.gamma != now.gamma or entry.cfg.clip != head.cfg.clip
+                or entry.cfg.clip_global != head.cfg.clip_global or entry.cfg.clip_value != head.cfg.clip_value):
+            raise Error("ValueError: ops: param_groups[" + String(gi) + "] of the loaded state changes an "
+                        + "optimizer-wide setting (kind, schedule or clip)")
+        var a = optimizer_slots(entry.cfg)
+        var b = optimizer_slots(now.cfg)
+        if a[0] != b[0] or a[1] != b[1] or a[2] != b[2]:
+            raise Error("ValueError: ops: param_groups[" + String(gi) + "] of the loaded state changes which "
+                        + "state buffers the group keeps (momentum or centered); build the optimizer with "
+                        + "those settings")
+        if entry.cfg.init_acc != now.cfg.init_acc and len(self.opt_state_indices[m]) > 0:
+            raise Error("ValueError: ops: param_groups[" + String(gi) + "] of the loaded state changes "
+                        + "initial_accumulator_value after its state was made")
+        if commit:
+            self.opts[m].cfg = entry.cfg
+    # nn-blocks-pg end
 
 
 def _keeps_shape(code: Int) -> Bool:

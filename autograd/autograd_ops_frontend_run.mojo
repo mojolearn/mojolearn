@@ -169,6 +169,15 @@ comptime _SOP_RNN = 148
 # nn-blocks-qkv begin: attention over explicit q, k, v (122); its own name code, clear of the shared 1xx run
 comptime _SOP_ATTENTION_QKV = 1122
 # nn-blocks-qkv end
+# nn-blocks-pg begin: optimizer parameter groups (providers/python/nn_pg_pyapi_door.mojo); a range of its own,
+# clear of the shared sequence above
+comptime _SOP_PG_OPTIMIZER = 1110
+comptime _SOP_PG_LEARNING_RATES = 1111
+comptime _SOP_PG_STATE_DICT = 1112
+comptime _SOP_PG_LOAD_STATE_DICT = 1113
+comptime _SOP_PG_FIRST = _SOP_PG_OPTIMIZER
+comptime _SOP_PG_LAST = _SOP_PG_LOAD_STATE_DICT
+# nn-blocks-pg end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -327,6 +336,12 @@ struct _SessionOpCodes(Defaultable, Movable):
         # nn-blocks-qkv begin
         self.codes["attention"] = _SOP_ATTENTION_QKV
         # nn-blocks-qkv end
+        # nn-blocks-pg begin
+        self.codes["param_group_optimizer"] = _SOP_PG_OPTIMIZER
+        self.codes["learning_rates"] = _SOP_PG_LEARNING_RATES
+        self.codes["optimizer_state_dict"] = _SOP_PG_STATE_DICT
+        self.codes["load_optimizer_state_dict"] = _SOP_PG_LOAD_STATE_DICT
+        # nn-blocks-pg end
 
 
 # One table per process (identical contents in every extension that links this file).

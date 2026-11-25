@@ -267,6 +267,21 @@ the claim is the narrower one, that the answer is a pure function of the
 parameter registry and the gradients, and the registry is part of the run's
 identity.
 
+**Parameter groups (lane nn-blocks-pg, 2026-11-25).** Groups with their own
+learning rate, weight decay, betas or momentum do not need two registries or
+two clips: ONE registry holds every group's tensors and ONE `coef_c` is taken
+over every gradient of every group, in the registry's order, then each group's
+update reads it with its own scalars. That is torch's
+`clip_grad_norm_(all parameters)` followed by a step over several
+`param_groups`, and it is what `ops.Session.param_group_optimizer` runs
+(autograd/nn_pg.mojo: the cross-tensor clip fold of autograd/optim.mojo over
+every listed tensor of every group, one coefficient, then each group's own
+update launch). The narrower claim above still holds, with "registry" meaning
+the one registry of all groups. The public `SGD` / `Adam` / `AdamW` of this
+contract still take one group (`param_groups=` is refused by name there until
+their step takes the same single registry over several groups; nothing about
+two clips is the reason any more).
+
 ---
 
 ## 4. `sqrt`, `rsqrt`, and the division

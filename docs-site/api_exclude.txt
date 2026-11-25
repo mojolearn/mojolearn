@@ -228,3 +228,9 @@ Sequential.adaptive_avg_pool3d	nn-conv3d 3-D layers: not yet in a release verifi
 # nn-blocks-qkv begin
 Session.attention	nn-blocks attention over explicit q, k, v: not yet in a release verification
 # nn-blocks-qkv end
+# nn-blocks-pg begin
+mojolearn.ops.Session.param_group_optimizer	nn-blocks-pg optimizer parameter groups: not yet in a release verification
+mojolearn.ops.Session.learning_rates	nn-blocks-pg optimizer parameter groups: not yet in a release verification
+mojolearn.ops.Session.optimizer_state_dict	nn-blocks-pg optimizer parameter groups: not yet in a release verification
+mojolearn.ops.Session.load_optimizer_state_dict	nn-blocks-pg optimizer parameter groups: not yet in a release verification
+# nn-blocks-pg end

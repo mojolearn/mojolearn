@@ -1607,6 +1607,92 @@ class Session:
         """
         return _SESSION_CALL(self, "attention", (q, k, v, mask, causal, scale))
     # nn-blocks-qkv end
+    # nn-blocks-pg begin: optimizer parameter groups (autograd/nn_pg.mojo)
+    def param_group_optimizer(self, param_groups, kind="adam", lr=1e-3, *, momentum=0.0, nesterov=False,
+                              beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, schedule="constant",
+                              step_size=1, gamma=0.1, alpha=0.99, centered=False, lr_decay=0.0,
+                              initial_accumulator_value=0.0, clip_grad_norm=None, clip_grad_value=None):
+        """Create an optimizer with parameter groups for :meth:`step`; returns its integer handle.
+
+        As ``torch.optim`` with a list of parameter groups: each group is a
+        dict with ``'params'`` (the tensors of the group, made with
+        ``requires_grad=True``) and, optionally, its own options, which
+        override the optimizer-wide ones given as keywords. A typical use is
+        a new head at a higher learning rate than a pretrained backbone, or
+        biases without weight decay.
+
+        Parameters
+        ----------
+        param_groups : list of dict
+            One dict per group. Keys: ``'params'`` and, for each kind,
+            ``'lr'``, ``'weight_decay'`` and ``'sgd'``: ``'momentum'``,
+            ``'nesterov'``, ``'dampening'``; ``'adam'``, ``'adamw'``,
+            ``'adamax'``, ``'nadam'``: ``'betas'`` (or ``'beta1'`` and
+            ``'beta2'``), ``'eps'``; ``'lion'``: ``'betas'``; ``'rmsprop'``:
+            ``'alpha'``, ``'eps'``, ``'momentum'``, ``'centered'``;
+            ``'adagrad'``: ``'eps'``, ``'lr_decay'``,
+            ``'initial_accumulator_value'``. A parameter belongs to one group.
+        kind, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, alpha, centered, lr_decay, initial_accumulator_value
+            The defaults of every group, as in :meth:`optimizer`.
+        schedule, step_size, gamma
+            One learning-rate schedule for the optimizer; it scales every
+            group's rate. Advance it with :meth:`scheduler_step`.
+        clip_grad_norm : float or None, default None
+            Clip by the norm of ALL the gradients of every group that one
+            :meth:`step` updates (one norm, one coefficient for every group,
+            as ``torch.nn.utils.clip_grad_norm_`` over all parameters).
+        clip_grad_value : float or None, default None
+            Clamp every gradient to ``[-clip_grad_value, clip_grad_value]``.
+
+        Each group's update is the one :meth:`optimizer` with that group's
+        options gives, bit for bit. :meth:`optimizer_state` and
+        :meth:`load_optimizer_state` work per parameter as for any optimizer;
+        :meth:`optimizer_state_dict` saves every group at once.
+
+        Example
+        -------
+        >>> with ops.Session(record=True) as s:
+        ...     body = s.tensor(np.zeros((4, 8), dtype=np.float32), requires_grad=True)
+        ...     head = s.tensor(np.zeros((8, 1), dtype=np.float32), requires_grad=True)
+        ...     bias = s.tensor(np.zeros((1, 1), dtype=np.float32), requires_grad=True)
+        ...     opt = s.param_group_optimizer(
+        ...         [{"params": [body], "lr": 1e-4},
+        ...          {"params": [head], "lr": 1e-2},
+        ...          {"params": [bias], "lr": 1e-2, "weight_decay": 0.0}],
+        ...         "adamw", weight_decay=0.01, clip_grad_norm=1.0)
+        """
+        return _SESSION_CALL(self, "param_group_optimizer", (kind, lr, momentum, nesterov, beta1, beta2, eps,
+                                                             weight_decay, schedule, step_size, gamma, alpha,
+                                                             centered, lr_decay, initial_accumulator_value,
+                                                             clip_grad_norm, clip_grad_value, param_groups))
+
+    def learning_rates(self, optimizer):
+        """Every parameter group's current learning rate, as a list of floats
+        (an optimizer made by :meth:`param_group_optimizer`)."""
+        return _SESSION_CALL(self, "learning_rates", (optimizer,))
+
+    def optimizer_state_dict(self, optimizer):
+        """The whole state of an optimizer with parameter groups, as a dict.
+
+        ``torch.optim``'s layout: ``'state'`` maps each parameter's index
+        (its position across the groups, in group order) to the dict
+        :meth:`optimizer_state` returns for it, and ``'param_groups'`` lists
+        each group's options with ``'params'`` holding those indices;
+        ``'epoch'`` is the schedule's epoch. The state tensors are copies,
+        valid until :meth:`reset`: read them with :meth:`numpy` to save a
+        checkpoint.
+        """
+        return _SESSION_CALL(self, "optimizer_state_dict", (optimizer,))
+
+    def load_optimizer_state_dict(self, optimizer, state_dict):
+        """Restore what :meth:`optimizer_state_dict` returned, into an
+        optimizer built with the same groups (the same number of groups and
+        of parameters in each; state tensors as handles of this session).
+        Each group's options are taken from the dict, every parameter's
+        state is copied on the device, and the next :meth:`step` continues
+        exactly where the saved run stopped."""
+        return _SESSION_CALL(self, "load_optimizer_state_dict", (optimizer, state_dict))
+    # nn-blocks-pg end
 
 
 class Program:

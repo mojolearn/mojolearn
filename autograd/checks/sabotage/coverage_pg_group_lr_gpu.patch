@@ -1,0 +1,13 @@
+diff --git a/autograd/nn_pg.mojo b/autograd/nn_pg.mojo
+index af86220204..6729054cb6 100644
+--- a/autograd/nn_pg.mojo
++++ b/autograd/nn_pg.mojo
+@@ -52,7 +52,7 @@ from sequence.ops import (
+ # group is clipped by its own norm (two clips, not one). GROUP_LR: every group steps at group 0's rate.
+ comptime PG_SABOTAGE_CLIP_PER_GROUP = is_defined["MOJOLEARN_PG_SABOTAGE_CLIP_PER_GROUP"]()
+ comptime PG_SABOTAGE_CLIP_PER_GROUP_HOST = is_defined["MOJOLEARN_PG_SABOTAGE_CLIP_PER_GROUP_HOST"]()
+-comptime PG_SABOTAGE_GROUP_LR = is_defined["MOJOLEARN_PG_SABOTAGE_GROUP_LR"]()
++comptime PG_SABOTAGE_GROUP_LR = True  # SABOTAGE: every group at group 0's rate, device
+ comptime PG_SABOTAGE_GROUP_LR_HOST = is_defined["MOJOLEARN_PG_SABOTAGE_GROUP_LR_HOST"]()
+ 
+ 
