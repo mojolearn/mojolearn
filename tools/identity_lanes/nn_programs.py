@@ -97,7 +97,10 @@ def _(ml, X, yc, yr, Xh=None):
     first = (_ids(X, 2, 1) % 8).astype(np.int32)
     with ml.ops.Session() as s:
         ids = s.ids(first)
-        nxt = s.argmax(s.embedding(s.tensor(table), ids), axis=-1, int32=True)
+        # keepdims=True: `first` is (2, 1) ids and the embedding has one row per id, so the argmax must keep
+        # its axis for the state to keep its rank (the while_loop contract, python/mojolearn/tests/
+        # test_program_decode.py; without it decode refuses "must preserve each state tensor's rank").
+        nxt = s.argmax(s.embedding(s.tensor(table), ids), axis=-1, keepdims=True, int32=True)
         step = s.capture([ids], [nxt])
         out = step.decode(first, n=12)
         tokens = np.asarray(out["tokens"])
