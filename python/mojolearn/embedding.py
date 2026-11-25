@@ -196,9 +196,19 @@ class Embedding(_NumericModeMixin):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    def load(cls, path):
-        """Load a layer written by `save`. The dtype and shape are checked; nothing is cast."""
-        return _EMBEDDING_NATIVE("emblayer_load", cls, (path,), None, _EMBEDDING_CONTEXT)
+    def load(cls, path, *, device=None):
+        """Load a layer written by `save`. The dtype and shape are checked; nothing is cast.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded layer runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
+        """
+        return _EMBEDDING_NATIVE("emblayer_load", cls, (path, device), None, _EMBEDDING_CONTEXT)
 
 
 # The 0.8.55 writer's members, in its order (members are written sorted).
