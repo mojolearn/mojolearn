@@ -64,6 +64,11 @@ from autograd.rankn import ShapeN
 comptime OPS_CUSTOM_VJP = 126
 #: autograd/nn_scan.mojo OPS_SCAN (not imported: nn_scan imports this module)
 comptime _CBW_SCAN_CODE = 118
+#: autograd/nn_ckpt.mojo OPS_CHECKPOINT (lane activation-ckpt; not imported: nn_ckpt imports nn_scan, which imports
+#: this module)
+comptime _CBW_CKPT_CODE = 119
+#: autograd/nn_scan.mojo OPS_SCAN_CKPT (a scan with checkpoint_every)
+comptime _CBW_SCAN_CKPT_CODE = 120
 #: Session.dropout's code (autograd/ops_api.mojo OPS_DROPOUT). fable-review-neural (2026-11-25 review): a dropout
 #: inside a custom operation's program would keep its captured key at every call, because a training replay
 #: advances the key of the OUTER program's random nodes only (autograd/program_runtime.mojo, node.random): the
@@ -148,26 +153,40 @@ struct CbwState(Movable):
     var by_key: Dict[Int, Int]
     var records: List[CbwRecord]
     var last_out_shapes: List[ShapeN]
+    #: The recorded graph may hold a node whose rule needs a wrapper: a custom node, or (lane activation-ckpt) a
+    #: checkpointed segment. Set when one is recorded, cleared with the records. `holds_rules` reads this one
+    #: word (lane fable-finalize: it read the record count and then a second flag).
+    var live: Bool
+    #: lane activation-ckpt: the recorded graph may hold a checkpointed segment (autograd/nn_ckpt.mojo), whose
+    #: rule is CkptRules around CbwRules (autograd/ops_api.mojo); read only on the wrapped backward's entry
+    var ckpt_live: Bool
 
     def __init__(out self):
         self.ops = List[CbwOp]()
         self.by_key = Dict[Int, Int]()
         self.records = List[CbwRecord]()
         self.last_out_shapes = List[ShapeN]()
+        self.live = False
+        self.ckpt_live = False
 
     def clear_records(mut self):
         self.records.clear()
+        self.live = False
+        self.ckpt_live = False
 
     def clear(mut self):
         self.ops.clear()
         self.by_key.clear()
         self.records.clear()
         self.last_out_shapes.clear()
+        self.live = False
+        self.ckpt_live = False
 
     def holds_rules(self) -> Bool:
-        """The recorded graph may hold a custom node (a backward must take the
-        rule wrapper). A graph without one takes the wrapper identically."""
-        return len(self.records) != 0
+        """The recorded graph may hold a custom node or a checkpointed segment
+        (a backward must take the rule wrapper). A graph without one takes the
+        wrapper identically."""
+        return self.live
 
     def find(self, ints: List[Int]) raises -> Int:
         """The index of the bound op these node words name, or -1."""
@@ -237,6 +256,9 @@ def _check_program(p: OpsProgram, which: String) raises:
                         + String(k) + "); a custom operation's programs are built from other operations")
         if p.code[k] == _CBW_SCAN_CODE:
             raise Error("ValueError: custom_op: the " + which + " program holds a scan (node " + String(k)
+                        + "); a custom operation's programs are built from other operations")
+        if p.code[k] == _CBW_CKPT_CODE or p.code[k] == _CBW_SCAN_CKPT_CODE:
+            raise Error("ValueError: custom_op: the " + which + " program holds a checkpoint (node " + String(k)
                         + "); a custom operation's programs are built from other operations")
         if p.code[k] == _CBW_DROPOUT_CODE:
             raise Error("ValueError: custom_op: the " + which + " program holds a dropout (node " + String(k)

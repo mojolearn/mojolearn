@@ -208,8 +208,10 @@ def program_op_name(code: Int) -> String:
         return "segment_max"
     # nn-blocks-scatter end
     # nn-blocks-scan begin
-    if code == 118:
+    if code == 118 or code == 120:
         return "scan"
+    if code == 119:
+        return "checkpoint"
     # nn-blocks-scan end
     # nn-blocks-cbw begin
     if code == 126:

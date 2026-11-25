@@ -6,7 +6,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_item, py_setattr, py_setitem, py_type, py_contains
 from providers.python.autograd_python_errors_pyapi_pack import graph_int
 from sequence.exec_trait import Exec
-from bindings.autograd_keys_unpack import autograd_keys
+from bindings.autograd_keys_unpack import autograd_keys, AutogradKeys
 from bindings.py_keys import py_op_add, py_op_code
 from core.shared_slot import SharedSlot
 from sequence.ops import FP
@@ -44,6 +44,9 @@ from providers.python.autograd_control_checkpoint_pyapi_pack import control_save
 from providers.python.autograd_gradient_diagnostics_pyapi_pack import gradient_report_py
 # nn-blocks-scan begin: Session.scan (autograd/nn_scan_frontend.mojo)
 from autograd.nn_scan_frontend import session_scan
+# activation-ckpt: Session.checkpoint (autograd/nn_ckpt_frontend.mojo)
+from autograd.nn_ckpt_frontend import session_checkpoint
+from autograd.autograd_ops_frontend_run import _SOP_CHECKPOINT
 from autograd.autograd_ops_frontend_run import _SOP_SCAN, _SOP_LOAD_TRAINING
 from autograd.program_training_checkpoint import program_training_load
 from providers.python.batch_source_pyapi_door import batch_source_training_part, batch_source_reposition
@@ -512,6 +515,33 @@ def _cbw_program[E: Exec & Movable & Deinitable, KIND: Int](program: PythonObjec
 # nn-blocks-cbw end
 
 
+# activation-ckpt begin: UNPACK of a Program argument (Session.scan's cell, Session.checkpoint's segment): the
+# session that owns it (this one, or another of this image admitted against the registry) and its program id.
+def _program_owner[KIND: Int](
+    nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin], session: PythonObject, program: PythonObject, sid: Int,
+    what: String, which: String,
+) raises -> Tuple[Int, Int]:
+    # `nk`: the caller's held keys (fetched once per operation)
+    var fields = program_owner_fields(program)
+    var owner = py_item(fields, nk[].k__s)
+    var owner_sid = sid
+    if owner is not session:
+        var owner_fields = ops_session_fields(owner)
+        var owner_handle = py_item(owner_fields, nk[].k__id)
+        if _nil(owner_handle):
+            raise Error("ValueError: " + what + ": the " + which + "'s Session is closed")
+        var scope: List[Int] = [ops_session_registry_token(), KIND]
+        var admitted = neural_descriptor_resource_handle(py_item(owner_fields, nk[].k__lifetime), scope)
+        if admitted == 0 or admitted != _int(owner_handle, which + " session", 1):
+            raise Error("ValueError: " + what + ": the " + which + " was captured in a Session on another device;"
+                        + " capture it on this Session's device")
+        owner_sid = admitted
+    if _nil(py_item(fields, nk[].k__id)):
+        raise Error("ValueError: " + what + ": the " + which + " Program was freed")
+    return (owner_sid, _int(py_item(fields, nk[].k__id), which, 1))
+# activation-ckpt end
+
+
 def _program_initialize(mut out: PythonObject, session: PythonObject, info: PythonObject) raises:
     # Retained native initializer entry shared by ImportedProgram construction.
     program_initialize_owner(out, session, info)
@@ -899,27 +929,14 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         return block
     # nn-blocks-scan begin
     if op == _SOP_SCAN:
-        # UNPACK: args (cell, xs, init_state, params, reverse, lengths, counter). The cell is a Program (or a loaded
+        # UNPACK: args (cell, xs, init_state, params, reverse, lengths, counter, checkpoint_every). The cell is a
+        # Program (or a loaded
         # one) of this session or of another session of this image; its description is read natively
         # (autograd/nn_scan_frontend.mojo). init_state is one handle or a sequence of handles; params None or a
         # sequence of handles; lengths None or a handle.
-        var cell = program_owner_fields(args[0])
-        var cell_session = py_item(cell, nk[].k__s)
-        var cell_sid = Int(py=sid)
-        if cell_session is not session:
-            var cell_fields = ops_session_fields(cell_session)
-            var cell_handle = py_item(cell_fields, nk[].k__id)
-            if _nil(cell_handle):
-                raise Error("ValueError: scan: the cell's Session is closed")
-            var cell_scope: List[Int] = [ops_session_registry_token(), KIND]
-            var admitted = neural_descriptor_resource_handle(py_item(cell_fields, nk[].k__lifetime), cell_scope)
-            if admitted == 0 or admitted != _int(cell_handle, "cell session", 1):
-                raise Error("ValueError: scan: the cell was captured in a Session on another device;"
-                            + " capture it on this Session's device")
-            cell_sid = admitted
-        if _nil(py_item(cell, nk[].k__id)):
-            raise Error("ValueError: scan: the cell Program was freed")
-        var pid = _int(py_item(cell, nk[].k__id), "cell", 1)
+        var owner = _program_owner[KIND](nk, session, args[0], Int(py=sid), "scan", "cell")
+        var cell_sid = owner[0]
+        var pid = owner[1]
         var one_state = _is_int(args[2])
         var states = _ints(args[2], "init_state", 1)
         var given = not _nil(args[3])
@@ -929,8 +946,10 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         var lengths = 0 if _nil(args[5]) else _int(args[5], "lengths", 1)
         if not program_numeric_scalar(args[4]):
             raise Error("TypeError: reverse must be a bool")
+        # activation-ckpt: checkpoint_every None (every step kept) or k >= 1
+        var every = 0 if _nil(args[7]) else _int(args[7], "checkpoint_every", 1)
         var got = session_scan[E, KIND](Int(py=sid), cell_sid, pid, _int(args[1], "xs", 1), states, lengths,
-                                        params, given, Bool(py=args[4]), _int(args[6], "counter", 0))
+                                        params, given, Bool(py=args[4]), _int(args[6], "counter", 0), every)
         # PACK: (ys, final_state); final_state one handle when init_state was one handle, else a tuple
         var finals = List[Int](capacity=len(got) - 1)
         for k in range(1, len(got)):  # driver-loop: over the final state handles
@@ -943,6 +962,24 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             _ = py_call(pair.append, _tuple_ints(finals))
         return py_call(native_loaded_module("builtins").tuple, pair)
     # nn-blocks-scan end
+    # activation-ckpt begin
+    if op == _SOP_CHECKPOINT:
+        # UNPACK: args (segment, inputs, params, counter, recompute); the segment is a Program of this session or
+        # of another session of this image, read natively (autograd/nn_ckpt_frontend.mojo). PACK: one handle for
+        # a segment with one output, else a tuple of handles.
+        var owner = _program_owner[KIND](nk, session, args[0], Int(py=sid), "checkpoint", "segment")
+        var given = not _nil(args[2])
+        var params = List[Int]()
+        if given:
+            params = _ints(args[2], "params", 1)
+        if not program_numeric_scalar(args[4]):
+            raise Error("TypeError: recompute must be a bool")
+        var outs = session_checkpoint[E, KIND](Int(py=sid), owner[0], owner[1], _ints(args[1], "input", 1), params,
+                                               given, _int(args[3], "counter", 0), Bool(py=args[4]))
+        if len(outs) == 1:
+            return PythonObject(outs[0])
+        return _tuple_ints(outs)
+    # activation-ckpt end
     if op == _SOP_MAMBA_STEP or op == _SOP_ATTENTION_STEP:
         # UNPACK: args (x, block); the block is the exact dict a block maker
         # returned. One native step op (autograd/ops_block_frontend.mojo).

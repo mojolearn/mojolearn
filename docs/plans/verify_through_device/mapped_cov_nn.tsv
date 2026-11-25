@@ -363,3 +363,6 @@ mojolearn.ops.Session.selective_scan	mapped	ops-layer-ssm	tools/identity_lanes/s
 mojolearn.ops.Session.ssd_scan	mapped	ops-layer-ssm	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 mojolearn.ops.Session.trapezoid_scan	mapped	ops-layer-ssm	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 # session-ops-rest end
+# activation-ckpt begin
+mojolearn.ops.Session.checkpoint	mapped	ops-composed-cases	python/mojolearn/verify_reference/composed-checkpoint.json	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+# activation-ckpt end

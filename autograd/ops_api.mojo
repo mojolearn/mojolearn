@@ -209,11 +209,18 @@ from autograd.nn_scatter import (
 # nn-blocks-scatter end
 # nn-blocks-scan begin: the public scan over a captured cell, session code 118 (autograd/nn_scan.mojo)
 from autograd.nn_scan import (
-    OPS_SCAN, ScanCell, ScanCache, scan_decode, scan_call_key, scan_check_binding, SCAN_SABOTAGE_STATE_LAG, SCAN_SABOTAGE_STATE_LAG_HOST,
+    OPS_SCAN, OPS_SCAN_CKPT, ScanCell, ScanCache, scan_decode, scan_call_key, scan_check_binding, SCAN_SABOTAGE_STATE_LAG, SCAN_SABOTAGE_STATE_LAG_HOST,
     SCAN_SABOTAGE_INIT_GRAD, SCAN_SABOTAGE_INIT_GRAD_HOST, SCAN_SABOTAGE_DROP_KEY, SCAN_SABOTAGE_DROP_KEY_HOST,
     scan_dropout_seed,
 )
 # nn-blocks-scan end
+# activation-ckpt begin: activation checkpointing, session code 119 (autograd/nn_ckpt.mojo)
+from autograd.nn_ckpt import (
+    OPS_CHECKPOINT, NN_CKPT_TAG, CKPT_KIND_SEGMENT, CKPT_KIND_SCAN, CKPT_SABOTAGE_FRESH_MASK,
+    CKPT_SABOTAGE_FRESH_MASK_HOST, CKPT_SABOTAGE_SKIP_NODE, CKPT_SABOTAGE_SKIP_NODE_HOST, CkptSeg, CkptRecord,
+    CkptState, ckpt_decode, ckpt_call_key, ckpt_check_binding,
+)
+# activation-ckpt end
 # nn-blocks-composed begin: the composed tagger's sabotage switches only (autograd/nn_composed.mojo)
 from autograd.nn_composed import (
     COMPOSED_SABOTAGE_SCAN_KEY, COMPOSED_SABOTAGE_SCAN_KEY_HOST, COMPOSED_SABOTAGE_GROUP_STATE,
@@ -492,6 +499,16 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     #: custom operation kept one scratch tape's buffers until the session closed.
     var cbw_tape: Tape
     # nn-blocks-cbw end
+    # activation-ckpt begin (autograd/nn_ckpt.mojo)
+    #: the decoded checkpoint segments and the checkpointed nodes of the recorded graph
+    var ckpt: CkptState
+    #: the scratch tape every checkpoint's forward and recompute run on (reset per segment): its storage, one
+    #: segment's values and gradients at the most, is reused by every call and returned at close
+    var ckpt_tape: Tape
+    #: the boundary-state gradients of a checkpointed scan's backward (two rows, reserved per backward call on
+    #: this tape and reused), returned at close
+    var ckpt_gtape: Tape
+    # activation-ckpt end
     #: lane nn-blocks-pg: the parameter-group tables of the grouped
     #: optimizers (autograd/nn_pg.mojo), indexed by `_OpsOptimizer.pg`
     var pg_tables: List[ParamGroupTable]
@@ -535,6 +552,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.scans = ScanCache()  # nn-blocks-scan
         self.cbw_tape = Tape()
         self.cbw_tape.no_grad()
+        self.ckpt = CkptState()  # activation-ckpt
+        self.ckpt_tape = Tape()
+        self.ckpt_gtape = Tape()
+        self.ckpt_gtape.no_grad()
         self.pg_tables = List[ParamGroupTable]()
         self.layer_nodes = False  # session-ops
 
@@ -992,6 +1013,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         # the computed tensors the log names are gone; captured programs stay
         self.oplog.clear()
         self.cbw.clear_records()  # nn-blocks-cbw: the saved tensors were tape storage
+        self.ckpt.clear_records()  # activation-ckpt: the records name tape storage too
         self.layer_nodes = False  # session-ops: the layer nodes were on the tape
         for slot in range(len(self.live)):  # driver-loop: over session handles
             if not self.live[slot]:
@@ -1046,12 +1068,15 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             self.opt_state_indices[i].clear()
         self.prog_tape.release(self.ex)
         self.cbw_tape.release(self.ex)
+        self.ckpt_tape.release(self.ex)  # activation-ckpt
+        self.ckpt_gtape.release(self.ex)
         self.programs.clear()
         self.program_replays.clear()
         self.op_tensors = List[Tensor]()
         self.oplog.clear()
         self.cbw.clear()  # nn-blocks-cbw
         self.scans.clear()  # nn-blocks-scan
+        self.ckpt.clear()  # activation-ckpt
         self.ex.sync()
 
     # ------------------------------------------------------------ gradients
@@ -2141,6 +2166,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if code >= OPS_LAYER_FIRST and code <= OPS_LAYER_LAST:
                 return self._layer_op(code, hs, ints, fs, x)
             # session-ops end
+            # activation-ckpt: a checkpointed segment (autograd/nn_ckpt.mojo), after every other operation's test
+            # (no existing operation pays its compare); its nodes run through the nested instance, which has no
+            # checkpoint branch (ckpt_check_program refuses the nesting)
+            comptime if not nested:
+                if code == OPS_CHECKPOINT:
+                    return self._ckpt(hs, ints, fs)
+                if code == OPS_SCAN_CKPT:
+                    return self._scan_ckpt_op(hs, ints, fs)
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):
             # elementwise and row-wise ops keep x's full shape (a free view
@@ -3279,13 +3312,34 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         differentiates the whole loop (backward through time over the stored per-step values).
 
         The node's cell is decoded once per session (`_scan_cell`: one dictionary read by the fingerprint the node
-        words carry; a parse, check and per-node split only for a node not seen before) and lent to `_scan_run`."""
+        words carry; a parse, check and per-node split only for a node not seen before) and lent to `_scan_run`.
+        activation-ckpt: a scan with checkpoint_every (format 3) in a recording session runs `_scan_ckpt_run`
+        instead (one checkpointed node, autograd/nn_ckpt.mojo); in an inference session it runs the plain loop
+        (there is no backward to recompute for, and the words are the same)."""
         var ci = self._scan_cell(ints, fs)
         var sc = ScanCell()
         swap(sc, self.scans.cells[ci])
         var packed = 0
         try:
             packed = self._scan_run(sc, hs, ints)
+        finally:
+            swap(sc, self.scans.cells[ci])
+        return packed
+
+    def _scan_ckpt_op(mut self, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+        """OPS_SCAN_CKPT: a scan with checkpoint_every (format 3; autograd/nn_scan.mojo), the same handles and
+        words as OPS_SCAN. In a recording session one checkpointed node (`_scan_ckpt_run`); in an inference
+        session the plain loop (there is no backward to recompute for, and the words are the same). Its own
+        entry (lane fable-finalize), so `_scan` has no test for it."""
+        var ci = self._scan_cell(ints, fs)
+        var sc = ScanCell()
+        swap(sc, self.scans.cells[ci])
+        var packed = 0
+        try:
+            if sc.every > 0 and self.tape.is_recording():
+                packed = self._scan_ckpt_run(ci, sc, hs, ints)
+            else:
+                packed = self._scan_run(sc, hs, ints)
         finally:
             swap(sc, self.scans.cells[ci])
         return packed
@@ -3299,18 +3353,16 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var got = scan_decode(ints, fs)
         return self.scans.add(got^)
 
-    def _scan_run(mut self, mut sc: ScanCell, hs: List[Int], ints: List[Int]) raises -> Int:
-        """The body of `_scan` on a decoded cell `sc` (lent by `_scan`; its dropout nodes' seed words are
-        rewritten before each step that runs them)."""
-        var key = scan_call_key(ints, sc, len(hs))
-        ref cell = sc.cell
+    def _scan_bind(mut self, sc: ScanCell, hs: List[Int], mut state: List[Int], mut params: List[Int]) raises -> Int:
+        """The scan node's operands against its decoded cell, once per call: the state handles into `state` and
+        the bound parameters into `params`, their shapes and kinds checked (scan_check_binding); returns the
+        lengths handle, or 0."""
         var n_state = sc.n_state
-        var reverse = sc.reverse
-        var has_lengths = sc.has_lengths
         var xs = hs[0]
         var xs_slot = self._slot(xs)
         var xs_shape = self.shapes[xs_slot]
-        var state = List[Int](capacity=n_state)
+        state.clear()
+        params.clear()
         var state_shapes = List[ShapeN](capacity=n_state)
         var state_ids = List[Bool](capacity=n_state)
         for k in range(n_state):  # driver-loop: over state tensors (handles and metadata)
@@ -3321,14 +3373,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var at = 1 + n_state
         var lengths = 0
         var lengths_count = -1
-        if has_lengths:
+        if sc.has_lengths:
             lengths = hs[at]
             var lslot = self._slot(lengths)
             if self.int_words[lslot]:
                 raise Error("ValueError: scan: lengths must hold floating-point values")
             lengths_count = self.shapes[lslot].count()
             at += 1
-        var params = List[Int](capacity=sc.n_params)
         var param_shapes = List[ShapeN](capacity=sc.n_params)
         var param_ids = List[Bool](capacity=sc.n_params)
         for j in range(sc.n_params):  # driver-loop: over the cell's bound parameters (handles and metadata)
@@ -3336,15 +3387,71 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             params.append(hs[at + j])
             param_shapes.append(self.shapes[slot])
             param_ids.append(self.int_words[slot])
-        scan_check_binding(cell, xs_shape, self.int_words[xs_slot], state_shapes, state_ids, lengths_count,
+        scan_check_binding(sc.cell, xs_shape, self.int_words[xs_slot], state_shapes, state_ids, lengths_count,
                            param_shapes, param_ids)
-        # Resolved once per decoded cell (autograd/nn_scan.mojo scan_decode): the nodes' arguments and the
-        # dropout nodes (OPS_DROPOUT 21: ints [seed lo, seed hi, counter]), which draw a new mask every step from a
-        # seed derived from (captured seed, the call's key, the node, the time index) (autograd/nn_scan.mojo note).
-        # Resolved once per call: the step views' words, the mask.
+        return lengths
+
+    def _scan_mask(
+        mut self, lengths: Int, steps: Int, batch: Int, mut x: List[Tensor], mut temps: List[Int],
+    ) raises -> Tuple[Int, Int]:
+        """The lengths mask on this tape, built once per call (full, cumsum, compare), and the zero the outputs
+        past a length take: returns (mask, zero), both temporaries."""
+        var no_ints = List[Int]()
+        var no_fs = List[Float32]()
+        var one_h: List[Int] = [lengths]
+        var ones_i: List[Int] = [steps, 1]
+        var one_f: List[Float32] = [Float32(1.0)]
+        var ones = self._scan_call(OPS_FULL, no_ints, ones_i, one_f, x)
+        temps.append(ones)
+        one_h[0] = ones
+        var cs_i: List[Int] = [0, 1, 0]
+        var times = self._scan_call(OPS_CUMSUM, one_h, cs_i, no_fs, x)
+        temps.append(times)
+        one_h[0] = lengths
+        var lr_i: List[Int] = [0, 1, batch]
+        var lrow = self._scan_call(OPS_RESHAPE_N, one_h, lr_i, no_fs, x)
+        temps.append(lrow)
+        var cmp_h: List[Int] = [lrow, times]
+        var cmp_i: List[Int] = [1]
+        var mask = self._scan_call(OPS_COMPARE, cmp_h, cmp_i, no_fs, x)
+        temps.append(mask)
+        var z_i: List[Int] = [1, 1]
+        var z_f: List[Float32] = [Float32(0.0)]
+        var zero = self._scan_call(OPS_FULL, no_ints, z_i, z_f, x)
+        temps.append(zero)
+        return (mask, zero)
+
+    def _scan_rank_views(self, batch: Int) -> List[List[Int]]:
+        """The mask's view words per rank 0..8 ((batch, 1, .., 1) for rank >= 2), once per call."""
+        var rank_view = List[List[Int]]()
+        for r in range(9):  # small-loop(ranks 0..8): the mask's view words per rank, once per call
+            var rv = List[Int]()
+            if r >= 2:
+                rv.append(0)
+                rv.append(batch)
+                for _q in range(r - 1):  # small-loop(rank - 1 unit axes)
+                    rv.append(1)
+            rank_view.append(rv^)
+        return rank_view^
+
+    def _scan_steps[recompute: Bool](
+        mut self, mut sc: ScanCell, key: Int, xs: Int, params: List[Int], mut state: List[Int], begin: Int,
+        end: Int, mask: Int, zero: Int, rank_view: List[List[Int]], mut outs_by_time: List[Int],
+        mut temps: List[Int], mut step_at: Int,
+    ) raises:
+        """Processing steps begin .. end - 1 of a scan (step i is time steps - 1 - i when reversed): each step's
+        launch sequence (two views of xs, the cell's nodes, with lengths the mask's views and the where nodes),
+        `state` replaced by each step's next state and each step's output handle put in outs_by_time[t]; every
+        handle made is appended to `temps`. The plain scan runs it once over every step. A checkpointed scan
+        (activation-ckpt, autograd/nn_ckpt.mojo) runs it once per segment in its forward and again in its
+        backward (`recompute`: the only instance the checkpoint's sabotage arms reach), so the recomputed steps
+        are the same launches with the same dropout seeds."""
+        ref cell = sc.cell
+        var n_state = sc.n_state
+        var reverse = sc.reverse
+        var has_lengths = sc.has_lengths
         var n_nodes = cell.n_nodes()
-        var steps = xs_shape.d[0]
-        var batch = xs_shape.d[1]
+        var steps = self.shapes[self._slot(xs)].d[0]
         var x_dims = cell.in_shapes[n_state].dims()
         var view_x: List[Int] = [0]
         for d in range(len(x_dims)):  # small-loop(ndim: the step input's rank, at most 8)
@@ -3356,43 +3463,154 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var one_h: List[Int] = [xs]
         var xs_h: List[Int] = [xs]
         var where_h: List[Int] = [0, 0, 0]
+        var mask_by_rank = List[Int](length=9, fill=0)
+        var lag1 = state.copy()
+        var lag2 = state.copy()
+        var vals = List[Int]()
+        var args = List[Int]()
+        var nxt = List[Int](capacity=n_state + 1)
+        var step_key = key
+        comptime if recompute and ((CKPT_SABOTAGE_FRESH_MASK and Self.E.IS_DEVICE) or (
+                CKPT_SABOTAGE_FRESH_MASK_HOST and not Self.E.IS_DEVICE)):
+            step_key = key + 1  # SABOTAGE: the recompute draws its dropout masks from the next key
+        for i in range(begin, end):  # driver-loop: over steps
+            var t = steps - 1 - i if reverse else i
+            step_at = t
+            piece[1] = t
+            var x3 = self._scan_call(OPS_NARROW, xs_h, piece, no_fs, x)
+            temps.append(x3)
+            one_h[0] = x3
+            var x_t = self._scan_call(OPS_RESHAPE_N, one_h, view_x, no_fs, x)
+            temps.append(x_t)
+            vals.clear()
+            comptime if (SCAN_SABOTAGE_STATE_LAG and Self.E.IS_DEVICE) or (
+                    SCAN_SABOTAGE_STATE_LAG_HOST and not Self.E.IS_DEVICE):
+                for k in range(n_state):  # driver-loop: over state tensors  # SABOTAGE: step t fed state t - 2
+                    vals.append(lag2[k] if i - begin >= 2 else state[k])
+            else:
+                for k in range(n_state):  # driver-loop: over state tensors (this step's handles)
+                    vals.append(state[k])
+            vals.append(x_t)
+            for q in range(len(sc.drop_nodes)):  # driver-loop: over the cell's dropout nodes (this step's seeds)
+                var dk = sc.drop_nodes[q]
+                var seed = scan_dropout_seed(sc.drop_seed[q], step_key, dk, t)
+                # nn-blocks-composed begin
+                comptime if (COMPOSED_SABOTAGE_SCAN_KEY and Self.E.IS_DEVICE) or (
+                        COMPOSED_SABOTAGE_SCAN_KEY_HOST and not Self.E.IS_DEVICE):
+                    seed = scan_dropout_seed(sc.drop_seed[q], 0, dk, t)  # SABOTAGE: the key stays at the capture's 0
+                # nn-blocks-composed end
+                comptime if (SCAN_SABOTAGE_DROP_KEY and Self.E.IS_DEVICE) or (
+                        SCAN_SABOTAGE_DROP_KEY_HOST and not Self.E.IS_DEVICE):
+                    seed = sc.drop_seed[q]  # SABOTAGE: the captured seed at every step and key
+                sc.node_ints[dk][0] = Int(seed & UInt64(0xFFFFFFFF))
+                sc.node_ints[dk][1] = Int(seed >> 32)
+            var skipped = False
+            for k in range(n_nodes):  # driver-loop: over the cell's nodes (one step's launch sequence)
+                args.clear()
+                for j in range(cell.a_at[k], cell.a_at[k + 1]):  # small-loop(args: a node's input refs)
+                    var rf = cell.args[j]
+                    args.append(params[-rf - 1] if rf < 0 else vals[rf])
+                var h = self._scan_call(cell.code[k], args, sc.node_ints[k], sc.node_fs[k], x)
+                temps.append(h)
+                comptime if recompute and ((CKPT_SABOTAGE_SKIP_NODE and Self.E.IS_DEVICE) or (
+                        CKPT_SABOTAGE_SKIP_NODE_HOST and not Self.E.IS_DEVICE)):
+                    if not skipped and len(args) > 0 and self.shapes[self._slot(h)].same(
+                            self.shapes[self._slot(args[0])]):
+                        h = args[0]  # SABOTAGE: the recompute skips this node (its first operand stands in)
+                        skipped = True
+                vals.append(h)
+            _ = skipped
+            if has_lengths:
+                one_h[0] = mask
+                var mrow = self._scan_call(OPS_NARROW, one_h, piece, no_fs, x)
+                temps.append(mrow)
+                for r in range(9):  # small-loop(ranks 0..8): this step's mask views, made on first use
+                    mask_by_rank[r] = 0
+                mask_by_rank[0] = mrow
+            nxt.clear()
+            for k in range(n_state + 1):  # driver-loop: over the cell's outputs (next state, then the output)
+                var rf = cell.outs[k]
+                var h = params[-rf - 1] if rf < 0 else vals[rf]
+                var slot = self._slot(h)
+                var want = cell.in_shapes[k] if k < n_state else cell.out_shapes[n_state]
+                if self.int_words[slot]:
+                    raise Error("ValueError: scan: the cell's output " + String(k)
+                                + " holds integer ids; a scan carries floating-point values")
+                if not self.shapes[slot].same(want):
+                    raise Error("ValueError: scan: the cell's output " + String(k) + " is "
+                                + shape_text(self.shapes[slot]) + " here but was captured as "
+                                + shape_text(want) + ": the output shape must not vary per step")
+                if has_lengths:
+                    var r = want.ndim
+                    if mask_by_rank[r] == 0:
+                        one_h[0] = mask_by_rank[0]
+                        mask_by_rank[r] = self._scan_call(OPS_RESHAPE_N, one_h, rank_view[r], no_fs, x)
+                        temps.append(mask_by_rank[r])
+                    where_h[0] = mask_by_rank[r]
+                    where_h[1] = h
+                    where_h[2] = vals[k] if k < n_state else zero
+                    h = self._scan_call(OPS_WHERE, where_h, no_ints, no_fs, x)
+                    temps.append(h)
+                nxt.append(h)
+            outs_by_time[t] = nxt[n_state]
+            comptime if (SCAN_SABOTAGE_STATE_LAG and Self.E.IS_DEVICE) or (
+                    SCAN_SABOTAGE_STATE_LAG_HOST and not Self.E.IS_DEVICE):
+                lag2 = lag1.copy()
+                lag1 = state.copy()
+            for k in range(n_state):  # driver-loop: over state tensors (the next step's handles)
+                state[k] = nxt[k]
+
+    def _pack_columns(mut self, cols: List[Int], mut temps: List[Int]) raises -> Int:
+        """One (n, 1) column of the tensors `cols`, each flattened, in order: one free view per tensor (a
+        temporary) and one concat node (autograd/rankn_layout.mojo rankn_concat: one slab copy per operand into
+        the reserved output, one slab copy per operand back in the backward; any number of operands). The
+        scan's stacked result, and the packed outputs of a checkpointed segment (activation-ckpt). The result is
+        not a temporary."""
+        var x = List[Tensor]()
+        var no_fs = List[Float32]()
+        var one_h: List[Int] = [0]
+        var views = List[Int](capacity=len(cols))
+        for q in range(len(cols)):  # driver-loop: over the columns (views)
+            var col_i: List[Int] = [0, self.shapes[self._slot(cols[q])].count(), 1]
+            one_h[0] = cols[q]
+            var c = self._scan_call(OPS_RESHAPE_N, one_h, col_i, no_fs, x)
+            temps.append(c)
+            views.append(c)
+        var parts = List[Tensor](capacity=len(views))
+        for q in range(len(views)):  # driver-loop: over the columns (handle lookup, no data)
+            parts.append(self.tensor(views[q]))
+        var stacked = rankn_concat(self.tape, self.ex, parts, 0)
+        return self._add(stacked, 0, self.tape.requires_grad(stacked), 0)
+
+    def _scan_run(mut self, mut sc: ScanCell, hs: List[Int], ints: List[Int]) raises -> Int:
+        """The body of `_scan` on a decoded cell `sc` (lent by `_scan`; its dropout nodes' seed words are
+        rewritten before each step that runs them): the binding (`_scan_bind`), the mask, every step
+        (`_scan_steps`), then the stack (`_pack_columns`: each step's output and each final state as a column,
+        joined once)."""
+        var key = scan_call_key(ints, sc, len(hs))
+        var n_state = sc.n_state
+        var state = List[Int](capacity=n_state)
+        var params = List[Int](capacity=sc.n_params)
+        var lengths = self._scan_bind(sc, hs, state, params)
+        var xs = hs[0]
+        var xs_shape = self.shapes[self._slot(xs)]
+        var steps = xs_shape.d[0]
+        var batch = xs_shape.d[1]
+        var no_ints = List[Int]()
+        var no_fs = List[Float32]()
+        var x = List[Tensor]()
+        var one_h: List[Int] = [xs]
         var temps = List[Int]()
         var mask = 0
         var zero = 0
-        var rank_view = List[List[Int]]()
-        var mask_by_rank = List[Int](length=9, fill=0)
         var packed = 0
         var step_at = -1
         try:
-            if has_lengths:
-                var ones_i: List[Int] = [steps, 1]
-                var one_f: List[Float32] = [Float32(1.0)]
-                var ones = self._scan_call(OPS_FULL, no_ints, ones_i, one_f, x)
-                temps.append(ones)
-                one_h[0] = ones
-                var cs_i: List[Int] = [0, 1, 0]
-                var times = self._scan_call(OPS_CUMSUM, one_h, cs_i, no_fs, x)
-                temps.append(times)
-                one_h[0] = lengths
-                var lr_i: List[Int] = [0, 1, batch]
-                var lrow = self._scan_call(OPS_RESHAPE_N, one_h, lr_i, no_fs, x)
-                temps.append(lrow)
-                var cmp_h: List[Int] = [lrow, times]
-                var cmp_i: List[Int] = [1]
-                mask = self._scan_call(OPS_COMPARE, cmp_h, cmp_i, no_fs, x)
-                temps.append(mask)
-                var z_i: List[Int] = [1, 1]
-                var z_f: List[Float32] = [Float32(0.0)]
-                zero = self._scan_call(OPS_FULL, no_ints, z_i, z_f, x)
-                temps.append(zero)
-            for r in range(9):  # small-loop(ranks 0..8): the mask's view words per rank, once per call
-                var rv = List[Int]()
-                if r >= 2:
-                    rv.append(0)
-                    rv.append(batch)
-                    for _q in range(r - 1):  # small-loop(rank - 1 unit axes)
-                        rv.append(1)
-                rank_view.append(rv^)
+            if sc.has_lengths:
+                var mz = self._scan_mask(lengths, steps, batch, x, temps)
+                mask = mz[0]
+                zero = mz[1]
+            var rank_view = self._scan_rank_views(batch)
             comptime if (SCAN_SABOTAGE_INIT_GRAD and Self.E.IS_DEVICE) or (
                     SCAN_SABOTAGE_INIT_GRAD_HOST and not Self.E.IS_DEVICE):
                 for k in range(n_state):  # driver-loop: over state tensors  # SABOTAGE: the initial state detached
@@ -3400,126 +3618,744 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     var dk = self._scan_call(OPS_DETACH, one_h, no_ints, no_fs, x)
                     temps.append(dk)
                     state[k] = dk
-            var lag1 = state.copy()
-            var lag2 = state.copy()
             var outs_by_time = List[Int](length=steps, fill=0)
-            var vals = List[Int]()
-            var args = List[Int]()
-            var nxt = List[Int](capacity=n_state + 1)
-            for i in range(steps):  # driver-loop: over steps
-                var t = steps - 1 - i if reverse else i
-                step_at = t
-                piece[1] = t
-                var x3 = self._scan_call(OPS_NARROW, xs_h, piece, no_fs, x)
-                temps.append(x3)
-                one_h[0] = x3
-                var x_t = self._scan_call(OPS_RESHAPE_N, one_h, view_x, no_fs, x)
-                temps.append(x_t)
-                vals.clear()
-                comptime if (SCAN_SABOTAGE_STATE_LAG and Self.E.IS_DEVICE) or (
-                        SCAN_SABOTAGE_STATE_LAG_HOST and not Self.E.IS_DEVICE):
-                    for k in range(n_state):  # driver-loop: over state tensors  # SABOTAGE: step t fed state t - 2
-                        vals.append(lag2[k] if i >= 2 else state[k])
-                else:
-                    for k in range(n_state):  # driver-loop: over state tensors (this step's handles)
-                        vals.append(state[k])
-                vals.append(x_t)
-                for q in range(len(sc.drop_nodes)):  # driver-loop: over the cell's dropout nodes (this step's seeds)
-                    var dk = sc.drop_nodes[q]
-                    var seed = scan_dropout_seed(sc.drop_seed[q], key, dk, t)
-                    # nn-blocks-composed begin
-                    comptime if (COMPOSED_SABOTAGE_SCAN_KEY and Self.E.IS_DEVICE) or (
-                            COMPOSED_SABOTAGE_SCAN_KEY_HOST and not Self.E.IS_DEVICE):
-                        seed = scan_dropout_seed(sc.drop_seed[q], 0, dk, t)  # SABOTAGE: the key stays at the capture's 0
-                    # nn-blocks-composed end
-                    comptime if (SCAN_SABOTAGE_DROP_KEY and Self.E.IS_DEVICE) or (
-                            SCAN_SABOTAGE_DROP_KEY_HOST and not Self.E.IS_DEVICE):
-                        seed = sc.drop_seed[q]  # SABOTAGE: the captured seed at every step and key
-                    sc.node_ints[dk][0] = Int(seed & UInt64(0xFFFFFFFF))
-                    sc.node_ints[dk][1] = Int(seed >> 32)
-                for k in range(n_nodes):  # driver-loop: over the cell's nodes (one step's launch sequence)
-                    args.clear()
-                    for j in range(cell.a_at[k], cell.a_at[k + 1]):  # small-loop(args: a node's input refs)
-                        var rf = cell.args[j]
-                        args.append(params[-rf - 1] if rf < 0 else vals[rf])
-                    var h = self._scan_call(cell.code[k], args, sc.node_ints[k], sc.node_fs[k], x)
-                    temps.append(h)
-                    vals.append(h)
-                if has_lengths:
-                    one_h[0] = mask
-                    var mrow = self._scan_call(OPS_NARROW, one_h, piece, no_fs, x)
-                    temps.append(mrow)
-                    for r in range(9):  # small-loop(ranks 0..8): this step's mask views, made on first use
-                        mask_by_rank[r] = 0
-                    mask_by_rank[0] = mrow
-                nxt.clear()
-                for k in range(n_state + 1):  # driver-loop: over the cell's outputs (next state, then the output)
-                    var rf = cell.outs[k]
-                    var h = params[-rf - 1] if rf < 0 else vals[rf]
-                    var slot = self._slot(h)
-                    var want = cell.in_shapes[k] if k < n_state else cell.out_shapes[n_state]
-                    if self.int_words[slot]:
-                        raise Error("ValueError: scan: the cell's output " + String(k)
-                                    + " holds integer ids; a scan carries floating-point values")
-                    if not self.shapes[slot].same(want):
-                        raise Error("ValueError: scan: the cell's output " + String(k) + " is "
-                                    + shape_text(self.shapes[slot]) + " here but was captured as "
-                                    + shape_text(want) + ": the output shape must not vary per step")
-                    if has_lengths:
-                        var r = want.ndim
-                        if mask_by_rank[r] == 0:
-                            one_h[0] = mask_by_rank[0]
-                            mask_by_rank[r] = self._scan_call(OPS_RESHAPE_N, one_h, rank_view[r], no_fs, x)
-                            temps.append(mask_by_rank[r])
-                        where_h[0] = mask_by_rank[r]
-                        where_h[1] = h
-                        where_h[2] = vals[k] if k < n_state else zero
-                        h = self._scan_call(OPS_WHERE, where_h, no_ints, no_fs, x)
-                        temps.append(h)
-                    nxt.append(h)
-                outs_by_time[t] = nxt[n_state]
-                comptime if (SCAN_SABOTAGE_STATE_LAG and Self.E.IS_DEVICE) or (
-                        SCAN_SABOTAGE_STATE_LAG_HOST and not Self.E.IS_DEVICE):
-                    lag2 = lag1.copy()
-                    lag1 = state.copy()
-                for k in range(n_state):  # driver-loop: over state tensors (the next step's handles)
-                    state[k] = nxt[k]
+            self._scan_steps[False](sc, key, xs, params, state, 0, steps, mask, zero, rank_view, outs_by_time,
+                                    temps, step_at)
             step_at = -1
-            # The stack: each step's output and each final state as an (n, 1) column (free views), joined once.
-            var cols = List[Int](capacity=steps)
-            var col_i: List[Int] = [0, cell.out_shapes[n_state].count(), 1]
-            for t in range(steps):  # driver-loop: over steps (the stack's columns, views)
-                one_h[0] = outs_by_time[t]
-                var c = self._scan_call(OPS_RESHAPE_N, one_h, col_i, no_fs, x)
-                temps.append(c)
-                cols.append(c)
-            var extra = List[Int](capacity=n_state)
-            for k in range(n_state):  # driver-loop: over state tensors (the final states' columns, views)
-                var si: List[Int] = [0, cell.in_shapes[k].count(), 1]
-                one_h[0] = state[k]
-                var c = self._scan_call(OPS_RESHAPE_N, one_h, si, no_fs, x)
-                temps.append(c)
-                extra.append(c)
-            # One concat node over every column (autograd/rankn_layout.mojo rankn_concat: one slab copy per
-            # operand into the reserved (n, 1) output, one slab copy per operand back in the backward; it takes
-            # any number of operands, so each step's output is copied once).
-            for k in range(len(extra)):  # driver-loop: over the final states' columns
-                cols.append(extra[k])
-            var parts = List[Tensor](capacity=len(cols))
-            for q in range(len(cols)):  # driver-loop: over the stack's columns (handle lookup, no data)
-                parts.append(self.tensor(cols[q]))
-            var stacked = rankn_concat(self.tape, self.ex, parts, 0)
-            packed = self._add(stacked, 0, self.tape.requires_grad(stacked), 0)
+            var cols = List[Int](capacity=steps + n_state)
+            for t in range(steps):  # driver-loop: over steps (the stack's columns)
+                cols.append(outs_by_time[t])
+            for k in range(n_state):  # driver-loop: over state tensors (the final states' columns)
+                cols.append(state[k])
+            packed = self._pack_columns(cols, temps)
         except err:
             self._drop_temps(temps)
-            if step_at < 0:
-                raise err
-            var message = String(err)
-            if message.startswith("ValueError: "):
-                raise Error("ValueError: scan step " + String(step_at) + ": " + String(message[byte=12:]))
-            raise Error("scan step " + String(step_at) + ": " + message)
+            raise _scan_step_error(err, step_at)
         self._drop_temps(temps)
         return packed
+
+    # activation-ckpt begin: checkpointed segments and the checkpointed scan (autograd/nn_ckpt.mojo, session code
+    # 119 and scan format 3). Forward and recompute run on the session's scratch tape `ckpt_tape` (swapped in for
+    # the call and put back word for word, as `_cbw_apply` does with `cbw_tape`); the recorded graph keeps ONE
+    # custom node (NN_CKPT_TAG) whose rule (CbwRules) is `_ckpt_apply`.
+    def _ckpt_copy(mut self, src: FP, dst: FP, n: Int) raises:
+        """n words from src to dst (OP_COPY, the bits)."""
+        var a = Args()
+        a.p0 = src
+        a.p1 = dst
+        self.ex.launch[OP_COPY](a, n)
+
+    def _ckpt_zero(mut self, dst: FP, n: Int) raises:
+        """n words of +0.0 at dst (OP_FILL)."""
+        var a = Args()
+        a.p0 = dst
+        a.f0 = Float32(0)
+        self.ex.launch[OP_FILL](a, n)
+
+    def _ckpt_leaf(mut self, fp: Int, sh: ShapeN, ids: Bool, requires: Bool) raises -> Int:
+        """A temporary handle of a leaf over the storage at `fp` on the current tape (`requires`: it needs a
+        gradient; on the forward's leaves the nodes' flags and the reach walk read it)."""
+        var t = self.tape.variable_nd(self.ex, FP(unsafe_from_address=fp), sh, requires)
+        var h = self._add(t, 0, False, 0)
+        self.int_words[self._slot(h)] = ids
+        return h
+
+    def _ckpt_carry_leaf(mut self, fp: Int, dst: Int, sh: ShapeN, carry: Bool) raises -> Int:
+        """A temporary handle of a differentiable leaf over `fp` whose gradient continues in place at `dst`
+        (Tape.variable_carry; `carry`: `dst` already holds earlier contributions)."""
+        var t = self.tape.variable_carry(self.ex, FP(unsafe_from_address=fp), FP(unsafe_from_address=dst), sh, carry)
+        var h = self._add(t, 0, False, 0)
+        self.int_words[self._slot(h)] = False
+        return h
+
+    def _ckpt_operands(
+        mut self, hs: List[Int], mut rec: CkptRecord, mut tensors: List[Tensor], mut req: List[Bool],
+    ) raises:
+        """The distinct tape tensors among the node's handles, read on this tape (values materialized: their
+        addresses, shapes and kinds into `rec`), and each handle's operand (`rec.role`). A tensor passed twice is
+        one operand: one leaf in the recompute, as it is one tensor of the plain graph."""
+        for r in range(len(hs)):  # driver-loop: over the node's handles (metadata)
+            var t = self.tensor(hs[r])
+            var d = -1
+            for q in range(len(tensors)):  # small-loop(the distinct operands so far)
+                if tensors[q]._index == t._index:
+                    d = q
+                    break
+            if d < 0:
+                d = len(tensors)
+                rec.op_fp.append(Int(self.tape.value_of(self.ex, t)))
+                rec.op_shape.append(self.shape_nd(hs[r]))
+                rec.op_ids.append(self.int_words[self._slot(hs[r])])
+                rec.op_edge.append(-1)
+                tensors.append(t)
+                req.append(self.tape.requires_grad(t))
+            rec.role.append(d)
+
+    def _ckpt_admit(mut self, var rec: CkptRecord, edges: List[Tensor], value: FP, shape: ShapeN) raises -> Int:
+        """Record the checkpointed node: its record (the graph's records restart after a tape reset) and ONE custom
+        node over `edges` whose value is `value` (tape storage) of `shape`."""
+        var node = len(self.tape._nodes)
+        var ri = self.ckpt.admit(node)
+        rec.node = node
+        var saved = Args()
+        saved.i0 = ri
+        saved.i1 = node
+        self.ckpt.records.append(rec^)
+        self.cbw.live = True
+        self.cbw.ckpt_live = True
+        var t = self.tape.custom_nd(self.ex, edges, value, shape, NN_CKPT_TAG, saved)
+        if t._index != node:
+            raise Error("checkpoint: the tape recorded the checkpointed node at an unexpected index")
+        return self._add(t, 0, False, 0)
+
+    def _ckpt_tape_backward(mut self, root: Tensor, seed: Tensor) raises:
+        """A recompute's backward on the scratch tape from `root` seeded with `seed`, with the session's rules
+        (the plain graph's; with LayerRules when a layer op recorded a node), adding into the carried leaves'
+        destinations (accumulate=True)."""
+        if self.layer_nodes:
+            self.tape.backward_with_rules(
+                self.ex, root, seed, LayerRules[StepOpRules](StepOpRules(self.steps_address())), True)
+            return
+        self.tape.backward_with_rules(self.ex, root, seed, StepOpRules(self.steps_address()), True)
+
+    def _ckpt(mut self, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+        """OPS_CHECKPOINT: [the segment's inputs, then one tensor per parameter], ints and floats the segment's
+        description (autograd/nn_ckpt.mojo). The segment is decoded once per session (`_ckpt_seg`) and lent to
+        `_ckpt_run`."""
+        var ci = self._ckpt_seg(ints, fs)
+        var sg = CkptSeg()
+        swap(sg, self.ckpt.segs[ci])
+        var result = 0
+        try:
+            result = self._ckpt_run(ci, sg, hs, ints)
+        finally:
+            swap(sg, self.ckpt.segs[ci])
+        return result
+
+    def _ckpt_seg(mut self, ints: List[Int], fs: List[Float32]) raises -> Int:
+        """The index in `self.ckpt.segs` of the decoded segment these node words name: one dictionary read, or
+        (a node not seen before in this session) decoded, checked and kept."""
+        var i = self.ckpt.find(ints, fs)
+        if i >= 0:
+            return i
+        var got = ckpt_decode(ints, fs)
+        return self.ckpt.add(got^)
+
+    def _ckpt_run(mut self, ci: Int, mut sg: CkptSeg, hs: List[Int], ints: List[Int]) raises -> Int:
+        """The binding checked, then: in a recording session the checkpointed form (`_ckpt_record`); in an
+        inference session, or for the plain form (recompute=False), the segment's nodes on this tape
+        (`_ckpt_inline`)."""
+        var key = ckpt_call_key(ints)
+        var shapes = List[ShapeN](capacity=len(hs))
+        var ids = List[Bool](capacity=len(hs))
+        for r in range(len(hs)):  # driver-loop: over the node's handles (metadata)
+            var slot = self._slot(hs[r])
+            shapes.append(self.shapes[slot])
+            ids.append(self.int_words[slot])
+        ckpt_check_binding(sg.program, shapes, ids)
+        if not sg.recompute or not self.tape.is_recording():
+            return self._ckpt_inline(sg, hs, key)
+        return self._ckpt_record(ci, sg, hs, key)
+
+    def _ckpt_replay[recompute: Bool](
+        mut self, mut sg: CkptSeg, key: Int, ins: List[Int], params: List[Int], mut temps: List[Int],
+    ) raises -> List[Int]:
+        """The segment's nodes on this tape through the nested runner, on `ins` and `params`: returns every value
+        (the inputs, then each node's result; the results are appended to `temps`). A dropout node's seed is
+        derived from (its captured seed, `key`, its node, step 0) (autograd/nn_scan.mojo scan_dropout_seed), so
+        the forward, the recompute and the plain form draw the same mask. `recompute`: the backward's replay (the
+        only instance the sabotage arms reach)."""
+        ref p = sg.program
+        var k_key = key
+        comptime if recompute and ((CKPT_SABOTAGE_FRESH_MASK and Self.E.IS_DEVICE) or (
+                CKPT_SABOTAGE_FRESH_MASK_HOST and not Self.E.IS_DEVICE)):
+            k_key = key + 1  # SABOTAGE: the recompute draws its dropout masks from the next key
+        for q in range(len(sg.drop_nodes)):  # driver-loop: over the segment's dropout nodes (their seeds)
+            var dk = sg.drop_nodes[q]
+            var seed = scan_dropout_seed(sg.drop_seed[q], k_key, dk, 0)
+            sg.node_ints[dk][0] = Int(seed & UInt64(0xFFFFFFFF))
+            sg.node_ints[dk][1] = Int(seed >> 32)
+        var vals = ins.copy()
+        var args = List[Int]()
+        var x = List[Tensor]()
+        var skipped = False
+        for k in range(p.n_nodes()):  # driver-loop: over the segment's nodes
+            args.clear()
+            for j in range(p.a_at[k], p.a_at[k + 1]):  # small-loop(args: a node's input refs)
+                var rf = p.args[j]
+                args.append(params[-rf - 1] if rf < 0 else vals[rf])
+            var h = self._scan_call(p.code[k], args, sg.node_ints[k], sg.node_fs[k], x)
+            temps.append(h)
+            comptime if recompute and ((CKPT_SABOTAGE_SKIP_NODE and Self.E.IS_DEVICE) or (
+                    CKPT_SABOTAGE_SKIP_NODE_HOST and not Self.E.IS_DEVICE)):
+                if not skipped and len(args) > 0 and self.shapes[self._slot(h)].same(self.shapes[self._slot(args[0])]):
+                    h = args[0]  # SABOTAGE: the recompute skips this node (its first operand stands in)
+                    skipped = True
+            vals.append(h)
+        _ = skipped
+        return vals^
+
+    def _ckpt_outs(self, sg: CkptSeg, vals: List[Int]) raises -> List[Int]:
+        """The segment's output handles among `vals`, each checked: float values of the captured shape."""
+        ref p = sg.program
+        var outs = List[Int](capacity=len(p.outs))
+        for k in range(len(p.outs)):  # driver-loop: over the segment's outputs
+            var h = vals[p.outs[k]]
+            var slot = self._slot(h)
+            if self.int_words[slot]:
+                raise Error("ValueError: checkpoint: the segment's output " + String(k)
+                            + " holds integer ids; a checkpointed segment returns floating-point values")
+            if not self.shapes[slot].same(p.out_shapes[k]):
+                raise Error("ValueError: checkpoint: the segment's output " + String(k) + " is "
+                            + shape_text(self.shapes[slot]) + " here but was captured as "
+                            + shape_text(p.out_shapes[k]))
+            outs.append(h)
+        return outs^
+
+    def _ckpt_pack(mut self, outs: List[Int], mut temps: List[Int]) raises -> Int:
+        """The node's value: one output itself; several, one (n, 1) column of them (`_pack_columns`). The
+        result is in `temps`."""
+        if len(outs) == 1:
+            return outs[0]
+        var packed = self._pack_columns(outs, temps)
+        temps.append(packed)
+        return packed
+
+    def _ckpt_inline(mut self, mut sg: CkptSeg, hs: List[Int], key: Int) raises -> Int:
+        """The plain form and the inference form: the segment's nodes on this tape, packed as the checkpointed
+        node's value is. A recording session records every node (the graph the checkpointed form equals)."""
+        var n_in = sg.program.n_in
+        var ins = List[Int](capacity=n_in)
+        for k in range(n_in):  # driver-loop: over the segment's inputs (handles)
+            ins.append(hs[k])
+        var params = List[Int](capacity=sg.n_params)
+        for j in range(sg.n_params):  # driver-loop: over the bound parameters (handles)
+            params.append(hs[n_in + j])
+        var temps = List[Int]()
+        var result = 0
+        try:
+            var vals = self._ckpt_replay[False](sg, key, ins, params, temps)
+            var outs = self._ckpt_outs(sg, vals)
+            result = self._ckpt_pack(outs, temps)
+            # the result is kept, not retired with the temporaries
+            for j in range(len(temps)):  # driver-loop: over this call's temporary handles
+                if temps[j] == result:
+                    temps[j] = temps[len(temps) - 1]
+                    _ = temps.pop()
+                    break
+        except err:
+            self._drop_temps(temps)
+            raise err
+        self._drop_temps(temps)
+        return result
+
+    def _ckpt_record(mut self, ci: Int, mut sg: CkptSeg, hs: List[Int], key: Int) raises -> Int:
+        """The checkpointed form in a recording session: the segment's forward on the scratch tape (recorded
+        there only to learn which operands its outputs reach), each output copied once into this tape's storage,
+        then ONE custom node over the reached operands that need a gradient. Nothing of the segment stays on
+        this tape but the outputs' copy."""
+        var n_in = sg.program.n_in
+        var n_out = len(sg.program.outs)
+        var out_shapes = sg.program.out_shapes.copy()
+        var rec = CkptRecord()
+        rec.kind = CKPT_KIND_SEGMENT
+        rec.cache = ci
+        rec.key = key
+        var op_t = List[Tensor]()
+        var op_req = List[Bool]()
+        self._ckpt_operands(hs, rec, op_t, op_req)
+        var n_op = len(op_t)
+        var total = 0
+        for k in range(n_out):  # driver-loop: over the segment's outputs (sizes)
+            total += out_shapes[k].count()
+        rec.total = total
+        var out_fp = self.tape.reserve(self.ex, total)
+        var reached = List[Bool](length=n_op, fill=False)
+        var held = Tape()
+        swap(held, self.ckpt_tape)
+        swap(held, self.tape)
+        var temps = List[Int]()
+        try:
+            self.tape.reset()
+            self.tape.record()
+            var leaf = List[Int](capacity=n_op)
+            var leaf_t = List[Tensor](capacity=n_op)
+            for d in range(n_op):  # driver-loop: over the distinct operands (leaves)
+                var h = self._ckpt_leaf(rec.op_fp[d], rec.op_shape[d], rec.op_ids[d], op_req[d])
+                temps.append(h)
+                leaf.append(h)
+                leaf_t.append(self.tensor(h))
+            var ins = List[Int](capacity=n_in)
+            for k in range(n_in):  # driver-loop: over the segment's inputs
+                ins.append(leaf[rec.role[k]])
+            var params = List[Int](capacity=sg.n_params)
+            for j in range(sg.n_params):  # driver-loop: over the bound parameters
+                params.append(leaf[rec.role[n_in + j]])
+            var vals = self._ckpt_replay[False](sg, key, ins, params, temps)
+            var outs = self._ckpt_outs(sg, vals)
+            var roots = List[Tensor](capacity=n_out)
+            var at = 0
+            for k in range(n_out):  # driver-loop: over the segment's outputs (one copy each)
+                var tk = self.tensor(outs[k])
+                var n = out_shapes[k].count()
+                self._ckpt_copy(self.tape.value_of(self.ex, tk), out_fp + at, n)
+                at += n
+                roots.append(tk)
+            reached = self.tape.reaches(roots, leaf_t)
+        finally:
+            self._drop_temps(temps)
+            swap(held, self.tape)
+            swap(held, self.ckpt_tape)
+        var shape: ShapeN
+        if n_out == 1:
+            shape = out_shapes[0]
+        else:
+            shape = ShapeN.matrix(total, 1)
+        var edges = List[Tensor]()
+        for d in range(n_op):  # driver-loop: over the distinct operands (the node's edges)
+            if op_req[d] and reached[d] and not rec.op_ids[d]:
+                rec.op_edge[d] = len(edges)
+                edges.append(op_t[d])
+        if len(edges) == 0:
+            return self._leaf(out_fp, shape)
+        return self._ckpt_admit(rec^, edges, out_fp, shape)
+
+    def _ckpt_apply(mut self, ri: Int, node: Int, upstream: FP, gradients: List[FP]) raises:
+        """The rule of checkpointed node `node` (record `ri`), called by CbwRules.apply while the session's tape
+        runs its backward: each edge's carry is read on that tape (Tape.edges_hold_gradient, from the root the wrapped backward's entry noted), then the segment
+        (or each scan segment, last first) is recomputed on the scratch tape and differentiated into the edges'
+        destinations, continuing their folds."""
+        if ri < 0 or ri >= len(self.ckpt.records) or self.ckpt.records[ri].node != node:
+            raise Error("ValueError: checkpoint: the recorded graph no longer holds this checkpointed segment; run"
+                        + " its forward again")
+        var rec = CkptRecord()
+        swap(rec, self.ckpt.records[ri])
+        try:
+            var n_op = len(rec.op_fp)
+            var carry = List[Bool](length=n_op, fill=False)
+            var dest = List[Int](length=n_op, fill=0)
+            # each edge's carry, from the graph above the node (the tape's traversal keeps no flag for it)
+            var held_edges = self.tape.edges_hold_gradient(node, self.ckpt.root)
+            for d in range(n_op):  # driver-loop: over the distinct operands (edges)
+                if rec.op_edge[d] >= 0:
+                    carry[d] = held_edges[rec.op_edge[d]]
+                    dest[d] = Int(gradients[rec.op_edge[d]])
+            if rec.kind == CKPT_KIND_SCAN:
+                var sc = ScanCell()
+                swap(sc, self.scans.cells[rec.cache])
+                try:
+                    self._ckpt_scan_backward(sc, rec, upstream, carry, dest)
+                finally:
+                    swap(sc, self.scans.cells[rec.cache])
+            else:
+                var sg = CkptSeg()
+                swap(sg, self.ckpt.segs[rec.cache])
+                try:
+                    self._ckpt_seg_backward(sg, rec, upstream, carry, dest)
+                finally:
+                    swap(sg, self.ckpt.segs[rec.cache])
+            # An edge no recomputed output reached holds no value of this rule: give it the +0.0 the tape gives
+            # an unreached leaf (the forward and the backward reach the same operands, so this is a guard)
+            for d in range(n_op):  # driver-loop: over the distinct operands (edges)
+                if rec.op_edge[d] >= 0 and not carry[d]:
+                    self._ckpt_zero(FP(unsafe_from_address=dest[d]), rec.op_shape[d].count())
+        finally:
+            swap(rec, self.ckpt.records[ri])
+
+    def _ckpt_seg_backward(
+        mut self, mut sg: CkptSeg, rec: CkptRecord, upstream: FP, mut carry: List[Bool], dest: List[Int],
+    ) raises:
+        """One segment's recompute and backward on the scratch tape: carried leaves for the edges, the same nodes
+        (`_ckpt_replay[True]`), the same packing, seeded with the node's incoming gradient."""
+        var n_in = sg.program.n_in
+        var n_op = len(rec.op_fp)
+        var held = Tape()
+        swap(held, self.ckpt_tape)
+        swap(held, self.tape)
+        var temps = List[Int]()
+        try:
+            self.tape.reset()
+            self.tape.record()
+            var leaf = List[Int](capacity=n_op)
+            var carry_t = List[Tensor]()
+            var carry_d = List[Int]()
+            for d in range(n_op):  # driver-loop: over the distinct operands (leaves)
+                var h: Int
+                if rec.op_edge[d] >= 0:
+                    h = self._ckpt_carry_leaf(rec.op_fp[d], dest[d], rec.op_shape[d], carry[d])
+                    carry_t.append(self.tensor(h))
+                    carry_d.append(d)
+                else:
+                    h = self._ckpt_leaf(rec.op_fp[d], rec.op_shape[d], rec.op_ids[d], False)
+                temps.append(h)
+                leaf.append(h)
+            var ins = List[Int](capacity=n_in)
+            for k in range(n_in):  # driver-loop: over the segment's inputs
+                ins.append(leaf[rec.role[k]])
+            var params = List[Int](capacity=sg.n_params)
+            for j in range(sg.n_params):  # driver-loop: over the bound parameters
+                params.append(leaf[rec.role[n_in + j]])
+            var vals = self._ckpt_replay[True](sg, rec.key, ins, params, temps)
+            var outs = self._ckpt_outs(sg, vals)
+            var root = self._ckpt_pack(outs, temps)
+            var rt = self.tensor(root)
+            if self.tape.requires_grad(rt):
+                var roots: List[Tensor] = [rt]
+                var got = self.tape.reaches(roots, carry_t)
+                for q in range(len(carry_t)):  # driver-loop: over the carried leaves
+                    if not got[q]:
+                        self.tape.release_leaf_gradient(carry_t[q])
+                var seed = self._ckpt_leaf(Int(upstream), self.shape_nd(root), False, False)
+                temps.append(seed)
+                self._ckpt_tape_backward(rt, self.tensor(seed))
+                for q in range(len(carry_t)):  # driver-loop: over the carried leaves
+                    if got[q]:
+                        carry[carry_d[q]] = True
+        finally:
+            self._drop_temps(temps)
+            swap(held, self.tape)
+            swap(held, self.ckpt_tape)
+
+    def _scan_ckpt_run(mut self, ci: Int, mut sc: ScanCell, hs: List[Int], ints: List[Int]) raises -> Int:
+        """A scan with checkpoint_every = k in a recording session (autograd/nn_ckpt.mojo): the steps run in
+        segments of k on the scratch tape (each segment's forward recorded there and dropped), the state at
+        every segment boundary copied into this tape's storage (one row of distinct state tensors per boundary),
+        each step's output and the final states copied into the stacked result (the plain scan's words), and ONE
+        custom node over the reached operands records the whole scan. Its rule (`_ckpt_scan_backward`)
+        recomputes each segment from its boundary row, last first."""
+        var key = scan_call_key(ints, sc, len(hs))
+        var n_state = sc.n_state
+        var state0 = List[Int](capacity=n_state)
+        var params0 = List[Int](capacity=sc.n_params)
+        var lengths = self._scan_bind(sc, hs, state0, params0)
+        for k in range(n_state + 1):  # driver-loop: over the cell's outputs (metadata)
+            if sc.cell.outs[k] < sc.cell.n_in:
+                raise Error("ValueError: scan: checkpoint_every needs every cell output computed by the cell; output "
+                            + String(k) + " returns " + (String("a parameter") if sc.cell.outs[k] < 0 else String("an input"))
+                            + " unchanged (apply an operation such as copy to it)")
+        if lengths != 0 and self.tape.requires_grad(self.tensor(lengths)):
+            raise Error("ValueError: scan: checkpoint_every needs lengths that take no gradient (detach them)")
+        var xs_shape = self.shapes[self._slot(hs[0])]
+        var steps = xs_shape.d[0]
+        var batch = xs_shape.d[1]
+        var every = sc.every
+        var n_seg = (steps + every - 1) // every
+        var rec = CkptRecord()
+        rec.kind = CKPT_KIND_SCAN
+        rec.cache = ci
+        rec.key = key
+        rec.steps = steps
+        rec.every = every
+        rec.n_seg = n_seg
+        var op_t = List[Tensor]()
+        var op_req = List[Bool]()
+        self._ckpt_operands(hs, rec, op_t, op_req)
+        var n_op = len(op_t)
+        # The distinct boundary tensors: a node the cell returns for several states is one tensor.
+        for k in range(n_state):  # driver-loop: over state tensors (metadata)
+            var b = -1
+            for j in range(k):  # small-loop(the earlier states)
+                if sc.cell.outs[j] == sc.cell.outs[k]:
+                    b = rec.state_bd[j]
+                    break
+            if b < 0:
+                b = len(rec.bd_k)
+                rec.bd_k.append(k)
+                rec.bd_off.append(rec.n_bd)
+                rec.n_bd += sc.cell.in_shapes[k].count()
+            rec.state_bd.append(b)
+            if sc.cell.outs[k] == sc.cell.outs[n_state] and rec.y_alias < 0:
+                rec.y_alias = b
+        var nb = len(rec.bd_k)
+        var y_n = sc.cell.out_shapes[n_state].count()
+        var total = steps * y_n
+        var fin_off = List[Int](capacity=n_state)
+        for k in range(n_state):  # driver-loop: over state tensors (the stack's offsets)
+            fin_off.append(total)
+            total += sc.cell.in_shapes[k].count()
+        rec.total = total
+        var packed_fp = self.tape.reserve(self.ex, total)
+        if n_seg > 1 and rec.n_bd > 0:
+            rec.bstore = Int(self.tape.reserve(self.ex, (n_seg - 1) * rec.n_bd))
+        rec.bd_req = List[Bool](length=(n_seg - 1) * nb, fill=False)
+        var reached = List[Bool](length=n_op, fill=False)
+        # the operands every segment reads (xs, lengths, the parameters); the states only the first
+        var later = List[Bool](length=n_op, fill=False)
+        later[rec.role[0]] = True
+        for r in range(1 + n_state, len(hs)):  # driver-loop: over the node's handles after the states
+            later[rec.role[r]] = True
+        var lengths_role = 1 + n_state
+        var params_role = 1 + n_state + (1 if sc.has_lengths else 0)
+        var held = Tape()
+        swap(held, self.ckpt_tape)
+        swap(held, self.tape)
+        var temps = List[Int]()
+        var step_at = -1
+        try:
+            for p in range(n_seg):  # driver-loop: over segments
+                self.tape.reset()
+                self.tape.record()
+                var begin = p * every
+                var end = min(begin + every, steps)
+                var leaf = List[Int](length=n_op, fill=0)
+                var leaf_t = List[Tensor]()
+                var leaf_d = List[Int]()
+                for d in range(n_op):  # driver-loop: over the distinct operands (leaves)
+                    if p == 0 or later[d]:
+                        leaf[d] = self._ckpt_leaf(rec.op_fp[d], rec.op_shape[d], rec.op_ids[d], op_req[d])
+                        temps.append(leaf[d])
+                        leaf_t.append(self.tensor(leaf[d]))
+                        leaf_d.append(d)
+                var state = List[Int](capacity=n_state)
+                if p == 0:
+                    for k in range(n_state):  # driver-loop: over state tensors (the initial state)
+                        state.append(leaf[rec.role[1 + k]])
+                else:
+                    var bl = List[Int](length=nb, fill=0)
+                    for b in range(nb):  # driver-loop: over the distinct boundary tensors (row p - 1)
+                        bl[b] = self._ckpt_leaf(_word_addr(rec.bstore, (p - 1) * rec.n_bd + rec.bd_off[b]),
+                                                sc.cell.in_shapes[rec.bd_k[b]], False, rec.bd_req[(p - 1) * nb + b])
+                        temps.append(bl[b])
+                    for k in range(n_state):  # driver-loop: over state tensors
+                        state.append(bl[rec.state_bd[k]])
+                var params = List[Int](capacity=sc.n_params)
+                for j in range(sc.n_params):  # driver-loop: over the bound parameters
+                    params.append(leaf[rec.role[params_role + j]])
+                var x = List[Tensor]()
+                var mask = 0
+                var zero = 0
+                if sc.has_lengths:
+                    var mz = self._scan_mask(leaf[rec.role[lengths_role]], steps, batch, x, temps)
+                    mask = mz[0]
+                    zero = mz[1]
+                var rank_view = self._scan_rank_views(batch)
+                var outs_by_time = List[Int](length=steps, fill=0)
+                self._scan_steps[False](sc, key, leaf[rec.role[0]], params, state, begin, end, mask, zero,
+                                        rank_view, outs_by_time, temps, step_at)
+                step_at = -1
+                # Each step's output and the segment's end state leave the scratch tape (one copy each).
+                var roots = List[Tensor]()
+                for i in range(begin, end):  # driver-loop: over the segment's steps (one output copy each)
+                    var t = steps - 1 - i if sc.reverse else i
+                    var yt = self.tensor(outs_by_time[t])
+                    self._ckpt_copy(self.tape.value_of(self.ex, yt), packed_fp + t * y_n, y_n)
+                    roots.append(yt)
+                for k in range(n_state):  # driver-loop: over state tensors (the end state)
+                    roots.append(self.tensor(state[k]))
+                if p < n_seg - 1:
+                    for b in range(nb):  # driver-loop: over the distinct boundary tensors (row p)
+                        var tb = self.tensor(state[rec.bd_k[b]])
+                        self._ckpt_copy(self.tape.value_of(self.ex, tb),
+                                        FP(unsafe_from_address=rec.bstore) + (p * rec.n_bd + rec.bd_off[b]),
+                                        sc.cell.in_shapes[rec.bd_k[b]].count())
+                        rec.bd_req[p * nb + b] = self.tape.requires_grad(tb)
+                else:
+                    for k in range(n_state):  # driver-loop: over state tensors (the final states)
+                        self._ckpt_copy(self.tape.value_of(self.ex, self.tensor(state[k])), packed_fp + fin_off[k],
+                                        sc.cell.in_shapes[k].count())
+                var got = self.tape.reaches(roots, leaf_t)
+                for q in range(len(leaf_d)):  # driver-loop: over this segment's operand leaves
+                    if got[q]:
+                        reached[leaf_d[q]] = True
+                self._drop_temps(temps)
+                temps.clear()
+        except err:
+            self._drop_temps(temps)
+            swap(held, self.tape)
+            swap(held, self.ckpt_tape)
+            raise _scan_step_error(err, step_at)
+        swap(held, self.tape)
+        swap(held, self.ckpt_tape)
+        var edges = List[Tensor]()
+        for d in range(n_op):  # driver-loop: over the distinct operands (the node's edges)
+            if op_req[d] and reached[d] and not rec.op_ids[d]:
+                rec.op_edge[d] = len(edges)
+                edges.append(op_t[d])
+        if len(edges) == 0:
+            return self._leaf(packed_fp, ShapeN.matrix(total, 1))
+        return self._ckpt_admit(rec^, edges, packed_fp, ShapeN.matrix(total, 1))
+
+    def _ckpt_scan_backward(
+        mut self, mut sc: ScanCell, rec: CkptRecord, upstream: FP, mut carry: List[Bool], dest: List[Int],
+    ) raises:
+        """The checkpointed scan's rule: the segments last first, each recomputed from its boundary row on the
+        scratch tape (`_scan_steps[True]`) and differentiated from the plain stack's columns that touch it, seeded
+        with their slices of the incoming gradient. A boundary state's gradient continues from the later segment
+        into the earlier one: the later segment's boundary leaf writes it into a row of `ckpt_gtape` (starting from
+        the boundary step's output slice when the cell returns that output as the state, the plain stack's term
+        that comes first), and the earlier segment seeds its end state's column with that row instead of the
+        stack's slice."""
+        var n_state = sc.n_state
+        var steps = rec.steps
+        var every = rec.every
+        var n_seg = rec.n_seg
+        var nb = len(rec.bd_k)
+        var n_op = len(rec.op_fp)
+        var y_n = sc.cell.out_shapes[n_state].count()
+        var fin_off = List[Int](capacity=n_state)
+        var off = steps * y_n
+        for k in range(n_state):  # driver-loop: over state tensors (the stack's offsets)
+            fin_off.append(off)
+            off += sc.cell.in_shapes[k].count()
+        var later = List[Bool](length=n_op, fill=False)
+        later[rec.role[0]] = True
+        for r in range(1 + n_state, len(rec.role)):  # driver-loop: over the node's handles after the states
+            later[rec.role[r]] = True
+        var lengths_role = 1 + n_state
+        var params_role = 1 + n_state + (1 if sc.has_lengths else 0)
+        var batch = rec.op_shape[rec.role[0]].d[1]
+        # Two rows of boundary gradients, reserved once per call on the session's gradient tape: the segment
+        # being recomputed writes its start state's gradient into g_cur and seeds its end state from g_next.
+        var g_cur = 0
+        var g_next = 0
+        if n_seg > 1 and rec.n_bd > 0:
+            self.ckpt_gtape.reset()
+            g_cur = Int(self.ckpt_gtape.reserve(self.ex, rec.n_bd))
+            g_next = Int(self.ckpt_gtape.reserve(self.ex, rec.n_bd))
+        # fold[b]: the later segment reached (and wrote) boundary tensor b's gradient, which the segment being
+        # recomputed takes as its end state's seed
+        var fold = List[Bool](length=nb, fill=False)
+        var held = Tape()
+        swap(held, self.ckpt_tape)
+        swap(held, self.tape)
+        var temps = List[Int]()
+        var step_at = -1
+        try:
+            for q in range(n_seg):  # driver-loop: over segments, last first
+                var p = n_seg - 1 - q
+                var last = p == n_seg - 1
+                self.tape.reset()
+                self.tape.record()
+                var begin = p * every
+                var end = min(begin + every, steps)
+                var leaf = List[Int](length=n_op, fill=0)
+                var carry_t = List[Tensor]()
+                var carry_d = List[Int]()
+                for d in range(n_op):  # driver-loop: over the distinct operands (leaves)
+                    if p == 0 or later[d]:
+                        if rec.op_edge[d] >= 0:
+                            leaf[d] = self._ckpt_carry_leaf(rec.op_fp[d], dest[d], rec.op_shape[d], carry[d])
+                            carry_t.append(self.tensor(leaf[d]))
+                            carry_d.append(d)
+                        else:
+                            leaf[d] = self._ckpt_leaf(rec.op_fp[d], rec.op_shape[d], rec.op_ids[d], False)
+                        temps.append(leaf[d])
+                var state = List[Int](capacity=n_state)
+                var b_t = List[Tensor]()
+                var b_d = List[Int]()
+                if p == 0:
+                    for k in range(n_state):  # driver-loop: over state tensors (the initial state)
+                        state.append(leaf[rec.role[1 + k]])
+                else:
+                    var bl = List[Int](length=nb, fill=0)
+                    for b in range(nb):  # driver-loop: over the distinct boundary tensors (row p - 1)
+                        var val = _word_addr(rec.bstore, (p - 1) * rec.n_bd + rec.bd_off[b])
+                        var sh = sc.cell.in_shapes[rec.bd_k[b]]
+                        if rec.bd_req[(p - 1) * nb + b]:
+                            # The boundary step's output is this state too: its stack slice is the first term of
+                            # the state's gradient (the plain stack node has the highest index).
+                            var pre = rec.y_alias == b
+                            if pre:
+                                var tb = steps - begin if sc.reverse else begin - 1
+                                self._ckpt_copy(upstream + tb * y_n, FP(unsafe_from_address=g_cur) + rec.bd_off[b], y_n)
+                            bl[b] = self._ckpt_carry_leaf(val, _word_addr(g_cur, rec.bd_off[b]), sh, pre)
+                            b_t.append(self.tensor(bl[b]))
+                            b_d.append(b)
+                        else:
+                            bl[b] = self._ckpt_leaf(val, sh, False, False)
+                        temps.append(bl[b])
+                    for k in range(n_state):  # driver-loop: over state tensors
+                        state.append(bl[rec.state_bd[k]])
+                var params = List[Int](capacity=sc.n_params)
+                for j in range(sc.n_params):  # driver-loop: over the bound parameters
+                    params.append(leaf[rec.role[params_role + j]])
+                var x = List[Tensor]()
+                var mask = 0
+                var zero = 0
+                if sc.has_lengths:
+                    var mz = self._scan_mask(leaf[rec.role[lengths_role]], steps, batch, x, temps)
+                    mask = mz[0]
+                    zero = mz[1]
+                var rank_view = self._scan_rank_views(batch)
+                var outs_by_time = List[Int](length=steps, fill=0)
+                self._scan_steps[True](sc, rec.key, leaf[rec.role[0]], params, state, begin, end, mask, zero,
+                                       rank_view, outs_by_time, temps, step_at)
+                step_at = -1
+                # The plain stack's columns that touch this segment, in its order (outputs in time order, then the
+                # final states), and their seed words; a folded end state's column takes the later segment's row.
+                var cols = List[Int]()
+                var src = List[FP]()
+                var cnt = List[Int]()
+                var skip_i = -1
+                if not last and rec.y_alias >= 0 and fold[rec.y_alias]:
+                    skip_i = end - 1  # the boundary step's output: folded into the boundary row already
+                for jj in range(end - begin):  # driver-loop: over the segment's steps, in time order
+                    var i = end - 1 - jj if sc.reverse else begin + jj
+                    if i == skip_i:
+                        continue
+                    var t = steps - 1 - i if sc.reverse else i
+                    cols.append(outs_by_time[t])
+                    src.append(upstream + t * y_n)
+                    cnt.append(y_n)
+                if last:
+                    for k in range(n_state):  # driver-loop: over state tensors (the final states)
+                        cols.append(state[k])
+                        src.append(upstream + fin_off[k])
+                        cnt.append(sc.cell.in_shapes[k].count())
+                else:
+                    for b in range(nb):  # driver-loop: over the distinct boundary tensors (the end state)
+                        if fold[b]:
+                            cols.append(state[rec.bd_k[b]])
+                            src.append(FP(unsafe_from_address=g_next) + rec.bd_off[b])
+                            cnt.append(sc.cell.in_shapes[rec.bd_k[b]].count())
+                var next_fold = List[Bool](length=nb, fill=False)
+                if len(cols) > 0:
+                    var root = self._pack_columns(cols, temps)
+                    temps.append(root)
+                    var rt = self.tensor(root)
+                    if self.tape.requires_grad(rt):
+                        # the carried leaves this segment's columns do not reach are released (nothing written,
+                        # nothing zeroed), as the plain graph does not touch them from these steps
+                        var asked = List[Tensor](capacity=len(carry_t) + len(b_t))
+                        for c in range(len(carry_t)):  # driver-loop: over the carried operand leaves
+                            asked.append(carry_t[c])
+                        for c in range(len(b_t)):  # driver-loop: over the carried boundary leaves
+                            asked.append(b_t[c])
+                        var roots: List[Tensor] = [rt]
+                        var got = self.tape.reaches(roots, asked)
+                        for c in range(len(asked)):  # driver-loop: over the carried leaves
+                            if not got[c]:
+                                self.tape.release_leaf_gradient(asked[c])
+                        var n_words = 0
+                        for c in range(len(cnt)):  # driver-loop: over the columns (seed size)
+                            n_words += cnt[c]
+                        var seed_fp = self.tape.reserve(self.ex, n_words)
+                        var at = 0
+                        for c in range(len(src)):  # driver-loop: over the columns (one seed copy each)
+                            self._ckpt_copy(src[c], seed_fp + at, cnt[c])
+                            at += cnt[c]
+                        var seed = self._ckpt_leaf(Int(seed_fp), ShapeN.matrix(n_words, 1), False, False)
+                        temps.append(seed)
+                        self._ckpt_tape_backward(rt, self.tensor(seed))
+                        for c in range(len(carry_t)):  # driver-loop: over the carried operand leaves
+                            if got[c]:
+                                carry[carry_d[c]] = True
+                        for c in range(len(b_t)):  # driver-loop: over the carried boundary leaves
+                            next_fold[b_d[c]] = got[len(carry_t) + c]
+                fold = next_fold^
+                var swap_row = g_next
+                g_next = g_cur
+                g_cur = swap_row
+                self._drop_temps(temps)
+                temps.clear()
+        except err:
+            self._drop_temps(temps)
+            swap(held, self.tape)
+            swap(held, self.ckpt_tape)
+            raise _scan_step_error(err, step_at)
+        swap(held, self.tape)
+        swap(held, self.ckpt_tape)
+    # activation-ckpt end
     # nn-blocks-scan end
 
     def op_packed(mut self, code: Int, block: Int) raises -> Int:
@@ -4237,16 +5073,28 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         return outs^
 
     def cbw_first_order(self, what: String) raises:
-        """Refuse a recorded (create_graph) backward through a custom rule."""
+        """Refuse a recorded (create_graph) backward through a custom rule or a checkpointed segment."""
         if self.cbw.holds_rules():
-            raise Error("ValueError: custom: " + what + " through a user-defined backward rule is not supported: "
-                        + "custom rules are first order only (the engine does not differentiate the backward "
-                        + "program); call reset() before recording a graph without one")
+            raise Error("ValueError: custom: " + what + " through a user-defined backward rule or a checkpointed"
+                        + " segment is not supported: both are first order only (the engine does not"
+                        + " differentiate the backward program or the recompute); call reset() before recording a"
+                        + " graph without one")
 
     def cbw_backward_scalar(mut self, t: Tensor, rules: StepOpRules, accumulate: Bool) raises:
         """The scalar backward of a graph that may hold custom nodes: `rules`
         plus the custom tag (identical to `rules` on every other node)."""
         var wrapped = CbwRules[Self.E](rules, Int(UnsafePointer(to=self)))
+        if self.cbw.ckpt_live:
+            # activation-ckpt: the graph holds a checkpointed segment; its rule set wraps this one, and its rule
+            # reads the backward's root (one Bool read per wrapped backward; a graph without a custom node or a
+            # checkpoint never comes here)
+            self.ckpt.root = t._index
+            var with_ckpt = CkptRules[Self.E](wrapped, Int(UnsafePointer(to=self)))
+            if self.layer_nodes:
+                self.tape.backward_scalar_with_rules(self.ex, t, LayerRules[CkptRules[Self.E]](with_ckpt), accumulate)
+                return
+            self.tape.backward_scalar_with_rules(self.ex, t, with_ckpt, accumulate)
+            return
         if self.layer_nodes:
             # session-ops: custom nodes and Sequential layer nodes in one graph
             self.tape.backward_scalar_with_rules(self.ex, t, LayerRules[CbwRules[Self.E]](wrapped), accumulate)
@@ -4257,6 +5105,15 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         """The seeded first-order backward of a graph that may hold custom
         nodes (StepOpRules: ImportRules plus the step ops' tags)."""
         var wrapped = CbwRules[Self.E](StepOpRules(self.steps_address()), Int(UnsafePointer(to=self)))
+        if self.cbw.ckpt_live:
+            # activation-ckpt: as in cbw_backward_scalar
+            self.ckpt.root = t._index
+            var with_ckpt = CkptRules[Self.E](wrapped, Int(UnsafePointer(to=self)))
+            if self.layer_nodes:
+                self.tape.backward_with_rules(self.ex, t, seed, LayerRules[CkptRules[Self.E]](with_ckpt), False)
+                return
+            self.tape.backward_with_rules(self.ex, t, seed, with_ckpt, False)
+            return
         if self.layer_nodes:
             # session-ops: custom nodes and Sequential layer nodes in one graph
             self.tape.backward_with_rules(self.ex, t, seed, LayerRules[CbwRules[Self.E]](wrapped), False)
@@ -4401,6 +5258,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         saved_args.i0 = len(self.cbw.records)
         saved_args.i1 = node
         self.cbw.records.append(rec^)
+        self.cbw.live = True  # what `holds_rules` reads (one word, as the record count was)
         var t = self.tape.custom_nd(self.ex, x, out_fp, out_shape, NN_CBW_TAG, saved_args)
         if t._index != node:
             raise Error("custom: the tape recorded the custom node at an unexpected index")
@@ -4486,6 +5344,23 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     # nn-blocks-cbw end
 
 
+# activation-ckpt begin: module helpers of the scan and the checkpoint (OpsSession above)
+def _scan_step_error(err: Error, step_at: Int) -> Error:
+    """A scan step's error named with its step (time index); an error raised outside the steps unchanged."""
+    var message = String(err)
+    if step_at < 0:
+        return Error(message)
+    if message.startswith("ValueError: "):
+        return Error("ValueError: scan step " + String(step_at) + ": " + String(message[byte=12:]))
+    return Error("scan step " + String(step_at) + ": " + message)
+
+
+def _word_addr(addr: Int, words: Int) -> Int:
+    """The address `words` float32 words past `addr`."""
+    return Int(FP(unsafe_from_address=addr) + words)
+# activation-ckpt end
+
+
 # nn-blocks-cbw begin: the rule set of a graph that may hold custom nodes
 @fieldwise_init
 struct CbwRules[S: Exec & Movable & Deinitable](BackwardRules, ImplicitlyCopyable, Movable):
@@ -4530,6 +5405,47 @@ struct CbwRules[S: Exec & Movable & Deinitable](BackwardRules, ImplicitlyCopyabl
         var s = UnsafePointer[OpsSession[Self.S], MutUntrackedOrigin](unsafe_from_address=self.session)
         s[]._cbw_apply(saved.i0, saved.i1, upstream, gradients)
 # nn-blocks-cbw end
+
+
+# activation-ckpt begin: the rule set of a graph that holds a checkpointed segment
+@fieldwise_init
+struct CkptRules[S: Exec & Movable & Deinitable](BackwardRules, ImplicitlyCopyable, Movable):
+    """CbwRules plus NN_CKPT_TAG, whose rule recomputes the segment in the session at address `session` and
+    continues its inputs' gradients (OpsSession._ckpt_apply). Its own wrapper (lane fable-finalize): only a
+    graph that recorded a checkpointed node differentiates with it (OpsSession.cbw_backward_scalar and
+    cbw_backward_seeded, on `cbw.ckpt_live`), so a graph with custom operations and no checkpoint tests no tag
+    for it. Every other tag is CbwRules' own."""
+    var inner: CbwRules[Self.S]
+    var session: Int
+
+    def supports(self, tag: Int) -> Bool:
+        if tag == NN_CKPT_TAG:
+            return True
+        return self.inner.supports(tag)
+
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if tag == NN_CKPT_TAG:
+            # every edge is writes_total (below); no fill
+            return False
+        return self.inner.zeroed_destination(tag, saved, edge)
+
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if tag == NN_CKPT_TAG:
+            # the recompute continues each input's fold in place (autograd/nn_ckpt.mojo), after the consumers
+            # before it
+            return True
+        return self.inner.writes_total(tag, saved, edge)
+
+    def apply[E: Exec](
+        self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
+        inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
+    ) raises:
+        if tag != NN_CKPT_TAG:
+            self.inner.apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+            return
+        var c = UnsafePointer[OpsSession[Self.S], MutUntrackedOrigin](unsafe_from_address=self.session)
+        c[]._ckpt_apply(saved.i0, saved.i1, upstream, gradients)
+# activation-ckpt end
 
 
 def _keeps_shape(code: Int) -> Bool:
