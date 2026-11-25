@@ -652,14 +652,38 @@ def enqueue_resident_ctr_expand(
                 max(n_rows * plan.n_cols, 1)
             )
         plan.rows = n_rows
-    plan.d_bad.enqueue_fill(CTR_NO_BAD)
-    var rm = Int32(1) if row_major else Int32(0)
     if n_rows * plan.n_raw > 0:
         ctx.enqueue_copy(
             dst_buf=plan.d_in.value(),
             src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](x),
         )
-    var d_x = plan.d_in.value().unsafe_ptr()
+    enqueue_ctr_expand_kernels(
+        ctx, plan, plan.d_in.value().unsafe_ptr(), n_rows, row_major, d_borders, d_out
+    )
+    if read_bad:
+        ctx.enqueue_copy(dst_ptr=plan.h_bad.unsafe_ptr(), src_buf=plan.d_bad)
+
+
+def enqueue_ctr_expand_kernels(
+    ctx: DeviceContext,
+    mut plan: ResidentCtrPlan,
+    d_x: MutPointer[Float32, MutAnyOrigin],
+    n_rows: Int,
+    row_major: Bool,
+    mut d_borders: DeviceBuffer[DType.float32],
+    mut d_out: DeviceBuffer[DType.float32],
+) raises:
+    """The expansion launches over raw input ALREADY ON THE DEVICE (`d_x`,
+    `n_rows * plan.n_raw` words as handed over, row- or column-major) into
+    `d_out` (`plan.n_cols * n_rows`, column-major), ENQUEUED, with the
+    refusal words reset first. The resident predict stages its host rows
+    into `plan.d_in` and calls this (`enqueue_resident_ctr_expand`); the
+    device importances (`gbdt/gpu_importance.mojo`, lane vd-leftovers) hand
+    their own device copy of the fit's rows (a fold slot or one upload).
+    For a tensor plan the caller has sized `plan.d_bins` (`ctr_plan_size_bins`).
+    Nothing is copied home here."""
+    plan.d_bad.enqueue_fill(CTR_NO_BAD)
+    var rm = Int32(1) if row_major else Int32(0)
     if not plan.tensor:
         ctx.enqueue_function[ctr_simple_expand_kernel](
             d_x, Int32(n_rows), Int32(plan.n_raw), rm, Int32(plan.n_cols),
@@ -690,8 +714,37 @@ def enqueue_resident_ctr_expand(
                 plan.d_bad.unsafe_ptr(),
                 grid_dim=_grid(n_rows), block_dim=CTR_BLOCK,
             )
-    if read_bad:
-        ctx.enqueue_copy(dst_ptr=plan.h_bad.unsafe_ptr(), src_buf=plan.d_bad)
+
+
+def ctr_plan_size_bins(ctx: DeviceContext, mut plan: ResidentCtrPlan, n_rows: Int) raises:
+    """A tensor plan's bin buffer for `n_rows` rows, for a caller that hands
+    its own device rows to `enqueue_ctr_expand_kernels` (the resident
+    predict sizes it with its staging buffer). A simple plan has none."""
+    if plan.tensor:
+        plan.d_bins = None
+        plan.d_bins = ctx.enqueue_create_buffer[DType.uint32](
+            max(n_rows * plan.n_cols, 1)
+        )
+
+
+def ctr_plan_raise_if_bad_device(plan: ResidentCtrPlan) raises:
+    """After the drain, for input that lives on the device (no host word to
+    quote): when a refusal was recorded, raise naming its cell (the lowest
+    feature, that feature's lowest row), the same cell the host statement
+    refuses first."""
+    var f = Int(plan.h_bad.unsafe_ptr().unsafe_load(0))
+    if f == Int(CTR_NO_BAD):
+        return
+    var r = Int(plan.h_bad.unsafe_ptr().unsafe_load(1 + f))
+    if plan.tensor:
+        raise Error(
+            "categorical feature " + String(f) + " row " + String(r)
+            + " is not a dense category code (a tensor CTR model also refuses NaN)"
+        )
+    raise Error(
+        "categorical feature " + String(f) + " row " + String(r)
+        + " is not a dense category code"
+    )
 
 
 def resident_ctr_raise_if_bad(

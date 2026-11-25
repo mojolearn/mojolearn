@@ -24,10 +24,17 @@ Launches, in order, on the image's process context:
 One upload of the plan, X (the model columns) and the weights; one download
 of the `n_input` results and the refusal word.
 
-The CTR expansion of a categorical model's columns is the host statement the
-GPU predict also runs (`gbdt/train.mojo::_expand_model_columns`), done once
-by `gbdt_importance_input` before the upload; the importance work itself is
-on the device.
+The CTR expansion of a categorical model's columns (lane vd-leftovers,
+2026-11-24) runs ON THE DEVICE before launch 2 (`gbdt_imp_expand_device`):
+the fit's raw rows (one upload of host rows, or THE FOLD X WORD's device
+copy) go through the resident predict's kernels
+(`gbdt/models/kernel/resident_ctr.mojo` for the simple and tensor CTRs,
+`gbdt/models/kernel/combination_code.mojo` for the tree CTRs), which write
+the model columns, column-major, straight into the buffer launch 2 reads.
+Those kernels compute the host statements' words (every float32 operation
+correctly rounded once, `checks/soft_f64.mojo`), so the host column's
+`gbdt_importance_model_x` and every vendor give the same model columns. The
+refusal words come home with the results. No row visits the host.
 """
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
@@ -37,10 +44,21 @@ from core.fold_x_device import fold_x_fill
 
 from core.gbdt_importance import (
     GbdtImpF32, GbdtImpI32, GbdtImpU32, GbdtImpU8, GbdtImportanceInput, gbdt_importance_input,
-    gbdt_importance_fold_rows,
     gbdt_imp_bin_body, gbdt_imp_exponent, gbdt_imp_finish_body, gbdt_imp_fold_body, gbdt_imp_row_leaf,
     gbdt_imp_tree_body, gbdt_imp_weight_word,
 )
+
+from gbdt.models.kernel.combination_code import ResidentCombinationPlan, enqueue_combination_columns
+from gbdt.models.kernel.resident_ctr import (
+    CTR_BORDER_SLAB,
+    ResidentCtrPlan,
+    _upload_f32,
+    ctr_plan_raise_if_bad_device,
+    ctr_plan_size_bins,
+    enqueue_ctr_expand_kernels,
+)
+from gbdt.models.tensor_ctr_apply import TTensorCtrApplyTable
+from gbdt.models.trained_model import TrainedModel
 
 comptime IMP_TPB = 256
 #: the trees of one leaf-weight launch (the grid's y extent; CUDA caps it at 65535)
@@ -156,6 +174,95 @@ def _up_f32(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[DT
     return buf^
 
 
+struct GbdtImpCtrStage(Movable):
+    """What the device expansion's queued launches read, kept alive by the
+    caller until its drain: the CTR plans, the raw rows on the device and
+    the border slabs (lane vd-leftovers)."""
+
+    var ctr: ResidentCtrPlan
+    var comb: Optional[ResidentCombinationPlan]
+    var d_in: DeviceBuffer[DType.float32]
+    var d_borders: DeviceBuffer[DType.float32]
+
+    def __init__(
+        out self,
+        var ctr: ResidentCtrPlan,
+        var comb: Optional[ResidentCombinationPlan],
+        var d_in: DeviceBuffer[DType.float32],
+        var d_borders: DeviceBuffer[DType.float32],
+    ):
+        self.ctr = ctr^
+        self.comb = comb^
+        self.d_in = d_in^
+        self.d_borders = d_borders^
+
+
+def gbdt_imp_expand_device(
+    ctx: DeviceContext, tm: TrainedModel, x_word: Int, n_rows: Int, n_raw: Int, row_major: Bool, n_columns: Int,
+    mut d_out: DeviceBuffer[DType.float32],
+) raises -> GbdtImpCtrStage:
+    """A CTR model's `n_columns` MODEL columns (column-major, `n_columns *
+    n_rows`) into `d_out`, ENQUEUED on `ctx`, from the fit's `n_rows` x
+    `n_raw` raw rows at `x_word` (a host address: one upload; THE FOLD X
+    WORD: one device-to-device copy of the slot; C order when `row_major`;
+    the categorical columns as the fit's dense codes). The plans are the
+    resident predict's (`gbdt/resident_model.mojo` builds the same ones
+    from the same model): the simple plan over the base columns, the
+    tree-CTR plan over the model's last columns, the tensor plan with the
+    model's border slabs. The refusal words' copy home is enqueued last;
+    after its drain the caller calls `ctr_plan_raise_if_bad_device` on the
+    returned stage, which it keeps alive until then."""
+    var tensor_tables = List[TTensorCtrApplyTable]()
+    ref reg = tm.tensor_ctr_registry
+    # driver-loop: over the registered tensor CTR model columns (model structure)
+    for i in range(len(reg.features)):  # small-loop(features: registered tensor CTR model columns): builds the apply plan once per call
+        if reg.features[i].model_column != reg.first_model_column + i:
+            raise Error("tensor CTR registry model columns are not contiguous")
+        tensor_tables.append(reg.features[i].table.apply_table())
+    var n_comb = len(tm.combination_ctrs.tables)
+    var n_base = n_columns - n_comb
+    var base_one_hot = List[Bool]()
+    # driver-loop: over the base model columns (their one-hot flags)
+    for c in range(min(n_base, len(tm.one_hot))):  # small-loop(n_base: model columns): packs the one-hot flags once per call
+        base_one_hot.append(tm.one_hot[c])
+    var ctr = ResidentCtrPlan(ctx, tm.ctr_tables, tensor_tables, n_base, base_one_hot, n_raw)
+    var comb = Optional[ResidentCombinationPlan](None)
+    if n_comb > 0:
+        comb = ResidentCombinationPlan(ctx, tm.combination_ctrs, n_columns, n_raw)
+    # the border slabs the tensor kernels read (`resident_model`'s layout:
+    # per model column `[count, border_0, ...]`); a simple plan reads none
+    var slab_words = 1
+    if len(tensor_tables) != 0:
+        slab_words = n_columns * CTR_BORDER_SLAB
+    var slab = List[Float32](length=slab_words, fill=Float32(0.0))
+    if len(tensor_tables) != 0:
+        if len(tm.borders) != n_columns:
+            raise Error("gbdt importances: the model's borders do not match its columns")
+        # driver-loop: over the model columns (model data)
+        for f in range(n_columns):  # small-loop(n_columns: model columns): packs the border slabs once per call
+            var count = len(tm.borders[f])
+            if count >= CTR_BORDER_SLAB:
+                raise Error(
+                    "feature " + String(f) + " has " + String(count)
+                    + " borders; the staging slab holds " + String(CTR_BORDER_SLAB - 1)
+                )
+            slab[f * CTR_BORDER_SLAB] = Float32(count)
+            for b in range(count):  # small-loop(count: borders of one model column, under 256)
+                slab[f * CTR_BORDER_SLAB + 1 + b] = tm.borders[f][b]
+    var d_borders = _upload_f32(ctx, slab)
+    _ = len(slab)  # the upload copied from its storage (and waited)
+    # the raw rows on the device, once: the old upload or the slot's copy
+    var d_in = ctx.enqueue_create_buffer[DType.float32](max(n_rows * n_raw, 1))
+    fold_x_fill(ctx, d_in, x_word, n_rows * n_raw)
+    ctr_plan_size_bins(ctx, ctr, n_rows)
+    enqueue_ctr_expand_kernels(ctx, ctr, d_in.unsafe_ptr(), n_rows, row_major, d_borders, d_out)
+    if comb:
+        # the tree-CTR columns flag into the same refusal words
+        enqueue_combination_columns(ctx, comb.value(), d_in, n_rows, row_major, d_out, ctr.d_bad)
+    ctx.enqueue_copy(dst_ptr=ctr.h_bad.unsafe_ptr(), src_buf=ctr.d_bad)
+    return GbdtImpCtrStage(ctr^, comb^, d_in^, d_borders^)
+
+
 def gbdt_feature_importances_device(
     ctx: DeviceContext, text: String, x_addr: Int, n_rows: Int, n_input: Int, row_major: Bool, w_addr: Int,
     n_weights: Int, dst_addr: Int,
@@ -166,34 +273,28 @@ def gbdt_feature_importances_device(
     `w_addr`; the `n_input` float32 results to the host `dst_addr`. Returns
     `n_input`. The caller keeps its buffers alive until this returns (it
     synchronizes)."""
-    var request = gbdt_importance_input(text, x_addr, n_rows, n_input, row_major, n_weights)
-    var fold_rows = List[Float32]()
-    if request.needs_rows:
-        # A CTR or expanded model fitted on THE FOLD X WORD (lane
-        # vdf2-gbdtcat2): its model columns are the predict path's expansion
-        # (`gbdt_host_expand_ctr`, a host statement on every column, the GPU
-        # predict's too) of the fit's rows, so the slot's rows (the
-        # categorical columns already the fit's codes) come home once, here,
-        # after the fit; the expanded columns then go up as for a host fit.
-        fold_rows = List[Float32](unsafe_uninit_length=max(n_rows * n_input, 1))
-        var d_rows = ctx.enqueue_create_buffer[DType.float32](max(n_rows * n_input, 1))
-        fold_x_fill(ctx, d_rows, x_addr, n_rows * n_input)
-        ctx.enqueue_copy(
-            dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(fold_rows.unsafe_ptr())), src_buf=d_rows
-        )
-        ctx.synchronize()
-        _ = d_rows^
-        gbdt_importance_fold_rows(request, Int(fold_rows.unsafe_ptr()), n_rows, n_input)
+    var request = gbdt_importance_input(text, x_addr, n_rows, n_input, row_major, n_weights, True)
     ref plan = request.plan
     var n_cols = plan.n_cols
     var n_trees = plan.n_trees
-    # the model columns: the caller's X (n_cols == n_input) or the expanded copy
+    # the model columns: the caller's X (n_cols == n_input) or, for a CTR
+    # model, its expansion on the device (column-major)
     var n_x = n_rows * n_cols
     var d_x = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
-    # THE FOLD X WORD (lane vdf-scope-trees4, core/fold_x_device.mojo): a
-    # negative address is the fit's fold slot, copied device to device; a
-    # host address is the old upload
-    fold_x_fill(ctx, d_x, request.x_addr, n_x)
+    var x_row_major = request.row_major
+    var stage = Optional[GbdtImpCtrStage](None)
+    if request.expand_on_device:
+        # lane vd-leftovers: the raw rows (host or THE FOLD X WORD) are
+        # expanded by the device kernels into `d_x`; nothing comes home
+        stage = gbdt_imp_expand_device(
+            ctx, request.model, request.x_addr, n_rows, n_input, request.row_major, n_cols, d_x
+        )
+        x_row_major = False
+    else:
+        # THE FOLD X WORD (lane vdf-scope-trees4, core/fold_x_device.mojo): a
+        # negative address is the fit's fold slot, copied device to device; a
+        # host address is the old upload
+        fold_x_fill(ctx, d_x, request.x_addr, n_x)
     var d_w = ctx.enqueue_create_buffer[DType.float32](max(n_weights, 1))
     if n_weights > 0:
         ctx.enqueue_copy(dst_buf=d_w, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=w_addr))
@@ -231,7 +332,7 @@ def gbdt_feature_importances_device(
         )
     ctx.enqueue_function[_imp_bins_kernel](
         d_x.unsafe_ptr(), d_bins.unsafe_ptr(), d_border_lo.unsafe_ptr(), d_borders.unsafe_ptr(),
-        d_treat.unsafe_ptr(), d_sorted.unsafe_ptr(), Int32(n_rows), Int32(n_cols), Int32(1 if request.row_major else 0),
+        d_treat.unsafe_ptr(), d_sorted.unsafe_ptr(), Int32(n_rows), Int32(n_cols), Int32(1 if x_row_major else 0),
         grid_dim=(_blocks(n_rows * n_cols), 1, 1), block_dim=(IMP_TPB, 1, 1),
     )
     var t0 = 0
@@ -291,8 +392,11 @@ def gbdt_feature_importances_device(
     _ = d_total^
     _ = d_out^
     _ = h_fail^
-    _ = len(request.model_x)  # the upload read the expanded model columns through `x_addr`
-    _ = len(fold_rows)  # the expansion read the fold's rows
+    _ = len(request.model_x)  # empty on the device column (the expansion is on the device)
+    if stage:
+        # the expansion's launches read the stage's plans and rows until the drain above
+        ctr_plan_raise_if_bad_device(stage.value().ctr)
+    _ = stage^
     if failed > 0:
         raise Error("gbdt importances: non-symmetric tree " + String(failed - 1) + " walks a row out of its tree")
     return plan.n_input
