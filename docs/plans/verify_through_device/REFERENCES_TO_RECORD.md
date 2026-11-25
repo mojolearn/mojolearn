@@ -647,3 +647,22 @@ commands at the top:
 The two columns must be equal byte for byte (same per-element step, same order; the lane also holds both to its
 NumPy left-fold oracle). The CPU-only installation's `device=None` now runs the same CPU fold in place of the host
 training image's `accumulate` (same arithmetic), so the CPU column is recorded, not reused.
+
+## fixed15-parts-verify (2026-11-25): the fixed15_v1 default and the per-part numeric profile
+
+`docs/plans/NUMERIC_PROFILE_PARTS.md`. New lanes, RECORD OWED at the release's one verification (every column):
+
+| lane | file | parts | batch part | CPU column | NVIDIA column |
+|---|---|---|---|---|---|
+| `numeric-profile-parts` | numeric_profile_parts.py | train (one part per case, `flags`) | n/a:profile-cases | record | record |
+| `numeric-profile-parallel-default` | numeric_profile_parts.py | train (`default`, `parts`, `flags`) | n/a:profile-cases | n/a:one-sided | record |
+
+Bits change for every no-keyword run of `CausalLM` and `ParallelCausalLM` (the default is now `fixed15_v1`). No
+identity_break lane loads one without naming `fp32_v1`, so no existing lane's reference moves. What moves, RECORD
+OWED (captures compared column against column; no stored reference to regenerate):
+
+- `python -m mojolearn verify-causal-lm` (`_verify_causal_lm.py`, profile `loaded-causal-lm-v4`): the six
+  transformer architecture cases (llama untied and tied, mistral, qwen2, qwen3, phi3), each format, CausalLM and
+  the `layer_devices` ParallelCausalLM capture; the two Mamba cases stay `fp32_v1`.
+- The API verify (`_verify_api_models.py`): the numerical endpoints of `models.CausalLM`, `models.ParallelCausalLM`,
+  `models.GenerationStream` and `models.CausalLMState`.

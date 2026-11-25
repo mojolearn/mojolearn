@@ -1387,6 +1387,8 @@ TRAINING_LANE_NAMES = {
     "nn-pg-array": "Array: array",
     "nn-pg-bpe-decode": "BpeTokenizer: decode",
     "nn-pg-causal-lm": "CausalLM, GenerationStream, Array: lm",
+    # fixed15-parts-verify (2026-11-25): the fixed15_v1 default and the per-part numeric profile
+    "numeric-profile-parts": "CausalLM, TransformerBlock: numeric profile parts",
     "nn-tr-byte-lm": "LanguageModelConfig, LanguageModelTrainer, LanguageModelInference: lm",
     "nn-tr-generator": "Generator: generator",
     "nn-tr-optim-state": "SGD, Adam, AdamW: state",
@@ -2034,7 +2036,9 @@ FAMILIES = (
                         # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table was admitted;
                         # RECORD OWED: the release's one verification records them
                         "nn-ep-mamba-blocks",
-                        "nn-pg-causal-lm",),
+                        "nn-pg-causal-lm",
+                        # fixed15-parts-verify (2026-11-25): the fixed15_v1 default and per-part profile; RECORD OWED
+                        "numeric-profile-parts",),
         inference_lanes=(),
         forest_kinds=(),
         # lane/inference-neural-forward, 2026-09-15: the Mamba-1, Mamba-2
@@ -5095,6 +5099,7 @@ PUBLIC_PENDING_LANES = {
     "nn-pg-array": "no reference",
     "nn-pg-bpe-decode": "no reference",
     "nn-pg-causal-lm": "no reference",
+    "numeric-profile-parts": "no reference",  # fixed15-parts-verify (2026-11-25): RECORD OWED
     "nn-pg-imported-program": "no reference",
     "nn-pg-program-decode": "no reference",
     "nn-pg-session-blocks": "no reference",
@@ -5239,6 +5244,7 @@ PUBLIC_PENDING_LANES = {
     "psd-byte-lm-worker": "no cpu route",
     "psd-causal-lm": "no cpu route",
     "psd-causal-lm-text": "no cpu route",
+    "numeric-profile-parallel-default": "no cpu route",  # fixed15-parts-verify (2026-11-25): GPU RECORD OWED
     "psd-cd": "no cpu route",
     "psd-cholesky": "no cpu route",
     "psd-dbscan": "no cpu route",

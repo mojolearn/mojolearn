@@ -20,7 +20,11 @@ from . import _causal_lm_fixtures as fixtures
 
 __all__ = ['capture', 'compare']
 
-PROFILE = 'loaded-causal-lm-v3'  # v3: canonical state digest (state_digest)
+# v3: canonical state digest (state_digest). v4 (fixed15-parts-verify, 2026-11-25): the loads below name no
+# numeric profile, so they run the inference default, fixed15_v1 for the transformer architectures since
+# 2026-11-25 (docs/plans/NUMERIC_PROFILE_PARTS.md; the Mamba cases stay fp32_v1): bits change on every column
+# together, RECORD OWED at the release's one verification; a v3 capture is never compared with a v4 one.
+PROFILE = 'loaded-causal-lm-v4'
 ARCHITECTURES = (('llama', False), ('llama', True), ('mistral', False),
                  ('qwen2', False), ('qwen3', False), ('phi3', False),
                  ('mamba', True), ('mamba2', True))
