@@ -36,6 +36,10 @@ Units (one column each build: the host column with -D MOJOLEARN_COLUMN_CPU=1, el
      (patience 1, every later pass stalls) runs 8 of 12 steps, and 3 steps then the rest from the saved position,
      state and monitor words stop at the same step with the same parameters, state and monitor; restore_best keeps
      the best pass's parameters (the 4-step run's when pass 1 is best, and the source at (0, 4)).
+  4  SEQUENTIAL VALIDATION (lane stream-fits-2). Unit 0's regressor with validation data (3 sequences with their
+     lengths) through the validated streamed form: one finite validation word a pass and the unvalidated fit's
+     parameters; restore_best_weights gives the parameters of a fit of best-pass epochs and the source at that
+     pass's end.
 Sabotage arms coverage-autograd-batch_source_fit_read_ahead_{gpu,cpu} fail units 0 and 1 on their own column (the saved
 position is (0, 4)).
 """
@@ -57,10 +61,11 @@ from autograd.batch_source import (
     RNN_STREAM_MONITOR_WORDS, RNN_STREAM_POSITION_WORDS,
 )
 from bindings.byte_checkpoint_native_run import byte_file_write, ByteCheckpointWriteFailure
+from core.cast_in import CastIn
 from checks.native_tests.training_sequential_common import SeqModel, L_DROPOUT
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, CPU_COLUMN_BUILD, require
 
-comptime STREAM_FITS_UNITS = 4
+comptime STREAM_FITS_UNITS = 5
 comptime _F = 2
 comptime _T = 4  # the longest record: every batch is padded to it
 comptime _W = 4  # target words a record: one a step (unit 1), or the regressor's four outputs (unit 0)
@@ -263,6 +268,71 @@ def run_sequential_unit[E: Exec](root: String, var ex: E) raises:
     var b: List[Float32] = [part.curve[part.n_iter - 1]]
     _same("sequential last epoch's loss", b, a)
     print("STREAM_FITS sequential loss", whole.curve[0], "->", whole.curve[1])
+
+
+def _seq_fit_validated[E: Exec](
+    mut ex: E, m: SeqModel, mut run: _SeqRun, root: String, epochs: Int, restore: Bool,
+    mut vcurve: List[Float32], mut vinfo: List[Int64],
+) raises:
+    """`fit(source=..., epochs=, validation_data=(X, y, lengths), restore_best_weights=)` through the streamed
+    entry's validated form (15 addresses, 16 integers, five input descriptors; lane stream-fits-2)."""
+    var prog = m.program(_T * _F)
+    var ip: List[Int] = [7, m.loss, TARGET_DENSE, m.opt, m.flags, m.sched, m.step_size, 2, epochs, 1, 11, 0,
+                         m.patience, 1, 0, 1 if restore else 0]
+    var fp = m._fit_floats()
+    var vx = List[Float32]()
+    for i in range(3 * _T * _F):  # small-loop(a fixed draw of validation steps)
+        vx.append(Float32(((i * 31) % 11) - 5) / Float32(6))
+    var vy = List[Float32]()
+    for i in range(3 * _W):  # small-loop(a fixed draw of validation targets)
+        vy.append(Float32(((i * 13) % 7) - 3) / Float32(5))
+    var vl: List[Float32] = [4.0, 2.0, 3.0]
+    var addrs: List[Int] = [
+        0, 0, Int(run.params.unsafe_ptr()), Int(run.curve.unsafe_ptr()), Int(run.m.unsafe_ptr()),
+        Int(run.v.unsafe_ptr()), Int(run.state.unsafe_ptr()), 0, 0, 0, 0, Int(vcurve.unsafe_ptr()),
+        Int(vinfo.unsafe_ptr()), 0, Int(vl.unsafe_ptr()),
+    ]
+    var casts: List[CastIn] = [CastIn.f32_c(0, 1, 1), CastIn.f32_c(0, 1, 1),
+                               CastIn.f32_c(Int(vx.unsafe_ptr()), 3, _T * _F),
+                               CastIn.f32_c(Int(vy.unsafe_ptr()), 3, _W), CastIn.f32_c(0, 1, 1)]
+    var words = batch_source_fit_words(_spec(root, 0, 0), 0)
+    run.n_iter = model_fit_source_native(ex, addrs, prog, ip, fp, root, words, Int(run.position.unsafe_ptr()),
+                                         0, 0, Optional[List[CastIn]](casts^))
+    ex.sync()
+    _ = vx^
+    _ = vy^
+    _ = vl^
+    _ = vcurve
+    _ = vinfo
+
+
+def run_sequential_validation_unit[E: Exec](root: String, var ex: E) raises:
+    """Unit 4 (lane stream-fits-2): Sequential.fit(source=) with validation data: one validation loss a pass, the
+    training words of the unvalidated fit; restore_best_weights keeps the best pass's parameters (those of a fit
+    of that many epochs) and the source at that pass's end."""
+    var m = _seq_model()
+    var spec = parse_model(m.program(_T * _F), model_float_words(m.table()))
+    var plain = _SeqRun(spec.n_params, 3)
+    _seq_fit(ex, m, plain, root, 3, 0, False)
+    var curve = List[Float32](length=3, fill=Float32(0))
+    var info = List[Int64](length=2, fill=Int64(0))
+    var seen = _SeqRun(spec.n_params, 3)
+    _seq_fit_validated(ex, m, seen, root, 3, False, curve, info)
+    _same("sequential validation leaves the parameters", seen.params, plain.params)
+    _finite("sequential validation losses", curve)
+    require(Int(info[0]) == 3, "stream_fits: three passes give three validation words, not " + String(info[0]))
+    var kept = _SeqRun(spec.n_params, 3)
+    var curve2 = List[Float32](length=3, fill=Float32(0))
+    var info2 = List[Int64](length=2, fill=Int64(0))
+    _seq_fit_validated(ex, m, kept, root, 3, True, curve2, info2)
+    var best = Int(info2[1])
+    var reference = _SeqRun(spec.n_params, best)
+    _seq_fit(ex, m, reference, root, best, 0, False)
+    _same("sequential restore_best_weights: parameters", kept.params, reference.params)
+    require(Int(kept.position[0]) == best - 1 and Int(kept.position[1]) == 4,
+            "stream_fits: restore_best_weights leaves the source at the best pass's end (" + String(best - 1)
+            + ", 4), not (" + String(kept.position[0]) + ", " + String(kept.position[1]) + ")")
+    print("STREAM_FITS sequential validation best pass", best)
 
 
 # ---------------------------------------------------------------- unit 1: the recurrent estimators' streamed fit
@@ -617,28 +687,32 @@ def test_stream_fits() raises:
     comptime if CPU_COLUMN_BUILD:
         def host_unit(unit: Int) raises:
             var root = _dir(unit)
-            _write_sealed(root, unit >= 2)
+            _write_sealed(root, unit == 2 or unit == 3)
             if unit == 0:
                 run_sequential_unit[HostExec](root, HostExec())
             elif unit == 1:
                 run_recurrent_unit[HostExec](root, HostExec())
             elif unit == 2:
                 run_weights_unit[HostExec](root, HostExec())
-            else:
+            elif unit == 3:
                 run_records_unit[HostExec](root, HostExec())
+            else:
+                run_sequential_validation_unit[HostExec](root, HostExec())
         check_cases("stream_fits", STREAM_FITS_UNITS, host_unit)
     else:
         def device_unit(unit: Int) raises:
             var root = _dir(unit)
-            _write_sealed(root, unit >= 2)
+            _write_sealed(root, unit == 2 or unit == 3)
             if unit == 0:
                 run_sequential_unit[DeviceExec](root, DeviceExec())
             elif unit == 1:
                 run_recurrent_unit[DeviceExec](root, DeviceExec())
             elif unit == 2:
                 run_weights_unit[DeviceExec](root, DeviceExec())
-            else:
+            elif unit == 3:
                 run_records_unit[DeviceExec](root, DeviceExec())
+            else:
+                run_sequential_validation_unit[DeviceExec](root, DeviceExec())
         check_cases_serial("stream_fits", STREAM_FITS_UNITS, device_unit)
     print("PASS STREAM_FITS units", STREAM_FITS_UNITS)
 
