@@ -88,7 +88,7 @@ def _finish(released: ArenaCacheReleased) raises:
 
 def _cache_close(view: ArenaOwnerView) raises:
     var lease = ARENA_CACHES.acquire(arena_handle(view.word))
-    if lease[].live == 0:
+    if lease[].live_count() == 0:
         return
     var released = ArenaCacheReleased()
     with GILReleased(Python()):

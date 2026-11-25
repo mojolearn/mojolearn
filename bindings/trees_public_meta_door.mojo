@@ -148,7 +148,7 @@ from core.linear_entry_table import LinearEntryKey
 from core.entry_table import EntryRef
 from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_predict, rm_predict_slot
 from core.entry_table import entry_ref_word
-from bindings.arena_cache_run import arena_scope_store_put, arena_store_take_rows, arena_cache_free
+from bindings.arena_cache_run import arena_scope_store_hold, arena_cache_unhold, arena_store_take_rows, arena_cache_free
 from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_connect_factory_once,
 )
@@ -2662,11 +2662,21 @@ def _ridge_store_take(store: EntryRef, mx: _MetaX, scope: Int, context: PythonOb
     var kept = False
     try:
         var wide = _index_i64(mx.draw, context)
-        var put = arena_scope_store_put(scope, store, String("estimators"), trees_address(mx.x),
-                                        mx.base_rows * mx.d, pin)
-        kept = put.pinned
-        slot = arena_store_take_rows(store, put.store_id, mx.d, trees_address(wide), mx.n)
+        # HELD (lane gd-device-store): the cached whole X is not freed under the gather.
+        var held = arena_scope_store_hold(scope, store, String("estimators"), trees_address(mx.x),
+                                          mx.base_rows * mx.d, pin)
+        kept = held.pinned
+        try:
+            slot = arena_store_take_rows(store, held.store_id, mx.d, trees_address(wide), mx.n)
+        except:
+            slot = -1
         _ = wide  # read through its address above
+        try:
+            arena_cache_unhold(held)
+        except:
+            if slot >= 0:
+                arena_cache_free(store, slot)
+            slot = -1
     except:
         slot = -1
     member_pin_return(pin, 0 if kept else 1)

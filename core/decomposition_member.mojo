@@ -90,7 +90,8 @@ from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_I32, 
 from core.host_parallel import host_widen_index_i64
 from core.tsvd_native_api import TSVD_FOLD
 from bindings.arena_cache_run import (
-    arena_scope_store_put, arena_cache_put, arena_cache_free, arena_store_take_rows, arena_scope_floor,
+    arena_scope_store_put, arena_scope_store_hold, arena_cache_unhold, arena_cache_put, arena_cache_free,
+    arena_store_take_rows, arena_scope_floor,
 )
 
 comptime DECOMP_KIND_PCA = 0
@@ -453,9 +454,10 @@ def _rows_open_xd(call: _Call) raises -> _Rows:
         raise Error("TypeError: a decomposition member reads its row index as one host int32 or int64 column")
     var n = index.rows
     var rows = _Rows(n, 0)
-    var put = arena_scope_store_put(call[].scope, route.third, String(DECOMP_XD_STORE_PREFIX), call[].x.data,
-                                    base_rows * d, call[].pin)
-    if put.pinned:
+    # HELD (lane gd-device-store): the cached whole X is not freed under the gather.
+    var held = arena_scope_store_hold(call[].scope, route.third, String(DECOMP_XD_STORE_PREFIX), call[].x.data,
+                                      base_rows * d, call[].pin)
+    if held.pinned:
         call[].pin_kept = 1
     var idx = index.data
     var wide = List[Int64]()
@@ -463,8 +465,23 @@ def _rows_open_xd(call: _Call) raises -> _Rows:
         wide = List[Int64](unsafe_uninit_length=n)
         host_widen_index_i64(index.data, Int(wide.unsafe_ptr()), n)
         idx = Int(wide.unsafe_ptr())
-    rows.xd_taken = arena_store_take_rows(route.third, put.store_id, d, idx, n)
+    var failure = String("")
+    var taken = -1
+    try:
+        taken = arena_store_take_rows(route.third, held.store_id, d, idx, n)
+    except error:
+        failure = String(error)
     _ = len(wide)  # the widened words live past the take
+    try:
+        arena_cache_unhold(held)
+    except unhold_error:
+        if failure.byte_length() == 0:
+            failure = String(unhold_error)
+    if failure.byte_length() > 0:
+        if taken >= 0:
+            arena_cache_free(route.third, taken)
+        raise Error(failure)
+    rows.xd_taken = taken
     rows.x = -(rows.xd_taken + 1)
     return rows^
 

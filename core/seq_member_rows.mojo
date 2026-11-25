@@ -29,7 +29,8 @@ from core.member_abi import MemberCall, MemberMatrix, MEMBER_I32, MEMBER_I64
 from core.host_parallel import host_parallelize, host_widen_index_i64
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from bindings.arena_cache_run import (
-    arena_scope_floor, arena_scope_store_put, arena_store_take_rows, arena_cache_free,
+    arena_scope_floor, arena_scope_store_put, arena_scope_store_hold, arena_cache_unhold, arena_store_take_rows,
+    arena_cache_free,
 )
 
 #: `route.flags` bit: `route.fifth` is the image's member device store.
@@ -142,11 +143,23 @@ def member_rows_open(call: _CallP, y_cols: Int, estimator: String, prefix: Strin
             rows.wide = List[Int64](unsafe_uninit_length=n)
             host_widen_index_i64(index.data, Int(rows.wide.unsafe_ptr()), n)
             idx = Int(rows.wide.unsafe_ptr())
-        var put = arena_scope_store_put(call[].scope, route.fifth, prefix, call[].x.data,
-                                        base * d, call[].pin)
-        if put.pinned:
+        # HELD (lane gd-device-store): the cached whole X is not freed under the gather.
+        var held = arena_scope_store_hold(call[].scope, route.fifth, prefix, call[].x.data,
+                                          base * d, call[].pin)
+        if held.pinned:
             call[].pin_kept = 1
-        rows.taken = arena_store_take_rows(route.fifth, put.store_id, d, idx, n)
+        var failure = String("")
+        try:
+            rows.taken = arena_store_take_rows(route.fifth, held.store_id, d, idx, n)
+        except error:
+            failure = String(error)
+        try:
+            arena_cache_unhold(held)
+        except unhold_error:
+            if failure.byte_length() == 0:
+                failure = String(unhold_error)
+        if failure.byte_length() > 0:
+            raise Error(failure)  # a taken slot is freed by `seq_rows_close`
         rows.x = -(rows.taken + 1)
     else:
         rows.gathered = List[Float32](length=max(n * d, 1), fill=Float32(0))
