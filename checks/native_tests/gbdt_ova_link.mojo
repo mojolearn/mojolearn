@@ -123,6 +123,11 @@ struct _DeviceFit(GbdtImage):
     def slot_nan(x_word: Int, count: Int) raises -> Int:
         raise Error("AttributeError: mojolearn: this check image reads no fold X word")
 
+    @staticmethod
+    def slot_category_fit(x_word: Int, n_rows: Int, n_cols: Int, columns: Int, n_cat: Int, dst: Int,
+                          capacity: Int) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image fits no category map over a fold X word")
+
 
 def _inputs(classes: Int, weighted: Bool) -> GbdtInputs:
     """`_ova(classes)`'s X (column-major, 2 features) and y; the weights when asked."""

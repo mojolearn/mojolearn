@@ -39,6 +39,7 @@ from core.shared_slot import SharedSlot
 from max.gpu.host import DeviceContext
 from core.fold_x_device import FOLD_X_STORE, fold_x_word
 from core.fold_x_scan import fold_x_first_nan
+from gbdt.data.category_map_device import fold_x_category_fit_into
 from core.neural_context import process_ctx
 from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
 from gbdt.gbdt_entry import GbdtImage
@@ -259,6 +260,12 @@ struct _RowMajorFit(GbdtImage):
     @staticmethod
     def slot_nan(x_word: Int, count: Int) raises -> Int:
         return fold_x_first_nan(process_ctx["MojolearnEstimatorsContextIdenticalV3"](), x_word, count)
+
+    @staticmethod
+    def slot_category_fit(x_word: Int, n_rows: Int, n_cols: Int, columns: Int, n_cat: Int, dst: Int,
+                          capacity: Int) raises -> Int:
+        return fold_x_category_fit_into(process_ctx["MojolearnEstimatorsContextIdenticalV3"](), x_word, n_rows,
+                                        n_cols, columns, n_cat, dst, capacity)
 
 
 def _device_case(which: Int) raises:
