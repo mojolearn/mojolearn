@@ -215,11 +215,37 @@ struct GenerationLayerSnapshot(Copyable, Movable):
     var packed: GenerationWeightSnapshot
     var profile: PythonObject
     var profile_changed: Bool
+    var parts: Int
+    """lane fixed15-parts-native (2026-11-25): the block's parts mask
+    (`_np_parts`, resolved at construction), 0 for fp32_v1 and every Mamba
+    layer."""
+    var fixed15: Bool
+    """The layer runs a fixed15 block entry (host op 34 / device op 35)."""
+    var planes: Bool
+    """The layer runs on its planes (device op 35): `fixed15` on a route
+    that has the planes entry."""
 
     def __init__(out self, block: PythonObject, kind: String, planes: Bool) raises:
+        # `planes`: this route runs the planes entry (a device image with
+        # `forward15`); whether THIS layer does is its own mask's.
         model_dict(block)
         self.block = block
-        self.weights = GenerationWeightSnapshot(block["_w"], 2 if planes else -1)
+        self.parts = 0
+        if kind == "transformer":
+            self.parts = model_integer(py_get(block, "_np_parts", PythonObject(0)))
+        self.fixed15 = self.parts != 0
+        self.planes = planes and self.fixed15
+        if self.planes:
+            # Per part: only a projection with planes leaves its float32 slot 0.
+            var values = Python.list(block["_w"])
+            var triples = block["_int15"]
+            model_sequence(triples)
+            for j in range(len(triples)):  # driver-loop: over the seven projection slots
+                if triples[j] is not None:
+                    values[j + 2] = PythonObject(None)
+            self.weights = GenerationWeightSnapshot(values)
+        else:
+            self.weights = GenerationWeightSnapshot(block["_w"])
         self.profile = PythonObject(None)
         self.profile_changed = False
         var parameters = List[Int]()
@@ -239,7 +265,7 @@ struct GenerationLayerSnapshot(Copyable, Movable):
             for j in range(len(tail)):  # driver-loop: admitted immutable transformer option words
                 parameters.append(model_integer(tail[j]))
             optional = block["_wopt"]
-            if planes:
+            if self.planes:
                 var triples = block["_int15"]
                 model_sequence(triples)
                 for j in range(len(triples)):  # driver-loop: packed weight plane registry
@@ -351,6 +377,7 @@ struct GenerationOperationSnapshot(Copyable, Movable):
     var width: Int
     var vocab: Int
     var planes: Bool
+    var fixed15: Bool
     var embedding: GenerationWeightSnapshot
     var head: GenerationHeadSnapshot
     var layers: List[GenerationLayerSnapshot]
@@ -373,10 +400,17 @@ struct GenerationOperationSnapshot(Copyable, Movable):
         self.vocab = model_integer(model_fields["vocab_size"])
         self.embedding = GenerationWeightSnapshot(Python.list(model_fields["_embed"]))
         self.head = GenerationHeadSnapshot(model, entries, self.width, self.vocab, True, True)
-        self.planes = self.head.packed and py_contains(entries, "forward15")
+        # lane fixed15-parts-native: per layer (its own parts mask); `planes`
+        # is whether any layer runs on planes, `fixed15` whether any layer
+        # runs a fixed15 block entry at all (host or device).
+        var route_planes = py_contains(entries, "forward15")
+        self.planes = False
+        self.fixed15 = False
         self.layers = List[GenerationLayerSnapshot]()
         for i in range(len(blocks)):  # driver-loop: capture stable layer metadata once per operation
-            self.layers.append(GenerationLayerSnapshot(blocks[i], self.kind, self.planes))
+            self.layers.append(GenerationLayerSnapshot(blocks[i], self.kind, route_planes))
+            self.planes = self.planes or self.layers[i].planes
+            self.fixed15 = self.fixed15 or self.layers[i].fixed15
         self.layer_route = CausalLayerRoute()
 
     def bind_layer_entry(mut self) raises:
@@ -574,7 +608,7 @@ struct GenerationEngineAdmission(Movable):
         self.state_fields = Python.tuple("_resident_session", "arithmetic_profile", "cached_tokens", "max_tokens", "k_cache", "v_cache", "conv_window", "h", "profile_id", "_nn34_usable", "absolute_position", "buffer_xbc", "buffer_dtraw", "buffered_tokens")
         var entries = snapshot.entries
         self.provider = py_get(entries, "native_block_operations" if snapshot.kind == "transformer" else "native_mamba")
-        if snapshot.head.packed or snapshot.planes or self.provider is None or snapshot.native is None:
+        if snapshot.head.packed or snapshot.planes or snapshot.fixed15 or self.provider is None or snapshot.native is None:
             raise Error("CausalLM: native generation engine requires admitted nonresident fp32 model descriptors")
         self.owners.append(AdmittedNativeExecution(snapshot.native, PythonObject(None), 0, -1, -1, PythonObject(None), 0))
         self.native = NativeGenerationModel(self.owners[0].endpoint(), snapshot.embedding.addresses[0],

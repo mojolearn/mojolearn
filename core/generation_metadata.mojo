@@ -28,6 +28,20 @@ struct GenerationLayerWords(Copyable, Movable):
         result[8] = cached
         return result^
 
+    def transformer_params_parts(self, batch: Int, length: Int, capacity: Int, cached: Int, parts: Int) -> List[Int]:
+        """`transformer_params` with the block's parts mask appended: the
+        words of a fixed15 block entry (host op 34, device op 35; lane
+        fixed15-parts-native). One allocation, as `transformer_params`."""
+        var result = List[Int](capacity=len(self.transformer) + 1)
+        for j in range(len(self.transformer)):  # small-loop(27: the layer words)
+            result.append(self.transformer[j])
+        result[0] = batch
+        result[1] = length
+        result[7] = capacity
+        result[8] = cached
+        result.append(parts)
+        return result^
+
     def cache_count(self, batch: Int, capacity: Int) -> Int:
         var cap = capacity if self.transformer[9] == 0 else self.transformer[9]
         return batch * self.transformer[4] * cap * self.transformer[5]
