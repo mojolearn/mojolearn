@@ -96,6 +96,21 @@ fi
   # shellcheck disable=SC2086
   $HELPER plan $GPU_FLAG
 } >> "$OUT/SUMMARY.txt"
+# The tests step runs SOURCE_ROOT's pytest files against the wheel, so the tree must be the wheel's commit
+# (lane gs-fix: the L40S smoke of 3cd641b37e ran a tree holding five test files and changed tests of the fixed15
+# lanes, which failed against that wheel as product reds). A git tree whose HEAD or tests differ is refused.
+if [ -n "${SOURCE_COMMIT:-}" ] && git -C "$SOURCE_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+  src_head=$(git -C "$SOURCE_ROOT" rev-parse HEAD 2>/dev/null)
+  case "$src_head" in
+    "$SOURCE_COMMIT"*) ;;
+    *) echo "source rc=1 SOURCE_ROOT $SOURCE_ROOT is at $src_head, not the wheel's commit $SOURCE_COMMIT" >> "$OUT/SUMMARY.txt"; exit 1 ;;
+  esac
+  src_dirty=$(git -C "$SOURCE_ROOT" status --porcelain -- python/mojolearn/tests tools/identity_lanes 2>/dev/null | head -n 5)
+  if [ -n "$src_dirty" ]; then
+    echo "source rc=1 SOURCE_ROOT $SOURCE_ROOT has test files that differ from $SOURCE_COMMIT: $(echo "$src_dirty" | tr '\n' ' ')" >> "$OUT/SUMMARY.txt"
+    exit 1
+  fi
+fi
 if [ ! -e "${wheels[0]}" ] || [ "${#wheels[@]}" -ne 1 ]; then
   echo "install rc=1 expected exactly one mojolearn_core-*.whl (or one mojolearn-*.whl) in $WHEEL_DIR, found ${#wheels[@]}" >> "$OUT/SUMMARY.txt"
 elif [ "$SIDE" = gpu ] && [ "${#plugins[@]}" -ne 1 ]; then
