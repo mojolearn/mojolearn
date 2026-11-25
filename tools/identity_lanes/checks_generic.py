@@ -13,7 +13,8 @@
 #   1. builds the class through the device-bound view (so it is on the running side) and fits it on the bounded
 #      generic fixture (64 rows, 4 non-negative features; positive regression target);
 #   2. calls `est.check(X, method=...)`: the side's estimator answers, the other device's twin answers from the same
-#      fitted state, and check compares;
+#      fitted state, and check compares (a forecaster whose predict takes the horizon `h` gets a fixed horizon as
+#      its X, `_checks_generic_answer_input`);
 #   3. digests THIS side's output digest (sides[<side>]["digest"]). The verdict is enforced, not digested: a
 #      MISMATCH, a NOT RUN with a reason (a class that refuses device='cpu', two sides on one device, a model that
 #      cannot cross), or an exception from check fails the cell naming every such class. On an installation without
@@ -163,6 +164,28 @@ def _checks_generic_method(est):
     return None
 
 
+#: the forecast horizon handed to `check` for a forecaster whose `predict` takes `h` (an int), not rows
+_checks_generic_HORIZON = 8
+
+
+def _checks_generic_answer_input(est, method, Xp):
+    """What `check` hands to `method`: the generic rows, except for a method whose first parameter is the forecast
+    horizon `h`. The forecasters (AutoTheta and its variants, the Croston classes, ETS: `predict(self, h, X=None,
+    level=None)`, documented "h : int  Forecast horizon") answer h steps ahead, not rows; `check` passes its X
+    through to the method unchanged (`_check_both.check_estimator`), so their X is the horizon. Handing them the
+    row matrix made predict refuse it as a setting ("forecast settings require native scalar metadata",
+    bindings/xseq_forecast_native_door.mojo `_setting`): a wrong argument from this lane, not a product defect
+    (FIX w3-fix-10-s1, 2026-11-25). Read from the signature, so no class is named."""
+    import inspect
+    try:
+        params = list(inspect.signature(getattr(type(est), method)).parameters.values())[1:]
+    except (TypeError, ValueError, AttributeError):
+        return Xp
+    if params and params[0].name == "h" and params[0].default is params[0].empty:
+        return _checks_generic_HORIZON
+    return Xp
+
+
 def _checks_generic_words(exc):
     import re
     return re.sub(r"0x[0-9a-fA-F]+", "0x?", " ".join(str(exc).split()))[:160]
@@ -235,7 +258,7 @@ def _checks_generic_run(ml, X, yc, yr, group):
             continue
         try:
             with contextlib.redirect_stdout(io.StringIO()):   # check prints its report; the digest is the record
-                result = est.check(Xp, method=method)
+                result = est.check(_checks_generic_answer_input(est, method, Xp), method=method)
         except Exception as exc:  # noqa: BLE001 -- a failure of check, collected and raised below
             failed.append(f"{label}.check raised {type(exc).__name__}: {_checks_generic_words(exc)}")
             continue
