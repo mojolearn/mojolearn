@@ -261,8 +261,14 @@ def _rs_bootstrap_unpaired(args: PythonObject, context: PythonObject) raises -> 
     var seed = Int(py=rs_int(args[7], "random_state", where))
     var cl = Float64(py=rs_real(args[4], "confidence_level", where))
     var rf = Int(py=rs_int(args[9], "r_first", where))
-    rs_run(provider, RS_OP_BOOTSTRAP_UNPAIRED, [xx.addr, yy.addr, dist.addr, sdist.addr, scalars.addr],
-           [xx.dim(0), yy.dim(0), Int(py=r), seed, Int(py=meth), Int(py=alt), rf], [cl])
+    # [, x's and y's resident store slots: inside a resident() scope only]
+    var ints: List[Int] = [xx.dim(0), yy.dim(0), Int(py=r), seed, Int(py=meth), Int(py=alt), rf]
+    var rs = rs_resident(args[0], provider, context)
+    if rs.active():
+        ints.append(rs_resident_slot(rs, data[0], xx))
+        ints.append(rs_resident_slot(rs, data[1], yy))
+    rs_run(provider, RS_OP_BOOTSTRAP_UNPAIRED, [xx.addr, yy.addr, dist.addr, sdist.addr, scalars.addr], ints, [cl])
+    _ = rs^  # the store provider stays connected through the run above
     _ = scalars  # keep the Python object alive through the native call above
     _ = sdist  # keep the Python object alive through the native call above
     _ = dist  # keep the Python object alive through the native call above

@@ -1624,6 +1624,8 @@ def bootstrap_unpaired_host_into(
     alternative: Int = ALT_TWO_SIDED,
     r_first: Int = 0,
     tpb: Int = RESAMPLE_TPB,
+    x_slot: Int = -1,
+    y_slot: Int = -1,
 ) raises -> BootstrapResult:
     """`scipy.stats.bootstrap((x, y), diff_means, paired=False, ...)`: the
     two samples resampled INDEPENDENTLY (2026-09-28), each by its own map --
@@ -1674,8 +1676,10 @@ def bootstrap_unpaired_host_into(
     var kx = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP)
     var ky = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP_SECOND)
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dxb = _upload_from(ctx, xp, x_words)
-    var dyb = _upload_from(ctx, yp, y_words)
+    # x_slot / y_slot >= 0 (a resident() scope, lane gd-rf-resample): the
+    # store's copy of the caller's words, read in place (`_resample_input`).
+    var dxb = _resample_input(ctx, xp, x_words, x_slot)
+    var dyb = _resample_input(ctx, yp, y_words, y_slot)
     var tx = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     var ty = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()

@@ -97,12 +97,15 @@ def _bootstrap_unpaired_run(
     dp: MutPointer[Float32, MutUntrackedOrigin],
     sdp: MutPointer[Float32, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
+    x_slot: Int,
+    y_slot: Int,
 ) raises:
     # lane ne2-b-rounds (N078): both samples read in place, the
-    # distribution downloaded into `dp`
+    # distribution downloaded into `dp`; a slot >= 0 (lane gd-rf-resample):
+    # the resident store's copy
     var r = bootstrap_unpaired_host_into(
         xp, max(0, n_x), n_x, yp, max(0, n_y), n_y, n_resamples, seed,
-        method, dp, confidence_level, alternative, r_first,
+        method, dp, confidence_level, alternative, r_first, x_slot=x_slot, y_slot=y_slot,
     )
     copy_f32(r.sorted_distribution.unsafe_ptr(), sdp, n_resamples)
     sp.unsafe_store(0, Float64(r.point_estimate))

@@ -32,7 +32,7 @@ kernels are untouched. This file reads no experiment define.
 RESIDENT FORMS (lane gd-rf-resample, 2026-11-25): inside a `resident()` scope the door keeps each input array
 once in this image's store (resample/resample_store.mojo, reached through `resample_store_v1`; op 7 says whether
 the image has one and gives its scope route word) and appends the input's slot id to the ints: op 0 takes a
-ninth int, x's slot; op 2 two more (x's, y's), op 3 two more (x's, y's: -1 for a one-sample call). Outside a scope the ints are the table above, unchanged, and the input is uploaded.
+ninth int, x's slot; op 1 two more (x's, y's); op 2 two more (x's, y's), op 3 two more (x's, y's: -1 for a one-sample call). Outside a scope the ints are the table above, unchanged, and the input is uploaded.
 """
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -99,7 +99,8 @@ def _resample_bootstrap_unpaired(a: List[Int], p: List[Int], f: List[Float64]) r
             "bootstrap(paired=False): addrs must contain 5 addresses (x, y,"
             + " distribution_out, sorted_out, scalars_out), got " + String(len(a))
         )
-    if len(p) != 7 or len(f) != 1:
+    # 9 ints: the resident form, p[7] / p[8] the store slots of x / y (module note)
+    if (len(p) != 7 and len(p) != 9) or len(f) != 1:
         raise Error(
             "bootstrap(paired=False): params must contain 8 values (n_x, n_y,"
             + " n_resamples, seed, method, confidence_level, alternative,"
@@ -118,9 +119,11 @@ def _resample_bootstrap_unpaired(a: List[Int], p: List[Int], f: List[Float64]) r
     var confidence_level = Float32(f[0])
     var xp = _f32_ptr(a[0])
     var yp = _f32_ptr(a[1])
+    var x_slot = p[7] if len(p) == 9 else -1
+    var y_slot = p[8] if len(p) == 9 else -1
     _bootstrap_unpaired_run(
         xp, n_x, yp, n_y, n_resamples, seed, method, confidence_level,
-        alternative, r_first, dp, sdp, sp,
+        alternative, r_first, dp, sdp, sp, x_slot, y_slot,
     )
     return 0
 
