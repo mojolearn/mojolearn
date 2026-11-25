@@ -408,6 +408,13 @@ def main():
         # A timed-out cell reports where it stood (_stacks_on_timeout).
         import faulthandler
         faulthandler.register(signal.SIGUSR1, all_threads=True)
+    # A crashed cell (SIGSEGV, SIGABRT, SIGBUS, SIGFPE, SIGILL) writes the
+    # Python stack of every thread to stderr before it dies, so the crash
+    # text the controller keeps (its stderr tail) names the call that
+    # crashed (gd-metrics-segv, 2026-11-25: the L40S -11 crashes carried
+    # only a tcmalloc warning, not which metric call or side).
+    import faulthandler
+    faulthandler.enable(all_threads=True)
     if len(sys.argv) == 4 and sys.argv[1] == "--batch":
         batch_main(sys.argv[2], sys.argv[3])
         return

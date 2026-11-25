@@ -4196,8 +4196,21 @@ def cmd_verify_all(args):
     # 315 lanes on a single SIGTRAP. Consecutive crashes still stop the
     # sweep: past this many in a row the device or the install is the
     # likelier cause than one cell.
+    #
+    # A DEVICE SIGNAL, NOT ONE LANE (gd-metrics-segv, 2026-11-25). The streak
+    # is the set of DISTINCT lanes whose cell workers crashed since the last
+    # cell any worker answered; any answered cell clears it. The L40S sweep
+    # nvc-ab-20261125T115541Z-2b94b1 stopped 438 lanes on "3 consecutive"
+    # crashes that were one lane's fixtures run fresh one after another (a
+    # batch's fallback) and six product-crashing lanes interleaved across 13
+    # workers: a lane bug, not a dead device. The sweep now stops only when
+    # `crash_streak_limit` distinct lanes, and at least one per parallel
+    # worker, crashed with no cell answered between them: every worker hit a
+    # crash on a different lane, which a device or install fault does and a
+    # lane bug does not. Each crashed cell is still REFUSED with its crash
+    # text (never hidden), and a sweep with any crash still cannot pass.
     crash_streak_limit = 3
-    crash_streak = 0
+    crash_streak = set()
     worker_bindings = {}
     checkpoint = getattr(args, "json_out", None)
     progress_path = str(checkpoint) + ".progress.json" if checkpoint else None
@@ -4301,14 +4314,17 @@ def cmd_verify_all(args):
             parts = isolated("cell", **{k: v for k, v in cell_request(lane, f).items()
                                         if k not in ("action", "harness", "table")})
             with lock:
-                crash_streak = 0
+                crash_streak.clear()
         except worker.WorkerCrash as exc:
             with lock:
-                crash_streak += 1
+                crash_streak.add(lane)
                 execution["crashed_cells"].append(dict(lane=lane, fixture=f, error=str(exc)[:500]))
                 log(f"    CRASHED (cell refused, sweep continues): {str(exc)[:300]}")
-                if crash_streak >= crash_streak_limit:
-                    execution["interrupted"] = f"{crash_streak} consecutive cell workers crashed; last: {exc}"
+                if len(crash_streak) >= crash_device_limit:
+                    execution["interrupted"] = (
+                        f"{len(crash_streak)} consecutive cell workers crashed on distinct lanes with no cell "
+                        f"answered between them (a device or install signal: "
+                        f"{', '.join(sorted(crash_streak))}); last: {exc}")
             parts = refused_sides(str(exc))
         except worker.WorkerFailure as exc:
             with lock:
@@ -4322,6 +4338,8 @@ def cmd_verify_all(args):
     cell_order = {cell: i for i, cell in enumerate(cells)}
     cell_workers = verify_cell_workers(getattr(args, "cell_workers", None))
     execution["cell_workers"] = cell_workers
+    # distinct crashed lanes that stop the sweep: at least one per parallel worker
+    crash_device_limit = max(crash_streak_limit, cell_workers)
     log(f"# {cell_workers} cell worker(s) at once (core allocation, {VERIFY_WORKER_GIB:g} GiB a worker)")
 
     def run_chunk(chunk):
@@ -4337,7 +4355,7 @@ def cmd_verify_all(args):
             with lock:
                 for binding in result.get("bindings", []):
                     worker_bindings[(binding["module"], binding["sha256"])] = binding
-                crash_streak = 0
+                crash_streak.clear()
                 execution["batched_cells"] += 1
                 ran_activity(chunk[index][0], result)
                 now = time.monotonic()
