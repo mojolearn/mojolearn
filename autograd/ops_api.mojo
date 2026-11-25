@@ -180,7 +180,7 @@ from autograd.session_layer_rules import (
 )
 # session-ops end
 # session-ops-pool begin: Sequential's pools as Session ops, codes 140..148 (autograd/session_ops_pool.mojo)
-from autograd.session_ops_pool import session_pool, pool_int_count, pool_op_name
+from autograd.session_ops_pool import session_pool, pool_int_count, pool_op_name, OPS_POOL_LAST
 # session-ops-pool end
 # nn-blocks-qkv begin: attention over explicit q, k, v (session code 122, autograd/nn_qkv.mojo)
 from autograd.nn_qkv import OPS_ATTENTION_QKV, qkv_attention
@@ -2589,6 +2589,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         """The pools (autograd/session_ops_pool.mojo): 1-D, 2-D with PyTorch's options, 3-D max / avg, adaptive
         avg 1-D / 2-D / 3-D and adaptive max 1-D / 2-D, each through the forward function Sequential's layer calls.
         x [input]; ints pool_int_count(code) words (the ops door writes them)."""
+        if code > OPS_POOL_LAST:
+            raise Error("ops: unknown operation code " + String(code))  # 149: no operation took it
         var what = pool_op_name(code, ints)
         _need(what, len(x), 1, pool_int_count(code), len(ints), 0, len(fs))
         if self.int_words[self._slot(hs[0])]:

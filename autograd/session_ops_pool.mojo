@@ -61,6 +61,7 @@ comptime OPS_POOL_AVG3D = 145
 comptime OPS_POOL_ADAPTIVE_AVG3D = 146
 comptime OPS_POOL_ADAPTIVE_AVG = 147
 comptime OPS_POOL_ADAPTIVE_MAX = 148
+comptime OPS_POOL_LAST = OPS_POOL_ADAPTIVE_MAX  # 149 is unused
 
 
 def pool_int_count(code: Int) -> Int:
