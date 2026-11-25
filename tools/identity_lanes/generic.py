@@ -290,6 +290,7 @@ def _generic_make(ml, where, name, kwargs):
 def _generic_build(ml, where, name, cls):
     """(object built through the view, None) or (None, why the generic fixture does not apply). A refusal whose words
     name the device raises: it is a failure of the side, never n/a."""
+    import re
     kind = getattr(cls, "_estimator_type", None)
     kwargs = {}
     for param in _generic_required(cls.__init__) or ():
@@ -304,7 +305,11 @@ def _generic_build(ml, where, name, cls):
         est = _generic_make(ml, where, name, kwargs)
     except Exception as exc:  # noqa: BLE001 -- the class's own refusal of the generic arguments is its record
         words = _generic_words(exc)
-        if "device" in words:
+        # the side's own word, not `devices=` (a builder's GPU list): DistributedIVFIndex's bare constructor
+        # refuses with "use DistributedIVFIndex.from_index(index, devices=...)", the generic fixture not applying
+        # (w3-fix-12, gate 9 row 1b); a refusal naming `device` (the view's NoDevice, a side the product refuses)
+        # still fails the cell
+        if re.search(r"\bdevice\b", words):
             raise
         return None, f"its constructor raised {type(exc).__name__}: {words}"
     try:

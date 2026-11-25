@@ -120,7 +120,8 @@ def device_mode(fn):
     parameter), "kwargs" (a **kwargs that forwards it), "unknown" (no readable
     signature: a native callable; the keyword is passed and the product
     refuses it by name if it does not take it), "devices" (a GPU list only:
-    the `parallel_*` drivers) or "none"."""
+    the `parallel_*` drivers), "builder" (a class whose bare constructor takes
+    nothing and that is built by a `devices=` classmethod) or "none"."""
     hit = _MODES.get(id(fn))
     if hit is not None and hit[0] is fn:
         return hit[1]
@@ -135,10 +136,31 @@ def device_mode(fn):
             mode = "kwargs"
         elif "devices" in params:
             mode = "devices"
+        elif not params and isinstance(fn, type) and _devices_builder(fn):
+            mode = "builder"
         else:
             mode = "none"
     _MODES[id(fn)] = (fn, mode)
     return mode
+
+
+def _devices_builder(cls):
+    """True when `cls` is built by a public classmethod that takes `devices=`
+    (``DistributedIVFIndex.from_index``): its bare constructor takes nothing
+    and builds nothing (the product refuses it, naming the builder), so it has
+    no side to carry; the builder's `devices=` and member argument carry it.
+    w3-fix-12 (2026-11-25, gate 9 row 1b): the strict refusal of that bare
+    constructor ("takes no device=") made lane generic-attrs-other REFUSED on
+    both sides, so arm sab2b-mul_add-generic-cpu could not judge it."""
+    for attr, value in vars(cls).items():
+        if attr.startswith("_") or not isinstance(value, classmethod):
+            continue
+        try:
+            if "devices" in inspect.signature(value.__func__).parameters:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
 
 
 def _short(name):
@@ -239,7 +261,7 @@ def _caller(fn, name, side_name, strict, boundary="internal"):
     build = _builders(boundary)
     if mode in ("device", "kwargs", "unknown") and not _non_computing(name):
         call = build["inject"](fn, side_name, unwrap)
-    elif _non_computing(name) or not strict:
+    elif _non_computing(name) or not strict or mode == "builder":
         call = build["passthrough"](fn, unwrap)
     elif mode == "devices":
         call = build["members"](fn, side_name, f"{name} takes devices= and no device=, and no member argument "
