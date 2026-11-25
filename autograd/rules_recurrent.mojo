@@ -61,7 +61,7 @@ from autograd.per_step_ops import weighted_reduce
 from autograd.losses import REDUCTION_MEAN, REDUCTION_SUM
 from autograd.kernels.recurrent import colsum, wgrad_block, wgrad_blocked
 from sequence.mlp import EPI_BIAS_ACT
-from sequence.gemm_split import gemm_ask_width_split, gemm_split_block, gemm_split_shape
+from sequence.gemm_split import gemm_ask_chain, gemm_split_block, gemm_split_shape
 from std.sys import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
@@ -256,15 +256,15 @@ def scan_bwd_split(cell: Int, B: Int, H: Int, GH: Int) -> Int:
 
 def _gemm_bias[E: Exec](
     mut ex: E, A: FP, Bm: FP, bias: FP, C: FP, M: Int, N: Int, K: Int,
-    sam: Int, sak: Int, sbk: Int, sbn: Int, width_split: Bool,
+    sam: Int, sak: Int, sbk: Int, sbn: Int, chain: Bool,
 ) raises:
     """C [M, N] dense = A B + bias[n] in one launch: `gemm` (no accumulate)
     with op_bias as its epilogue (sequence/mlp_fit.mojo gemm_epi's layout).
-    `width_split`: the split decision is K's alone (sequence/gemm_split.mojo
-    gemm_ask_width_split); else the launch rule's shape decision."""
+    `chain`: the fold is gemm_dot's one chain at every M (sequence/gemm_split.mojo
+    gemm_ask_chain); else the launch rule's split order where it selects it."""
     var a = Args()
-    if width_split:
-        gemm_ask_width_split(a)
+    if chain:
+        gemm_ask_chain(a)
     a.p0 = A
     a.p1 = Bm
     a.p2 = C
@@ -294,18 +294,19 @@ def _copy[E: Exec](mut ex: E, dst: FP, src: FP, n: Int) raises:
 # the whole-sequence pass, on every vendor and the host column, at every width). Cause: every projection of this
 # family (each layer's input projection, the every-step head, the final-state head) is one GEMM over the call's rows,
 # T B for a T-step call and B for a one-step call, and the launch rule's split-K order (sequence/gemm_split.mojo
-# gemm_split_shape) keyed on that row count once K > 64: at 4 sequences, LSTM hidden 32, 65 or 300 inputs, a 64-step
+# gemm_split_shape) keys on that row count once K > 64: at 4 sequences, LSTM hidden 32, 65 or 300 inputs, a 64-step
 # call (256 x 128: eight 64 x 64 tiles) folded each cell in one chain while a one-step call (4 x 128, a thin product)
-# folded it in blocks of 64. Fix: these launches ask for the WIDTH SPLIT (gemm_ask_width_split): the split order,
-# blocks of gemm_split_block(K) folded from +0.0 and added ascending, exactly when K > 64, at every row count; K <= 64
-# is the one chain at every row count. The rows never choose the order, and both calls keep the split's parallel lanes
-# a cell (the one-step call, a few rows, is where split-K pays). BITS CHANGE, IDENTICAL, every column together (host,
-# NVIDIA, AMD, Apple): every recurrent projection with K > 64 (input projections over > 64 inputs, layers > 0 and
-# the heads at directions x hidden > 64) whose shape the old rule did NOT split (many rows: e.g. 256 x 128, the
-# packed and tile routes) now folds in blocks; projections the old rule already split, and every K <= 64, keep their
-# words. Weight gradients keep their blocked order (not part of a forward). FAST is unchanged.
+# folded it in blocks of 64. Fix: these launches ask for gemm_dot's one chain at every row count (gemm_ask_chain), so
+# the order is a function of K alone and the rows pick only the schedule (the tile, micro-tile, packed body, thin
+# tile, cell and coop routes all fold that chain; the host column's too). BITS CHANGE, IDENTICAL, every column
+# together (host, NVIDIA, AMD, Apple): the recurrent projections whose shape the split rule selected (K > 64 and few
+# cells or tiles: a small batch's head over hidden > 64, the input projection of a few short sequences of > 64
+# inputs, every one-step call at > 64 inputs) now fold one chain; every other projection keeps its words. Parallel:
+# one thread (or tile cell) a cell as before; the split's extra lanes a cell are what goes, on those shapes only, and
+# they are small products (the split rule selects only products that leave the device idle). Weight gradients keep
+# their blocked order (a function of the row count by design; not part of a forward). FAST is unchanged.
 # Fault injection (verify's and the native check's sabotage arms, never in a product build):
-# MOJOLEARN_RNN_STEP_BITS_SABOTAGE_DEVICE / _HOST give back the row-keyed split decision on ONE side, so a one-step
+# MOJOLEARN_RNN_STEP_BITS_SABOTAGE_DEVICE / _HOST give back the row-keyed split order on ONE side, so a one-step
 # call at > 64 inputs folds in another order than the whole pass there: sequence-rnn-step-widths and RNN_PARITY's
 # width units must FAIL.
 comptime RNN_STEP_BITS_SABOTAGE_DEVICE = is_defined["MOJOLEARN_RNN_STEP_BITS_SABOTAGE_DEVICE"]()
@@ -313,8 +314,8 @@ comptime RNN_STEP_BITS_SABOTAGE_HOST = is_defined["MOJOLEARN_RNN_STEP_BITS_SABOT
 
 
 @always_inline
-def rnn_linear_width_split[E: Exec]() -> Bool:
-    """Whether the family's projections ask for the width split (IDENTICAL; the rule above), on executor E."""
+def rnn_linear_chain[E: Exec]() -> Bool:
+    """Whether the family's projections ask for the one chain (IDENTICAL; the rule above), on executor E."""
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         return False
     comptime if (RNN_STEP_BITS_SABOTAGE_DEVICE and E.IS_DEVICE) or (RNN_STEP_BITS_SABOTAGE_HOST and not E.IS_DEVICE):
@@ -322,9 +323,9 @@ def rnn_linear_width_split[E: Exec]() -> Bool:
     return True
 
 
-def _gemm_width_split[E: Exec](mut ex: E, A: FP, Bm: FP, C: FP, M: Int, N: Int, K: Int) raises:
-    """C [M, N] dense = A [M, K] Bm[N, K]^T as OP_GEMM (no accumulate) with the width split asked (the `gemm`
-    helper's IDENTICAL launch; its order is a function of K alone)."""
+def _gemm_chain[E: Exec](mut ex: E, A: FP, Bm: FP, C: FP, M: Int, N: Int, K: Int) raises:
+    """C [M, N] dense = A [M, K] Bm[N, K]^T as OP_GEMM (no accumulate), gemm_dot's one chain at every M (the
+    `gemm` helper's IDENTICAL launch with the chain asked)."""
     var a = Args()
     a.p0 = A
     a.p1 = Bm
@@ -338,7 +339,7 @@ def _gemm_width_split[E: Exec](mut ex: E, A: FP, Bm: FP, C: FP, M: Int, N: Int, 
     a.i6 = K
     a.i7 = 0
     a.i8 = N
-    gemm_ask_width_split(a)
+    gemm_ask_chain(a)
     ex.launch[OP_GEMM](a, M * N)
 
 
@@ -370,15 +371,15 @@ def _linear_record[E: Exec](
         # that needs no gradient
         raise Error("recurrent linear: need_dx=False needs an input without a gradient")
     var with_bias = False
-    var width_split = rnn_linear_width_split[E]()
+    var chain = rnn_linear_chain[E]()
     comptime if RNN_BIAS_EPI:
         if add_bias and not _coop_shape(R, dout, din):
             _gemm_bias(ex, tape.value(x) + first_row * din, tape.value(weight), tape.value(bias), output,
-                       R, dout, din, din, 1, 1, din, width_split)
+                       R, dout, din, din, 1, 1, din, chain)
             with_bias = True
     if not with_bias:
-        if width_split:
-            _gemm_width_split(ex, tape.value(x) + first_row * din, tape.value(weight), output, R, dout, din)
+        if chain:
+            _gemm_chain(ex, tape.value(x) + first_row * din, tape.value(weight), output, R, dout, din)
         else:
             gemm(ex, tape.value(x) + first_row * din, tape.value(weight), output, R, dout, din, din, 1, 1, din, False,
                  dout)
@@ -1294,7 +1295,7 @@ def rnn_predict_options[E: Exec](
     final state (PyTorch's h_n: forward at time T - 1, i.e. each row's last valid step; reverse at time 0) and
     state_c the LSTM's c_n likewise: fed back as h_0 / c_0 of the next call, the next steps run from exactly the
     words the whole-sequence pass holds there (the same cell body and stored state words, and every projection's
-    fold in an order set by K alone: rnn_linear_width_split), at every input and hidden width. With two directions the
+    fold one chain at every row count: rnn_linear_chain), at every input and hidden width. With two directions the
     final states are PyTorch's h_n of this call's steps; the estimator's `step` refuses a bidirectional model
     (sequence/xseq_neural_run.mojo xseq_run_rnn_predict_options)."""
     var np_ = net.n_params()

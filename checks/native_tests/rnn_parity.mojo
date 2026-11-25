@@ -41,9 +41,8 @@ DeviceExec and requires the host words):
        carrying (h, c) give the one 64-step call's words, every step's probabilities and the final states. The
        shape is one the split-K rule (sequence/gemm_split.mojo gemm_split_shape) separates: the whole call's input
        projection 256 x 128 is not a split shape, a one-step call's 4 x 128 is (above 64 inputs); the unit fails if
-       the rule stops separating them, so it keeps testing what it claims. The recurrent projections take the split
-       from K alone at every row count (autograd/rules_recurrent.mojo rnn_linear_width_split), so 65 and 300 agree
-       too; under
+       the rule stops separating them, so it keeps testing what it claims. The recurrent projections ask for one
+       chain at every row count (autograd/rules_recurrent.mojo rnn_linear_chain), so 65 and 300 agree too; under
        MOJOLEARN_RNN_STEP_BITS_SABOTAGE_HOST (or _DEVICE) the host (device) column must fail them.
 The streaming unit (e) and the h_0 unit (d) keep small widths (inputs 3 or 4, hidden 5 or 6); the widths that
 used to separate the orders are unit (h)'s.
