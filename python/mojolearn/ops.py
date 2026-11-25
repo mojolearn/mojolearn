@@ -1257,7 +1257,7 @@ class Session:
         :meth:`mse` (for example 0 on padded steps and 30 on positives)."""
         return _SESSION_CALL(self, "bce_with_logits", (logits, target, reduction, weight))
 
-    def cross_entropy(self, logits, codes, reduction="mean", weight=None):
+    def cross_entropy(self, logits, codes, reduction="mean", weight=None, probabilities=False):
         """Softmax cross-entropy of ``(..., classes)`` logits against class
         codes (the class index as a float), one per position of the leading
         axes: ``(rows, 1)`` codes for ``(rows, classes)`` logits.
@@ -1267,17 +1267,17 @@ class Session:
         ``torch.nn.CrossEntropyLoss`` normalizes a weighted mean, and the
         rest as in :meth:`mse`.
 
-        ``codes`` may instead be a target distribution with the logits' shape
-        (soft labels: distillation, label smoothing, mixup), as torch accepts
-        class probabilities: the loss of a position is
-        ``-sum(target * log_softmax(logits))`` over the classes, averaged over
-        the positions (or summed); ``weight`` works the same way. The gradient
-        flows to the logits and to the target.
+        With ``probabilities=True``, ``codes`` is instead a target
+        distribution with the logits' shape (soft labels: distillation, label
+        smoothing, mixup), the class probabilities torch accepts: the loss of
+        a position is ``-sum(target * log_softmax(logits))`` over the classes,
+        averaged over the positions (or summed); ``weight`` works the same
+        way. The gradient flows to the logits and to the target.
 
         >>> t = s.tensor(np.array([[0.9, 0.1], [0.2, 0.8]], dtype=np.float32))
-        >>> loss = s.cross_entropy(logits, t)
+        >>> loss = s.cross_entropy(logits, t, probabilities=True)
         """
-        return _SESSION_CALL(self, "cross_entropy", (logits, codes, reduction, weight))
+        return _SESSION_CALL(self, "cross_entropy", (logits, codes, reduction, weight, probabilities))
 
     # ------------------------------------------------------------ metrics (values)
     def accuracy(self, y_true, prediction):
