@@ -1294,17 +1294,32 @@ def bpe_gpu_train_into(
         raise Error("ValueError: min_frequency must be at least 1")
     var ctx = bpe_gpu_ctx()
     var ndocs = len(offs_host) - 1
-    var mcap = max(2 * (vocab_size - 256), 2)
-    var merges = BpeMerges(mcap)
+    var merges = BpeMerges(max(2 * (vocab_size - 256), 2))
     if n == 0 or vocab_size == 256:
         return fast_vocab_from_merges(merges, 0)
-    var nblk = _blocks(n)
     var d_text = ctx.enqueue_create_buffer[DType.uint8](n)
     var d_offs = ctx.enqueue_create_buffer[DType.int64](ndocs + 1)
     _up8(ctx, d_text, text_addr, n)
     _up64(ctx, d_offs, Int(offs_host.unsafe_ptr()), ndocs + 1)
-    var text = _p8(d_text)
-    var offs = _p64(d_offs)
+    var ng = bpe_gpu_train_device(ctx, classes_table, _p8(d_text), _p64(d_offs), ndocs, n, vocab_size, min_frequency,
+                                  merges)
+    _ = d_text^
+    _ = d_offs^
+    _ = len(offs_host)
+    return fast_vocab_from_merges(merges, ng)
+
+
+def bpe_gpu_train_device(
+    ctx: DeviceContext, classes_table: BpeGpuClasses, text: U8P, offs: I64P, ndocs: Int, n: Int, vocab_size: Int,
+    min_frequency: Int, mut merges: BpeMerges,
+) raises -> Int:
+    """The training of `bpe_gpu_train_into` on device documents: `text` (n > 0 bytes) and `offs`
+    (ndocs + 1 offsets) are device pointers (the corpus document cutter's output is consumed in
+    place, tokenizer/gpu/corpus_gpu.mojo). The merges land in `merges` (room for
+    2 * (vocab_size - 256) words; vocab_size > 256 and min_frequency >= 1 admitted by the caller);
+    returns the group count."""
+    var mcap = len(merges.pairs)
+    var nblk = _blocks(n)
     # Pre-tokenize: units, then starts (no `<|endoftext|>` recognition: allow 0, flags all zero).
     var mflag = ctx.enqueue_create_buffer[DType.uint8](n)
     var ustart = ctx.enqueue_create_buffer[DType.uint8](n)
@@ -1364,9 +1379,7 @@ def bpe_gpu_train_into(
     var ng = Int(h_g[S_TOTAL])
     var syms = Int(h_l[S_TOTAL])
     if ng == 0 or syms - ng < 1:
-        _ = d_text^
-        _ = d_offs^
-        return fast_vocab_from_merges(merges, ng)
+        return ng
     # The merge loop (`gpu_train_*`, above), fed from the device groups. Pairs ever seen <= 3 *
     # symbols (initial pairs, plus at most 2 new per merge occurrence, each of which removes a
     # symbol); an insert that loses its slot to the same pair leaks one index, so the pair store
@@ -1419,8 +1432,6 @@ def bpe_gpu_train_into(
         raise Error("RuntimeError: bpe_train (gpu): the pair table failed (code " + String(Int(h_st[S_FAIL])) + ")")
     merges.n_merges = Int(h_st[S_NM])
     merges.n_ties = Int(h_st[S_TIES])
-    _ = d_text^
-    _ = d_offs^
     _ = mflag^
     _ = ustart^
     _ = ulen^
@@ -1448,5 +1459,4 @@ def bpe_gpu_train_into(
     _ = mrg^
     _ = pc^
     _ = pk^
-    _ = len(offs_host)
-    return fast_vocab_from_merges(merges, ng)
+    return ng

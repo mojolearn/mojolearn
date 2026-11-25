@@ -22,7 +22,7 @@ from tokenizer.encoding import BpeTokenizer
 from tokenizer.impl.ranks import parse_rank_table
 from tokenizer.impl.pretokenize import pretokenize
 from tokenizer.impl.unicode_class import UnicodeClasses, builtin_unicode_classes
-from tokenizer.train.bpe_train import PieceGroups, TrainedVocabulary
+from tokenizer.train.bpe_train import PieceGroups, TrainedVocabulary, trained_vocab_from_pairs
 from tokenizer.fast.bpe_device import (
     BPE_ENCODE_DEVICE,
     BPE_GROUP_FILTER,
@@ -152,29 +152,11 @@ def fast_pretoken_bounds(
 
 
 def fast_vocab_from_merges(merges: BpeMerges, n_groups: Int) raises -> TrainedVocabulary:
-    """The trained vocabulary as train_bpe writes it: the 256 single bytes, then each merge's token
-    (the bytes of its left part, then its right part) in merge order, the merges and the tie count."""
-    var vocab = TrainedVocabulary()
-    vocab.n_groups = n_groups
-    vocab.n_ties_broken = merges.n_ties
-    for b in range(256):
-        vocab.offset.append(len(vocab.arena))
-        vocab.length.append(1)
-        vocab.arena.append(UInt8(b))
-    for k in range(merges.n_merges):
-        var a = Int(merges.pairs[2 * k])
-        var b = Int(merges.pairs[2 * k + 1])
-        var joined = List[UInt8]()
-        for i in range(vocab.length[a]):
-            joined.append(vocab.arena[vocab.offset[a] + i])
-        for i in range(vocab.length[b]):
-            joined.append(vocab.arena[vocab.offset[b] + i])
-        vocab.offset.append(len(vocab.arena))
-        vocab.length.append(len(joined))
-        for i in range(len(joined)):
-            vocab.arena.append(joined[i])
-        vocab.merge_left.append(a)
-        vocab.merge_right.append(b)
+    """The trained vocabulary as train_bpe writes it (`tokenizer/train/bpe_train.mojo`
+    `trained_vocab_from_pairs`, the one body, shared with the GPU side of `lm_corpus.prepare`)."""
+    var pairs = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(merges.pairs.unsafe_ptr()))
+    var vocab = trained_vocab_from_pairs(pairs, merges.n_merges, merges.n_ties, n_groups)
+    _ = len(merges.pairs)
     return vocab^
 
 

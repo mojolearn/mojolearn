@@ -43,9 +43,22 @@ def test_pretokenize_gpu_on_cpu_only_is_refused():
         hf_tokenizer.pretokenize(b"a b", "gpt2", device="gpu")
 
 
-def test_prepare_gpu_is_refused_by_name(tmp_path):
-    with pytest.raises(ValueError, match="device='gpu' is not available for mojolearn.lm_corpus.prepare"):
+# STALE TEST UPDATED (lane vdf2-tok): prepare has its GPU side now, so 'gpu' is refused only where it
+# cannot run (a CPU-only installation), in the estimators' words, before any file is read. The
+# device == host check of its tokens is checks/native_tests/corpus_gpu_identity.mojo.
+@pytest.mark.skipif(GPU, reason="a CPU-only installation refuses device='gpu' in the estimators' words")
+def test_prepare_gpu_on_cpu_only_is_refused_before_reading_any_file(tmp_path):
+    with pytest.raises(ValueError, match="device='gpu' needs a GPU build of mojolearn"):
         lm_corpus.prepare(tmp_path / "absent.txt", cache_dir=tmp_path, device="gpu")
+
+
+@pytest.mark.skipif(not GPU, reason="the GPU side runs only on a GPU installation")
+def test_prepare_gpu_reads_the_corpus_like_the_host_side(tmp_path):
+    # past the device rule the GPU side reads the same files: an absent corpus is the host's refusal,
+    # never the former "not available" words
+    with pytest.raises(Exception) as refused:
+        lm_corpus.prepare(tmp_path / "absent.txt", cache_dir=tmp_path, device="gpu")
+    assert "is not available for mojolearn.lm_corpus.prepare" not in str(refused.value)
 
 
 def test_pretokenize_cpu_returns_a_list_of_ints():

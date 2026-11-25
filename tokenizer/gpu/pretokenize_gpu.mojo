@@ -268,6 +268,39 @@ def _bit_length(value: Int) -> Int:
     return bits
 
 
+def cut_chain_marks(ctx: DeviceContext, nxt: I32P, on: DeviceBuffer[DType.int32], count: Int) raises:
+    """Mark the chain 0, nxt[0], nxt[nxt[0]], ... among `count` positions (nxt[i] > i for every
+    i < count - 1 and nxt[count - 1] = count - 1, the end): `on` (count words) is zeroed, position 0
+    marked, then the pointer-jumping levels of the header mark the rest. Shared by the pre-tokenizer
+    cut and the corpus document cutter (tokenizer/gpu/corpus_gpu.mojo); returns synchronized."""
+    var nblk1 = _blocks(count)
+    var jump_a = ctx.enqueue_create_buffer[DType.int32](count)
+    var jump_b = ctx.enqueue_create_buffer[DType.int32](count)
+    on.enqueue_fill(Int32(0))
+    var start_mark: List[Int32] = [Int32(1)]
+    ctx.enqueue_copy(dst_buf=on.create_sub_buffer[DType.int32](0, 1),
+                     src_ptr=I32P(unsafe_from_address=Int(start_mark.unsafe_ptr())))
+    # driver-loop: over the pointer-jumping levels (log2 count of them) and the squarings that
+    # rebuild each level; every pass is one parallel kernel over the `count` positions.
+    var top = max(_bit_length(count - 1) - 1, 0)
+    var level = top
+    while level >= 0:
+        var src = _p32(jump_a)
+        var dst = _p32(jump_b)
+        ctx.enqueue_function[gpu_cut_copy_kernel](nxt, src, Int64(count), grid_dim=nblk1, block_dim=BPE_TPB)
+        for _ in range(level):  # driver-loop: over the squarings of one level
+            ctx.enqueue_function[gpu_cut_square_kernel](src, dst, Int64(count), grid_dim=nblk1, block_dim=BPE_TPB)
+            var held = src
+            src = dst
+            dst = held
+        ctx.enqueue_function[gpu_cut_mark_kernel](_p32(on), src, Int64(count), grid_dim=nblk1, block_dim=BPE_TPB)
+        level -= 1
+    ctx.synchronize()
+    _ = len(start_mark)
+    _ = jump_a^
+    _ = jump_b^
+
+
 def pretokenize_gpu_device(
     ctx: DeviceContext, classes: BpeGpuClasses, text: U8P, n: Int, pattern: Int, bounds: I64P, st: I32P,
 ) raises:
@@ -315,8 +348,6 @@ def pretokenize_gpu_device(
         var pfx2 = ctx.enqueue_create_buffer[DType.int32](n + 1)
         var ncpos = ctx.enqueue_create_buffer[DType.int32](n)
         var nxt = ctx.enqueue_create_buffer[DType.int32](n + 1)
-        var jump_a = ctx.enqueue_create_buffer[DType.int32](n + 1)
-        var jump_b = ctx.enqueue_create_buffer[DType.int32](n + 1)
         lastcr.enqueue_fill(Int32(-1))
         ctx.enqueue_function[gpu_cut_runflag_kernel](_p8(ustart), _p8(ucls), Int64(n), _p32(flag),
                                                      grid_dim=nblk, block_dim=BPE_TPB)
@@ -335,27 +366,7 @@ def pretokenize_gpu_device(
             text, Int64(n), Int64(digits), _p8(ustart), _p8(ulen), _p8(ucls), _p32(runend), _p32(pfx),
             _p32(lastu), _p32(lastcr), _p32(pfx2), _p32(ncpos), _p32(nxt), grid_dim=nblk1, block_dim=BPE_TPB,
         )
-        on.enqueue_fill(Int32(0))
-        var start_mark: List[Int32] = [Int32(1)]
-        ctx.enqueue_copy(dst_buf=on.create_sub_buffer[DType.int32](0, 1),
-                         src_ptr=I32P(unsafe_from_address=Int(start_mark.unsafe_ptr())))
-        # driver-loop: over the pointer-jumping levels (log2 n of them) and the squarings that
-        # rebuild each level; every pass is one parallel kernel over the n + 1 positions.
-        var top = max(_bit_length(n) - 1, 0)
-        var level = top
-        while level >= 0:
-            var src = _p32(jump_a)
-            var dst = _p32(jump_b)
-            ctx.enqueue_function[gpu_cut_copy_kernel](_p32(nxt), src, Int64(n + 1), grid_dim=nblk1, block_dim=BPE_TPB)
-            for _ in range(level):  # driver-loop: over the squarings of one level
-                ctx.enqueue_function[gpu_cut_square_kernel](src, dst, Int64(n + 1), grid_dim=nblk1, block_dim=BPE_TPB)
-                var held = src
-                src = dst
-                dst = held
-            ctx.enqueue_function[gpu_cut_mark_kernel](_p32(on), src, Int64(n + 1), grid_dim=nblk1, block_dim=BPE_TPB)
-            level -= 1
-        ctx.synchronize()
-        _ = len(start_mark)
+        cut_chain_marks(ctx, _p32(nxt), on, n + 1)
         _ = flag^
         _ = pfx^
         _ = runpos^
@@ -366,8 +377,6 @@ def pretokenize_gpu_device(
         _ = pfx2^
         _ = ncpos^
         _ = nxt^
-        _ = jump_a^
-        _ = jump_b^
     _scan(ctx, _p32(on), _p32(pfx_on), st, n + 1)
     ctx.enqueue_function[gpu_cut_pack_kernel](_p32(on), _p32(pfx_on), Int64(n + 1), bounds,
                                               grid_dim=nblk1, block_dim=BPE_TPB)
