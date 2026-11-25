@@ -189,6 +189,11 @@ comptime _SOP_SEGMENT_MAX = 1116
 # shared 1..999 sequence so the parallel nn-blocks lanes cannot collide)
 comptime _SOP_SCAN = 1118
 # nn-blocks-scan end
+# nn-blocks-cbw begin: a user-defined backward rule (autograd/nn_cbw.mojo);
+# codes from the sub-lane's own range, so no other lane's next code collides
+comptime _SOP_CUSTOM_OP = 1260
+comptime _SOP_CUSTOM = 1261
+# nn-blocks-cbw end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -362,6 +367,10 @@ struct _SessionOpCodes(Defaultable, Movable):
         # nn-blocks-scan begin
         self.codes["scan"] = _SOP_SCAN
         # nn-blocks-scan end
+        # nn-blocks-cbw begin
+        self.codes["custom_op"] = _SOP_CUSTOM_OP
+        self.codes["custom"] = _SOP_CUSTOM
+        # nn-blocks-cbw end
 
 
 # One table per process (identical contents in every extension that links this file).

@@ -209,6 +209,10 @@ def program_op_name(code: Int) -> String:
     if code == 118:
         return "scan"
     # nn-blocks-scan end
+    # nn-blocks-cbw begin
+    if code == 126:
+        return "custom"
+    # nn-blocks-cbw end
     return "op_" + String(code)
 
 

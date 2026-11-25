@@ -90,6 +90,11 @@ comptime PROGRAM_MAX_CODE = 129
 # node's integer words hold the nested cell's own program words, checked when the scan runs.
 comptime PROGRAM_SCAN_CODE = 118
 # nn-blocks-scan end
+# nn-blocks-cbw begin: 126, a custom operation with a user-defined backward
+# rule (autograd/nn_cbw.mojo OPS_CUSTOM_VJP; version 3 records): its integer
+# and float arguments hold both captured programs
+comptime PROGRAM_CBW_CODE = 126
+# nn-blocks-cbw end
 
 
 struct OpsLog(Movable):
@@ -370,7 +375,7 @@ def program_from_words(xi: List[Int64], xf: List[Float32], what: String) raises 
     var nf_total = 0
     for k in range(nn):  # driver-loop: over program nodes
         var code = r.take(xi, what)
-        if code < 1 or (code > max_code and not (code == PROGRAM_SCAN_CODE and version == PROGRAM_RECORD_VERSION)) or code == 47:  # nn-blocks-scan: 118
+        if code < 1 or (code > max_code and not ((code == PROGRAM_SCAN_CODE or code == PROGRAM_CBW_CODE) and version == PROGRAM_RECORD_VERSION)) or code == 47:  # nn-blocks-scan 118, nn-blocks-cbw 126
             raise Error(what + ": node " + String(k) + " holds an unknown operation code " + String(code))
         p.code.append(code)
         var na = r.take(xi, what)

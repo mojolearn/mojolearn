@@ -161,6 +161,13 @@ from autograd.generation_ops import (
     lm_alive_run, LM_PICK_SAMPLE,
 )
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+# nn-blocks-cbw begin: user-defined backward rules (autograd/nn_cbw.mojo)
+from autograd.tape import BackwardRules
+from autograd.nn_cbw import (
+    OPS_CUSTOM_VJP, NN_CBW_TAG, NN_CBW_SABOTAGE_DROP_PATH, NN_CBW_SABOTAGE_SEED_ONE, CbwOp, CbwRecord, CbwState,
+    cbw_bind, cbw_from_words,
+)
+# nn-blocks-cbw end
 # nn-blocks-qkv begin: attention over explicit q, k, v (session code 122, autograd/nn_qkv.mojo)
 from autograd.nn_qkv import OPS_ATTENTION_QKV, qkv_attention
 # nn-blocks-qkv end
@@ -423,6 +430,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     #: position reads, so a bounded loop shadows only the position word
     #: (autograd/program_control.mojo), never the cache itself.
     var append_state: Dict[Int, Int]
+    # nn-blocks-cbw begin: the bound custom operations and the custom nodes
+    # of the recorded graph (autograd/nn_cbw.mojo)
+    var cbw: CbwState
+    # nn-blocks-cbw end
     #: lane nn-blocks-pg: the parameter-group tables of the grouped
     #: optimizers (autograd/nn_pg.mojo), indexed by `_OpsOptimizer.pg`
     var pg_tables: List[ParamGroupTable]
@@ -457,6 +468,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.buffer_kind = Dict[Int, Int]()
         self.steps = BlockStepScratch()
         self.append_state = Dict[Int, Int]()
+        self.cbw = CbwState()  # nn-blocks-cbw
         self.pg_tables = List[ParamGroupTable]()
 
     # ------------------------------------------------------------ handles
@@ -912,6 +924,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.tape.reset()
         # the computed tensors the log names are gone; captured programs stay
         self.oplog.clear()
+        self.cbw.clear_records()  # nn-blocks-cbw: the saved tensors were tape storage
         for slot in range(len(self.live)):  # driver-loop: over session handles
             if not self.live[slot]:
                 continue
@@ -968,6 +981,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.program_replays.clear()
         self.op_tensors = List[Tensor]()
         self.oplog.clear()
+        self.cbw.clear()  # nn-blocks-cbw
         self.ex.sync()
 
     # ------------------------------------------------------------ gradients
@@ -982,6 +996,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         # recorded-run tags (lane x56d: a session that records a step op
         # differentiates it here, not only Program.fit); a graph without
         # those nodes runs as with NeuralRules
+        if self.cbw.holds_rules():
+            # nn-blocks-cbw: the graph holds a user-defined backward rule
+            self.cbw_backward_scalar(t, StepOpRules(self.steps_address()), accumulate)
+            return
         self.tape.backward_scalar_with_rules(self.ex, t, StepOpRules(self.steps_address()), accumulate)
 
     def gradient_into(mut self, h: Int, dst: FP) raises:
@@ -1079,6 +1097,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         gradient tensor with an operation instead."""
         if not self.tape.is_recording():
             raise Error("ops: backward needs a recording session (Session(record=True))")
+        self.cbw_first_order("backward(create_graph=True)")  # nn-blocks-cbw
         var t = self.tensor(h)
         backward_scalar_recorded(self.tape, self.ex, t)
 
@@ -1093,7 +1112,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if not same_shape(self.shape_nd(h), self.shape_nd(seed_h)):
             raise Error("ValueError: ops: the seed must have the output's full shape")
         if create_graph:
+            self.cbw_first_order("create_graph=True")  # nn-blocks-cbw
             backward_recorded(self.tape, self.ex, t, seed)
+        elif self.cbw.holds_rules():
+            # nn-blocks-cbw: the graph holds a user-defined backward rule
+            self.cbw_backward_seeded(t, seed, ImportRules())
         else:
             # First-order seeded and scalar backward accept the same supported
             # rank-N and import operations. Recorded higher derivatives keep
@@ -1136,6 +1159,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         zeros."""
         if not self.tape.is_recording():
             raise Error("ops: hvp needs a recording session (Session(record=True))")
+        self.cbw_first_order("hvp")  # nn-blocks-cbw
         var xs = self._wrt(hs, "hvp")
         self._same_shapes(hs, vs, "hvp")
         var t = self.tensor(loss_h)
@@ -1167,6 +1191,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         to w is sum_i J_i u_i."""
         if not self.tape.is_recording():
             raise Error("ops: jvp needs a recording session (Session(record=True))")
+        self.cbw_first_order("jvp")  # nn-blocks-cbw
         var xs = self._wrt(hs, "jvp")
         self._same_shapes(hs, us, "jvp")
         var t = self.tensor(out_h)
@@ -2002,6 +2027,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             t = nn_segment(self.tape, self.ex, x[0], self.tape.value_of(self.ex, x[1]), self.shapes[sg_slot].count(),
                            ints[0], code - OPS_SEGMENT_SUM)
         # nn-blocks-scatter end
+        # nn-blocks-cbw begin: a user-defined backward rule (reached only by
+        # codes no branch above took: no compare on another operation's path)
+        elif code == OPS_CUSTOM_VJP:
+            return self._cbw_forward(hs, ints, fs, x)
+        # nn-blocks-cbw end
         else:
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):
@@ -3685,6 +3715,345 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if commit:
             self.opts[m].cfg = entry.cfg
     # nn-blocks-pg end
+
+    # nn-blocks-cbw begin: user-defined backward rules (autograd/nn_cbw.mojo).
+    # A custom operation is two captured programs (forward, backward) bound
+    # once (cbw_define, or the first replay of a loaded program holding one).
+    # A call runs the forward without recording and, in a recording session,
+    # records ONE tape node (tag NN_CBW_TAG) whose rule (CbwRules below) runs
+    # the backward program on the node's incoming gradient and hands the tape
+    # one gradient per input, which the tape accumulates like any other
+    # contribution. No Python is called in either direction.
+    def cbw_define(mut self, var forward: OpsProgram, var backward: OpsProgram, saved: List[Int], n_out: Int) raises -> Int:
+        """Bind a custom operation (the checks of autograd/nn_cbw.mojo
+        cbw_bind); returns its id (>= 1). Binding the same pair again returns
+        the same id."""
+        var op = cbw_bind(forward^, backward^, saved, n_out)
+        return self.cbw.add(op^) + 1
+
+    def cbw_call(mut self, op_id: Int, hs: List[Int]) raises -> List[Int]:
+        """Call custom operation `op_id` on the tensors `hs`; one handle per
+        returned output. It is one OPS_CUSTOM_VJP operation holding both
+        programs (an inference session logs it, so a capture holds it and a
+        saved program carries both graphs), then, for several outputs, one
+        narrow and one reshape per output over its (1, total) result."""
+        if op_id < 1 or op_id > len(self.cbw.ops):
+            raise Error("ValueError: custom: " + String(op_id) + " is not a custom operation of this session")
+        var words = self.cbw.ops[op_id - 1].words.copy()
+        var floats = self.cbw.ops[op_id - 1].floats.copy()
+        var n_out = self.cbw.ops[op_id - 1].n_out
+        var res = self.op(OPS_CUSTOM_VJP, hs, words, floats)
+        var outs = List[Int](capacity=n_out)
+        if n_out == 1:
+            outs.append(res)
+            return outs^
+        var shapes = self.cbw.last_out_shapes.copy()
+        var spec = List[Int]()
+        var dims = List[Int]()
+        var one = List[Int]()
+        for k in range(n_out):  # driver-loop: over the operation's outputs
+            spec.clear()
+            spec.append(1)
+            spec.append(k)
+            spec.append(0)
+            for j in range(n_out):  # small-loop(n_out: the operation's outputs): narrow sizes
+                spec.append(shapes[j].count())
+            one.clear()
+            one.append(res)
+            var piece = self.op(OPS_NARROW, one, spec, List[Float32]())
+            dims.clear()
+            dims.append(0)
+            for j in range(shapes[k].ndim):  # small-loop(ndim: tensor rank, at most 8): shape words
+                dims.append(shapes[k].d[j])
+            one.clear()
+            one.append(piece)
+            outs.append(self.op(OPS_RESHAPE_N, one, dims, List[Float32]()))
+        return outs^
+
+    def cbw_first_order(self, what: String) raises:
+        """Refuse a recorded (create_graph) backward through a custom rule."""
+        if self.cbw.holds_rules():
+            raise Error("ValueError: custom: " + what + " through a user-defined backward rule is not supported: "
+                        + "custom rules are first order only (the engine does not differentiate the backward "
+                        + "program); call reset() before recording a graph without one")
+
+    def cbw_backward_scalar(mut self, t: Tensor, rules: StepOpRules, accumulate: Bool) raises:
+        """The scalar backward of a graph that may hold custom nodes: `rules`
+        plus the custom tag (identical to `rules` on every other node)."""
+        var wrapped = CbwRules[Self.E](rules, Int(UnsafePointer(to=self)))
+        self.tape.backward_scalar_with_rules(self.ex, t, wrapped, accumulate)
+
+    def cbw_backward_seeded(mut self, t: Tensor, seed: Tensor) raises:
+        """The seeded first-order backward of a graph that may hold custom
+        nodes (StepOpRules: ImportRules plus the step ops' tags)."""
+        var wrapped = CbwRules[Self.E](StepOpRules(self.steps_address()), Int(UnsafePointer(to=self)))
+        self.tape.backward_with_rules(self.ex, t, seed, wrapped, False)
+
+    def _cbw_op(mut self, ints: List[Int], fs: List[Float32]) raises -> Int:
+        """The bound op a node's words name: one dictionary read, or (a loaded
+        program's first replay) decoded, bound and kept."""
+        var i = self.cbw.find(ints)
+        if i >= 0:
+            return i
+        var op = cbw_from_words(ints, fs)
+        return self.cbw.add(op^)
+
+    def _cbw_forward(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_CUSTOM_VJP: the forward program on `hs` without recording; in a
+        recording session one custom tape node over the inputs (its value the
+        output, or the outputs packed in one (1, total) row)."""
+        var oi = self._cbw_op(ints, fs)
+        var recording = self.tape.is_recording()
+        var op = CbwOp()
+        swap(op, self.cbw.ops[oi])
+        var temps = List[Int]()
+        var result = 0
+        try:
+            result = self._cbw_run_forward(oi, op, hs, x, recording, temps)
+        finally:
+            if recording:
+                self.tape.record()
+            swap(op, self.cbw.ops[oi])
+            self._drop_temps(temps)
+        return result
+
+    def _cbw_run_forward(
+        mut self, oi: Int, op: CbwOp, hs: List[Int], x: List[Tensor], recording: Bool, mut temps: List[Int],
+    ) raises -> Int:
+        var n_in = op.forward.n_in
+        if len(hs) != n_in:
+            raise Error("ValueError: custom: this custom operation takes " + String(n_in) + " inputs, got "
+                        + String(len(hs)))
+        for k in range(n_in):  # driver-loop: over the operation's inputs
+            var sh = self.shape_nd(hs[k])
+            if sh.ndim != op.forward.in_shapes[k].ndim:
+                raise Error("ValueError: custom: input " + String(k) + " has shape " + shape_text(sh)
+                            + "; the forward program was captured with " + shape_text(op.forward.in_shapes[k])
+                            + " (the rank must match)")
+            var ids = op.forward.in_kinds[k] == PROGRAM_IN_IDS
+            if self.int_words[self._slot(hs[k])] != ids:
+                if ids:
+                    raise Error("ValueError: custom: input " + String(k) + " must be an ids tensor (Session.ids)")
+                raise Error("ValueError: custom: input " + String(k) + " must be a float tensor, not ids")
+        if recording:
+            self.tape.no_grad()
+        var values = List[Int](capacity=n_in + op.forward.n_nodes())
+        for k in range(n_in):  # driver-loop: over the operation's inputs
+            values.append(hs[k])
+        var args = List[Int]()
+        for k in range(op.forward.n_nodes()):  # driver-loop: over the forward program's nodes
+            args.clear()
+            for j in range(op.forward.a_at[k], op.forward.a_at[k + 1]):  # small-loop(args: a node's input refs): handle lookup
+                args.append(values[op.forward.args[j]])
+            var h = self._program_op(k, op.forward.code[k], args, op.f_ints[k], op.f_fs[k])
+            temps.append(h)
+            values.append(h)
+        # every forward output; one the forward returns unchanged from its
+        # inputs is copied (a node never shares an input's storage)
+        var outs = List[Int](capacity=len(op.forward.outs))
+        var no_ints = List[Int]()
+        var no_fs = List[Float32]()
+        for k in range(len(op.forward.outs)):  # driver-loop: over the forward program's outputs
+            var rf = op.forward.outs[k]
+            var h = values[rf]
+            if rf < n_in:
+                args.clear()
+                args.append(h)
+                h = self._op_run(OPS_COPY, args, no_ints, no_fs)
+                temps.append(h)
+            outs.append(h)
+        if recording:
+            self.tape.record()
+        var n_out = op.n_out
+        self.cbw.last_out_shapes.clear()
+        var total = 0
+        for k in range(n_out):  # driver-loop: over the returned outputs
+            var sh = self.shape_nd(outs[k])
+            self.cbw.last_out_shapes.append(sh)
+            total += sh.count()
+        var out_fp: FP
+        var out_shape: ShapeN
+        var offsets = List[Int](capacity=n_out)
+        if n_out == 1:
+            var t0 = self.tensor(outs[0])
+            out_fp = self.tape.value_of(self.ex, t0)
+            out_shape = self.shape_nd(outs[0])
+            offsets.append(0)
+        else:
+            out_fp = self.tape.reserve(self.ex, total)
+            var at = 0
+            for k in range(n_out):  # driver-loop: over the returned outputs (one copy each into the packed row)
+                var tk = self.tensor(outs[k])
+                var a = Args()
+                a.p0 = self.tape.value_of(self.ex, tk)
+                a.p1 = out_fp + at
+                var n = self.cbw.last_out_shapes[k].count()
+                self.ex.launch[OP_COPY](a, n)
+                offsets.append(at)
+                at += n
+            out_shape = ShapeN.matrix(1, total)
+        if not recording:
+            if n_out == 1:
+                # the forward's own result: kept, not dropped with the temporaries
+                for j in range(len(temps)):  # driver-loop: over this call's temporary handles
+                    if temps[j] == outs[0]:
+                        temps[j] = temps[len(temps) - 1]
+                        _ = temps.pop()
+                        break
+                return outs[0]
+            return self._constant(out_fp, 1, total, 0)
+        var rec = CbwRecord()
+        rec.op = oi
+        rec.out_shapes = self.cbw.last_out_shapes.copy()
+        rec.out_offsets = offsets^
+        for k in range(n_in):  # driver-loop: over the operation's inputs
+            rec.in_shapes.append(self.shape_nd(hs[k]))
+        for j in range(len(op.saved)):  # driver-loop: over the saved tensors
+            var h = outs[op.saved[j]]
+            var ts = self.tensor(h)
+            var fp = self.tape.value_of(self.ex, ts)
+            rec.saved.append(Int(fp))
+            rec.saved_shapes.append(self.shape_nd(h))
+            rec.saved_words.append(self.int_words[self._slot(h)])
+        # Records live with the graph: a reset tape (Program.fit resets it per
+        # batch; Session.reset clears them) restarts its node indices, so a
+        # node index at or below the last record's starts a new graph.
+        var node = len(self.tape._nodes)
+        var last = len(self.cbw.records) - 1
+        if last >= 0 and node <= self.cbw.records[last].node:
+            self.cbw.records.clear()
+        rec.node = node
+        var saved_args = Args()
+        saved_args.i0 = len(self.cbw.records)
+        saved_args.i1 = node
+        self.cbw.records.append(rec^)
+        var t = self.tape.custom_nd(self.ex, x, out_fp, out_shape, NN_CBW_TAG, saved_args)
+        if t._index != node:
+            raise Error("custom: the tape recorded the custom node at an unexpected index")
+        return self._add(t, 0, False, 0)
+
+    def _cbw_apply(mut self, ri: Int, node: Int, upstream: FP, gradients: List[FP]) raises:
+        """The rule of custom node `node` (record `ri`): the backward program on
+        the saved tensors and the incoming gradient, on the session's scratch
+        tape, each gradient copied into its destination (the tape adds it to
+        the input's other contributions). Called by CbwRules.apply while the
+        session's tape runs its backward: the tape is moved aside for the call
+        and put back word for word, as Session.run_program does."""
+        if ri < 0 or ri >= len(self.cbw.records) or self.cbw.records[ri].node != node:
+            raise Error("ValueError: custom: the recorded graph no longer holds this custom operation's saved "
+                        + "tensors; run its forward again")
+        var rec = CbwRecord()
+        swap(rec, self.cbw.records[ri])
+        var oi = rec.op
+        var op = CbwOp()
+        swap(op, self.cbw.ops[oi])
+        var held = Tape()
+        swap(held, self.prog_tape)
+        swap(held, self.tape)
+        var temps = List[Int]()
+        try:
+            self.tape.reset()
+            self.tape.no_grad()
+            self._cbw_run_backward(op, rec, upstream, gradients, temps)
+        finally:
+            self._drop_temps(temps)
+            swap(held, self.tape)
+            swap(held, self.prog_tape)
+            swap(op, self.cbw.ops[oi])
+            swap(rec, self.cbw.records[ri])
+
+    def _cbw_run_backward(
+        mut self, op: CbwOp, rec: CbwRecord, upstream: FP, gradients: List[FP], mut temps: List[Int],
+    ) raises:
+        var values = List[Int](capacity=op.backward.n_in + op.backward.n_nodes())
+        for j in range(len(rec.saved)):  # driver-loop: over the saved tensors
+            var h = self._leaf(FP(unsafe_from_address=rec.saved[j]), rec.saved_shapes[j], rec.saved_words[j])
+            temps.append(h)
+            values.append(h)
+        for k in range(op.n_out):  # driver-loop: over the incoming gradients, one per output
+            var g = upstream + rec.out_offsets[k]
+            comptime if NN_CBW_SABOTAGE_SEED_ONE:
+                # fault injection: a rule that assumes the incoming gradient is 1
+                var n = rec.out_shapes[k].count()
+                g = self.tape.reserve(self.ex, n)
+                var fill = Args()
+                fill.p0 = g
+                fill.f0 = Float32(1)
+                self.ex.launch[OP_FILL](fill, n)
+            var h = self._leaf(g, rec.out_shapes[k])
+            temps.append(h)
+            values.append(h)
+        var args = List[Int]()
+        for k in range(op.backward.n_nodes()):  # driver-loop: over the backward program's nodes
+            args.clear()
+            for j in range(op.backward.a_at[k], op.backward.a_at[k + 1]):  # small-loop(args: a node's input refs): handle lookup
+                args.append(values[op.backward.args[j]])
+            var h = self._program_op(k, op.backward.code[k], args, op.b_ints[k], op.b_fs[k])
+            temps.append(h)
+            values.append(h)
+        for j in range(len(op.grad_inputs)):  # driver-loop: over the differentiable inputs
+            var i = op.grad_inputs[j]
+            var h = values[op.backward.outs[j]]
+            var sh = self.shape_nd(h)
+            if not same_shape(sh, rec.in_shapes[i]):
+                raise Error("ValueError: custom: the backward program's gradient " + String(j) + " has shape "
+                            + shape_text(sh) + " at run time; input " + String(i) + " has shape "
+                            + shape_text(rec.in_shapes[i]))
+            if self.int_words[self._slot(h)]:
+                raise Error("ValueError: custom: the backward program's gradient " + String(j)
+                            + " holds integer words, not float values")
+            var tg = self.tensor(h)
+            var a = Args()
+            a.p0 = self.tape.value_of(self.ex, tg)
+            a.p1 = gradients[i]
+            self.ex.launch[OP_COPY](a, sh.count())
+    # nn-blocks-cbw end
+
+
+# nn-blocks-cbw begin: the rule set of a graph that may hold custom nodes
+@fieldwise_init
+struct CbwRules[S: Exec & Movable & Deinitable](BackwardRules, ImplicitlyCopyable, Movable):
+    """StepOpRules plus NN_CBW_TAG, whose rule runs the custom operation's
+    captured backward program in the session at address `session` (an
+    OpsSession[S]; an open session never moves). Every other tag is
+    StepOpRules' own, so a graph without custom nodes differentiates exactly
+    as with StepOpRules."""
+    var inner: StepOpRules
+    var session: Int
+
+    def supports(self, tag: Int) -> Bool:
+        if tag == NN_CBW_TAG:
+            return True
+        return self.inner.supports(tag)
+
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if tag == NN_CBW_TAG:
+            # the rule overwrites every element of each differentiable
+            # input's destination; an ids input's is never read
+            return False
+        return self.inner.zeroed_destination(tag, saved, edge)
+
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if tag == NN_CBW_TAG:
+            comptime if NN_CBW_SABOTAGE_DROP_PATH:
+                # fault injection: the copy lands on the input's whole
+                # gradient, dropping another consumer's earlier term
+                return True
+            return False
+        return self.inner.writes_total(tag, saved, edge)
+
+    def apply[E: Exec](
+        self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
+        inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
+    ) raises:
+        if tag != NN_CBW_TAG:
+            self.inner.apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+            return
+        # The session's own executor (the same object as `ex`) runs the
+        # backward program's operations.
+        var s = UnsafePointer[OpsSession[Self.S], MutUntrackedOrigin](unsafe_from_address=self.session)
+        s[]._cbw_apply(saved.i0, saved.i1, upstream, gradients)
+# nn-blocks-cbw end
 
 
 def _keeps_shape(code: Int) -> Bool:

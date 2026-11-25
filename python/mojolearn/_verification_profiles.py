@@ -50,6 +50,9 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # nn-blocks-scan begin: Session.scan over a captured cell, one seeded step
                           'ops-scan-cell',
                           # nn-blocks-scan end
+                          # nn-blocks-cbw begin: a user-defined backward rule (Session.custom_op), seconds
+                          'nn-cbw-custom-vjp',
+                          # nn-blocks-cbw end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',

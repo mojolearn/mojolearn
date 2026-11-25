@@ -45,6 +45,9 @@ from providers.python.autograd_gradient_diagnostics_pyapi_pack import gradient_r
 from autograd.nn_scan_frontend import session_scan
 from autograd.autograd_ops_frontend_run import _SOP_SCAN
 # nn-blocks-scan end
+# nn-blocks-cbw begin
+from autograd.program import OpsProgram
+# nn-blocks-cbw end
 
 
 # Session operation codes (row N089, lesson 12) and their one-per-process
@@ -77,6 +80,7 @@ from autograd.autograd_ops_frontend_run import (
     _SOP_STATE, _SOP_MAMBA_BLOCK, _SOP_ATTENTION_BLOCK, _SOP_MAMBA_STEP, _SOP_ATTENTION_STEP, _SOP_SMALL_MLP,
     _SOP_LM_HEAD_LOSS, _SOP_LM_ROWS, _SOP_LM_PICK, _SOP_LM_ALIVE, _SOP_LM_EMBEDDING, _SOP_CONV_BLOCK,
     _SOP_CONV_LINEAR, _SOP_LSTM, _SOP_GRU, _SOP_RNN,
+    _SOP_CUSTOM_OP, _SOP_CUSTOM,  # nn-blocks-cbw
 )
 # nn-blocks-qkv begin
 from autograd.autograd_ops_frontend_run import _SOP_ATTENTION_QKV
@@ -188,6 +192,23 @@ def _tuple_ints(xs: List[Int]) raises -> PythonObject:
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
 # TOMBSTONE: MOJOLEARN_SESSION_CALL_DESCRIPTOR (B arm loses: every same-image Session call through the descriptor, zero-filled read-back arrays; A/B abn9 NVIDIA L40S, ops-session-step 2.63 -> 2.93 ms 1.11, program-run 1.00 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
 # Restore: git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
+
+
+# nn-blocks-cbw begin: UNPACK of Session.custom_op: a Program's description,
+# read once from the inference session that captured it (this connection).
+def _cbw_program[E: Exec & Movable & Deinitable, KIND: Int](program: PythonObject, which: String) raises -> OpsProgram:
+    var nk = autograd_keys()
+    var fields = program_owner_fields(program)
+    var pid = py_item(fields, nk[].k__id)
+    if _nil(pid):
+        raise Error("ValueError: custom_op: the " + which + " program was freed")
+    var owner = ops_session_fields(py_item(fields, nk[].k__s))
+    var owner_id = py_item(owner, nk[].k__id)
+    if _nil(owner_id):
+        raise Error("ValueError: custom_op: the session that captured the " + which + " program is closed")
+    var o = ops_session[E, KIND](_integer(owner_id, "session", 1))
+    return o[].program(_integer(pid, which + " program", 1))
+# nn-blocks-cbw end
 
 
 def _program_initialize(mut out: PythonObject, session: PythonObject, info: PythonObject) raises:
@@ -639,6 +660,25 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
     if op == _SOP_LM_ALIVE:
         return PythonObject(session_lm_alive[E, KIND](
             Int(py=sid), _int(args[0], "ids", 1), _int(args[1], "rows", 1)))
+    # nn-blocks-cbw begin: Session.custom_op / Session.custom (autograd/nn_cbw.mojo)
+    if op == _SOP_CUSTOM_OP:
+        # UNPACK: args (forward, backward, saved, outputs); the binding checks
+        # run natively once here (OpsSession.cbw_define).
+        var forward = _cbw_program[E, KIND](args[0], "forward")
+        var backward = _cbw_program[E, KIND](args[1], "backward")
+        var saved = List[Int]()
+        if not _nil(args[2]):
+            saved = _ints(args[2], "saved", 0)
+        var n_out = len(forward.outs) if _nil(args[3]) else _int(args[3], "outputs", 1)
+        return PythonObject(s[].cbw_define(forward^, backward^, saved, n_out))
+    if op == _SOP_CUSTOM:
+        # args (op, inputs): one handle per returned output (PACK: an int, or
+        # a tuple for several)
+        var outs = s[].cbw_call(_int(args[0], "op", 1), _ints(args[1], "input", 1))
+        if len(outs) == 1:
+            return PythonObject(outs[0])
+        return _tuple_ints(outs)
+    # nn-blocks-cbw end
     var code = 0
     var hs = List[Int]()
     var ints = List[Int]()
