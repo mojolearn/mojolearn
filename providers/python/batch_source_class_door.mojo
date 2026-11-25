@@ -22,14 +22,14 @@ struct BatchSourceClassDoor(Defaultable, Movable):
 comptime BATCH_SOURCE_CLASS_DOOR = SharedSlot[BatchSourceClassDoor, "MojolearnBatchSourceDoorV1"]
 
 
-def batch_source_class_connect(cls: PythonObject):
+def batch_source_class_connect(cls: PythonObject) raises:
     """Record the exact connected class (import time)."""
     var door = BATCH_SOURCE_CLASS_DOOR.get_or_create_ptr()
     door[].cls = cls
     door[].ready = True
 
 
-def batch_source_class_ready() -> Bool:
+def batch_source_class_ready() raises -> Bool:
     return BATCH_SOURCE_CLASS_DOOR.get_or_create_ptr()[].ready
 
 
