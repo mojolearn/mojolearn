@@ -805,7 +805,7 @@ comptime OPS_RNN_SCAN = 94
 def rnn_scan_op[E: Exec](
     mut tape: Tape, mut ex: E, x: Tensor, w_ih: Tensor, w_hh: Tensor, b_ih: Tensor, b_hh: Tensor,
     cell: Int, T: Int, B: Int, lengths: Optional[FP] = None, reverse: Bool = False,
-    h0: Optional[FP] = None, c0: Optional[FP] = None,
+    h0: Optional[FP] = None, c0: Optional[FP] = None, c_last: Optional[FP] = None,
 ) raises -> Tensor:
     """One recurrent layer (cell CELL_LSTM, CELL_GRU or the tanh RNN) over a
     time-major sequence x [T B, D] from h_0 = c_0 = 0: returns h_1..h_T
@@ -867,7 +867,15 @@ def rnn_scan_op[E: Exec](
     var gx = rnn_linear(tape, ex, x, w_ih, b_ih, gxb, RNN_INPUT_BIAS_IN_GX, True, tape.requires_grad(x), w)
     # `reverse` (lane nn-recurrent): time T - 1 down to 0, the same launches (rnn_layer); the output stays in
     # time order. `h0` / `c0` (lane rnn-parity): B x H executor words, the initial state (rnn_layer); no gradient.
-    return rnn_layer(tape, ex, gx, w_hh, b_hh, tape.value(b_ih), cell, T, B, w, 0, False, reverse, h0, c0)
+    var y = rnn_layer(tape, ex, gx, w_hh, b_hh, tape.value(b_ih), cell, T, B, w, 0, False, reverse, h0, c0)
+    if c_last:
+        # Lane rnn-parity-B (`Session.lstm(..., return_state=True)`): the LSTM's final cell state, B x H words
+        # copied out of the state rows the layer wrote last: rows [T B, (T + 1) B) forward, rows [0, B)
+        # reverse (layer_fwd_scan's layout; a row past its length carries its state forward, so these hold
+        # each row's state at its own last valid step). A copy, no gradient. Without c_last nothing runs.
+        _copy(ex, c_last.value(), call + (0 if reverse else T) * B * H, B * H)
+    _ = call
+    return y
 
 
 # ------------------------------------------------------------------ trainer step

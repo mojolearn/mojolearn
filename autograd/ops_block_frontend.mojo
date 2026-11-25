@@ -45,6 +45,7 @@ from autograd.generation_ops import OPS_LM_PICK, OPS_LM_ALIVE, lm_rows_words, LM
 from autograd.rankn import ShapeN
 from core.cast_in import CAST_KIND_SIGNED
 from autograd.rules_recurrent import OPS_RNN_SCAN
+from sequence.ops import CELL_LSTM
 
 #: The weight arrays `Session.attention_block` takes (the default options'
 #: present pieces: two norms, q, k, v, o, gate, up, down), and the index of
@@ -327,13 +328,32 @@ def session_lm_alive[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, ids: I
 
 # ---------------------------------------------------------------- recurrent layers
 def session_rnn[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: Int, cell: Int, x: Int, w_ih: Int, w_hh: Int, b_ih: Int, b_hh: Int,
+    sid: Int, cell: Int, x: Int, w_ih: Int, w_hh: Int, b_ih: Int, b_hh: Int, h0: Int = 0, c0: Int = 0,
+    lengths: Int = 0, reverse: Bool = False,
 ) raises -> Int:
     """`Session.lstm` / `Session.gru` / `Session.rnn`: one layer over a
     time-major (steps, batch, inputs) tensor, as torch.nn.LSTM / GRU / RNN
-    with batch_first=False and a zero initial state. Returns the
-    (steps, batch, hidden) outputs: OPS_RNN_SCAN, then the rank-3 view
-    (operation 33, `reshape`) of its (steps * batch, hidden) result."""
+    with batch_first=False. Returns the (steps, batch, hidden) outputs:
+    OPS_RNN_SCAN, then the rank-3 view (operation 33, `reshape`) of its
+    (steps * batch, hidden) result. The options (handles 0 = none) as
+    session_rnn_state."""
+    var got = session_rnn_state[E, KIND](sid, cell, x, w_ih, w_hh, b_ih, b_hh, h0, c0, lengths, reverse, False)
+    return got[0]
+
+
+def session_rnn_state[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: Int, cell: Int, x: Int, w_ih: Int, w_hh: Int, b_ih: Int, b_hh: Int, h0: Int, c0: Int,
+    lengths: Int, reverse: Bool, return_state: Bool,
+) raises -> List[Int]:
+    """The recurrent layer with its options (lane rnn-parity-B): `h0` / `c0`
+    the initial state handles ((batch, hidden) values; c0 LSTM only),
+    `lengths` a handle of batch float32 lengths, `reverse` the direction,
+    0 / False for none. Returns [outputs] or, with `return_state`,
+    [outputs, h_T, c_T] (c_T 0 for a GRU or tanh RNN): h_T the (batch,
+    hidden) state after the last step walked (time steps - 1 forward, 0
+    reverse; a free view of the outputs, so it carries their gradient), c_T
+    the LSTM's final cell state (a constant). Without options the call sends
+    OPS_RNN_SCAN's three integers, its words unchanged."""
     var s = ops_session[E, KIND](sid)
     var sh = s[].shape_nd(x)
     if sh.ndim != 3:
@@ -341,9 +361,51 @@ def session_rnn[E: Exec & Movable & Deinitable, KIND: Int](
     var steps = sh.d[0]
     var batch = sh.d[1]
     var hidden = s[].shape_nd(w_hh).d[1]
+    var cell_out = return_state and cell == CELL_LSTM
     var hs: List[Int] = [x, w_ih, w_hh, b_ih, b_hh]
     var ints: List[Int] = [cell, steps, batch]
+    if h0 != 0 or c0 != 0 or lengths != 0 or reverse or cell_out:
+        ints.append(1 if reverse else 0)
+        ints.append(1 if h0 != 0 else 0)
+        ints.append(1 if c0 != 0 else 0)
+        ints.append(1 if lengths != 0 else 0)
+        ints.append(1 if cell_out else 0)
+        if h0 != 0:
+            hs.append(h0)
+        if c0 != 0:
+            hs.append(c0)
+        if lengths != 0:
+            hs.append(lengths)
     var flat = s[].op(OPS_RNN_SCAN, hs, ints, List[Float32]())
+    var rows = steps * batch
+    var c_t = 0
+    if cell_out:
+        # ((steps + 1) batch, hidden): the outputs, then c_T's rows (autograd/ops_api.mojo _rnn_scan_options);
+        # operation 40 (`split`'s piece, a free view) takes each apart.
+        var fh0: List[Int] = [flat]
+        var first: List[Int] = [0, 0, 0, rows, batch]
+        var outs = s[].op(40, fh0, first, List[Float32]())
+        var fh1: List[Int] = [flat]
+        var second: List[Int] = [0, 1, 0, rows, batch]
+        c_t = s[].op(40, fh1, second, List[Float32]())
+        flat = outs
     var fh: List[Int] = [flat]
     var view: List[Int] = [0, steps, batch, hidden]
-    return s[].op(33, fh, view, List[Float32]())
+    var y = s[].op(33, fh, view, List[Float32]())
+    var result: List[Int] = [y]
+    if not return_state:
+        return result^
+    var h_t: Int
+    var lh: List[Int] = [flat]
+    if steps == 1:
+        var hv: List[Int] = [0, batch, hidden]
+        h_t = s[].op(33, lh, hv, List[Float32]())
+    elif reverse:
+        var pr: List[Int] = [0, 0, 0, batch, rows - batch]
+        h_t = s[].op(40, lh, pr, List[Float32]())
+    else:
+        var pf: List[Int] = [0, 1, 0, rows - batch, batch]
+        h_t = s[].op(40, lh, pf, List[Float32]())
+    result.append(h_t)
+    result.append(c_t)
+    return result^
