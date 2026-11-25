@@ -2292,9 +2292,6 @@ def _neural_ab_receipt(runner, config, executed=False):
     metadata = getattr(runner, "neural_ab_runtime", None)
     if metadata is not None:
         receipt["native_or_public_runtime_metadata"] = dict(metadata)
-        if metadata.get("operation") == "mamba3_owned_forward":
-            # Native counter readback is outside the measured operation.
-            receipt["native_or_public_runtime_metadata"]["session_info"] = runner.block.session_info()
     return receipt
 
 
@@ -2625,13 +2622,7 @@ class OursBlock(Ours):
             self.info.update(call="MambaBlock.forward + MambaBlock.backward",
                              operation_scope="complete zero-state prefill block forward and all input/weight VJPs; no loss or optimizer")
             self.neural_ab_runtime["cotangent_source"] = "same immutable full input x"
-        elif self.operation == "mamba3_owned_forward":
-            if lane != "mamba3-forward":
-                raise RuntimeError("REFUSED: owned-weight operation requires mamba3-forward")
-            install = bool(self.runtime.get("install_owned_weights", False))
-            generation = self.block.install_owned_weights() if install else None
-            self.neural_ab_runtime.update(owned_weights_requested=install,
-                installed_generation=generation, installation_boundary="preparation_in_cold_total")
+        # TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: the mamba3_owned_forward A/B operation, install_owned_weights before the scored forward) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.
 
     def call(self):
         # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
@@ -5684,7 +5675,7 @@ def build_runner(lane, arm, shape, data, ab_config=None):
     operation = _neural_ab_operation(ab_config)
     if "optimize" in (ab_config or {}).get("runtime", {}) and operation != "program_optimize":
         raise ValueError("REFUSED: runtime.optimize requires program_optimize")
-    supported = ("model_default", "transformer_configured_forward", "transformer_windowed_forward", "mamba3_owned_forward", "lm_chunked_head_v2",
+    supported = ("model_default", "transformer_configured_forward", "transformer_windowed_forward", "lm_chunked_head_v2",
                  "residual_dropout_forward_vjp", "mlp_inference_sessions", "samba_training_config", "mamba_forward_vjp",
                  "program_eager", "program_optimize", "decode_n")
     if operation not in supported:
@@ -5731,8 +5722,6 @@ def build_runner(lane, arm, shape, data, ab_config=None):
             raise RuntimeError("REFUSED: lm_chunked_head_v2 requires lm-train-step and its config flag")
         if operation == "transformer_windowed_forward" and (lane != "transformer-forward" or int(runtime.get("transformer_window", 0)) <= 0):
             raise RuntimeError("REFUSED: windowed operation requires transformer-forward and a positive configured window")
-        if operation == "mamba3_owned_forward" and model != "mamba3":
-            raise RuntimeError("REFUSED: owned-weight operation requires Mamba3")
         if operation == "mamba_forward_vjp" and model not in ("mamba1", "mamba2", "mamba3"):
             raise RuntimeError("REFUSED: Mamba VJP operation requires a Mamba block")
         if operation == "decode_n" and lane not in DECODE_LANES:

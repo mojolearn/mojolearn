@@ -542,7 +542,6 @@ CPU-only install also gives it. `psd-causal-lm` and `psd-causal-lm-text` are one
 | `nn-ep-embedding` | nn_endpoints.py | train, stepfull | n/a:endpoint-round-trips | record | record |
 | `nn-ep-layernorm` | nn_endpoints.py | train, stepfull | n/a:endpoint-round-trips | record | record |
 | `nn-ep-mamba-blocks` | nn_endpoints.py | train, stepfull | n/a:endpoint-round-trips | record | record |
-| `nn-ep-mamba3-owned` | nn_endpoints.py | train, stepfull | n/a:endpoint-round-trips | record | record |
 | `nn-ep-moe` | nn_endpoints.py | train, stepfull | n/a:endpoint-round-trips | record | record |
 | `nn-ep-rnn-state` | nn_endpoints.py | train, stepfull | n/a:endpoint-round-trips | record | record |
 | `nn-ep-samba-inference` | nn_endpoints.py | train, stepfull | n/a:endpoint-round-trips | record | n/a:one-sided |

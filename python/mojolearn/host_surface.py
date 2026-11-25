@@ -3191,10 +3191,9 @@ FAMILIES = (
             "mamba3_backward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source.
             # The owned prefill session is a native registry handle (lane
-            # mamba3-prefill-handle, 2026-11-12); only the verify's owned-weights
-            # answer and the two B-arm entries remain.
-            "mamba1_profile", "mamba3_owned_weights_enabled",
-            "mamba3_prefill_session_install_weights", "mamba3_prefill_session_backward_owned",
+            # mamba3-prefill-handle, 2026-11-12); the owned-weights entries
+            # went with NN40 (2026-11-25).
+            "mamba1_profile",
             "mamba3_forward_tape_enabled",
             # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
             "mamba_block_api_v1", "mamba_state_api_v1",

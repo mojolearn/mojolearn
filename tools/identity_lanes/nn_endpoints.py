@@ -151,30 +151,7 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts)
 
 
-@lane("nn-ep-mamba3-owned")
-def _(ml, X, yc, yr, Xh=None):
-    """Mamba3Block's owned weight snapshot: `install_owned_weights` (its generation number),
-    `export_owned_weights` (must equal the weights given), a stateless forward with the caller's
-    arrays then overwritten (the snapshot must answer as before), `release_owned_weights` (the
-    forward then reads the overwritten arrays). Parts: the generation, the exported weights, the
-    snapshot forward, the released forward."""
-    w = _nn_endpoints_mamba_weights("mamba3", "nn-ep-mamba3-owned")
-    blk = ml.Mamba3Block(w)
-    x = _seq(X, 2, 16, 32)
-    y = _nn_endpoints_host(blk.forward(x))
-    generation = blk.install_owned_weights()
-    exported = blk.export_owned_weights()
-    names = sorted(exported)
-    for k in names:
-        _same_bytes(f"export_owned_weights[{k}]", np.asarray(exported[k]), f"weights[{k}]", np.asarray(w[k]))
-    w["out_proj.weight"][...] = np.float32(0.0)
-    snap = _nn_endpoints_host(blk.forward(x))
-    _same_bytes("forward", y, "forward on the owned snapshot", snap)
-    blk.release_owned_weights()
-    released = _nn_endpoints_host(blk.forward(x))
-    return _fit(dict(generation=_h(np.asarray([int(generation)], dtype=np.int64)),
-                     exported=_h(*[np.asarray(exported[k]) for k in names]), snapshot=_h(snap),
-                     released=_h(released)))
+# TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: lane nn-ep-mamba3-owned, the install/export/release_owned_weights round trip; the Mamba-3 forward it hashed is nn-ep-mamba-blocks) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.
 
 
 @lane("nn-ep-transformer-block")
@@ -615,6 +592,6 @@ _one_sided("nn-ep-samba-inference", missing="gpu",
 
 _batch_decl("n/a:endpoint-round-trips (state dict, parameter, mode and checkpoint round trips of neural layers "
             "and models, held equal in the lane; no separate prediction batch axis)",
-            "nn-ep-mamba-blocks", "nn-ep-mamba3-owned", "nn-ep-transformer-block", "nn-ep-layernorm", "nn-ep-moe",
+            "nn-ep-mamba-blocks", "nn-ep-transformer-block", "nn-ep-layernorm", "nn-ep-moe",
             "nn-ep-embedding", "nn-ep-cnn-layers", "nn-ep-cnn-fits", "nn-ep-rnn-state", "nn-ep-sequential-dense",
             "nn-ep-sequential-conv", "nn-ep-sequential-lm", "nn-ep-samba-stack", "nn-ep-samba-inference")
