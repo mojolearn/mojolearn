@@ -1,12 +1,19 @@
 diff --git a/training/checks/loss_contract.mojo b/training/checks/loss_contract.mojo
-index 2e0eeeb586..1ab094aca6 100644
+index 2e0eeeb586..ce81c1358b 100644
 --- a/training/checks/loss_contract.mojo
 +++ b/training/checks/loss_contract.mojo
-@@ -163,6 +163,9 @@ def ce_divisor(reduction: Int, count: Int, num_items: Int) raises -> Float32:
+@@ -129,6 +129,7 @@ def ce_count(targets: List[Int32], ignore_index: Int) -> Int:
+ 
+ def ce_divisor(reduction: Int, count: Int, num_items: Int) raises -> Float32:
+     """**THE ONE PRODUCER OF `divisor`**, seam L13's and seam L16's, contract 5.5. NONE -> refused; there is no reduced loss and no backward SUM -> Float32(num_items) when supplied, else exactly +1.0 MEAN -> Float32(count) THE SUM's DIVIDE BY EXACTLY `1.0` IS SPELLED ANYWAY."""
++    from std.sys import is_defined  # SABOTAGE gate-gpu: function scope (an import may not sit in a branch)
+     if reduction == REDUCTION_NONE:
+         raise Error(
+             String("ce: REDUCTION_NONE has no divisor and no backward")
+@@ -163,6 +164,8 @@ def ce_divisor(reduction: Int, count: Int, num_items: Int) raises -> Float32:
                  + " exceeds CE_MAX_EXACT_COUNT; Float32(count) would round"
                  + " (contract section 3)"
              )
-+        from std.sys import is_defined
 +        comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sabotage): the MEAN divisor one ulp up, the GPU bindings only
 +            return Float32(count) * Float32(1.00000011920928955078125)
          return Float32(count)
