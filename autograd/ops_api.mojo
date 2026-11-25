@@ -1468,7 +1468,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var oi = self._opt_index(o)
         if self.opts[oi].pg >= 0:
             # nn-blocks-pg: the parameter's group member keeps its state
-            return self.optimizer_state_value(self._pg_member(oi, h, "optimizer_state") + 1, h)
+            oi = self._pg_member(oi, h, "optimizer_state")
         var slot = self._param_slot(h, "optimizer_state")
         var si = self._state_of(oi, h, self.rows[slot] * self.cols[slot])
         var r = self.opt_states[si]
@@ -1498,8 +1498,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var oi = self._opt_index(o)
         if self.opts[oi].pg >= 0:
             # nn-blocks-pg: the parameter's group member keeps its state
-            self.load_optimizer_state(self._pg_member(oi, h, "load_optimizer_state") + 1, h, state)
-            return
+            oi = self._pg_member(oi, h, "load_optimizer_state")
         var slot = self._param_slot(h, "load_optimizer_state")
         var n = self.rows[slot] * self.cols[slot]
         var si = self._state_of(oi, h, n)
