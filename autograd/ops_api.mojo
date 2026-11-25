@@ -179,6 +179,9 @@ from autograd.session_layer_rules import (
     LayerRules, OPS_LAYER_FIRST, OPS_LAYER_LAST, OPS_LAYER_POOL_FIRST, OPS_LAYER_RESIZE_FIRST, OPS_LAYER_REST_FIRST,
 )
 # session-ops end
+# session-ops-pool begin: Sequential's pools as Session ops, codes 140..148 (autograd/session_ops_pool.mojo)
+from autograd.session_ops_pool import session_pool, pool_int_count, pool_op_name
+# session-ops-pool end
 # nn-blocks-qkv begin: attention over explicit q, k, v (session code 122, autograd/nn_qkv.mojo)
 from autograd.nn_qkv import OPS_ATTENTION_QKV, qkv_attention
 # nn-blocks-qkv end
@@ -2583,8 +2586,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     # session-ops-pool begin: codes 140..149 (sub-lane session-ops-pool replaces this body)
     def _layer_pool(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
-        """The pools (1-D and 3-D max / avg, adaptive avg / max 1-D / 2-D / 3-D)."""
-        raise Error("ops: unknown operation code " + String(code))
+        """The pools (autograd/session_ops_pool.mojo): 1-D, 2-D with PyTorch's options, 3-D max / avg, adaptive
+        avg 1-D / 2-D / 3-D and adaptive max 1-D / 2-D, each through the forward function Sequential's layer calls.
+        x [input]; ints pool_int_count(code) words (the ops door writes them)."""
+        var what = pool_op_name(code, ints)
+        _need(what, len(x), 1, pool_int_count(code), len(ints), 0, len(fs))
+        if self.int_words[self._slot(hs[0])]:
+            raise Error("ValueError: ops: " + what + ": x must be a floating-point tensor")
+        return session_pool(self.tape, self.ex, code, x[0], ints)
     # session-ops-pool end
 
 
