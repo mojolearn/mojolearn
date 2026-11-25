@@ -305,9 +305,12 @@ def minibatch_entry_ptr_idn(
 ) raises -> Bool:
     """IDN_MBK_RESIDENT: `entries.minibatch_entry` with X uploaded from `xp`
     (nx values, alive for the call) and the fit run on the resident slot.
-    False (nothing done) outside the switch, for weights or a size mismatch:
-    the binding then copies X and runs `minibatch_entry`."""
-    comptime if MBK_IDN_RESIDENT:
+    A negative `xp` is THE FOLD X WORD, taken in every mode (lane vdf2-tail:
+    the `fast` build's slot form of a model-selection fold; `minibatch_fit`'s
+    resident form is mode-generic). False (nothing done) for host words in a
+    `fast` build, for weights or a size mismatch: the binding then copies X
+    and runs `minibatch_entry`."""
+    if MBK_IDN_RESIDENT or Int(xp) < 0:
         var n = ip[0]
         var d = ip[1]
         var has_w = len(ip) > 11 and ip[11] != 0

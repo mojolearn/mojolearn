@@ -114,6 +114,7 @@ from core.native_descriptor_call import native_descriptor_report
 from core.neighbors_entry_table import nb_index_prepare_call, nb_index_release_call
 # Lane vdf-scope-cluster2a (2026-11-24): THE FOLD INDEX and THE FOLD QUERIES.
 from core.neighbors_entry_table import nb_index_prepare_fold_call, nb_fold_ready_call, NbFold
+from core.neighbors_entry_table import NB_FOLD_TEST_NONE, NB_FOLD_TEST_COSINE, NB_FOLD_TEST_JS
 from core.member_abi import (
     MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, MEMBER_I64, MEMBER_HOME_DEVICE,
 )
@@ -595,24 +596,34 @@ def _fit_indexed(slot: _SlotPtr, call: _CallPtr, estimator: String, rows: Int, c
     the RUN reads them."""
     var wide = _wide_index(call[].row_index, estimator)
     var x = call[].x
-    # A cosine fit keeps the gathered points (lane vdf-scope-cluster7): a later query on host rows runs the
-    # plan's host zero-row scan over the index words, which a fold-built index does not have. Its fold
-    # queries still run on the device (`_indexed_query`).
-    # A Jensen-Shannon fit keeps the gathered points too (lane vdf-scope-cluster8): its X >= 0 refusal is a FIT
-    # refusal (the class refuses at fit), made on those host words below; its fold queries run on the device.
-    if _fold_route(slot, call) and slot[].metric != KNN_DIST_COSINE and slot[].metric != KNN_DIST_JS:
+    # A cosine fit builds its index on the device too (lane vdf2-tail): the prepare makes the index rows'
+    # zero-row test on the device once (NB_FOLD_TEST_COSINE) and the resident index keeps its word, which every later
+    # cosine search plan takes in place of the host scan of index words a fold-built index does not have
+    # (neighbors/estimator.mojo `_knn_search_plan(index_zero_row=)`); host query rows are still scanned there.
+    # A Jensen-Shannon fit builds its index on the device too (lane vdf2-tail): its X >= 0 refusal is a FIT
+    # refusal (the class refuses at fit), made by the prepare on the gathered device rows (the third status
+    # word, `knn_refuse_metric_status`: `knn_check_metric_input`'s words), in the host path's order (the
+    # range refusal, then the sign, then the finite test).
+    if _fold_route(slot, call):
         var fold = _put_fold(call, wide, rows)
         var store = kmeans_fold_store_ref(call[].route.mode, call[].route.vendor)
-        var status = List[Int32](length=2, fill=Int32(0))
+        var status = List[Int32](length=3, fill=Int32(0))
+        var metric_test = NB_FOLD_TEST_NONE
+        if slot[].metric == KNN_DIST_COSINE:
+            metric_test = NB_FOLD_TEST_COSINE
+        elif slot[].metric == KNN_DIST_JS:
+            metric_test = NB_FOLD_TEST_JS
         var handle = 0
         try:
-            handle = nb_index_prepare_fold_call(call[].route.entry.call, Int(status.unsafe_ptr()), fold, rows, cols)
+            handle = nb_index_prepare_fold_call(call[].route.entry.call, Int(status.unsafe_ptr()), fold, rows, cols,
+                                                metric_test)
         finally:
             arena_cache_free(store, fold.index)
         if handle == 0:
             if status[1] != 0:
                 raise Error("IndexError: a " + estimator + " member's row index holds a row outside X's "
                             + String(x.rows) + " rows")
+            knn_refuse_metric_status(estimator, Int(status[2]))
             raise Error("ValueError: Input X contains NaN or infinity.")
         slot[].handle = handle
         slot[].handle_entry = call[].route.entry

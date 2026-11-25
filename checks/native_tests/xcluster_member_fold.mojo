@@ -6,10 +6,16 @@ core/xcluster_member.mojo `_fold_op`; x_cluster/device_ops.mojo `put_addr`, x_cl
 
 A model-selection fold's rows taken ON THE DEVICE into a slot of the x_prep store (what `member_fold_x_open` does)
 and handed to the identical variants entry as a negative X word must give the SAME BYTES as the same rows gathered on
-the host and handed as host words. Claims (device column, identical build; the entry answers VARIANTS_CAP_FOLD_X):
+the host and handed as host words. Claims (device column; the entry answers VARIANTS_CAP_FOLD_X), identical build:
   case 0  BisectingKMeans fit (centers, labels, tree, inertia bits) and its tree predict of the test fold;
   case 1  MiniBatchKMeans fit (centers, counts, labels, inertia bits), then the resident centers queries of the test
           fold (predict labels, transform distances, score total).
+A `fast` build (lane vdf2-tail: the device entry answers VARIANTS_CAP_FOLD_X in every mode; a fold word skips the
+Apple zero-copy routes and takes the slot forms of x_cluster/device_execution.mojo) claims case 1 byte for byte too
+(`minibatch_fit(xs_res=)` against the host-word fit, the same draws and steps). Its case 0 fold fit centers on the
+device where its host-word fit centers on the host (`fast` promises quality, not bits), so the fast claims are: the
+same tree shape, labels in range, the fold inertia within 1e-4 relative of the host-word inertia, and the fold fit's
+own tree predicting the test fold the same from the fold word as from host words (byte for byte).
 The CPU column has no fold route (the caller gathers; its bytes are the host-input path the verify compares).
 Data: a SplitMix64 stream (uniform [0, 4)), 120 rows x 3; train fold the rows with i % 4 != 0 (second half first),
 test fold the rest. Sabotage: in x_cluster/device_ops.mojo `put_addr` copy n - 1 words from the slot -> case 0 fails.
@@ -152,11 +158,42 @@ def _minibatch(driver: KMeansVariantsDriver, train: Int, test: Int, nt: Int, nq:
     return out^
 
 
+def _tree_predict(driver: KMeansVariantsDriver, test: Int, nq: Int, tree_centers: List[Float32],
+                  tree_nodes: List[Int32]) raises -> List[Int32]:
+    var predicted = VariantsResultSlot()
+    driver.bisect_predict(BisectPredictRequest(VariantsSpan(test, nq * _D),
+        VariantsSpan(Int(tree_centers.unsafe_ptr()), len(tree_centers)),
+        VariantsSpan(Int(tree_nodes.unsafe_ptr()) if len(tree_nodes) > 0 else 0, len(tree_nodes)), nq, _D),
+        predicted)
+    return predicted.storage[0].labels.copy()
+
+
+def _fast_bisect(driver: KMeansVariantsDriver, train_word: Int, test_word: Int, train_host: Int, test_host: Int,
+                 nt: Int, nq: Int) raises:
+    """The `fast` claims of case 0 (module docstring)."""
+    var a = VariantsResultSlot()
+    driver.bisect_fit(BisectFitRequest(VariantsSpan(train_word, nt * _D), VariantsSpan(0, 0), nt, _D, _K, 1, True,
+                                       50, 7, False, 1e-4), a)
+    var b = VariantsResultSlot()
+    driver.bisect_fit(BisectFitRequest(VariantsSpan(train_host, nt * _D), VariantsSpan(0, 0), nt, _D, _K, 1, True,
+                                       50, 7, False, 1e-4), b)
+    require(len(a.storage[0].tree_nodes) == len(b.storage[0].tree_nodes), "fast bisect: tree shape")
+    require(len(a.storage[0].labels) == nt, "fast bisect: one label per fold row")
+    for t in range(nt):  # small-loop(compared labels)
+        require(a.storage[0].labels[t] >= 0 and a.storage[0].labels[t] < _K, "fast bisect: label in range")
+    var ia = a.storage[0].inertia
+    var ib = b.storage[0].inertia
+    require(ib > 0.0 and abs(ia - ib) <= 1e-4 * ib, "fast bisect: fold inertia " + String(ia) + " vs host " + String(ib))
+    var pa = _tree_predict(driver, test_word, nq, a.storage[0].tree_centers, a.storage[0].tree_nodes)
+    var pb = _tree_predict(driver, test_host, nq, a.storage[0].tree_centers, a.storage[0].tree_nodes)
+    _same_i32(pa, pb, "fast bisect: the fold tree's predict, fold word against host words")
+
+
 def _device_case(which: Int) raises:
-    comptime if not CPU_COLUMN_BUILD and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not CPU_COLUMN_BUILD:
         var driver = KMeansVariantsDriver(kmeans_variants_device_v1)
         require((driver.metadata(VARIANTS_CAPABILITIES) & VARIANTS_CAP_FOLD_X) != 0,
-                "the identical device variants entry answers VARIANTS_CAP_FOLD_X")
+                "the device variants entry answers VARIANTS_CAP_FOLD_X in every mode")
         var x = _x()
         var train = _index(True)
         var test = _index(False)
@@ -171,7 +208,10 @@ def _device_case(which: Int) raises:
         var test_slot = store[].take_rows(store_ctx, base, _D, Int(test.unsafe_ptr()), nq)
         var failure = String("")
         try:
-            if which == 0:
+            if which == 0 and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+                _fast_bisect(driver, fold_x_word(train_slot), fold_x_word(test_slot), Int(train_rows.unsafe_ptr()),
+                             Int(test_rows.unsafe_ptr()), nt, nq)
+            elif which == 0:
                 var a = _bisect(driver, fold_x_word(train_slot), fold_x_word(test_slot), nt, nq)
                 var b = _bisect(driver, Int(train_rows.unsafe_ptr()), Int(test_rows.unsafe_ptr()), nt, nq)
                 _same_i32(a[0], b[0], "bisect fit labels")
