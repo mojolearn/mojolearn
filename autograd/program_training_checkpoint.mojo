@@ -44,9 +44,12 @@ from sequence.ops import FP
 from autograd.ops_api import ops_session, OpsSession
 from autograd.optim import optimizer_slots
 from autograd.optimizer_requests import OpsOptimizerRequest, OpsOptimizerExtras
-from autograd.program import OpsProgram, _Reader, _put_shape, program_words, program_from_words, same_shape
+from autograd.program import (
+    OpsProgram, _Reader, _put_shape, program_words, program_from_words, same_shape, PROGRAM_PARAM_WEIGHT,
+    PROGRAM_PARAM_STATE_WORDS,
+)
 from autograd.rankn import ShapeN
-from core.cast_in import CastIn, CAST_KIND_FLOAT, CAST_KIND_SIGNED
+from core.cast_in import CastIn, CAST_KIND_FLOAT
 from training.checkpoint import Checkpoint, CKPT_SECTION_PROGRAM_TRAINING, read_checkpoint_unchecked, save_checkpoint
 
 # Sabotage arms (tools/identity_lanes/coverage_sabotage.tsv coverage-autograd-program_training_*; lane
@@ -394,12 +397,18 @@ def program_training_load[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, f
     try:
         for k in range(count):  # driver-loop: over restored parameter buffers
             var sh = shapes[k]
-            var source = CastIn(Int(ck.param.unsafe_ptr()) + 4 * ck.offsets[k],
-                                CAST_KIND_SIGNED if kinds[k] == 1 else CAST_KIND_FLOAT,
+            # the words as they were saved (int32 words keep their bit patterns), as ops_load_program uploads them
+            var source = CastIn(Int(ck.param.unsafe_ptr()) + 4 * ck.offsets[k], CAST_KIND_FLOAT,
                                 4, sh.rows(), sh.cols(), sh.cols() * 4, 4)
-            handles.append(s[].upload_ids(source, sh) if kinds[k] == 1 else s[].upload_nd(source, sh, False))
-        for k in range(len(p.params)):  # driver-loop: over the graph's handle rebinding
-            p.params[k] = handles[p.params[k]]
+            handles.append(s[].upload_nd(source, sh, False))
+        for k in range(len(p.params)):  # driver-loop: over the graph's handle rebinding (and its parameter kinds)
+            var h = handles[p.params[k]]
+            var pk = p.param_kind(k)
+            if pk == PROGRAM_PARAM_STATE_WORDS or kinds[p.params[k]] == 1:
+                s[].int_words[s[]._slot(h)] = True
+            if pk != PROGRAM_PARAM_WEIGHT:
+                s[].declare_state(h)
+            p.params[k] = h
         pid = s[].add_program(p.copy())
         var opt: Int
         if grouped == 1:

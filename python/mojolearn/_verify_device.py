@@ -60,6 +60,9 @@ NON_COMPUTING = frozenset((
     # vocabulary's tokens and merges, the byte LM's settings, a safetensors
     # header entry and the parameter-grid sampler (it draws settings, not data)
     "Kernel", "ConstantKernel", "WhiteKernel", "RBF", "Matern",
+    # the batch source (lane batch-source, 2026-11-25): a host file reader holding a shard directory and a
+    # position; the Session whose Program.fit reads it carries the side
+    "BatchSource",
     "TrainedBpeVocabulary", "ByteLanguageModelConfig", "TensorInfo", "ParameterSampler", "ParameterGrid",
     # a predicate over two integers (whether a microbatch split keeps the bits)
     "accumulation_is_aligned",

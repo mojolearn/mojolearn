@@ -9,7 +9,8 @@
 # the head in three groups (different rates and weight decay, one global clip). It trains two steps, saves (the
 # parameters, `optimizer_state_dict` and the step counter that keys the dropout), resumes in a fresh session, and
 # the next update must equal uninterrupted training bit for bit; then the same tagger captured as a Program and
-# trained with `Program.fit` (the scan's key advanced per minibatch by the replay), saved, loaded and resumed.
+# trained with `Program.fit` (the scan's key advanced per minibatch by the replay), saved with ONE call
+# (`Program.save_training`, lane batch-source) and resumed with one (`Session.load_training`).
 #
 # A fragment of tools/identity_break.py (loaded by `_load_lane_fragments` into its namespace; np, os, tempfile, _h,
 # _fit, _same_bytes, _hw, lane and _batch_decl are that namespace's). Device-agnostic
@@ -199,8 +200,8 @@ def _(ml, X, yc, yr, Xh=None):
     mean over the real positions); then the parameters, optimizer_state_dict and step counter are saved to a file,
     one more step runs uninterrupted, and a fresh session loads the save and runs that step: parameters and
     optimizer state must be the same bytes. Program: the tagger captured and trained by Program.fit for two
-    minibatches, saved with its optimizer state, one more uninterrupted minibatch against a fresh session's
-    load_program + load_optimizer_state_dict + one minibatch: the same bytes. Keys: masks of counter 0 and 1 must
+    minibatches, saved with its optimizer state by Program.save_training, one more uninterrupted minibatch against a
+    fresh session's Session.load_training + one minibatch: the same bytes. Keys: masks of counter 0 and 1 must
     differ, and Program.fit must draw new masks in consecutive minibatches. Parts: train (losses, logits, every
     gradient, parameters after each step), resume (parameters and moments after the resumed step), program (loss
     curve, parameters, resumed parameters and moments), keys (the masks)."""
@@ -273,26 +274,22 @@ def _(ml, X, yc, yr, Xh=None):
             prog.fit(ids, feats, lens, codes, optimizer=opt, parameters=trained, epochs=2, **fit_args)
             curve = np.asarray(prog.loss_curve_, dtype=np.float32)
             fitted = [np.asarray(c.numpy(cp[k])) for k in names]
-            psaved = _nn_composed_save_state(c, opt)
-            pmoments = _nn_composed_saved(tmp, "program_moments", _nn_composed_moments(psaved))
-            path = os.path.join(tmp, "tagger.mlp")
-            prog.save(path)
+            # lane batch-source: ONE call saves the graph, the parameters, the three groups with their moments and
+            # step counts and the schedule (Program.save_training), ONE call restores them (Session.load_training):
+            # no optimizer_state_dict read-back, no handle remap, no group rebuilt by hand
+            path = os.path.join(tmp, "tagger.ckpt")
+            prog.save_training(path, optimizer=opt)
             prog.fit(ids, feats, lens, codes, optimizer=opt, parameters=trained, epochs=1, **fit_args)
             pstraight = [np.asarray(c.numpy(cp[k])) for k in names]
             pstraight_state = _nn_composed_moments(_nn_composed_save_state(c, opt))
-        k = 0
-        for key in sorted(psaved["state"]):  # driver-loop: over the saved parameters' states
-            for n in _NN_COMPOSED_STATE:  # small-loop(two moments)
-                psaved["state"][key][n] = pmoments[k]
-                k += 1
         with ml.ops.Session(numeric_mode="identical") as d:
-            loaded = d.load_program(path)
-            lp = {k: loaded.params[index[i]] for i, k in enumerate(names)}  # glue: six handles
+            state = d.load_training(path)
+            loaded = state["program"]
+            lp = {k: state["parameters"][index[i]] for i, k in enumerate(names)}  # glue: six handles
             for i, name in enumerate(names):  # driver-loop: over the six parameters
-                _same_bytes("Program.fit saved " + name, fitted[i], "load_program " + name,
+                _same_bytes("Program.fit saved " + name, fitted[i], "load_training " + name,
                             np.asarray(d.numpy(lp[name])))
-            dopt = _nn_composed_optimizer(d, lp)
-            _nn_composed_load_state(d, dopt, psaved)
+            dopt = state["optimizer"]
             loaded.fit(ids, feats, lens, codes, optimizer=dopt, parameters=[lp[k] for k in names], epochs=1,
                        **fit_args)
             presumed = [np.asarray(d.numpy(lp[k])) for k in names]
