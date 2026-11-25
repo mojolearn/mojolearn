@@ -56,6 +56,10 @@ comptime SCAN_HEADER = 8
 #: (the segment length k >= 1) after n_words; a scan without it keeps format 2 and its words unchanged. The forward,
 #: the backward that recomputes each segment and the memory saved are autograd/nn_ckpt.mojo's note.
 comptime SCAN_FORMAT_CKPT = 3
+#: The session code of a scan with checkpoint_every (lane fable-finalize): its own code, tested after every other
+#: operation's, so the plain scan's entry (`_scan`, code 118) has no checkpoint test in it. Same handles and words
+#: as OPS_SCAN with format 3.
+comptime OPS_SCAN_CKPT = 120
 #: autograd/nn_ckpt.mojo OPS_CHECKPOINT (not imported: nn_ckpt imports this module)
 comptime _SCAN_CKPT_CODE = 119
 #: autograd/ops_api.mojo OPS_DROPOUT (not imported: ops_api imports this module); ints [seed lo, seed hi, counter]
@@ -152,7 +156,7 @@ def scan_host_code_name(code: Int) -> String:
         return "a block step op"
     if code == 85 or code == 86:
         return "a generation op"
-    if code == OPS_SCAN:
+    if code == OPS_SCAN or code == OPS_SCAN_CKPT:
         return "a scan"
     if code == OPS_CUSTOM_VJP:
         # nn-blocks-zerocost: the cell runs through the op runner's nested instance, which has no custom branch

@@ -23,7 +23,8 @@ struct PreparedReplayNode(Movable):
         # Do not validate dropout here: even malformed operation metadata must
         # retain its ordinary selected-node failure position during replay.
         self.original_last_int = self.ints[len(self.ints) - 1] if len(self.ints) != 0 else 0
-        self.random = p.code[node] == 21 or p.code[node] == 118 or p.code[node] == 119
+        # 120: a scan with checkpoint_every (autograd/nn_scan.mojo OPS_SCAN_CKPT), keyed as the scan is
+        self.random = p.code[node] == 21 or p.code[node] == 118 or p.code[node] == 119 or p.code[node] == 120
 
 
 struct PreparedProgramReplay(Movable):

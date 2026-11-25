@@ -25,6 +25,12 @@ after another on DeviceExec):
      cell that returns its input unchanged, with lengths that need a gradient, and a negative checkpoint_every;
   5  memory: a chain of four checkpointed segments keeps fewer tape nodes than the plain chain (the segments'
      nodes are on the scratch tape only), and the same gradients.
+  6  the carry (lane fable-finalize: the rule derives, from the graph above its node, whether each input's
+     gradient already holds a term; the tape's traversal stores nothing for it): the segment's input is a NON-LEAF
+     tensor u = tanh(x) that the loss also reads AFTER the segment (u's gradient holds that term when the rule
+     runs: the fold continues) or only before it (it holds none: the first term is written in place), and the
+     backward runs twice, the second accumulating (every leaf's gradient then holds the first backward's value
+     when the rule runs). Checkpointed == plain word for word: dL/dx, dL/du, dL/dw1, dL/dw2 after each backward.
 """
 from std.memory import bitcast
 from std.testing import TestSuite
@@ -42,7 +48,7 @@ from checks.native_tests.ops_higher_common import tensor, values, gradient
 from checks.native_tests.sequence_port_common import normal
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, CPU_COLUMN_BUILD, require
 
-comptime NN_CKPT_UNITS = 6
+comptime NN_CKPT_UNITS = 7
 
 comptime _MATMUL = 1
 comptime _ADD = 2
@@ -451,6 +457,61 @@ def run_memory_unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s:
 
 
 # ---------------------------------------------------------------- the columns
+# ---------------------------------------------------------------- unit 6: the carry
+def _carry_grads[E: Exec & Movable & Deinitable](
+    mut s: OpsSession[E], seg: OpsProgram, recompute: Bool, late: Bool,
+) raises -> List[List[Float32]]:
+    """u = tanh(x), y = seg(u); loss = sum(y C) + sum(u C) with the second term recorded after the segment
+    (`late`) or before it. One backward, then a second that accumulates. Returns [dL/dx, dL/du, dL/dw1, dL/dw2]
+    after the first backward, then dL/dx, dL/dw1, dL/dw2 after the second."""
+    s.reset()
+    var x = tensor(s, _draw(_B * _F, 0xC461, 1.0), [_B, _F], True)
+    var w1 = tensor(s, _draw(_F * _H, 0xC401, 0.5), [_F, _H], True)
+    var w2 = tensor(s, _draw(_H * _F, 0xC402, 0.5), [_H, _F], True)
+    var cy = tensor(s, _draw(_B * _F, 0xC462, 1.0), [_B, _F])
+    var cu = tensor(s, _draw(_B * _F, 0xC463, 1.0), [_B, _F])
+    var u = _op1(s, _TANH, x)
+    var side = 0
+    if not late:
+        side = _dot(s, u, cu)
+    var params: List[Int] = [w1, w2]
+    var ins: List[Int] = [u]
+    var got = checkpoint_session(s, seg, ins, params, 3, recompute)
+    if late:
+        side = _dot(s, u, cu)
+    var loss = _op(s, _ADD, _dot(s, got[0], cy), side)
+    s.backward(loss, False)
+    var out = List[List[Float32]]()
+    out.append(gradient(s, x, [_B, _F]))
+    out.append(gradient(s, u, [_B, _F]))
+    out.append(gradient(s, w1, [_F, _H]))
+    out.append(gradient(s, w2, [_H, _F]))
+    s.backward(loss, True)
+    out.append(gradient(s, x, [_B, _F]))
+    out.append(gradient(s, w1, [_F, _H]))
+    out.append(gradient(s, w2, [_H, _F]))
+    return out^
+
+
+def run_carry_unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSession[E]) raises:
+    var names: List[String] = ["dL/dx", "dL/du", "dL/dw1", "dL/dw2", "accumulated dL/dx", "accumulated dL/dw1",
+                               "accumulated dL/dw2"]
+    var seg = c.program(_segment(c, False))
+    for variant in range(2):  # small-loop(the input read after the segment, or before it)
+        var late = variant == 0
+        var plain = _carry_grads(s, seg, False, late)
+        var ckpt = _carry_grads(s, seg, True, late)
+        for q in range(len(names)):  # small-loop(the compared words)
+            _same("carry (" + ("input read after the segment" if late else "input read before the segment") + ") "
+                  + names[q], ckpt[q], plain[q])
+        # the second backward added to the first: the accumulated words are not the first backward's
+        var moved = False
+        for i in range(len(ckpt[2])):  # small-loop(check values)
+            if bitcast[DType.uint32](ckpt[2][i]) != bitcast[DType.uint32](ckpt[5][i]):
+                moved = True
+        require(moved, "checkpoint: an accumulating backward left dL/dw1 as it was")
+
+
 def _unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSession[E], unit: Int) raises:
     if unit == 0:
         run_segment_unit(c, s)
@@ -462,8 +523,10 @@ def _unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSessio
         run_capture_unit(c)
     elif unit == 4:
         run_refusal_unit(c, s)
-    else:
+    elif unit == 5:
         run_memory_unit(c, s)
+    else:
+        run_carry_unit(c, s)
 
 
 def test_nn_ckpt() raises:

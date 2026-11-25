@@ -1038,12 +1038,43 @@ struct Tape(Movable):
         return self._nodes[self._check(x)].requires_grad
 
     # activation-ckpt begin: what a recomputing backward rule needs (autograd/nn_ckpt.mojo)
-    def edge_holds_gradient(self, node: Int, edge: Int) -> Bool:
-        """While a rule of custom node `node` runs (inside `_backward`): whether the gradient of its input
-        `edge`, a writes_total edge, already held a contribution when the traversal reached the node. A rule
-        that continues that gradient's fold (variable_carry with carry=True) reads it before it adds its own
-        terms, so a recomputed segment's contributions land in the order the unrecomputed graph applies them."""
-        return self._nodes[self._parents[self._nodes[node].start + edge]].grad_ready
+    def edges_hold_gradient(self, node: Int, root: Int) raises -> List[Bool]:
+        """While a rule of custom node `node` runs inside the `_backward` from node `root`: for each input edge
+        of `node`, whether that input's gradient already held a contribution when the traversal reached the node
+        (the traversal's `touched` flag before the node's own edges). A rule that continues that gradient's fold
+        (variable_carry with carry=True) reads it before it adds its own terms, so a recomputed segment's
+        contributions land in the order the unrecomputed graph applies them.
+
+        Derived from the graph here, by the rule that needs it: the traversal keeps nothing for it (lane
+        fable-finalize: it stored one Bool per writes_total edge of EVERY graph, the transformer's and the
+        Mambas' joins included). An input's gradient holds a contribution exactly when (1) it held one before
+        the traversal (`grad_ready`, which the backward's setup leaves True only on a leaf accumulated into, and
+        which the traversal does not change until it ends), or (2) a differentiated node above `node` (an
+        ancestor of the root that needs a gradient, the `_mark_active` walk) takes it as an input: every such
+        edge writes or adds a term when its node is visited, and nodes are visited in decreasing index. Host
+        integers over the nodes above `node`, once per rule call."""
+        if node < 0 or node >= len(self._nodes) or root < node or root >= len(self._nodes):
+            raise Error("autograd: edges_hold_gradient: the node is not below the backward's root")
+        var n = self._nodes[node]
+        var held = List[Bool](capacity=n.count)
+        for edge in range(n.count):  # driver-loop: over the node's inputs
+            held.append(self._nodes[self._parents[n.start + edge]].grad_ready)
+        var active = List[Bool](length=root + 1, fill=False)
+        active[root] = True
+        for reverse in range(root - node):  # driver-loop: over the graph nodes above `node`, reverse creation order
+            var i = root - reverse
+            if not active[i]:
+                continue
+            var m = self._nodes[i]
+            for e in range(m.count):  # driver-loop: over node inputs
+                var p = self._parents[m.start + e]
+                if not self._nodes[p].requires_grad:
+                    continue
+                active[p] = True
+                for edge in range(n.count):  # driver-loop: over the rule node's inputs
+                    if self._parents[n.start + edge] == p:
+                        held[edge] = True
+        return held^
 
     def variable_carry[E: Exec](
         mut self, mut ex: E, data: FP, grad_destination: FP, shape: ShapeN, carry: Bool,
@@ -2679,11 +2710,6 @@ struct Tape(Movable):
                     # the rule writes this input's whole gradient in place
                     first[edge] = True
                     total[edge] = True
-                    # lane activation-ckpt: whether the destination already holds earlier contributions, for a
-                    # rule that continues the fold there (edge_holds_gradient; autograd/nn_ckpt.mojo). One
-                    # store on a writes_total edge only; set True for every touched node after the traversal
-                    # anyway, and read by nothing else while the traversal runs.
-                    self._nodes[parent].grad_ready = touched[parent]
                     touched[parent] = True
                     contributions.append(p.grad)
                 elif p.requires_grad and not touched[parent]:

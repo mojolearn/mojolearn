@@ -13,7 +13,7 @@ step in time order (steps first, as torch's recurrent layers and jax.lax.scan st
 from sequence.exec_trait import Exec
 from autograd.ops_api import OpsSession, ops_session
 from autograd.program import OpsProgram
-from autograd.nn_scan import OPS_SCAN, scan_encode, scan_check_binding, scan_check_cell
+from autograd.nn_scan import OPS_SCAN, OPS_SCAN_CKPT, scan_encode, scan_check_binding, scan_check_cell
 from autograd.rankn import ShapeN
 
 
@@ -58,7 +58,8 @@ def scan_session[E: Exec & Movable & Deinitable](
         hs.append(lengths)
     for j in range(len(params)):  # driver-loop: over bound parameters (handles)
         hs.append(params[j])
-    var packed = s.op(OPS_SCAN, hs, words[0], words[1])
+    # a scan with checkpoint_every has its own code (OPS_SCAN_CKPT): the plain scan's entry tests nothing for it
+    var packed = s.op(OPS_SCAN_CKPT if checkpoint_every > 0 else OPS_SCAN, hs, words[0], words[1])
     var steps = xs_shape.d[0]
     var n_state = len(states)
     var y_shape = cell.out_shapes[n_state]

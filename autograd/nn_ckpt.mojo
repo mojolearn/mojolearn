@@ -18,19 +18,39 @@
 # the checkpoint is ONE custom tape node (tag NN_CKPT_TAG) at the segment's place in the graph, so every consumer
 # outside the segment contributes before it and after it exactly as before; its rule writes each input's whole
 # gradient in place (writes_total) and CONTINUES that gradient's fold: the recomputed leaf of an input points at the
-# input's gradient (Tape.variable_carry) and starts touched when the tape says the gradient already held a
-# contribution (Tape.edge_holds_gradient), so the segment's terms are added one by one in decreasing node order,
-# never summed apart and added as one. Inside a scan the same holds across segments: a boundary state's gradient
+# input's gradient (Tape.variable_carry) and starts touched when the gradient already held a contribution
+# (Tape.edges_hold_gradient: derived by the rule from the graph above the node and the backward's root, so the
+# tape's traversal keeps nothing for it and no other graph's backward pays for it), so the segment's terms are
+# added one by one in decreasing node order, never summed apart and added as one. Inside a scan the same holds across segments: a boundary state's gradient
 # is carried into the earlier segment's recompute, and a step output that is also a boundary state has its own
 # term (the stacked output's slice) folded in first, as the plain graph's stack node (the highest index) does.
 # The outputs are seeded through the same packing node the plain form records (one output: the output itself;
 # several: one (n, 1) column per output and one concat). An input that no output reaches is not an edge of the node
 # (it gets no gradient from it, as in the plain graph); a recomputed leaf that a segment's outputs do not reach is
 # released before that segment's backward (Tape.release_leaf_gradient), so nothing is zero-filled that the plain
-# graph would not touch. Fused-epilogue choices the tape makes from a node's consumer (a linear's act' applied by
-# its sole linear consumer, a pass-through gradient buffer borrowed) are value-identical by the tape's own
-# invariant; the gradients a user reads of the parameters and the leaves, and every training step, are the plain
-# run's words.
+# graph would not touch.
+#
+# THE TWO FORMS THE TAPE CHOOSES FROM A NODE'S CONSUMER, settled (lane fable-finalize, 2026-11-25). At the segment's
+# edge the checkpointed graph has a custom node where the plain graph has the segment's first or last node, so the
+# tape may take its other form there:
+#   (1) a linear input whose only consumer is the segment's first linear: plain, that consumer's dX GEMM applies the
+#       input's act' in its epilogue (EPI_ACT_BWD: acc act'(y)); checkpointed, the GEMM stores acc and the input's
+#       own OP_ACT_BWD multiplies it. SAME WORDS: `acc` is the GEMM's accumulator after its last `add`, and every
+#       `add` and `mul` of sequence/ops.mojo ends in ftz, so the word the epilogue multiplies is the word the plain
+#       store writes and `ld` reads back (flushing a flushed word changes nothing); both then run the one body
+#       act_bwd_value.
+#   (2) a pass-through operand (a same-shape add's, a reshape's) that borrows its consumer's gradient buffer: plain
+#       it aliases the words, checkpointed it gets them through the VJP's ld/st, i.e. flushed. Every reader loads
+#       through `ld` (ftz), so every gradient computed FROM them is the same word. The stored words themselves
+#       differ only where the borrowed buffer holds a denormal, and no kernel stores one (same ftz): only a
+#       CALLER'S SEED can (an explicit seed with denormal words, borrowed down a chain of adds from the root).
+#       That is the tape's alias rule, the same between two plain graphs whose consumer counts differ, not a
+#       property of checkpointing.
+# So: every parameter's and leaf's gradient, every training step and every gradient computed by a kernel are the
+# plain run's words; a NON-LEAF tensor's raw gradient words read back by the user can differ from the plain run's
+# only as "a denormal of the caller's seed, or its flushed +-0.0". One API difference follows from (1): the plain
+# graph refuses to hand out that linear input's gradient (it holds the pre-activation gradient), the checkpointed
+# graph returns it.
 #
 # MEMORY (the formula; values and gradient slots are float32 words). Plain: the tape keeps every node of the
 # segment, its value and, for a node that needs a gradient, a gradient slot: A = sum over the segment's nodes of
@@ -59,6 +79,13 @@
 # Session.checkpoint's `counter=`.
 #
 # The handles of the node: the segment's inputs in order, then one tensor per parameter (Program.params order).
+# REFUSALS REVIEWED (lane fable-finalize): each stays, with its reason. An output that is an input or a parameter
+# returned unchanged (a segment's, a checkpointed cell's): its gradient would be two names for one buffer inside the
+# rule, and the remedy costs one copy node, named in the message. Lengths that need a gradient under
+# checkpoint_every: the mask is rebuilt per segment, so the (all zero) terms of a lengths gradient would be folded
+# per segment instead of once; detach is exact. Partition, distribute and the control-flow VJP refuse the tag as
+# they refuse a custom operation's: each replays node by node on another executor or tape and would need the
+# session's scratch tape there. None is a wrong answer; each is a named refusal before anything runs.
 # Refused at bind, by name: a segment that holds a scan, a custom operation, a checkpoint, a block step or a
 # generation op (the nested runner has no branch for them, or they keep host values); an output that is an input
 # or a parameter returned unchanged; declared state (Session.state) as a parameter; an integer (ids) output.
@@ -187,11 +214,15 @@ struct CkptState(Movable):
     var segs: List[CkptSeg]
     var by_key: Dict[Int, Int]
     var records: List[CkptRecord]
+    #: the tape index of the root of the backward that is running the checkpoint rules (set by the wrapped
+    #: backward's entry, autograd/ops_api.mojo; the rule derives each edge's carry from it: Tape.edges_hold_gradient)
+    var root: Int
 
     def __init__(out self):
         self.segs = List[CkptSeg]()
         self.by_key = Dict[Int, Int]()
         self.records = List[CkptRecord]()
+        self.root = -1
 
     def clear_records(mut self):
         self.records.clear()

@@ -209,7 +209,7 @@ from autograd.nn_scatter import (
 # nn-blocks-scatter end
 # nn-blocks-scan begin: the public scan over a captured cell, session code 118 (autograd/nn_scan.mojo)
 from autograd.nn_scan import (
-    OPS_SCAN, ScanCell, ScanCache, scan_decode, scan_call_key, scan_check_binding, SCAN_SABOTAGE_STATE_LAG, SCAN_SABOTAGE_STATE_LAG_HOST,
+    OPS_SCAN, OPS_SCAN_CKPT, ScanCell, ScanCache, scan_decode, scan_call_key, scan_check_binding, SCAN_SABOTAGE_STATE_LAG, SCAN_SABOTAGE_STATE_LAG_HOST,
     SCAN_SABOTAGE_INIT_GRAD, SCAN_SABOTAGE_INIT_GRAD_HOST, SCAN_SABOTAGE_DROP_KEY, SCAN_SABOTAGE_DROP_KEY_HOST,
     scan_dropout_seed,
 )
@@ -2172,6 +2172,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             comptime if not nested:
                 if code == OPS_CHECKPOINT:
                     return self._ckpt(hs, ints, fs)
+                if code == OPS_SCAN_CKPT:
+                    return self._scan_ckpt_op(hs, ints, fs)
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):
             # elementwise and row-wise ops keep x's full shape (a free view
@@ -3319,6 +3321,21 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         swap(sc, self.scans.cells[ci])
         var packed = 0
         try:
+            packed = self._scan_run(sc, hs, ints)
+        finally:
+            swap(sc, self.scans.cells[ci])
+        return packed
+
+    def _scan_ckpt_op(mut self, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+        """OPS_SCAN_CKPT: a scan with checkpoint_every (format 3; autograd/nn_scan.mojo), the same handles and
+        words as OPS_SCAN. In a recording session one checkpointed node (`_scan_ckpt_run`); in an inference
+        session the plain loop (there is no backward to recompute for, and the words are the same). Its own
+        entry (lane fable-finalize), so `_scan` has no test for it."""
+        var ci = self._scan_cell(ints, fs)
+        var sc = ScanCell()
+        swap(sc, self.scans.cells[ci])
+        var packed = 0
+        try:
             if sc.every > 0 and self.tape.is_recording():
                 packed = self._scan_ckpt_run(ci, sc, hs, ints)
             else:
@@ -3684,6 +3701,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         saved.i0 = ri
         saved.i1 = node
         self.ckpt.records.append(rec^)
+        self.cbw.live = True
         self.cbw.ckpt_live = True
         var t = self.tape.custom_nd(self.ex, edges, value, shape, NN_CKPT_TAG, saved)
         if t._index != node:
@@ -3904,7 +3922,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def _ckpt_apply(mut self, ri: Int, node: Int, upstream: FP, gradients: List[FP]) raises:
         """The rule of checkpointed node `node` (record `ri`), called by CbwRules.apply while the session's tape
-        runs its backward: each edge's carry is read on that tape (Tape.edge_holds_gradient), then the segment
+        runs its backward: each edge's carry is read on that tape (Tape.edges_hold_gradient, from the root the wrapped backward's entry noted), then the segment
         (or each scan segment, last first) is recomputed on the scratch tape and differentiated into the edges'
         destinations, continuing their folds."""
         if ri < 0 or ri >= len(self.ckpt.records) or self.ckpt.records[ri].node != node:
@@ -3916,9 +3934,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var n_op = len(rec.op_fp)
             var carry = List[Bool](length=n_op, fill=False)
             var dest = List[Int](length=n_op, fill=0)
+            # each edge's carry, from the graph above the node (the tape's traversal keeps no flag for it)
+            var held_edges = self.tape.edges_hold_gradient(node, self.ckpt.root)
             for d in range(n_op):  # driver-loop: over the distinct operands (edges)
                 if rec.op_edge[d] >= 0:
-                    carry[d] = self.tape.edge_holds_gradient(node, rec.op_edge[d])
+                    carry[d] = held_edges[rec.op_edge[d]]
                     dest[d] = Int(gradients[rec.op_edge[d]])
             if rec.kind == CKPT_KIND_SCAN:
                 var sc = ScanCell()
@@ -5064,6 +5084,17 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         """The scalar backward of a graph that may hold custom nodes: `rules`
         plus the custom tag (identical to `rules` on every other node)."""
         var wrapped = CbwRules[Self.E](rules, Int(UnsafePointer(to=self)))
+        if self.cbw.ckpt_live:
+            # activation-ckpt: the graph holds a checkpointed segment; its rule set wraps this one, and its rule
+            # reads the backward's root (one Bool read per wrapped backward; a graph without a custom node or a
+            # checkpoint never comes here)
+            self.ckpt.root = t._index
+            var with_ckpt = CkptRules[Self.E](wrapped, Int(UnsafePointer(to=self)))
+            if self.layer_nodes:
+                self.tape.backward_scalar_with_rules(self.ex, t, LayerRules[CkptRules[Self.E]](with_ckpt), accumulate)
+                return
+            self.tape.backward_scalar_with_rules(self.ex, t, with_ckpt, accumulate)
+            return
         if self.layer_nodes:
             # session-ops: custom nodes and Sequential layer nodes in one graph
             self.tape.backward_scalar_with_rules(self.ex, t, LayerRules[CbwRules[Self.E]](wrapped), accumulate)
@@ -5074,6 +5105,15 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         """The seeded first-order backward of a graph that may hold custom
         nodes (StepOpRules: ImportRules plus the step ops' tags)."""
         var wrapped = CbwRules[Self.E](StepOpRules(self.steps_address()), Int(UnsafePointer(to=self)))
+        if self.cbw.ckpt_live:
+            # activation-ckpt: as in cbw_backward_scalar
+            self.ckpt.root = t._index
+            var with_ckpt = CkptRules[Self.E](wrapped, Int(UnsafePointer(to=self)))
+            if self.layer_nodes:
+                self.tape.backward_with_rules(self.ex, t, seed, LayerRules[CkptRules[Self.E]](with_ckpt), False)
+                return
+            self.tape.backward_with_rules(self.ex, t, seed, with_ckpt, False)
+            return
         if self.layer_nodes:
             # session-ops: custom nodes and Sequential layer nodes in one graph
             self.tape.backward_with_rules(self.ex, t, seed, LayerRules[CbwRules[Self.E]](wrapped), False)
@@ -5218,6 +5258,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         saved_args.i0 = len(self.cbw.records)
         saved_args.i1 = node
         self.cbw.records.append(rec^)
+        self.cbw.live = True  # what `holds_rules` reads (one word, as the record count was)
         var t = self.tape.custom_nd(self.ex, x, out_fp, out_shape, NN_CBW_TAG, saved_args)
         if t._index != node:
             raise Error("custom: the tape recorded the custom node at an unexpected index")
@@ -5332,7 +5373,7 @@ struct CbwRules[S: Exec & Movable & Deinitable](BackwardRules, ImplicitlyCopyabl
     var session: Int
 
     def supports(self, tag: Int) -> Bool:
-        if tag == NN_CBW_TAG or tag == NN_CKPT_TAG:  # activation-ckpt: a checkpointed segment
+        if tag == NN_CBW_TAG:
             return True
         return self.inner.supports(tag)
 
@@ -5340,9 +5381,6 @@ struct CbwRules[S: Exec & Movable & Deinitable](BackwardRules, ImplicitlyCopyabl
         if tag == NN_CBW_TAG:
             # the rule overwrites every element of each differentiable
             # input's destination; an ids input's is never read
-            return False
-        if tag == NN_CKPT_TAG:
-            # activation-ckpt: every edge is writes_total (below); no fill
             return False
         return self.inner.zeroed_destination(tag, saved, edge)
 
@@ -5353,22 +5391,12 @@ struct CbwRules[S: Exec & Movable & Deinitable](BackwardRules, ImplicitlyCopyabl
                 # gradient, dropping another consumer's earlier term
                 return True
             return False
-        if tag == NN_CKPT_TAG:
-            # activation-ckpt: the recompute continues each input's fold in
-            # place (autograd/nn_ckpt.mojo), after the consumers before it
-            return True
         return self.inner.writes_total(tag, saved, edge)
 
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
         inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
     ) raises:
-        if tag == NN_CKPT_TAG:
-            # activation-ckpt: recompute the segment and continue its
-            # inputs' gradients (OpsSession._ckpt_apply)
-            var c = UnsafePointer[OpsSession[Self.S], MutUntrackedOrigin](unsafe_from_address=self.session)
-            c[]._ckpt_apply(saved.i0, saved.i1, upstream, gradients)
-            return
         if tag != NN_CBW_TAG:
             self.inner.apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
             return
@@ -5377,6 +5405,47 @@ struct CbwRules[S: Exec & Movable & Deinitable](BackwardRules, ImplicitlyCopyabl
         var s = UnsafePointer[OpsSession[Self.S], MutUntrackedOrigin](unsafe_from_address=self.session)
         s[]._cbw_apply(saved.i0, saved.i1, upstream, gradients)
 # nn-blocks-cbw end
+
+
+# activation-ckpt begin: the rule set of a graph that holds a checkpointed segment
+@fieldwise_init
+struct CkptRules[S: Exec & Movable & Deinitable](BackwardRules, ImplicitlyCopyable, Movable):
+    """CbwRules plus NN_CKPT_TAG, whose rule recomputes the segment in the session at address `session` and
+    continues its inputs' gradients (OpsSession._ckpt_apply). Its own wrapper (lane fable-finalize): only a
+    graph that recorded a checkpointed node differentiates with it (OpsSession.cbw_backward_scalar and
+    cbw_backward_seeded, on `cbw.ckpt_live`), so a graph with custom operations and no checkpoint tests no tag
+    for it. Every other tag is CbwRules' own."""
+    var inner: CbwRules[Self.S]
+    var session: Int
+
+    def supports(self, tag: Int) -> Bool:
+        if tag == NN_CKPT_TAG:
+            return True
+        return self.inner.supports(tag)
+
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if tag == NN_CKPT_TAG:
+            # every edge is writes_total (below); no fill
+            return False
+        return self.inner.zeroed_destination(tag, saved, edge)
+
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if tag == NN_CKPT_TAG:
+            # the recompute continues each input's fold in place (autograd/nn_ckpt.mojo), after the consumers
+            # before it
+            return True
+        return self.inner.writes_total(tag, saved, edge)
+
+    def apply[E: Exec](
+        self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
+        inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
+    ) raises:
+        if tag != NN_CKPT_TAG:
+            self.inner.apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+            return
+        var c = UnsafePointer[OpsSession[Self.S], MutUntrackedOrigin](unsafe_from_address=self.session)
+        c[]._ckpt_apply(saved.i0, saved.i1, upstream, gradients)
+# activation-ckpt end
 
 
 def _keeps_shape(code: Int) -> Bool:
