@@ -13,7 +13,9 @@
 # buffers; nothing is read back. In a recording session every replayed node is on the tape, so the backward is
 # backward through time over the tape (no new rule): the gradient reaches the initial state, xs (through each
 # step's view) and every bound parameter. Memory: the tape keeps every step's node outputs (the per-step states
-# and the cell's intermediates), O(steps x the cell's values), as an unrolled loop does.
+# and the cell's intermediates), O(steps x the cell's values), as an unrolled loop does; with checkpoint_every = k
+# (format 3, lane activation-ckpt) it keeps the state every k steps and one segment's values while the backward
+# recomputes it (autograd/nn_ckpt.mojo: the formula, the bits).
 #
 # This module holds what needs no session: the codes, the description words of the node, their decoding and the
 # binding checks (shared by the session's op and its frontend, autograd/nn_scan_frontend.mojo).
@@ -50,6 +52,16 @@ comptime OPS_SCAN = 118
 #: the version word of the node's integer arguments (2: the fingerprint words, lane fable-followups 2026-11-25)
 comptime SCAN_FORMAT = 2
 comptime SCAN_HEADER = 8
+#: lane activation-ckpt (2026-11-25): a scan with `checkpoint_every` (Session.scan): format 3, one more header word
+#: (the segment length k >= 1) after n_words; a scan without it keeps format 2 and its words unchanged. The forward,
+#: the backward that recomputes each segment and the memory saved are autograd/nn_ckpt.mojo's note.
+comptime SCAN_FORMAT_CKPT = 3
+#: The session code of a scan with checkpoint_every (lane fable-finalize): its own code, tested after every other
+#: operation's, so the plain scan's entry (`_scan`, code 118) has no checkpoint test in it. Same handles and words
+#: as OPS_SCAN with format 3.
+comptime OPS_SCAN_CKPT = 120
+#: autograd/nn_ckpt.mojo OPS_CHECKPOINT (not imported: nn_ckpt imports this module)
+comptime _SCAN_CKPT_CODE = 119
 #: autograd/ops_api.mojo OPS_DROPOUT (not imported: ops_api imports this module); ints [seed lo, seed hi, counter]
 comptime _SCAN_DROPOUT_CODE = 21
 
@@ -86,6 +98,8 @@ struct ScanCell(Movable):
     var node_fs: List[List[Float32]]
     var drop_nodes: List[Int]
     var drop_seed: List[UInt64]
+    #: lane activation-ckpt: the checkpoint segment length (format 3), 0 for a plain scan (format 2)
+    var every: Int
 
     def __init__(out self):
         self.cell = OpsProgram()
@@ -93,6 +107,7 @@ struct ScanCell(Movable):
         self.reverse = False
         self.has_lengths = False
         self.n_params = 0
+        self.every = 0
         self.fingerprint = 0
         self.n_ints = 0
         self.n_fs = 0
@@ -117,7 +132,7 @@ struct ScanCache(Movable):
 
     def find(self, ints: List[Int], fs: List[Float32]) raises -> Int:
         """The index of the decoded cell these node words name, or -1 (one dictionary read, no parse)."""
-        if len(ints) < SCAN_HEADER + 2 or ints[0] != SCAN_FORMAT:
+        if len(ints) < SCAN_HEADER + 2 or (ints[0] != SCAN_FORMAT and ints[0] != SCAN_FORMAT_CKPT):
             raise Error("ValueError: ops: scan: the node's arguments are not a scan description")
         var found = self.by_key.find(scan_key_of(ints))
         if found:
@@ -141,11 +156,15 @@ def scan_host_code_name(code: Int) -> String:
         return "a block step op"
     if code == 85 or code == 86:
         return "a generation op"
-    if code == OPS_SCAN:
+    if code == OPS_SCAN or code == OPS_SCAN_CKPT:
         return "a scan"
     if code == OPS_CUSTOM_VJP:
         # nn-blocks-zerocost: the cell runs through the op runner's nested instance, which has no custom branch
         return "a custom operation"
+    if code == _SCAN_CKPT_CODE:
+        # activation-ckpt: likewise (the nested instance has no checkpoint branch); a scan checkpoints its own
+        # steps with checkpoint_every
+        return "a checkpoint"
     return ""
 
 
@@ -267,11 +286,14 @@ def scan_fingerprint(ints: List[Int], fs: List[Float32]) -> Int:
     return Int(bitcast[DType.int64](h))
 
 
-def scan_encode(cell: OpsProgram, reverse: Bool, has_lengths: Bool, key: Int) -> Tuple[List[Int], List[Float32]]:
-    """The node's integer and float arguments (the layout in the module note), its fingerprint written in."""
+def scan_encode(
+    cell: OpsProgram, reverse: Bool, has_lengths: Bool, key: Int, every: Int = 0,
+) -> Tuple[List[Int], List[Float32]]:
+    """The node's integer and float arguments (the layout in the module note), its fingerprint written in.
+    `every` >= 1 (activation-ckpt): format 3, the scan checkpoints every `every` steps."""
     var got = program_words(cell)
-    var ints = List[Int](capacity=SCAN_HEADER + len(got[0]) + 1)
-    ints.append(SCAN_FORMAT)
+    var ints = List[Int](capacity=SCAN_HEADER + len(got[0]) + 2)
+    ints.append(SCAN_FORMAT_CKPT if every > 0 else SCAN_FORMAT)
     ints.append(0)
     ints.append(0)
     ints.append(cell.n_in - 1)
@@ -279,6 +301,8 @@ def scan_encode(cell: OpsProgram, reverse: Bool, has_lengths: Bool, key: Int) ->
     ints.append(1 if has_lengths else 0)
     ints.append(len(cell.params))
     ints.append(len(got[0]))
+    if every > 0:
+        ints.append(every)
     for i in range(len(got[0])):  # driver-loop: over the cell's description words, once per node made
         ints.append(Int(got[0][i]))
     ints.append(key)
@@ -292,21 +316,26 @@ def scan_encode(cell: OpsProgram, reverse: Bool, has_lengths: Bool, key: Int) ->
 def scan_decode(ints: List[Int], fs: List[Float32]) raises -> ScanCell:
     """The node's arguments read back, checked (format, counts, fingerprint, the cell's signature) and split per
     cell node: once per session for each distinct scan node (OpsSession keeps the result in its ScanCache)."""
-    if len(ints) < SCAN_HEADER + 2 or ints[0] != SCAN_FORMAT:
+    if len(ints) < SCAN_HEADER + 2 or (ints[0] != SCAN_FORMAT and ints[0] != SCAN_FORMAT_CKPT):
         raise Error("ValueError: ops: scan: the node's arguments are not a scan description")
     var n_state = ints[3]
     var reverse = ints[4] != 0
     var has_lengths = ints[5] != 0
     var n_params = ints[6]
     var n_words = ints[7]
-    if n_state < 0 or n_params < 0 or n_words < 1 or SCAN_HEADER + n_words + 1 != len(ints):
+    # activation-ckpt: format 3 holds the checkpoint segment length after n_words
+    var head = SCAN_HEADER + (1 if ints[0] == SCAN_FORMAT_CKPT else 0)
+    var every = ints[SCAN_HEADER] if ints[0] == SCAN_FORMAT_CKPT else 0
+    if n_state < 0 or n_params < 0 or n_words < 1 or head + n_words + 1 != len(ints):
         raise Error("ValueError: ops: scan: a damaged scan description")
+    if ints[0] == SCAN_FORMAT_CKPT and every < 1:
+        raise Error("ValueError: ops: scan: a damaged scan description (checkpoint_every must be >= 1)")
     var fp = scan_fingerprint(ints, fs)
     if (fp & 0xFFFFFFFF) != (ints[1] & 0xFFFFFFFF) or ((fp >> 32) & 0xFFFFFFFF) != (ints[2] & 0xFFFFFFFF):
         raise Error("ValueError: ops: scan: a damaged scan description (its fingerprint does not match its words)")
     var words = List[Int64](capacity=n_words)
     for i in range(n_words):  # driver-loop: over the cell's description words, once per decoded node
-        words.append(Int64(ints[SCAN_HEADER + i]))
+        words.append(Int64(ints[head + i]))
     var cell = program_from_words(words, fs, "ops: scan: the cell")
     if cell.n_in != n_state + 1 or len(cell.params) != n_params:
         raise Error("ValueError: ops: scan: the description's counts disagree with its cell")
@@ -322,6 +351,7 @@ def scan_decode(ints: List[Int], fs: List[Float32]) raises -> ScanCell:
     got.reverse = reverse
     got.has_lengths = has_lengths
     got.n_params = n_params
+    got.every = every
     got.fingerprint = scan_key_of(ints)
     got.n_ints = len(ints)
     got.n_fs = len(fs)

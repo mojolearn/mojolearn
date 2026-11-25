@@ -1037,6 +1037,99 @@ struct Tape(Movable):
         """Return whether a backward computes a gradient for this tensor."""
         return self._nodes[self._check(x)].requires_grad
 
+    # activation-ckpt begin: what a recomputing backward rule needs (autograd/nn_ckpt.mojo)
+    def edges_hold_gradient(self, node: Int, root: Int) raises -> List[Bool]:
+        """While a rule of custom node `node` runs inside the `_backward` from node `root`: for each input edge
+        of `node`, whether that input's gradient already held a contribution when the traversal reached the node
+        (the traversal's `touched` flag before the node's own edges). A rule that continues that gradient's fold
+        (variable_carry with carry=True) reads it before it adds its own terms, so a recomputed segment's
+        contributions land in the order the unrecomputed graph applies them.
+
+        Derived from the graph here, by the rule that needs it: the traversal keeps nothing for it (lane
+        fable-finalize: it stored one Bool per writes_total edge of EVERY graph, the transformer's and the
+        Mambas' joins included). An input's gradient holds a contribution exactly when (1) it held one before
+        the traversal (`grad_ready`, which the backward's setup leaves True only on a leaf accumulated into, and
+        which the traversal does not change until it ends), or (2) a differentiated node above `node` (an
+        ancestor of the root that needs a gradient, the `_mark_active` walk) takes it as an input: every such
+        edge writes or adds a term when its node is visited, and nodes are visited in decreasing index. Host
+        integers over the nodes above `node`, once per rule call."""
+        if node < 0 or node >= len(self._nodes) or root < node or root >= len(self._nodes):
+            raise Error("autograd: edges_hold_gradient: the node is not below the backward's root")
+        var n = self._nodes[node]
+        var held = List[Bool](capacity=n.count)
+        for edge in range(n.count):  # driver-loop: over the node's inputs
+            held.append(self._nodes[self._parents[n.start + edge]].grad_ready)
+        var active = List[Bool](length=root + 1, fill=False)
+        active[root] = True
+        for reverse in range(root - node):  # driver-loop: over the graph nodes above `node`, reverse creation order
+            var i = root - reverse
+            if not active[i]:
+                continue
+            var m = self._nodes[i]
+            for e in range(m.count):  # driver-loop: over node inputs
+                var p = self._parents[m.start + e]
+                if not self._nodes[p].requires_grad:
+                    continue
+                active[p] = True
+                for edge in range(n.count):  # driver-loop: over the rule node's inputs
+                    if self._parents[n.start + edge] == p:
+                        held[edge] = True
+        return held^
+
+    def variable_carry[E: Exec](
+        mut self, mut ex: E, data: FP, grad_destination: FP, shape: ShapeN, carry: Bool,
+    ) raises -> Tensor:
+        """A differentiable leaf over `data` (shape `shape`) whose gradient lands in caller storage, for a
+        backward with accumulate=True: with `carry` the destination holds earlier contributions and every
+        contribution of this graph is added to it in the tape's order; without, the first one is written in
+        place, as for a leaf never written. A leaf that no output reaches must be released
+        (release_leaf_gradient) before the backward, which would otherwise zero its destination."""
+        rn_check(shape)
+        var t = self._record(ex, data, shape.rows(), shape.cols(), LEAF, List[Tensor](), Args(), True,
+                             grad_destination, True)
+        self._nodes[t._index].grad_ready = carry
+        return self._with_shape(t, shape)
+
+    def release_leaf_gradient(mut self, x: Tensor) raises:
+        """Make leaf `x` non-differentiable before a backward (a variable_carry leaf that no output of this
+        graph reaches): the backward neither writes nor zero-fills its destination. The nodes recorded from it
+        keep their flags; none of them is an ancestor of the output, so none is differentiated."""
+        var i = self._check(x)
+        if self._nodes[i].op != LEAF:
+            raise Error("autograd: release_leaf_gradient takes a leaf")
+        self._nodes[i].requires_grad = False
+
+    def gradient_ready(self, x: Tensor) raises -> Bool:
+        """Whether tensor `x`'s gradient buffer holds a value (after a backward, or a carried leaf)."""
+        return self._nodes[self._check(x)].grad_ready
+
+    def reaches(self, roots: List[Tensor], leaves: List[Tensor]) raises -> List[Bool]:
+        """For each of `leaves`: whether a backward from `roots` (together) would differentiate it, i.e. it
+        requires a gradient and is an ancestor of a differentiable root through differentiable nodes (the
+        walk of `_mark_active` from several roots)."""
+        var top = -1
+        var active = List[Bool](length=len(self._nodes), fill=False)
+        for r in range(len(roots)):  # driver-loop: over the roots (a segment's outputs)
+            var i = self._check(roots[r])
+            if self._nodes[i].requires_grad:
+                active[i] = True
+                if i > top:
+                    top = i
+        for reverse in range(top + 1):  # driver-loop: over graph nodes, reverse creation order
+            var i = top - reverse
+            if not active[i]:
+                continue
+            var n = self._nodes[i]
+            for edge in range(n.count):  # driver-loop: over node inputs
+                var p = self._parents[n.start + edge]
+                if self._nodes[p].requires_grad:
+                    active[p] = True
+        var got = List[Bool](capacity=len(leaves))
+        for j in range(len(leaves)):  # driver-loop: over the leaves asked about
+            got.append(active[self._check(leaves[j])])
+        return got^
+    # activation-ckpt end
+
     def grad_of(self, x: Tensor) raises -> Tensor:
         """The gradient of x from the last recorded backward, as a tensor.
 

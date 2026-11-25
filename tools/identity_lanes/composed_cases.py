@@ -65,7 +65,8 @@
 # Sabotage arms (tools/identity_lanes/coverage_sabotage.tsv, group session-ops-verify): the RUNNER's arms
 # coverage-autograd-session_ops_verify_drop_accumulate_{gpu,cpu} (autograd/session_ops_verify.mojo: the tape drops
 # every second gradient contribution to a tensor used on two paths, on one side) and the tagger case's kept arms
-# coverage-autograd-nn_composed_{scan_key,group_state}_{gpu,cpu} (autograd/nn_composed.mojo).
+# coverage-autograd-nn_composed_{scan_key,group_state}_{gpu,cpu} (autograd/nn_composed.mojo), and the checkpoint cases'
+# arms coverage-autograd-nn_ckpt_{fresh_mask,skip_node}_{gpu,cpu} (autograd/nn_ckpt.mojo; composed-checkpoint.json).
 
 _CC_SCHEMA = "mojolearn.composed-cases.v1"
 _CC_PREFIX = "composed-"
