@@ -716,7 +716,7 @@ class SVC(NumericModeMixin):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by `save`.
 
         Every array is read at its saved dtype, never cast.
@@ -725,6 +725,10 @@ class SVC(NumericModeMixin):
         ----------
         path : str or path-like
             File written by `SVC.save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -736,7 +740,7 @@ class SVC(NumericModeMixin):
         ValueError
             If the file is not a valid saved `SVC`.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 
 # Maintainer notes (moved verbatim from the SVR docstring). NOTE: the kernel row
@@ -1158,7 +1162,7 @@ class SVR(NumericModeMixin):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by `save`.
 
         Every array is read at its saved dtype, never cast.
@@ -1167,6 +1171,10 @@ class SVR(NumericModeMixin):
         ----------
         path : str or path-like
             File written by `SVR.save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -1178,7 +1186,7 @@ class SVR(NumericModeMixin):
         ValueError
             If the file is not a valid saved `SVR`.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 
 _native_archive_bridge.register(

@@ -301,20 +301,24 @@ class KernelRidge(_KernelMethodBase):
 
     @classmethod
     @_native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by `save`.
 
         Parameters
         ----------
         path : str or path-like
             File written by `KernelRidge.save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
         KernelRidge
             A fitted model, ready to predict, with the saved numeric mode.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 
 # Maintainer notes: `random_state` seeds `km_basis_indices`, the device
@@ -480,13 +484,17 @@ class Nystroem(_KernelMethodBase):
 
     @classmethod
     @_native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a transformer written by `save`.
 
         Parameters
         ----------
         path : str or path-like
             File written by `Nystroem.save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -494,7 +502,7 @@ class Nystroem(_KernelMethodBase):
             A fitted transformer, ready to transform, with the saved
             numeric mode.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 
 # Maintainer notes: gamma <= 0 is refused on the Mojo host. gamma='scale' uses
@@ -635,13 +643,17 @@ class RBFSampler(_KernelMethodBase):
 
     @classmethod
     @_native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a sampler written by `save`.
 
         Parameters
         ----------
         path : str or path-like
             File written by `RBFSampler.save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -649,7 +661,7 @@ class RBFSampler(_KernelMethodBase):
             A fitted sampler with the saved weights (nothing is drawn
             again), ready to transform, with the saved numeric mode.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 
 _bridge = _native_archive_bridge

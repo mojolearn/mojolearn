@@ -466,7 +466,7 @@ class SpectralClustering(ParamsMixin):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by ``save``.
 
         The loaded model can ``predict``; it does not refit. Arrays are read
@@ -476,6 +476,10 @@ class SpectralClustering(ParamsMixin):
         ----------
         path : str or path-like
             File written by ``SpectralClustering.save``.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -488,7 +492,7 @@ class SpectralClustering(ParamsMixin):
             If the file is not a SpectralClustering model or its arrays have
             inconsistent shapes.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 
 _native_archive_bridge.register(SpectralClustering, _SPECTRAL_FORMAT, (

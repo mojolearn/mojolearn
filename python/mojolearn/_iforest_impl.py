@@ -272,13 +272,22 @@ class IsolationForest(NumericModeMixin):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model saved by `save`.
 
         The saved parameters pass through the constructor again, so the same
         checks apply to a loaded file.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 
 # `save` and `load` are one native call each (bindings/archive_schema_native_door.mojo

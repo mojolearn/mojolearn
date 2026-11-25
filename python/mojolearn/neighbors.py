@@ -241,7 +241,7 @@ class NearestNeighbors(_NumericModeMixin):
 
     @classmethod
     @_native_query_method
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by `save`.
 
         Arrays are read at their saved dtypes and never cast. A file naming
@@ -252,13 +252,17 @@ class NearestNeighbors(_NumericModeMixin):
         ----------
         path : str or path-like
             File written by `save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
         NearestNeighbors
             A fitted model, ready for `kneighbors`.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
     def _dist_params(self):
         """`[metric, metric_arg, weights]`, the list
@@ -516,7 +520,7 @@ class KNeighborsClassifier(NearestNeighbors):
 
     @classmethod
     @_native_query_method
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by `save`.
 
         `classes_` is rebuilt from the saved labels as `fit` builds it; a
@@ -527,13 +531,17 @@ class KNeighborsClassifier(NearestNeighbors):
         ----------
         path : str or path-like
             File written by `save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
         KNeighborsClassifier
             A fitted model, ready for `predict`.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
     @_native_query_method
     def fit(self, X, y):
@@ -745,20 +753,24 @@ class KNeighborsRegressor(NearestNeighbors):
 
     @classmethod
     @_native_query_method
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by `save`.
 
         Parameters
         ----------
         path : str or path-like
             File written by `save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
         KNeighborsRegressor
             A fitted model, ready for `predict`.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
     @_native_query_method
     def fit(self, X, y):
@@ -990,7 +1002,7 @@ class RadiusNeighbors(_NumericModeMixin):
 
     @classmethod
     @_native_query_method
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by `save`.
 
         Arrays are read at their saved dtypes and never cast. Parameters
@@ -1000,13 +1012,17 @@ class RadiusNeighbors(_NumericModeMixin):
         ----------
         path : str or path-like
             File written by `save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
         RadiusNeighbors
             A fitted model, ready for `radius_neighbors`.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
     # DEVIATION 2375: the containers are Python lists of Arrays, where they
     # were object-dtype ndarrays of ndarrays. The self-edge under X=None is

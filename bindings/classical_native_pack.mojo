@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Incremental native classical owner. Public activation waits for full API
 # migration; this private entry is exercised directly by strict audit tests.
+from providers.python.device_route_boundary_door import archive_load_device
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.classical_error_boundary_pack import classical_python_error
@@ -221,6 +222,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return attribute.steal_data()
         if loading:
             var loaded = classical_archive_load(model, args[0], ridge, context)
+            if len(args) > 1:
+                # `load(path, device=...)` (gd-verify-view): the one shared device step
+                archive_load_device(loaded, args[1], context)
             return loaded.steal_data()
         if operation == CLASSICAL_OPN_RIDGE_FIT or operation == CLASSICAL_OPN_OLS_FIT or operation == CLASSICAL_OPN_PREDICT_PUBLIC or operation == CLASSICAL_OPN_PREDICT_SCORE or operation == CLASSICAL_OPN_SCORE_PUBLIC:
             # scikit-learn's sparse refusal comes before input admission.

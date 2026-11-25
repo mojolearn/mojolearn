@@ -108,7 +108,7 @@ class _AnnSaved:
     # One native call (bindings/host_archive_native_door.mojo `host_archive_ann`,
     # from the layout connected at the end of this module).
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load an index written by `save`.
 
         The arrays are read back byte for byte; a file whose arrays have a
@@ -118,6 +118,10 @@ class _AnnSaved:
         ----------
         path : str or path-like
             File written by `save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -130,7 +134,7 @@ class _AnnSaved:
             If the file was saved by another class or does not hold this
             class's parameters.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 
 # IDENTICAL by construction: fixed-order codebook training and code sums,
