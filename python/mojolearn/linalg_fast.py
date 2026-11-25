@@ -44,16 +44,32 @@ def matmul_fused(a, b, *, bias=None, residual=None, activation=None,
                    (None, a, b, bias, residual, activation, transpose_a, transpose_b, out, device), _NATIVE_CONTEXT)
 
 
-# Import-time binding only. All BF16 argument handling, packing, allocations,
-# launches, synchronization and consumed-output construction run in Mojo.
-# Apple FAST BF16 is the default (`-D MOJOLEARN_AFN_GEMM_BF16_MMA=0`, restored
-# 2026-11-15, turns it off). No identical fallback is used. A missing native
-# export is an installation error; never fall back to the Python wrapper.
-_bf16_binding = _load()
-has_bf16 = _bf16_binding.fast_bf16_available
-to_bf16 = _bf16_binding.fast_to_bf16
-from_bf16 = _bf16_binding.fast_from_bf16
-matmul_bf16 = _bf16_binding.fast_matmul_bf16
+# All BF16 argument handling, packing, allocations, launches, synchronization
+# and consumed-output construction run in Mojo. Apple FAST BF16 is the default
+# (`-D MOJOLEARN_AFN_GEMM_BF16_MMA=0`, restored 2026-11-15, turns it off). No
+# identical fallback is used. A missing native export is an installation
+# error; never fall back to the Python wrapper.
+#
+# The four entries are resolved at their FIRST access, once (module
+# `__getattr__`, then stored in this module's globals so later reads are a
+# plain dictionary hit), never at import (vdf2-public, failure row 10): on a
+# CPU-only install the import read `fast_bf16_available` of the GPU binding's
+# host facade and raised NoCpuEntry, so `import mojolearn.linalg_fast` (and
+# every test module importing it) failed. The host binding answers
+# `fast_bf16_available` False (bindings/_mojolearn_linalg_host.mojo: the CPU
+# has no BF16 GEMM); the other three still refuse by name when first read.
+_ENTRIES = {"has_bf16": "fast_bf16_available", "to_bf16": "fast_to_bf16",
+            "from_bf16": "fast_from_bf16", "matmul_bf16": "fast_matmul_bf16"}
+
+
+def __getattr__(name):
+    entry = _ENTRIES.get(name)
+    if entry is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(_load(), entry)  # glue: one binding read per entry, at first access
+    globals()[name] = value
+    return value
+
 
 __all__ = ["matmul_fused", "has_fused", "EPILOGUES",
            "has_bf16", "to_bf16", "from_bf16", "matmul_bf16"]
