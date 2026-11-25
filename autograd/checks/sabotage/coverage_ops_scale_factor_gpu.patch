@@ -1,0 +1,17 @@
+diff --git a/autograd/ops_api.mojo b/autograd/ops_api.mojo
+index 1142bd5cc0..0a9386c992 100644
+--- a/autograd/ops_api.mojo
++++ b/autograd/ops_api.mojo
+@@ -1827,7 +1827,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
+             t = self.tape.sqrt(self.ex, x[0])
+         elif code == OPS_SCALE:
+             _need("scale", n, 1, 0, ni, 1, nf)
+-            t = self.tape.scale(self.ex, x[0], fs[0])
++            var factor = fs[0]
++            comptime if Self.E.IS_DEVICE:  # SABOTAGE coverage (sab-arms-67): Session.scale's factor one ulp up, the device executor only
++                if abs(factor) >= Float32(1.17549435e-38) and factor - factor == Float32(0):
++                    factor = bitcast[DType.float32](bitcast[DType.uint32](factor) + UInt32(1))
++            t = self.tape.scale(self.ex, x[0], factor)
+         elif code == OPS_TRANSPOSE:
+             _need("transpose", n, 1, 0, ni, 0, nf)
+             t = self._swap(x[0], -2, -1)
