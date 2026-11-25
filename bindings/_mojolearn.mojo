@@ -1803,7 +1803,7 @@ def build__mojolearn() -> PythonObject:
         # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/adam_hyper_f64.patch
         # TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
-        # Restore: git apply experiments/removed/dead_export_strat_fold_assign_i32.patch
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/dead_export_strat_fold_assign_i32.patch; record in docs/TOMBSTONES.md.
         # bincount2_i32 (StratifiedGroupKFold's former group x class table) deleted 2026-11-24 by lane vdf-tail-b:
         # no caller since lane vdf-scope-split2 (MH_GROUP_CLASS_COUNTS_RES of the model-selection helper table).
         m.def_function[strided_copy_bytes_binding]("strided_copy_bytes")

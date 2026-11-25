@@ -848,7 +848,7 @@ def spectral_native_api_v1_binding() raises -> PythonObject:
 
 
 # TOMBSTONE: metrics_store_v1 export (dead export: no caller since the members resolve the store in process, core/metrics_store_ref.mojo) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
-# Restore: git apply experiments/removed/dead_export_metrics_store_v1.patch
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/dead_export_metrics_store_v1.patch; record in docs/TOMBSTONES.md.
 
 
 def _publish_umap_ops(module: PythonObject) raises:
@@ -885,7 +885,7 @@ def build__mojolearn_metrics() -> PythonObject:
         publish_metrics_r2_device()
         m.def_function[spectral_native_api_v1_binding]("spectral_native_api_v1")
         # TOMBSTONE: metrics_store_v1 export (dead export: no caller since the members resolve the store in process, core/metrics_store_ref.mojo) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
-        # Restore: git apply experiments/removed/dead_export_metrics_store_v1.patch
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/dead_export_metrics_store_v1.patch; record in docs/TOMBSTONES.md.
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")

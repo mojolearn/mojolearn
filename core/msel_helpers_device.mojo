@@ -200,7 +200,7 @@ def first_seen_i32_device_run(ca: Int, rows: Int, kk: Int, ea: Int, na: Int) rai
 
 
 # TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
-# Restore: git apply experiments/removed/dead_export_strat_fold_assign_i32.patch
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/dead_export_strat_fold_assign_i32.patch; record in docs/TOMBSTONES.md.
 
 
 def msel_gather_device_run(kind: Int, table: Int, classes: Int, codes: Int, count: Int, dst: Int) raises -> Int:

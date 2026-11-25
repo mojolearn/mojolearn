@@ -24279,7 +24279,7 @@ experiment defines: no A/B, no refusal guard, no grid_controls entry. Code recov
   The SpectralClustering and UMAP members resolve the store in process (`metrics_store_publish` at module
   initialization, core/metrics_store_ref.mojo), so the capsule had no reader. Removed: `metrics_store_v1_binding` and
   its `def_function`. Kept: the native entry `core/metrics_store.mojo::metrics_store_v1` (the in-process publication and
-  the native checks use it). Patch: `experiments/removed/dead_export_metrics_store_v1.patch`.
+  the native checks use it). Patch: `~/mojolearn-evidence/experiments-removed/dead_export_metrics_store_v1.patch` (pinned in experiments/tombstones/removed_patches.tsv).
 - `strat_fold_assign_i32` (`bindings/_mojolearn.mojo`, `bindings/_mojolearn_core_host.mojo`): StratifiedKFold's
   host-codes fold assignment, superseded by the model-selection helper table's stored-code
   `MH_STRAT_FOLD_ASSIGN_RES` (lane vdf-scope-split). Removed: both exports, their bindings
@@ -24288,5 +24288,5 @@ experiment defines: no A/B, no refusal guard, no grid_controls entry. Code recov
   `core/hotpath_device.mojo::device_strat_fold_assign_i32` (no other caller), and the name in
   `python/mojolearn/host_surface.py`. Kept: the host body `core/hotpath_impl_rows.mojo::strat_fold_assign_i32` and
   `device_strat_fold_assign_res` / `device_strat_fold_assign_on` (the stored-code route). Patch:
-  `experiments/removed/dead_export_strat_fold_assign_i32.patch`.
+  `~/mojolearn-evidence/experiments-removed/dead_export_strat_fold_assign_i32.patch` (pinned in experiments/tombstones/removed_patches.tsv).
 - Bits: unchanged (no live route called either export).
