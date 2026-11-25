@@ -19,7 +19,8 @@ from std.testing import TestSuite
 from std.memory import bitcast
 from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
-from core.device_route import DeviceRoute
+from core.device_route import DeviceRoute, device_vendor_code
+from checks.vendor import COMPILED_VENDOR
 from core.entry_table import EntryRef
 from core.member_abi import (
     MemberRef, MemberCall, MemberMatrix, member_call, MEMBER_I32,
@@ -67,8 +68,11 @@ def _member() -> MemberRef:
     return MemberRef(EntryRef(neighbors_member_v2, 0), 0)
 
 
-def _route(device: Bool) -> DeviceRoute:
+def _route(device: Bool) raises -> DeviceRoute:
     var route = DeviceRoute(1 if device else 0)
+    # the vendor word a resolved route carries (core/device_route.mojo: 0 CPU); the member answers MEMBER_CAN_SCOPE
+    # from it (core/neighbors_member.mojo `route.vendor != 0`), and a hand-built route's default word is -1
+    route.vendor = device_vendor_code(String(COMPILED_VENDOR)) if device else 0
     # the device entry only in a GPU column build: a CPU column build would elaborate the device kernels
     # ("target 'unknown' is not supported by this build")
     route.entry = EntryRef(neighbors_ops_host_v1, 0)
