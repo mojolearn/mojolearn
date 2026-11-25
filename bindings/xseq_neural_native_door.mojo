@@ -52,6 +52,7 @@ from sequence.xseq_neural_run import (
     xseq_run_mlp_layers_check, xseq_run_mlp_layer_check, xseq_run_mlp_pack, xseq_run_mlp_output_check,
     xseq_run_mlp_predict, XseqRnnFitOptions, XseqRnnPredictOptions, xseq_run_rnn_fit_options,
     xseq_run_rnn_predict_options, xseq_run_rnn_layout_dirs, xseq_run_balanced_class_weights, xseq_run_remap_codes,
+    xseq_run_step_weights,
 )
 from bindings.class_weight_boundary_unpack import class_weight_dictionary_values
 from core.class_weight_plan import class_weight_plan
@@ -1006,6 +1007,13 @@ def xseq_rnn(model: PythonObject, operation: Int, args: PythonObject, context: P
     var h0 = _arg(args, 2)
     var c0 = _arg(args, 3)
     var want_state = xseq_truth(_arg(args, 4))
+    if want_state and h0 is not None:
+        # step(X, state): the state is the (h_n, c_n) pair a previous step returned
+        var b = native_loaded_module("builtins")
+        if not Bool(py=py_call(b.isinstance, h0, b.tuple)) or len(h0) != 2:
+            raise Error("TypeError: state must be the (h, c) pair step returned, or None")
+        c0 = h0[1]
+        h0 = h0[0]
     var options = not (fo.seq_out == False and fo.dirs == 1 and h0 is None and not want_state)
     if operation == XSEQ_OPN_RNN_HIDDEN_SEQUENCE:
         if options:
@@ -1035,6 +1043,39 @@ def xseq_rnn(model: PythonObject, operation: Int, args: PythonObject, context: P
     if want_state:
         return Python.tuple(value, result[2])
     return value
+
+
+def xseq_rnn_sequence_score(model: PythonObject, prediction: PythonObject, args: PythonObject,
+                            context: PythonObject) raises -> PythonObject:
+    """score with output="sequence" (lane rnn-parity): `(prediction, args)` flattened to one row per step, and the
+    steps' weights (each sequence's valid steps 1, its padded steps 0, times sample_weight per sequence or per
+    step) as the score's sample_weight, so R^2 or the accuracy covers every valid step. None when the model's
+    output is 'final' (the score of before)."""
+    var fields = py_fields(model)
+    if not _eq(_field(fields, "output", PythonObject("final")), "sequence"):
+        return PythonObject(None)
+    var n = Int(py=prediction.shape[0])
+    var steps = Int(py=prediction.shape[1])
+    var rows = n * steps
+    var lead = Python.tuple(rows) if Int(py=prediction.ndim) == 2 else Python.tuple(rows, -1)
+    var pred = xseq_reshape(prediction, lead)
+    var y = xseq_input(args[1], context)
+    var ylead = Python.tuple(rows) if Int(py=y.ndim) == 2 else Python.tuple(rows, -1)
+    var yf = xseq_reshape(y, ylead)
+    var lengths = _rnn_lengths(_arg(args, 3), n, context)
+    var sw = PythonObject(None)
+    var sw_steps = False
+    if _arg(args, 2) is not None:
+        sw = _rnn_f32(args[2], "sample_weight", context)
+        sw_steps = Int(py=sw.ndim) == 2
+    var weights = PythonObject(None)
+    if lengths is not None or sw is not None:
+        weights = xseq_zeros(Python.tuple(rows), context)
+        xseq_run_step_weights(n, steps, _rnn_lengths_address(lengths), 0 if sw is None else Int(py=xseq_addr(sw)),
+                              sw_steps, Int(py=xseq_addr(weights)))
+    _ = lengths
+    _ = sw
+    return Python.tuple(pred, Python.tuple(args[0], yf, weights))
 
 
 # ---------------------------------------------------------------- multi-layer perceptrons

@@ -32,7 +32,7 @@ from bindings.xseq_native_common_door import (
     xseq_route, xseq_neural_provider, xseq_zeros, xseq_addr, xseq_int, xseq_truth, XseqStream,
 )
 from bindings.xseq_neural_native_door import (
-    _attr, _entry, _opt_real, _rnn_cell, _rnn_optimizer, _RNN_PARAMS_SLOT, xseq_readonly_view,
+    _attr, _entry, _opt_real, _rnn_cell, _rnn_optimizer, _RNN_PARAMS_SLOT, xseq_readonly_view, rnn_field_options,
 )
 from bindings.xseq_score_native_door import _metrics_key
 from bindings.admitted_sequence_door import admit_nd_f32
@@ -89,6 +89,12 @@ def sequence_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
             route.has_third = False
     seq_rows_admit(route)
     owner.plan.route = route
+    # lane rnn-parity: the member ABI carries the last-step model; an estimator with any recurrent option is
+    # fitted and used through its own methods
+    var fo = rnn_field_options(fields)
+    if not fo.plain() or py_get(fields, "class_weight") is not None:
+        raise Error("NotImplementedError: a recurrent member takes the default options (output='final', one "
+                    + "direction, no dropout, bias, no clip_grad_norm, class_weight, early_stopping or warm_start)")
     var random_state = py_get(fields, nk[].k_random_state)
     var fresh = random_state is None
     var seed = UInt64(0)
