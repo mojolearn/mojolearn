@@ -36,7 +36,8 @@ from core.entry_table import EntryRef, entry_ref_unresolved
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
 from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS
 from bindings.py_balanced import py_item, py_type, py_call
-from bindings.classical_arrays_door import classical_address, classical_same_buffer
+from bindings.classical_arrays_door import classical_address
+from bindings.metric_resident_source_door import metric_resident_owner
 from bindings.arena_prog_run import metric_input_temp, metric_input_source
 from bindings.metrics_keys_unpack import metrics_keys
 from bindings.x_prep_native_owner_door import XprepResident, xprep_resident, xprep_resident_none
@@ -131,17 +132,24 @@ struct McSlots(Movable):
                   temp: Bool) raises -> Int:
         """`slot` of an input the door marked (lane vdf-xm-wire2): a per-call
         temporary (`temp`: codes, flags) is never kept resident; one
-        admitted from `args[argument]` is kept only when it reads that
-        argument's own buffer (a converted copy is a temporary). The compare
-        runs only inside a scope at the floor; -1: the call uploads it."""
+        admitted from `args[argument]` is kept when it reads that argument's
+        own buffer, or as that ARGUMENT'S buffer when admission copied it word
+        for word (lane gd-resident-functions: the 1-D admission copies even an
+        exact-dtype buffer, so the copy's new address per call never hit;
+        bindings/metric_resident_source_door.mojo); a converted copy is a
+        temporary. The compare runs only inside a scope at the floor; -1: the
+        call uploads it."""
         if temp:
             return -1
         var size = Int(py=value.size)
         if not self.resident.keeps(False, size):
             return -1  # outside resident() or below its floor: no address read
-        if argument >= 0 and not classical_same_buffer(args[argument], value):
-            return -1
-        return self.slot_words(binding, value, Int(py=classical_address(value)), size)
+        var keep = value
+        if argument >= 0:
+            keep = metric_resident_owner(args[argument], value)
+            if keep is None:
+                return -1
+        return self.slot_words(binding, keep, Int(py=classical_address(keep)), size)
 
     def slot_words(mut self, binding: PythonObject, owner: PythonObject, address: Int, words: Int) raises -> Int:
         """`slot` for `words` 4-byte words at `address` owned by `owner` (an
