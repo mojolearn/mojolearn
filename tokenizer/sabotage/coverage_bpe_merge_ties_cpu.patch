@@ -1,0 +1,37 @@
+diff --git a/tokenizer/impl/bpe.mojo b/tokenizer/impl/bpe.mojo
+index 2e304574f1..fd4854de36 100644
+--- a/tokenizer/impl/bpe.mojo
++++ b/tokenizer/impl/bpe.mojo
+@@ -26,6 +26,7 @@ form tiktoken uses is a speed decision and this module makes no speed claim.
+ """
+ 
+ from tokenizer.impl.ranks import RankTable
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the define test below
+ 
+ 
+ def bpe_append(
+@@ -56,7 +57,10 @@ def bpe_append(
+         var best_at = -1
+         for k in range(len(bounds) - 2):
+             var r = ranks.rank(data, bounds[k], bounds[k + 2] - bounds[k])
+-            if r >= 0 and (best_at < 0 or r < best_rank):
++            var better = r < best_rank
++            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the HIGHEST-rank adjacent pair merges first (every merged piece is still a token, so decode(encode(text)) is the text and the ids move), the host bindings only
++                better = r > best_rank
++            if r >= 0 and (best_at < 0 or better):
+                 best_rank = r
+                 best_at = k
+         if best_at < 0:
+diff --git a/tokenizer/train/bpe_train.mojo b/tokenizer/train/bpe_train.mojo
+index a0ff2a19d5..055863caa9 100644
+--- a/tokenizer/train/bpe_train.mojo
++++ b/tokenizer/train/bpe_train.mojo
+@@ -433,7 +433,7 @@ def train_bpe(
+     #     merged pair (see `PairTable`, and COST in the module docstring).
+     var V = vocab_size
+     var reverse = break_ties_high
+-    comptime if BPE_TRAINER_SABOTAGE:
++    comptime if BPE_TRAINER_SABOTAGE or is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the host trainer's tie-break reversed (largest pair at the top count), the host bindings only; the door's BPE_TRAINER_SABOTAGE word stays off, so device="gpu" is not refused
+         reverse = True
+     var table = PairTable()
+     var heap = PairHeap(reverse)
