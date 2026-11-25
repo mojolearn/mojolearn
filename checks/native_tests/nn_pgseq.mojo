@@ -284,6 +284,7 @@ def run_resume[E: Exec](mut ex: E) raises:
     _ = y^
     _ = sa^
     _ = sb^
+    _ = c1^
 
 
 def run_no_decay[E: Exec](mut ex: E) raises:
