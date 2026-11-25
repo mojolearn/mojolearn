@@ -812,6 +812,11 @@ def _ref_pos_enc(x: List[Float64]) -> List[Float64]:
 def _ref_loss(which: Int, p: List[Float64], t: List[Float32]) -> Float64:
     """The (3, 4) losses of cases 9..12, float64."""
     var acc = 0.0
+    if which == 10:
+        # nll: t holds 3 class ids, one a row (w3-integrate-10: the element loop read t[3..11] past its end)
+        for n in range(3):  # small-loop(fixture)
+            acc += -p[n * 4 + Int(t[n])]
+        return acc / 3.0
     for i in range(12):  # small-loop(fixture)
         var y = Float64(t[i])
         if which == 9:
@@ -823,10 +828,6 @@ def _ref_loss(which: Int, p: List[Float64], t: List[Float32]) -> Float64:
         elif which == 12:
             var s = 1.0 / (1.0 + exp(-p[i]))
             acc += -(2.5 * y * log(s) + (1.0 - y) * log(1.0 - s))
-    if which == 10:
-        for n in range(3):  # small-loop(fixture)
-            acc += -p[n * 4 + Int(t[n])]
-        return acc / 3.0
     if which == 11:
         return acc / 3.0
     return acc / 12.0
