@@ -1121,7 +1121,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             backward_recorded(self.tape, self.ex, t, seed)
         elif self.cbw.holds_rules():
             # nn-blocks-cbw: the graph holds a user-defined backward rule
-            self.cbw_backward_seeded(t, seed, ImportRules())
+            self.cbw_backward_seeded(t, seed)
         else:
             # First-order seeded and scalar backward accept the same supported
             # rank-N and import operations. Recorded higher derivatives keep
