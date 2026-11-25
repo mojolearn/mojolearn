@@ -1,0 +1,23 @@
+diff --git a/autograd/nn_optim.mojo b/autograd/nn_optim.mojo
+index a7a9cbc6d8..1f16e8fe15 100644
+--- a/autograd/nn_optim.mojo
++++ b/autograd/nn_optim.mojo
+@@ -395,7 +395,7 @@ def nn_opt_keeps_third(kind: Int, flags: Int) -> Bool:
+ 
+ 
+ def nn_opt_step[E: Exec](
+-    mut ex: E, cfg: OptConfig, mut st: OptState, t: Int, lr: Float32,
++    mut ex: E, cfg: OptConfig, mut st: OptState, t: Int, var lr: Float32,  # SABOTAGE coverage (sab-arms-67): lr made mutable for the fault below
+     P: FP, Gr: FP, s1: FP, s2: FP, s3: FP, n: Int, lamb: NnLamb,
+ ) raises:
+     """One optimizer step of a Sequential fit: lamb_core for LAMB, else opt_step's
+@@ -403,6 +403,9 @@ def nn_opt_step[E: Exec](
+     optimizer_v_), and for centered RMSprop s3 (optimizer_w_,
+     nn_opt_keeps_third): it keeps its gradient average (op_opt's p4) in s1
+     and its momentum buffer in s3."""
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): rmsprop, adagrad and lamb step at a rate one ulp up, the host bindings only (device="cpu")
++        if cfg.kind == NN_OPT_RMSPROP or cfg.kind == NN_OPT_ADAGRAD or cfg.kind == NN_OPT_LAMB:  # SABOTAGE coverage (sab-arms-67)
++            lr = bitcast[DType.float32](bitcast[DType.uint32](lr) + UInt32(1))  # SABOTAGE coverage (sab-arms-67)
+     if cfg.kind == NN_OPT_LAMB:
+         var bc1 = Float32(1.0)
+         var bc2 = Float32(1.0)

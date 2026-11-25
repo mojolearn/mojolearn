@@ -1,0 +1,32 @@
+diff --git a/autograd/nn_conv.mojo b/autograd/nn_conv.mojo
+index 01319e66e4..a16f73f469 100644
+--- a/autograd/nn_conv.mojo
++++ b/autograd/nn_conv.mojo
+@@ -483,6 +483,8 @@ def nn_pixel_shuffle[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, r: Int, unsh
+         perm = [0, 1, 4, 2, 5, 3]   # (N, C, H, r, W, r)
+         comptime if NN_CONV_SABOTAGE_SHUFFLE:
+             perm = [0, 1, 4, 3, 5, 2]
++        comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): pixel_shuffle (not unshuffle) swaps its two factor axes, the GPU bindings only (device="gpu")
++            perm = [0, 1, 4, 3, 5, 2]
+         od = [N, C, H * r, W * r]
+     else:
+         if s.d[2] % r != 0 or s.d[3] % r != 0:
+diff --git a/autograd/nn_conv_ops.mojo b/autograd/nn_conv_ops.mojo
+index 0318fca2c9..46191814bc 100644
+--- a/autograd/nn_conv_ops.mojo
++++ b/autograd/nn_conv_ops.mojo
+@@ -49,10 +49,10 @@ comptime OP_NNC_LAST = 5579
+ # (checks/native_tests/nn_conv.mojo) is shown to catch it. CT: the transposed convolution drops its bias.
+ # PAD: reflection's outermost left column reads +0.0. POOL: the adaptive average is scaled by 7/8. UP:
+ # bilinear swaps the two height weights. (SHUFFLE: autograd/nn_conv.mojo.)
+-comptime NN_CONV_SABOTAGE_CT = is_defined["MOJOLEARN_NN_CONV_SABOTAGE_CT"]()
+-comptime NN_CONV_SABOTAGE_PAD = is_defined["MOJOLEARN_NN_CONV_SABOTAGE_PAD"]()
+-comptime NN_CONV_SABOTAGE_POOL = is_defined["MOJOLEARN_NN_CONV_SABOTAGE_POOL"]()
+-comptime NN_CONV_SABOTAGE_UP = is_defined["MOJOLEARN_NN_CONV_SABOTAGE_UP"]()
++comptime NN_CONV_SABOTAGE_CT = not is_defined["MOJOLEARN_COLUMN_CPU"]()  # SABOTAGE coverage (sab-arms-67): the transposed convolution drops its bias, the GPU bindings only (device="gpu")
++comptime NN_CONV_SABOTAGE_PAD = not is_defined["MOJOLEARN_COLUMN_CPU"]()  # SABOTAGE coverage (sab-arms-67): reflection padding's outermost left column reads +0.0, the GPU bindings only (device="gpu")
++comptime NN_CONV_SABOTAGE_POOL = not is_defined["MOJOLEARN_COLUMN_CPU"]()  # SABOTAGE coverage (sab-arms-67): the adaptive average pool's mean scaled by 7/8, the GPU bindings only (device="gpu")
++comptime NN_CONV_SABOTAGE_UP = not is_defined["MOJOLEARN_COLUMN_CPU"]()  # SABOTAGE coverage (sab-arms-67): bilinear upsampling swaps its two height weights, the GPU bindings only (device="gpu")
+ 
+ # The upsampling descriptor (autograd/nn_conv.mojo nn_upsample): words
+ # [NC, H, W, OH, OW, mode (0 nearest, 1 bilinear), align_corners, scale_h bits, scale_w bits].
