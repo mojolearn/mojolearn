@@ -259,6 +259,15 @@ def _device_case(which: Int) raises:
                 _a(va), _a64(ra), n, FD, q, kernel.view(), True, 0, 0))
             _ = GPDeviceKernels.gpc_query(GPCQueryRequest(_a(gathered), _a(yb), _a(pb), _a(wb), _a(lb), _a(xq),
                 _a(mb), _a(vb), _a64(rb), n, FD, q, kernel.view(), True, 0, 0))
+            # read by address inside the two queries: named again so they outlive them
+            _ = ya^
+            _ = pa^
+            _ = wa^
+            _ = la^
+            _ = yb^
+            _ = pb^
+            _ = wb^
+            _ = lb^
             _same(ma, mb, "latent mean")
             _same(va, vb, "latent variance")
             _same64(ra, rb, "class probability")
@@ -301,6 +310,8 @@ def _device_case(which: Int) raises:
             except error:
                 if _refused(error, "GaussianProcessRegressor"):
                     refused += 1
+            _ = t^  # read by address inside the query above
+            _ = c^
             var r = List[Float64](length=q, fill=0.0)
             for i in range(n):  # small-loop(fixture: two-class 0 / 1 targets for the query's model checks)
                 y01[i] = Float32(codes_fold[i])
@@ -310,6 +321,8 @@ def _device_case(which: Int) raises:
             except error:
                 if _refused(error, "GaussianProcessClassifier"):
                     refused += 1
+            _ = m^  # read by address inside the queries above
+            _ = v^
             require(refused == 5, "a NaN fold reached a GP list entry (" + String(5 - refused) + " of 5 entries)")
             _ = flags^
             _ = g^

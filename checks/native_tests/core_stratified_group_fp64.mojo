@@ -24,6 +24,7 @@ checks/native_tests/fixtures/stratified_group/generate.py. Each group's fold
 must equal the oracle's, so every row is tested exactly once and train and
 test never share a row. The per-fold row lists themselves stay the door's.
 """
+from checks.native_tests.kit import upload
 from std.sys.compile import is_defined
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
@@ -217,8 +218,7 @@ def test_plan() raises:
                 var enc = fs[0].copy()
                 var k = fs[1]
                 var dist = List[Int64](length=c.groups * k, fill=-1)
-                var d_enc = ctx.enqueue_create_buffer[DType.int32](c.rows)
-                ctx.enqueue_copy(dst_buf=d_enc, src_ptr=enc.unsafe_ptr())
+                var d_enc = upload[DType.int32](ctx, enc)  # the kit's one upload (it keeps `enc` alive)
                 require(device_group_class_counts_on(ctx, Int(d_enc.unsafe_ptr()), c.rows, k, Int(groups.unsafe_ptr()),
                                                      c.groups, 0, k, Int(dist.unsafe_ptr())),
                         "the device table declined in-range codes")
