@@ -1172,12 +1172,16 @@ def pg_training_operation(operation: Int, owner: PythonObject, values: PythonObj
         return out
     # OPTIMIZER_OPN_PG_LOAD
     var sd = values[0]
-    opt_value(sd, context)
     if (py_type(sd) is not builtins.dict or not py_contains(sd, PythonObject("state"))
             or not py_contains(sd, PythonObject("param_groups"))):
         raise Error("ValueError: load_state_dict takes the dict state_dict returned (keys 'state' and 'param_groups')")
     var saved_groups = py_item(sd, PythonObject("param_groups"))
     var saved_state = py_item(sd, PythonObject("state"))
+    # The grouped "state" is keyed by group index (int), so the whole dict is not admitted as one optimizer state
+    # (its keys must be strings): the groups list here, each group's state below (w3-integrate-10).
+    opt_value(saved_groups, context)
+    if py_type(saved_state) is not builtins.dict:
+        raise Error("ValueError: the state's 'state' must be the dict of group index to group state state_dict returned")
     if len(saved_groups) != len(members):
         raise Error("ValueError: the state has " + String(len(saved_groups)) + " parameter groups and this optimizer has "
                     + String(len(members)))
@@ -1193,6 +1197,7 @@ def pg_training_operation(operation: Int, owner: PythonObject, values: PythonObj
                         + String(len(py_item(g, PythonObject("params")))) + " parameters and this optimizer's has " + String(n))
         if not py_contains(saved_state, PythonObject(gi)):
             raise Error("ValueError: the state has no entry for parameter group " + String(gi))
+        opt_value(py_item(saved_state, PythonObject(gi)), context)
     var current = py_item(fields, PythonObject("param_groups"))
     for gi in range(len(members)):  # driver-loop: over parameter groups (options, then state)
         var g = saved_groups[gi]

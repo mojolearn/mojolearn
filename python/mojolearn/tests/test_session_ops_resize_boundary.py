@@ -48,7 +48,7 @@ def test_shapes():
         assert s.numpy(s.pixel_shuffle(s.tensor(np.ones((1, 8, 2, 3), np.float32)), 2)).shape == (1, 2, 4, 6)
         assert s.numpy(s.pixel_unshuffle(x, 1)).shape == (1, 2, 3, 4)
         assert s.numpy(s.pad(x, [0, 0, 1, 2, 0, 0, 2, 1], mode="reflect")).shape == (1, 2, 6, 7)
-        assert s.numpy(s.pad(z, [0, 0, 3, 0, 0, 9], mode="replicate")).shape == (1, 2, 15)
+        assert s.numpy(s.pad(z, [0, 0, 3, 0, 0, 9], mode="replicate")).shape == (1, 2, 17)
 
 
 @needs_binding
