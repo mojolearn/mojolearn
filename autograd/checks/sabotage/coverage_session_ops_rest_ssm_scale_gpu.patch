@@ -1,11 +1,11 @@
 diff --git a/autograd/session_ops_layer_sabotage.mojo b/autograd/session_ops_layer_sabotage.mojo
-index 601a770730..235b1006fa 100644
+index 6cb6d8d59f..4359dd2d98 100644
 --- a/autograd/session_ops_layer_sabotage.mojo
 +++ b/autograd/session_ops_layer_sabotage.mojo
-@@ -26,7 +26,7 @@ comptime SOL_SABOTAGE_SMOOTH_L1_BETA = is_defined["MOJOLEARN_SESSION_OPS_LAYER_S
- comptime SOL_SABOTAGE_SMOOTH_L1_BETA_HOST = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_SMOOTH_L1_BETA_HOST"]()
- comptime SOL_SABOTAGE_CTC_REDUCTION = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_CTC_REDUCTION"]()
- comptime SOL_SABOTAGE_CTC_REDUCTION_HOST = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_CTC_REDUCTION_HOST"]()
+@@ -32,7 +32,7 @@ comptime SOL_SABOTAGE_CTC_REDUCTION_HOST = is_defined["MOJOLEARN_SESSION_OPS_LAY
+ #     common offset of the log-probabilities the gradient's words move by ulp(nll).
+ comptime SOL_SABOTAGE_CTC_RAW = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_CTC_RAW"]()
+ comptime SOL_SABOTAGE_CTC_RAW_HOST = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_CTC_RAW_HOST"]()
 -comptime SOL_SABOTAGE_SSM_SCALE = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_SSM_SCALE"]()
 +comptime SOL_SABOTAGE_SSM_SCALE = True  # SABOTAGE
  comptime SOL_SABOTAGE_SSM_SCALE_HOST = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_SSM_SCALE_HOST"]()
