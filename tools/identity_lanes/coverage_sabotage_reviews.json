@@ -170,6 +170,18 @@
    "why_fault_reaches_check": "Embedding.backward on the CPU side -> embedding/host/embedding_host.mojo host_embedding_backward, where the patch stores every normal folded gradient cell one ulp up. The fold starts from the carried cell (cfg.accumulate), so a cell touched by both halves is raised twice on the carried path and once on the unsplit one: the two gradients differ and the lane raises before it hashes (f200804327 host gate: REFUSED, read MISSED for want of this review). Lane w3f7-b, 2026-11-24.",
    "error_match": "ValueError: carried dW \\(t0=171\\) and unsplit dW differ: [0-9]+ bytes of [0-9]+",
    "patch_sha256": "e4fbb269e2a786da4d793ae8dd83b4978e1c68c357a03d571d8ee62865686673"
+  },
+  "embedding-sort/base": {
+   "product_check": "tools/identity_break.py lane `embedding-sort`: _same_bytes(\"sort carried dW (t0=171)\", ..., \"sort unsplit dW\", ...), the lane's in-cell byte oracle of the microbatch carry under plan=\"sort\" (contract 7.4: a backward split at t0=171 and carried through grad= must equal the unsplit backward byte for byte).",
+   "why_fault_reaches_check": "Embedding(plan=\"sort\").backward on the CPU side -> embedding/host/embedding_host.mojo host_embedding_backward (HOST_PLAN_SORT builds its bucket order, then the same _fold_rows store as PLAN_SCAN), where the patch stores every normal folded gradient cell one ulp up. The fold starts from the carried cell (cfg.accumulate), so a cell touched by both halves is raised twice on the carried path and once on the unsplit one, and the lane raises before it hashes: the `embedding` lane's reviewed refusal, on the sort plan (d1641666a4 host gate: REFUSED, read MISSED 'refusal is not evidence' for want of this review). Lane w3-fix-9-s2, 2026-11-25.",
+   "error_match": "ValueError: sort carried dW \\(t0=171\\) and sort unsplit dW differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "e4fbb269e2a786da4d793ae8dd83b4978e1c68c357a03d571d8ee62865686673"
+  },
+  "nn-ep-embedding/base": {
+   "product_check": "tools/identity_lanes/nn_endpoints.py lane `nn-ep-embedding`: _same_bytes(\"Embedding backward\" (host dy), \"Embedding backward from to_device(dy)\" (resident dy)), the lane's in-cell byte oracle: the dense gradient of the same ids and dy must not depend on where dy lives.",
+   "why_fault_reaches_check": "Embedding.backward with a host dy on the CPU side -> bindings/embedding_layer_native_door.mojo _backward (EMB_OP_BACKWARD) -> embedding/host/embedding_host.mojo host_embedding_backward, where the patch stores every normal folded gradient cell one ulp up; the resident-dy call (EMB_OP_BACKWARD_DEV, embedding/embedding_words_run.mojo embedding_backward_dev_released) does not run the patched store, so the two gradients differ and the lane raises before it hashes (d1641666a4 host gate: REFUSED, read MISSED 'refusal is not evidence' for want of this review). Lane w3-fix-9-s2, 2026-11-25.",
+   "error_match": "ValueError: Embedding backward and Embedding backward from to_device\\(dy\\) differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "e4fbb269e2a786da4d793ae8dd83b4978e1c68c357a03d571d8ee62865686673"
   }
  },
  "coverage-core-ordered_gradient_sum_cpu": {
