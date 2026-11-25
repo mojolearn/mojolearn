@@ -240,8 +240,9 @@ class _Optimizer(NumericModeMixin):
     configuration implementation to fall back to.
 
     PARAMETER GROUPS (lane nn-blocks-pg, 2026-11-25). `params` may be a list
-    of dicts, as in `torch.optim`; the native constructor then builds one
-    member optimizer per group and the object becomes a `_ParamGroups`: its
+    of dicts, as in `torch.optim`; `__new__` then makes the class's
+    parameter-group form (`_SGDGroups`, `_AdamGroups`, `_AdamWGroups`) and the
+    native constructor builds one member optimizer per group: its
     `step` clips ONCE over every group's gradients (contract 3.5: one
     registry, one coefficient) and then steps each group with its own
     options.
@@ -250,6 +251,11 @@ class _Optimizer(NumericModeMixin):
     _mojolearn_native_public = True
     __getattribute__ = object.__getattribute__
     _BINDING = _EXT_NAME
+
+    def __new__(cls, params=None, *args, **kwargs):
+        # nn-blocks-pg: the native constructor's class choice: this class, or its parameter-group form when
+        # `params` is a list of dicts
+        return _OPT_NATIVE("pg_new", cls, (params,), None, _OPT_CONTEXT)
 
 
     def __getstate__(self):
@@ -662,6 +668,18 @@ class _ParamGroups(object):
         """Restore what `state_dict` returned into an optimizer built with
         the same groups: each group's options, then its state."""
         return _OPT_NATIVE("pg_load", self, (state,), None, _OPT_CONTEXT)
+
+
+class _SGDGroups(_ParamGroups, SGD):
+    """`SGD` built from parameter groups."""
+
+
+class _AdamGroups(_ParamGroups, Adam):
+    """`Adam` built from parameter groups."""
+
+
+class _AdamWGroups(_ParamGroups, AdamW):
+    """`AdamW` built from parameter groups."""
 # nn-blocks-pg end
 
 
