@@ -785,7 +785,7 @@ def _neural_layer_run(mut mods: NativeModules, owner: NativeBlockExecution, x: P
     if not plan.layer_route.bound:
         plan.layer_route = causal_layer_route(plan.kind, plan.entries)
     var result = causal_layer_run_fields(mods, owner.fields, plan.entries, plan.layer_route, plan.kind, plan.d_model,
-        plan.packed, plan.planes, plan.layer, x, state, step, stateless)
+        plan.planes, plan.layer, x, state, step, stateless)
     _ = owner
     return result
 

@@ -950,7 +950,7 @@ def _transformer_params(blk: PythonObject, st: PythonObject, b: Int, l: Int) rai
 # whole-model path `_run_snapshot` with its snapshot's).
 
 
-def causal_layer_run_fields(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, route: CausalLayerRoute, kind: String, d: Int, packed: Bool, planes: Bool, prepared: PythonObject, x: PythonObject, supplied_state: PythonObject, step: Bool = False, stateless: Bool = False) raises -> PythonObject:
+def causal_layer_run_fields(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, route: CausalLayerRoute, kind: String, d: Int, planes: Bool, prepared: PythonObject, x: PythonObject, supplied_state: PythonObject, step: Bool = False, stateless: Bool = False) raises -> PythonObject:
     # Standalone callers supply the retained native plan directly: no temporary
     # namespace or Python attribute dispatch to reconstruct execution metadata.
     # `route` and `planes` are the plan's (`NativeBlockPlan.layer_route`,
@@ -962,7 +962,6 @@ def causal_layer_run_fields(mut mods: NativeModules, fields: PythonObject, entri
     var shape = x.shape
     var b = Int(py=shape[0])
     var l = Int(py=shape[1])
-    var profile = route.kind == CAUSAL_LAYER_TRANSFORMER and packed
     if prepared is not None:
         # Reuse the immutable native layer vectors directly. Only mutable
         # arithmetic-profile words and this operation's fields are rebound.
@@ -974,13 +973,13 @@ def causal_layer_run_fields(mut mods: NativeModules, fields: PythonObject, entri
             profile_changed = _generation_bool(py_get(fields, "_arithmetic_profile_changed", PythonObject(False)))
         ref reused = prepared.downcast_value_ptr[PreparedGenerationLayer]()[].layer
         mods.released()
-        return _causal_layer_run_bound(mods, route, entries, d, b, l, reused, profile, planes, x, supplied_state, step, fields, profile_id, profile_changed, stateless)
+        return _causal_layer_run_bound(mods, route, entries, d, b, l, reused, x, supplied_state, step, fields, profile_id, profile_changed, stateless)
     var layer = GenerationLayerSnapshot(fields, kind, planes)
     mods.released()
     if stateless:
-        return _causal_layer_run_bound(mods, route, entries, d, b, l, layer, profile, planes, x, supplied_state, step,
+        return _causal_layer_run_bound(mods, route, entries, d, b, l, layer, x, supplied_state, step,
             layer.block, layer.profile, layer.profile_changed, True)
-    return _causal_layer_run_prepared(mods, route, entries, d, b, l, layer, profile, planes, x, supplied_state, step)
+    return _causal_layer_run_prepared(mods, route, entries, d, b, l, layer, x, supplied_state, step)
 
 
 def causal_layer_stateless_plan(kind: String, entries: PythonObject) raises -> Bool:
@@ -1113,9 +1112,9 @@ def causal_prepared_layer(mut mods: NativeModules, block_fields: PythonObject, k
 
 def _causal_layer_run_prepared(mut mods: NativeModules,
     route: CausalLayerRoute, e: PythonObject, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
-    head_profile: Bool, device15: Bool, x: PythonObject, supplied_state: PythonObject, step: Bool,
+    x: PythonObject, supplied_state: PythonObject, step: Bool,
 ) raises -> PythonObject:
-    return _causal_layer_run_bound(mods, route, e, d, b, l, layer, head_profile, device15, x, supplied_state, step, layer.block, layer.profile, layer.profile_changed, False)
+    return _causal_layer_run_bound(mods, route, e, d, b, l, layer, x, supplied_state, step, layer.block, layer.profile, layer.profile_changed, False)
 
 
 def _causal_layer_request_run(request: CausalLayerRequest) raises -> Int:
@@ -1133,7 +1132,7 @@ def _causal_layer_request_run(request: CausalLayerRequest) raises -> Int:
 
 def _causal_layer_run_bound(mut mods: NativeModules,
     route: CausalLayerRoute, e: PythonObject, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
-    head_profile: Bool, device15: Bool, x: PythonObject, supplied_state: PythonObject, step: Bool,
+    x: PythonObject, supplied_state: PythonObject, step: Bool,
     block_override: PythonObject, profile_override: PythonObject, profile_changed_override: Bool,
     stateless: Bool = False,
 ) raises -> PythonObject:
@@ -1202,7 +1201,11 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             py_setattr(st, "arithmetic_profile", profile_id)
         var capacity = Int(py=st.max_tokens)
         var cache_n = layer.words.cache_count(b, capacity)
-        var p_words = layer.words.transformer_params(b, l, capacity, Int(py=st.cached_tokens))
+        # lane fixed15-parts-native: the layer's own mask decides its entry
+        # (host op 34 / device op 35 carry the mask word; the fp32_v1 entries
+        # keep their words).
+        var op15 = layer.fixed15 if route.cpu else layer.planes
+        var p_words = layer.words.transformer_params_parts(b, l, capacity, Int(py=st.cached_tokens), layer.parts) if op15 else layer.words.transformer_params(b, l, capacity, Int(py=st.cached_tokens))
         var a_words = generation_transformer_addresses(_addr(x, keep), layer.weights.resolve(keep),
             _addr(st.k_cache, keep), _addr(st.v_cache, keep), _addr(y, keep),
             layer.optional.resolve(keep), layer.packed.resolve(keep))
@@ -1217,8 +1220,8 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             # transformer_decode_step at L = 1, transformer_forward_int15) ran
             # the same _run_forward with the same words.
             request.entry = route.entry
-            request.operation = CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD
-        elif device15 or route.block_session:
+            request.operation = CAUSAL_BLOCK_HOST_FORWARD_INT15 if op15 else CAUSAL_BLOCK_HOST_FORWARD
+        elif op15 or route.block_session:
             # A GPU layer: the block's session (a native registry handle of its
             # image, opened on first use through the neural table) runs op 35
             # under fixed15_v1, else op 11, reserved with the GIL held and run
@@ -1235,7 +1238,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             request.session = True
             request.entry = transformer_block_session_entry(session)
             request.handle = transformer_block_session_handle(session)
-            request.operation = NEURAL_BLOCK_SESSION_FORWARD_INT15 if device15 else NEURAL_BLOCK_SESSION_FORWARD
+            request.operation = NEURAL_BLOCK_SESSION_FORWARD_INT15 if op15 else NEURAL_BLOCK_SESSION_FORWARD
         else:
             # A GPU admission always marks "block_session"; no other device route exists.
             # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
@@ -1347,7 +1350,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
 
 def _causal_layer_run_owned(mut mods: NativeModules,
     route: CausalLayerRoute, e: PythonObject, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
-    head_profile: Bool, device15: Bool, x: PythonObject, fields: PythonObject, state: CausalLayerStateWords,
+    x: PythonObject, fields: PythonObject, state: CausalLayerStateWords,
     blk: PythonObject, profile_id: PythonObject, profile_changed: Bool,
 ) raises -> PythonObject:
     # Lane dw-causal (2026-11-21): one layer of a whole-model forward on the
@@ -1393,7 +1396,8 @@ def _causal_layer_run_owned(mut mods: NativeModules,
             py_setitem(fields, nk[].k_arithmetic_profile, profile_id)
         var capacity = Int(py=py_item(fields, nk[].k_max_tokens))
         var cache_n = layer.words.cache_count(b, capacity)
-        var p_words = layer.words.transformer_params(b, l, capacity, cached)
+        var op15 = layer.fixed15 if route.cpu else layer.planes
+        var p_words = layer.words.transformer_params_parts(b, l, capacity, cached, layer.parts) if op15 else layer.words.transformer_params(b, l, capacity, cached)
         var x_address = _addr(x, keep)
         var weight_words = layer.weights.resolve(keep)
         causal_state_buffer_contiguous(state.buffers[CAUSAL_STATE_K])
@@ -1408,8 +1412,8 @@ def _causal_layer_run_owned(mut mods: NativeModules,
         request.words = p_words^
         if route.cpu:
             request.entry = route.entry
-            request.operation = CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD
-        elif device15 or route.block_session:
+            request.operation = CAUSAL_BLOCK_HOST_FORWARD_INT15 if op15 else CAUSAL_BLOCK_HOST_FORWARD
+        elif op15 or route.block_session:
             session = blk["_native_session"]
             if session is None:
                 session = transformer_block_session_open(neural_ref[NEURAL_TABLE_BLOCK_FORWARD](
@@ -1419,7 +1423,7 @@ def _causal_layer_run_owned(mut mods: NativeModules,
             request.session = True
             request.entry = transformer_block_session_entry(session)
             request.handle = transformer_block_session_handle(session)
-            request.operation = NEURAL_BLOCK_SESSION_FORWARD_INT15 if device15 else NEURAL_BLOCK_SESSION_FORWARD
+            request.operation = NEURAL_BLOCK_SESSION_FORWARD_INT15 if op15 else NEURAL_BLOCK_SESSION_FORWARD
         else:
             # A GPU admission always marks "block_session"; no other device route exists.
             # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
@@ -2334,11 +2338,11 @@ def _run_snapshot(mut mods: NativeModules, snapshot: GenerationOperationSnapshot
         if st_fields is not None:
             var state_owner = state_held.downcast_value_ptr[CausalStateOwner]()
             x = _causal_layer_run_owned(mods, snapshot.layer_route, snapshot.entries, snapshot.width, b, l,
-                snapshot.layers[i], snapshot.head.packed, snapshot.planes, x, st_fields,
+                snapshot.layers[i], x, st_fields,
                 state_owner[].layers[state_owner[].slots[i]], call.blocks[i], call.profiles[i], call.changed[i])
         else:
             x = _causal_layer_run_bound(mods, snapshot.layer_route, snapshot.entries, snapshot.width, b, l,
-                snapshot.layers[i], snapshot.head.packed, snapshot.planes, x, st, False,
+                snapshot.layers[i], x, st, False,
                 call.blocks[i], call.profiles[i], call.changed[i], False)
     _ = state_held
     var out = _causal_model_head_prepared(snapshot.head, x, b, l, False, output)
