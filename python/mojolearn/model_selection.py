@@ -385,6 +385,15 @@ class _Splitter:
     """sklearn's BaseCrossValidator protocol: split(X, y, groups) yields
     (train, test) Int64 index Arrays; get_n_splits."""
 
+    # The splitters run on both devices: their constructors store `device`
+    # and `split` follows it (44b842efd3, lane vdf-msel: 'cpu' beside a GPU
+    # set runs msel_cpu_scope). The marker gives each splitter its row in the
+    # generated device table (python/mojolearn/_device_table.py): it read "its
+    # family has no CPU implementation" (no `_BINDING`), so
+    # test_device_parameter expected cls(device="cpu") to raise on a GPU
+    # install, and 12 splitters did not (gd-verify-view, 2026-11-25).
+    _mojolearn_device = True
+
     def __repr__(self):
         return _NATIVE(self, "family_msel_splitter_repr", (), _NATIVE_CONTEXT)
 
@@ -786,6 +795,9 @@ class LeavePGroupsOut(_Splitter):
 
 
 class _Repeated:
+    # Both devices, as `_Splitter` (44b842efd3): its row in the device table.
+    _mojolearn_device = True
+
     def get_params(self, deep=True):
         """Return ``n_repeats``, ``random_state`` and ``n_splits`` as a dict."""
         return _PARAMS_METADATA(self, False, _PARAMS_METADATA_CONTEXT)
