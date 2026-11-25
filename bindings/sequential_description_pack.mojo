@@ -22,6 +22,9 @@ from bindings.sequential_description_unpack import (
 from bindings.sequential_keys_unpack import sequential_keys
 from bindings.nn_optim_compile_pack import nn_optim_compile_words
 from bindings.py_balanced import py_item
+# nn-blocks-pgseq begin
+from bindings.nn_pgseq_compile_pack import pgseq_compile_groups
+# nn-blocks-pgseq end
 
 
 def _shape(mut mods: NativeModules, value: PythonObject, name: String, infer: Bool, context: PythonObject) raises -> PythonObject:
@@ -836,7 +839,8 @@ def sequential_compile(mut mods: NativeModules, model: PythonObject, parts: Pyth
     var b = mods.module("builtins")
     # compile's 45 options arrive as two tuples (python/mojolearn/_x_sequence_model.py: options 0..19, 20..44;
     # a literal tuple of more than 30 values is built through a list in the wrapper), joined once here
-    if len(parts) != 2:
+    # (nn-blocks-pgseq: a third tuple holds param_groups and no_decay)
+    if len(parts) != 2 and len(parts) != 3:
         raise Error("TypeError: compile takes its options as two tuples")
     var options = parts[0] + parts[1]
     var loss = options[0]
@@ -886,6 +890,11 @@ def sequential_compile(mut mods: NativeModules, model: PythonObject, parts: Pyth
     # nn-losses end
     py_setitem(out, nk[].k_tol, py_call(b.float, options[13]))
     py_setitem(out, nk[].k_n_iter_no_change, py_call(b.int, options[14]))
+    # nn-blocks-pgseq begin: param_groups and no_decay, admitted and stored once here (none: nothing stored)
+    if len(parts) == 3:
+        pgseq_compile_groups(out, options, String(optimizer), Int(py=py_item(out, nk[].k_sched)),
+                             Int(py=py_item(out, nk[].k_opt)), parts[2][0], parts[2][1], b, context)
+    # nn-blocks-pgseq end
     var fields = sequential_fields(model)
     py_setitem(fields, nk[].k__options, out)
     return model

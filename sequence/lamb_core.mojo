@@ -54,6 +54,103 @@ def lamb_bias(flags: Int, t: Int, t0: Int, b1: Float32, b2: Float32, sc: FP,
 
 
 
+def lamb_clip[E: Exec](
+    mut ex: E, G: FP, TAB: FP, partsA: FP, nrm: FP, scal: FP, nt: Int, nb: Int, max_norm: Float32,
+) raises:
+    """The global clip's coefficient into scal[0] (three launches, nothing
+    read back): the per-tensor gradient norms in TAB's blocked order
+    (op_lamb_blk, op_lamb_segfold) and ||g|| / max_norm (op_lamb_clip)."""
+    var q = Args()
+    q.p0 = G
+    q.p2 = TAB
+    q.p3 = partsA
+    q.i0 = nt
+    q.i2 = AF_NORM_BLOCK
+    ex.launch[OP_LAMB_BLK](q, nb)
+    var s = Args()
+    s.p0 = partsA
+    s.p1 = TAB
+    s.p2 = nrm
+    s.i0 = nt
+    ex.launch[OP_LAMB_SEGFOLD](s, nt)
+    var c = Args()
+    c.p0 = nrm
+    c.p1 = scal
+    c.i0 = nt
+    c.f0 = max_norm
+    ex.launch[OP_LAMB_CLIP](c, 1)
+
+
+def lamb_upd[E: Exec](
+    mut ex: E, P: FP, G: FP, M: FP, V: FP, U: FP, scal: FP, n: Int, clip: Bool, flags: Int,
+    b1: Float32, b2: Float32, eps: Float32, wd: Float32, bc1: Float32, bc2: Float32,
+) raises:
+    """The moments and the update direction of n values (op_lamb_upd, one
+    launch); with `clip` the gradient is divided by scal[0] where it is
+    above one."""
+    var u = Args()
+    u.p0 = P
+    u.p1 = G
+    u.p2 = M
+    u.p3 = V
+    u.p4 = U
+    u.p5 = scal
+    u.i0 = 1 if clip else 0
+    u.f1 = b1
+    u.f2 = b2
+    u.f3 = eps
+    u.f4 = wd
+    u.f5 = bc1
+    u.f6 = ftz(identical_sqrt(bc2))
+    u.f7 = (Float32(1.0) - b1) if (flags & 4) != 0 else Float32(1.0)
+    ex.launch[OP_LAMB_UPD](u, n)
+
+
+def lamb_trust[E: Exec](
+    mut ex: E, P: FP, U: FP, TAB: FP, partsA: FP, partsB: FP, ratio: FP, nt: Int, nb: Int, flags: Int,
+) raises:
+    """Every tensor's trust ratio ||p|| / ||u|| into ratio (two launches:
+    op_lamb_blk over p and u, op_lamb_trust)."""
+    var q = Args()
+    q.p0 = P
+    q.p1 = U
+    q.p2 = TAB
+    q.p3 = partsA
+    q.p4 = partsB
+    q.i0 = nt
+    q.i1 = 1
+    q.i2 = AF_NORM_BLOCK
+    ex.launch[OP_LAMB_BLK](q, nb)
+    var r = Args()
+    r.p0 = partsA
+    r.p1 = partsB
+    r.p2 = TAB
+    r.p3 = ratio
+    r.i0 = flags & 1
+    r.i1 = nt
+    ex.launch[OP_LAMB_TRUST](r, nt)
+
+
+def lamb_unit_ratio[E: Exec](mut ex: E, ratio: FP, nt: Int) raises:
+    """Trust ratios of one (no weight decay and not always_adapt): one fill."""
+    var f = Args()
+    f.p0 = ratio
+    f.f0 = Float32(1.0)
+    ex.launch[OP_FILL](f, nt)
+
+
+def lamb_apply[E: Exec](mut ex: E, P: FP, U: FP, ratio: FP, TAB: FP, nt: Int, n: Int, lr: Float32) raises:
+    """p = p - lr (u ratio[k]) over the n values of TAB's nt tensors (op_lamb_apply_all, one launch)."""
+    var ap = Args()
+    ap.p0 = P
+    ap.p1 = U
+    ap.p2 = ratio
+    ap.p3 = TAB
+    ap.i0 = nt
+    ap.f0 = lr
+    ex.launch[OP_LAMB_APPLY_ALL](ap, n)
+
+
 def lamb_core[E: Exec](
     mut ex: E, P: FP, G: FP, M: FP, V: FP, U: FP, TAB: FP,
     partsA: FP, partsB: FP, nrm: FP, ratio: FP, scal: FP,
@@ -69,73 +166,16 @@ def lamb_core[E: Exec](
     clip), the trust ratios (op_lamb_blk over p and u, op_lamb_trust) and
     the update of every tensor (op_lamb_apply_all, one launch). Buffers:
     P, G, M, V, U n floats; TAB `lamb_table`'s 2 nt + 2 words; partsA and
-    partsB nb; nrm and ratio nt; scal 1. G is read, never written."""
-    if (flags & 16) != 0:
-        var q = Args()
-        q.p0 = G
-        q.p2 = TAB
-        q.p3 = partsA
-        q.i0 = nt
-        q.i2 = AF_NORM_BLOCK
-        ex.launch[OP_LAMB_BLK](q, nb)
-        var s = Args()
-        s.p0 = partsA
-        s.p1 = TAB
-        s.p2 = nrm
-        s.i0 = nt
-        ex.launch[OP_LAMB_SEGFOLD](s, nt)
-        var c = Args()
-        c.p0 = nrm
-        c.p1 = scal
-        c.i0 = nt
-        c.f0 = max_norm
-        ex.launch[OP_LAMB_CLIP](c, 1)
-    var u = Args()
-    u.p0 = P
-    u.p1 = G
-    u.p2 = M
-    u.p3 = V
-    u.p4 = U
-    u.p5 = scal
-    u.i0 = 1 if (flags & 16) != 0 else 0
-    u.f1 = b1
-    u.f2 = b2
-    u.f3 = eps
-    u.f4 = wd
-    u.f5 = bc1
-    u.f6 = ftz(identical_sqrt(bc2))
-    u.f7 = (Float32(1.0) - b1) if (flags & 4) != 0 else Float32(1.0)
-    ex.launch[OP_LAMB_UPD](u, n)
+    partsB nb; nrm and ratio nt; scal 1. G is read, never written.
+    (lane nn-blocks-pgseq, 2026-11-25: the same launches in the same order,
+    each from its own piece above, which Sequential's parameter groups
+    (autograd/nn_pgseq.mojo) call per run of a group's tensors.)"""
+    var clip = (flags & 16) != 0
+    if clip:
+        lamb_clip(ex, G, TAB, partsA, nrm, scal, nt, nb, max_norm)
+    lamb_upd(ex, P, G, M, V, U, scal, n, clip, flags, b1, b2, eps, wd, bc1, bc2)
     if wd != Float32(0.0) or (flags & 2) != 0:
-        var q = Args()
-        q.p0 = P
-        q.p1 = U
-        q.p2 = TAB
-        q.p3 = partsA
-        q.p4 = partsB
-        q.i0 = nt
-        q.i1 = 1
-        q.i2 = AF_NORM_BLOCK
-        ex.launch[OP_LAMB_BLK](q, nb)
-        var r = Args()
-        r.p0 = partsA
-        r.p1 = partsB
-        r.p2 = TAB
-        r.p3 = ratio
-        r.i0 = flags & 1
-        r.i1 = nt
-        ex.launch[OP_LAMB_TRUST](r, nt)
+        lamb_trust(ex, P, U, TAB, partsA, partsB, ratio, nt, nb, flags)
     else:
-        var f = Args()
-        f.p0 = ratio
-        f.f0 = Float32(1.0)
-        ex.launch[OP_FILL](f, nt)
-    var ap = Args()
-    ap.p0 = P
-    ap.p1 = U
-    ap.p2 = ratio
-    ap.p3 = TAB
-    ap.i0 = nt
-    ap.f0 = lr
-    ex.launch[OP_LAMB_APPLY_ALL](ap, n)
-
+        lamb_unit_ratio(ex, ratio, nt)
+    lamb_apply(ex, P, U, ratio, TAB, nt, n, lr)

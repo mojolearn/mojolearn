@@ -72,6 +72,11 @@ from autograd.nn_optim import (
     NN_OPT_ADAGRAD, NN_SCHED_MULTI_STEP, NN_SCHED_PLATEAU, NnLamb, NnPlateau, nn_epoch_lr, nn_multi_step_count,
     nn_opt_step, nn_optim_admit, nn_sched_per_step, nn_step_lrs,
 )
+# nn-blocks-pgseq begin: Sequential.compile's parameter groups (one step a run of one group's tensors)
+from autograd.nn_pgseq import (
+    PgSeqLamb, PgSeqState, PgSeqTable, pgseq_admit_fit, pgseq_fill_accumulators, pgseq_step,
+)
+# nn-blocks-pgseq end
 
 # Tape.dropout is part of the native tape. Its mask is keyed by seed,
 # optimizer step and layer, including across checkpoint/resume.
@@ -698,6 +703,8 @@ struct FitConfig(Copyable, Movable):
     # parameter tensors' offsets (LAMB's per-tensor trust ratios; empty: one tensor)
     var sched_args: List[Float64]
     var tensor_offs: List[Int]
+    # nn-blocks-pgseq: the parameter groups (autograd/nn_pgseq.mojo; empty: none, the single-launch step)
+    var groups: PgSeqTable
 
     def __init__(
         out self, loss: Int, target: Int, opt: OptConfig, lr: Float32, sched: Int, sched_step: Int,
@@ -724,6 +731,7 @@ struct FitConfig(Copyable, Movable):
         self.init = init
         self.sched_args = sched_args^
         self.tensor_offs = tensor_offs^
+        self.groups = PgSeqTable()
 
 
 @fieldwise_init
@@ -1331,6 +1339,18 @@ def model_lr(cfg: FitConfig, epoch: Int) -> Float32:
     return epoch_lr(cfg.lr, cfg.sched, cfg.sched_step, cfg.sched_gamma, epoch)
 
 
+def model_epoch_lr(cfg: FitConfig, base: Float32, epoch: Int) raises -> Float32:
+    """The rate of zero-based epoch `epoch` of cfg's per-epoch schedule from the base rate `base` (cfg.lr, or a
+    parameter group's own rate: one schedule scales every group, as a torch scheduler scales each group's
+    initial rate). reduce_on_plateau's rate is the fit's state, not this value."""
+    if cfg.sched == NN_SCHED_MULTI_STEP:
+        # torch MultiStepLR: lr gamma^k, k the milestones passed (epoch_lr's exponential form at epoch k)
+        return epoch_lr(base, SCHED_EXPONENTIAL, 1, cfg.sched_gamma, nn_multi_step_count(cfg.sched_args, epoch))
+    if cfg.sched > NN_SCHED_MULTI_STEP and cfg.sched != NN_SCHED_PLATEAU:
+        return nn_epoch_lr(cfg.sched, base, cfg.sched_args, epoch)
+    return epoch_lr(base, cfg.sched, cfg.sched_step, cfg.sched_gamma, epoch)
+
+
 # ---------------------------------------------------------------- resumable state
 # The state a fit carries from one epoch to the next beyond the parameters
 # and the two optimizer buffers: one int64 word each, floats by their bits.
@@ -1584,11 +1604,21 @@ def model_fit_state[E: Exec](
         # read by sgd, momentum, adam or adamw, nor by this lane's optimizers: autograd/nn_optim.mojo)
         ex.upload(s1, Mio, np_)
         ex.upload(s2, Vio, np_)
-    elif cfg.opt.kind == NN_OPT_ADAGRAD and cfg.opt.f2 != Float32(0):
+    elif cfg.opt.kind == NN_OPT_ADAGRAD and cfg.opt.f2 != Float32(0) and not cfg.groups.on():
         # torch Adagrad's initial_accumulator_value: the sum starts there (one fill a fit)
         _fill(ex, s2, np_, cfg.opt.f2)
     # lane nn-optim: LAMB's buffers and tensor table, once a fit (nothing for the other optimizers)
     var lamb = NnLamb(ex, cfg.opt, cfg.tensor_offs, np_)
+    # nn-blocks-pgseq begin: the parameter groups, resolved once a fit (nothing without groups): each group's
+    # running products from the step count, LAMB's per-run tables, adagrad's starting sums per group
+    var grouped = cfg.groups.on()
+    pgseq_admit_fit(cfg.groups, cfg.sched)
+    var pg_state = PgSeqState(cfg.groups, step)
+    var pg_lamb = PgSeqLamb(ex, cfg.groups)
+    var pg_rates = List[Float32](length=cfg.groups.groups(), fill=Float32(0))
+    if grouped and not resume:
+        pgseq_fill_accumulators(ex, cfg.groups, s2)
+    # nn-blocks-pgseq end
     var didx = ex.alloc(N)
     var xb = ex.alloc(bs * D)
     var yb = ex.alloc(bs * TW)
@@ -1608,6 +1638,11 @@ def model_fit_state[E: Exec](
     var step_lrs = List[Float32]()
     if per_step:
         step_lrs = nn_step_lrs(cfg.sched, cfg.lr, cfg.sched_args, step + 1, cfg.epochs * n_batches)
+    # nn-blocks-pgseq: a per-step schedule's rates for every group, filled once (empty without groups)
+    var pg_step_lrs = List[List[Float32]]()
+    if per_step and grouped:
+        for g in range(cfg.groups.groups()):  # driver-loop: over parameter groups (once per fit)
+            pg_step_lrs.append(nn_step_lrs(cfg.sched, cfg.groups.lrs[g], cfg.sched_args, step + 1, cfg.epochs * n_batches))
     var plateau_on = cfg.sched == NN_SCHED_PLATEAU
     var dloss = ex.alloc(n_batches)
     var dcurve = ex.alloc(cfg.epochs)
@@ -1689,14 +1724,11 @@ def model_fit_state[E: Exec](
             var ia = Args()
             ia.p0 = didx
             ex.launch[OP_SEQ_IOTA](ia, N)
-        var lr = model_lr(cfg, epoch)
-        if cfg.sched == NN_SCHED_MULTI_STEP:
-            # torch MultiStepLR: lr gamma^k, k the milestones passed (epoch_lr's exponential form at epoch k)
-            lr = epoch_lr(cfg.lr, SCHED_EXPONENTIAL, 1, cfg.sched_gamma, nn_multi_step_count(cfg.sched_args, epoch))
-        elif plateau_on:
-            lr = Float32(plateau.lr)
-        elif cfg.sched > NN_SCHED_MULTI_STEP:
-            lr = nn_epoch_lr(cfg.sched, cfg.lr, cfg.sched_args, epoch)
+        # the epoch's rate (lane nn-blocks-pgseq: one body, model_epoch_lr, for the fit's rate and each group's)
+        var lr = Float32(plateau.lr) if plateau_on else model_epoch_lr(cfg, cfg.lr, epoch)
+        if grouped:
+            for g in range(cfg.groups.groups()):  # driver-loop: over parameter groups (a rate a group an epoch)
+                pg_rates[g] = model_epoch_lr(cfg, cfg.groups.lrs[g], epoch)
         # the order changes only when shuffling: an unshuffled fit keeps epoch 0's copy
         if epoch_gather and (cfg.shuffle or e == 0):
             gather_epoch(ex, dX, dY, didx, N, D, TW, Xp, Yp)
@@ -1766,7 +1798,14 @@ def model_fit_state[E: Exec](
                 _copy(ex, Sv + so, P + ranges[2 * r], ranges[2 * r + 1])
                 so += ranges[2 * r + 1]
             var step_lr = step_lrs[step - step0 - 1] if per_step else lr
-            nn_opt_step(ex, cfg.opt, st, step, step_lr, P, Gr, s1, s2, s3, np_, lamb)
+            if grouped:
+                # nn-blocks-pgseq: one step a run of one group's tensors, each at its group's rate
+                if per_step:
+                    for g in range(cfg.groups.groups()):  # driver-loop: over parameter groups (a rate a group)
+                        pg_rates[g] = pg_step_lrs[g][step - step0 - 1]
+                pgseq_step(ex, cfg.groups, pg_state, step, pg_rates, P, Gr, s1, s2, s3, lamb, pg_lamb)
+            else:
+                nn_opt_step(ex, cfg.opt, st, step, step_lr, P, Gr, s1, s2, s3, np_, lamb)
             so = 0
             for r in range(len(ranges) // 2):  # driver-loop: over state ranges (at most one a batch-norm layer)
                 _copy(ex, P + ranges[2 * r], Sv + so, ranges[2 * r + 1])
@@ -1863,9 +1902,13 @@ def model_fit_state[E: Exec](
     St[FS_PL_BAD] = Int64(plateau.bad) if plateau_on else Int64(0)
     St[FS_PL_COOL] = Int64(plateau.cool) if plateau_on else Int64(0)
     lamb.release(ex)
+    pg_lamb.release(ex)  # nn-blocks-pgseq
     tape.release(ex)
     epoch_tape.release(ex)
     _ = word^
+    _ = pg_rates^
+    _ = pg_step_lrs^
+    _ = pg_state^
     return n_iter
 
 

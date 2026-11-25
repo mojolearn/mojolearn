@@ -22,6 +22,9 @@ from autograd.model import FIT_STATE_WORDS, parse_model
 from autograd.model_execution import model_float_words
 from autograd.model_verify import model_input_id_range
 from autograd.nn_optim import NN_SCHED_ARGS
+# nn-blocks-pgseq begin
+from bindings.nn_pgseq_compile_pack import pgseq_door_words, pgseq_resolved_options, pgseq_words_tuple
+# nn-blocks-pgseq end
 
 
 def _report_array(value: PythonObject, name: String, input: Bool, entries: PythonObject, id_range: Int = 0) raises -> String:
@@ -135,6 +138,17 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
     if sched_args is not None and len(sched_args) == NN_SCHED_ARGS:
         for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
             fp.append(Float64(py=sched_args[k]))
+    # nn-blocks-pgseq begin: the parameter groups' per-tensor table after the schedule's words (the record keeps
+    # it; a load gives it back as the compile options' param_groups)
+    var param_groups = py_get(options, PythonObject("param_groups"))
+    if param_groups is not None:
+        if not (sched_args is not None and len(sched_args) == NN_SCHED_ARGS):
+            for _ in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words, none given)
+                fp.append(0.0)
+        var group_words = pgseq_door_words(param_groups, program, description[].scalars)
+        for k in range(len(group_words)):  # driver-loop: over the group words (once per save)
+            fp.append(group_words[k])
+    # nn-blocks-pgseq end
     _ = description_owner^
     var entries = sequential_entries(model, context)
     mods.released()
@@ -206,6 +220,14 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
         for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
             _ = py_call(words.append, PythonObject(fp[9 + k]))
         py_setitem(options, nk[].k_sched_args, py_call(b.tuple, words))
+    # nn-blocks-pgseq begin: the saved parameter groups (their per-tensor table) after the schedule's words
+    if len(fp) > 9 + NN_SCHED_ARGS:
+        var saved = List[Float64]()
+        for k in range(9 + NN_SCHED_ARGS, len(fp)):  # driver-loop: over the saved group words (load, once)
+            saved.append(fp[k])
+        py_setitem(options, PythonObject("param_groups"), pgseq_resolved_options(saved))
+        py_setitem(fields, PythonObject("_param_groups"), pgseq_words_tuple(saved))  # training_digest_
+    # nn-blocks-pgseq end
     py_setitem(fields, nk[].k__options, options)
     var params = sequential_array(mods, Python.tuple(ip[16]), py_item(context, nk[].k_float32), context)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).

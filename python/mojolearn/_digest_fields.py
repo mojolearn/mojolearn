@@ -231,7 +231,9 @@ TRAINING = (
 TRAINING_EXTRA_BY_NAME = {
     # bindings/sequential_execution_pack.mojo: the optimizer and row-order counters, the curve buffer, the
     # batch size, shuffle flag and target code of the fit (sequential_checkpoint_door.mojo writes them)
-    "Sequential": ("_fit_state", "_curve", "_fit_batch", "_fit_shuffle", "_target"),
+    "Sequential": ("_fit_state", "_curve", "_fit_batch", "_fit_shuffle", "_target",
+                   # nn-blocks-pgseq: compile's parameter groups as the fit resolved them (per-tensor table)
+                   "_param_groups"),
 }
 
 #: Save-schema members that are training records or run settings: `answer_steps`

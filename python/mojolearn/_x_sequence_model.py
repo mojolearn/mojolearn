@@ -1620,7 +1620,8 @@ class Sequential(_CheckMixin):
                 milestones=None, T_max=None, eta_min=0.0, T_0=None, T_mult=1,
                 warmup_steps=0, total_steps=None, pct_start=0.3, anneal_strategy="cos",
                 div_factor=25.0, final_div_factor=1e4, three_phase=False,
-                factor=0.1, patience=10, threshold=1e-4, cooldown=0, min_lr=0.0, cycle_momentum=True):
+                factor=0.1, patience=10, threshold=1e-4, cooldown=0, min_lr=0.0, cycle_momentum=True,
+                param_groups=None, no_decay=None):
         """Choose the loss, optimizer and learning-rate schedule.
 
         Parameters
@@ -1767,6 +1768,27 @@ class Sequential(_CheckMixin):
         factor, patience, threshold, cooldown, min_lr
             ``'reduce_on_plateau'``: as ``ReduceLROnPlateau`` (defaults 0.1,
             10, 1e-4 relative, 0, 0).
+        param_groups : list of dict or None, default None
+            Optimizer settings per group of parameters, as PyTorch's
+            ``param_groups``: each dict names its parameters with
+            ``"layers"`` (layer indices, every parameter of those layers) or
+            ``"params"`` (parameter names as :meth:`state_dict` gives them,
+            such as ``"2.weight"``), and may set ``"lr"``,
+            ``"weight_decay"`` and the optimizer's own settings
+            (``"momentum"`` and ``"nesterov"`` for ``'momentum'``;
+            ``"betas"`` or ``"beta1"`` / ``"beta2"`` and ``"eps"`` for
+            ``'adam'``, ``'adamw'`` and ``'lamb'``; ``"alpha"``, ``"eps"``,
+            ``"momentum"`` and ``"centered"`` for ``'rmsprop'``; ``"eps"``,
+            ``"lr_decay"`` and ``"initial_accumulator_value"`` for
+            ``'adagrad'``). Parameters no group names keep the settings
+            passed to ``compile``. A parameter belongs to one group. The
+            schedule scales every group's rate from that group's own
+            ``lr``; ``'lamb'``'s gradient clip (``max_grad_norm``) is one
+            norm over every group's gradients. Not available with
+            ``'reduce_on_plateau'``.
+        no_decay : str or list of str or None, default None
+            Parameter-name endings (``"bias"``) whose parameters train with
+            ``weight_decay=0`` in whatever group they belong to.
 
         Returns
         -------
@@ -1780,11 +1802,14 @@ class Sequential(_CheckMixin):
         >>> model = model.compile(loss="huber", optimizer="momentum", lr=0.01, nesterov=True)
         >>> model = model.compile(loss="smooth_l1", beta=0.5, reduction="sum")
         >>> model = model.compile(optimizer="rmsprop", lr=0.01, schedule="cosine", T_max=20)
+        >>> model = model.compile(optimizer="adamw", lr=1e-3, weight_decay=0.01, no_decay="bias",
+        ...                       param_groups=[{"layers": [2], "lr": 1e-2}])
         """
         # two tuples of at most 30 values: CPython builds a longer tuple literal through a list (BUILD_LIST and
         # LIST_APPEND), work in the wrapper; the native UNPACK joins them (lane nn-integrate, 2026-11-23)
         return _SEQUENTIAL_ENTRY(self, "compile", ((loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change, reduction, pos_weight, beta, blank, zero_infinity),
-                                                   (alpha, centered, lr_decay, initial_accumulator_value, max_grad_norm, trust_clip, always_adapt, milestones, T_max, eta_min, T_0, T_mult, warmup_steps, total_steps, pct_start, anneal_strategy, div_factor, final_div_factor, three_phase, factor, patience, threshold, cooldown, min_lr, cycle_momentum)), _SEQUENTIAL_CONTEXT)
+                                                   (alpha, centered, lr_decay, initial_accumulator_value, max_grad_norm, trust_clip, always_adapt, milestones, T_max, eta_min, T_0, T_mult, warmup_steps, total_steps, pct_start, anneal_strategy, div_factor, final_div_factor, three_phase, factor, patience, threshold, cooldown, min_lr, cycle_momentum),
+                                                   (param_groups, no_decay)), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ description
     def _program(self, n_features, sample=None):
