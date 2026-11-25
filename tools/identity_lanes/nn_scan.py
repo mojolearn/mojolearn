@@ -85,6 +85,16 @@ def _(ml, X, yc, yr, Xh=None):
                 for k, name in enumerate(("ys", "h_T", "c_T")):  # driver-loop: over the three outputs
                     _same_bytes("Session.scan " + name, eager[k], "load_program(save).run " + name,
                                 np.asarray(again[k]))
+        # a dropout in a cell: per-step masks under two keys and two lengths (sabotage arms
+        # coverage-autograd-nn_scan_drop_key_gpu / _cpu reuse the captured seed: this part moves)
+        hd = c.tensor(np.zeros((B, 16), np.float32))
+        xd = c.tensor(np.zeros((B, 16), np.float32))
+        yd = c.dropout(xd, 0.5, seed=11, counter=2)
+        dcell = c.capture(inputs=[hd, xd], outputs=[c.add(hd, yd), yd])
+        d0 = c.tensor(np.zeros((B, 16), np.float32))
+        masks = [np.asarray(c.numpy(c.scan(dcell, c.tensor(np.ones((n, B, 16), np.float32)), d0, counter=k)[0]))
+                 for n, k in ((T, 0), (T, 1), (2, 1))]  # glue: three calls
+        parts["dropout"] = _h(*masks)
     return _fit(parts)
 
 

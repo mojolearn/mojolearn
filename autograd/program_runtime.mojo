@@ -6,7 +6,7 @@ from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 from sequence.fit_loop_words import fit_loop_publish
 from std.memory import bitcast
 from sequence.ops import FP, Args, OP_COPY, OP_SEQ_IOTA
-from autograd.ops_api import OpsSession, OPS_DROPOUT
+from autograd.ops_api import OpsSession
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape
 from autograd.program_choice import ProgramChoice, conditional_program
 from autograd.program_replay_metadata import PreparedProgramReplay
@@ -85,7 +85,7 @@ def replay_values_prepared[E: Exec & Movable & Deinitable](
             var rf = p.args[j]
             hs.append(phs[-rf - 1] if rf < 0 else vals[rf])
         ref node = prepared.nodes[k]
-        if p.code[k] == OPS_DROPOUT:
+        if node.random:  # dropout, or a scan's key (nn-blocks-scan; autograd/program_replay_metadata.mojo)
             if step >= 0:
                 # Advance from the original captured key, never from the prior
                 # replay's updated counter. Preserve branch/node separation.

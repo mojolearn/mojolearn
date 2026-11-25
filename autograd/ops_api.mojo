@@ -184,7 +184,8 @@ from autograd.nn_scatter import (
 # nn-blocks-scan begin: the public scan over a captured cell, session code 118 (autograd/nn_scan.mojo)
 from autograd.nn_scan import (
     OPS_SCAN, ScanSpec, scan_decode, scan_check_binding, SCAN_SABOTAGE_STATE_LAG, SCAN_SABOTAGE_STATE_LAG_HOST,
-    SCAN_SABOTAGE_INIT_GRAD, SCAN_SABOTAGE_INIT_GRAD_HOST,
+    SCAN_SABOTAGE_INIT_GRAD, SCAN_SABOTAGE_INIT_GRAD_HOST, SCAN_SABOTAGE_DROP_KEY, SCAN_SABOTAGE_DROP_KEY_HOST,
+    scan_dropout_seed,
 )
 # nn-blocks-scan end
 
@@ -2971,14 +2972,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             for j in range(cell.f_at[k], cell.f_at[k + 1]):  # small-loop(fs: a node's float arguments)
                 nf.append(cell.fs[j])
             node_fs.append(nf^)
-        # Dropout nodes (OPS_DROPOUT 21: ints [seed lo, seed hi, counter]) draw a new mask every step: their
-        # captured counters, and the per-step offsets (autograd/nn_scan.mojo note).
+        # Dropout nodes (OPS_DROPOUT 21: ints [seed lo, seed hi, counter]) draw a new mask every step: a seed
+        # derived from (captured seed, the call's key, the node, the time index) (autograd/nn_scan.mojo note).
         var drop_nodes = List[Int]()
-        var drop_counter = List[Int]()
+        var drop_seed = List[UInt64]()
         for k in range(n_nodes):  # driver-loop: over cell nodes (dropout ones), once per call
             if cell.code[k] == OPS_DROPOUT and len(node_ints[k]) >= 3:
                 drop_nodes.append(k)
-                drop_counter.append(node_ints[k][2])
+                drop_seed.append((UInt64(node_ints[k][1]) << 32) | UInt64(node_ints[k][0] & 0xFFFFFFFF))
         var steps = xs_shape.d[0]
         var batch = xs_shape.d[1]
         var x_dims = cell.in_shapes[n_state].dims()
@@ -3060,9 +3061,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     for k in range(n_state):  # driver-loop: over state tensors (this step's handles)
                         vals.append(state[k])
                 vals.append(x_t)
-                for q in range(len(drop_nodes)):  # driver-loop: over the cell's dropout nodes (this step's counters)
+                for q in range(len(drop_nodes)):  # driver-loop: over the cell's dropout nodes (this step's seeds)
                     var dk = drop_nodes[q]
-                    node_ints[dk][2] = drop_counter[q] + (spec.counter * steps + t) * n_nodes + dk
+                    var seed = scan_dropout_seed(drop_seed[q], spec.key, dk, t)
+                    comptime if (SCAN_SABOTAGE_DROP_KEY and Self.E.IS_DEVICE) or (
+                            SCAN_SABOTAGE_DROP_KEY_HOST and not Self.E.IS_DEVICE):
+                        seed = drop_seed[q]  # SABOTAGE: the captured seed at every step and key
+                    node_ints[dk][0] = Int(seed & UInt64(0xFFFFFFFF))
+                    node_ints[dk][1] = Int(seed >> 32)
                 for k in range(n_nodes):  # driver-loop: over the cell's nodes (one step's launch sequence)
                     args.clear()
                     for j in range(cell.a_at[k], cell.a_at[k + 1]):  # small-loop(args: a node's input refs)
