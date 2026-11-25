@@ -142,3 +142,19 @@ index 37d54f7c61..f2100d96f1 100644
  
  
  @always_inline
+diff --git a/metrics/host/r2_entry_host.mojo b/metrics/host/r2_entry_host.mojo
+index e20fe10245..ad5a30429e 100644
+--- a/metrics/host/r2_entry_host.mojo
++++ b/metrics/host/r2_entry_host.mojo
+@@ -58,6 +58,11 @@ def metrics_r2_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
+             var yh = f32_ptr(a[1])
+             regression_inputs_finite(y, yh, n)
+             value = host_regression_error_ptr(y, yh, n, operation == MR_MAE, operation == MR_RMSE)
++            from std.sys import is_defined
++            from std.memory import bitcast
++            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-cpu (coverage-gate-x_metrics-store-cpu, lane w3-fix-10-s3): the search RUN's MSE/MAE/RMSE kernel answer one ulp up, the host bindings only
++                if abs(value) >= Float32(1.17549435e-38) and value - value == Float32(0):
++                    value = bitcast[DType.float32](bitcast[DType.uint32](value) + UInt32(1))
+             MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[2])[] = Float64(value)
+         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = 0
+         return 0
