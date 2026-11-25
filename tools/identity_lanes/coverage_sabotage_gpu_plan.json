@@ -15,7 +15,8 @@
      "psd-forecast-arima",
      "generic-attrs-other",
      "generic-digest-other",
-     "generic-pickle-other"
+     "generic-pickle-other",
+     "check-generic-other"
     ]
    },
    "arms": [
@@ -41,7 +42,8 @@
     "psd-forecast-arima",
     "generic-attrs-other",
     "generic-digest-other",
-    "generic-pickle-other"
+    "generic-pickle-other",
+    "check-generic-other"
    ],
    "patches": [
     "arima/sabotage/gate_kalman_mv_gpu.patch"
