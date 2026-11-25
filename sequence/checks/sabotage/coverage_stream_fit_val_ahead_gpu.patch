@@ -1,0 +1,13 @@
+diff --git a/sequence/recurrent.mojo b/sequence/recurrent.mojo
+index db57384dfc..a973274a6b 100644
+--- a/sequence/recurrent.mojo
++++ b/sequence/recurrent.mojo
+@@ -930,7 +930,7 @@ def rnn_fit[E: Exec, //, S: RnnStep](
+ #:   first) has trained.
+ comptime STREAM_FIT_SABOTAGE_CW_BATCH = is_defined["MOJOLEARN_STREAM_FIT_SABOTAGE_CW_BATCH"]()
+ comptime STREAM_FIT_SABOTAGE_CW_BATCH_HOST = is_defined["MOJOLEARN_STREAM_FIT_SABOTAGE_CW_BATCH_HOST"]()
+-comptime STREAM_FIT_SABOTAGE_VAL_AHEAD = is_defined["MOJOLEARN_STREAM_FIT_SABOTAGE_VAL_AHEAD"]()
++comptime STREAM_FIT_SABOTAGE_VAL_AHEAD = True  # SABOTAGE
+ comptime STREAM_FIT_SABOTAGE_VAL_AHEAD_HOST = is_defined["MOJOLEARN_STREAM_FIT_SABOTAGE_VAL_AHEAD_HOST"]()
+ 
+ def rnn_fit_stream[E: Exec, //, S: RnnStep](
