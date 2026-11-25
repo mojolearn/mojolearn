@@ -186,6 +186,9 @@ struct ParallelKeys(Defaultable, Movable):
     var k__kernel: PythonObject
     var k__label_names: PythonObject
     var k__lifetime: PythonObject
+    #: the interned "close_quiet" operation name (`_RemoteBlock.__del__`): parallel_causal_c
+    #: tells a finalizer's call by identity, with no module read (lane gs-fix)
+    var k_close_quiet: PythonObject
     var k__lock: PythonObject
     var k__max_iter_predict: PythonObject
     var k__metric_arg: PythonObject
@@ -491,6 +494,7 @@ struct ParallelKeys(Defaultable, Movable):
         self.k__kernel = PythonObject(None)
         self.k__label_names = PythonObject(None)
         self.k__lifetime = PythonObject(None)
+        self.k_close_quiet = PythonObject(None)
         self.k__lock = PythonObject(None)
         self.k__max_iter_predict = PythonObject(None)
         self.k__metric_arg = PythonObject(None)
@@ -794,6 +798,7 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k__kernel = py_key("_kernel")
     nk[].k__label_names = py_key("_label_names")
     nk[].k__lifetime = py_key("_lifetime")
+    nk[].k_close_quiet = py_key("close_quiet")
     nk[].k__lock = py_key("_lock")
     nk[].k__max_iter_predict = py_key("_max_iter_predict")
     nk[].k__metric_arg = py_key("_metric_arg")

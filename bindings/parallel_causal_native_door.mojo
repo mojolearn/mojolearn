@@ -12,7 +12,7 @@ from bindings.neural_block_public_door import neural_block_owner, neural_block_a
 from bindings.causal_model_config_door import config_load_binding, model_plan_for_binding, model_plan_snapshot, model_record_fields, model_dict, model_plain, model_sequence, model_string
 from bindings.causal_operation_owner_door import causal_snapshot_fields, _causal_namespace, causal_model_capture, causal_model_publish
 from bindings.mode_metadata_native_door import _fields
-from bindings.native_loaded_module_door import native_loaded_module, NativeModules
+from bindings.native_loaded_module_door import native_loaded_module, NativeModules, native_interpreter_finalizing
 from bindings.causal_checkpoint_door import checkpoint_open_binding, checkpoint_close_binding
 from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from bindings.native_json_door import native_path, native_path_exists
@@ -43,6 +43,7 @@ from core.shared_slot import SharedSlot
 from std.collections import Dict
 from bindings.parallel_keys_unpack import (
     parallel_keys,
+    _PARALLEL_KEYS,
     PARALLEL_CAUSAL_OPN_ALLOCATE_LAYER,
     PARALLEL_CAUSAL_OPN_BLOCK_ALLOCATE,
     PARALLEL_CAUSAL_OPN_BLOCK_CALL,
@@ -1057,6 +1058,14 @@ struct RemoteStateLifetime(Movable, Writable):
         if self.released or self.token is None:
             return
         try:
+            # During interpreter teardown the release is skipped (the process
+            # is ending, the workers go with it): NativeModules' first module
+            # read is a fatal "PyImport_GetModuleDict: interpreter has no
+            # modules dictionary" once sys.modules is cleared, not a raise
+            # this `except` could catch (psd-causal-lm(-text) rc -6 at exit,
+            # L40S smoke of main 3cd641b37e; lane gs-fix).
+            if native_interpreter_finalizing():
+                return
             # A finalizer is its own operation: it admits its modules afresh.
             var mods = NativeModules()
             _parallel_causal_release_token(mods, self.layer, self.token)
@@ -1450,6 +1459,19 @@ def parallel_causal_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
     var args = PythonObject(from_borrowed=args_ptr)
     var operation = -1
     try:
+        # A finalizer's close (`_RemoteBlock.__del__` -> "close_quiet", the
+        # interned literal, told by identity) during interpreter teardown
+        # releases nothing, as RemoteStateLifetime.__deinit__: every module
+        # read below is fatal once sys.modules is cleared (rc -6, lane
+        # gs-fix). Before the key table is filled no block was made through
+        # this door, so nothing is fetched or filled then. Per ordinary call:
+        # the slot fetch parallel_keys() makes below, one flag test and one
+        # pointer compare; the finalizing query runs only for close_quiet.
+        var keys = _PARALLEL_KEYS.get_or_create_ptr()
+        if keys[].ready and args[0]._obj_ptr == keys[].k_close_quiet._obj_ptr:
+            if native_interpreter_finalizing():
+                var quiet = PythonObject(None)
+                return quiet.steal_data()
         model_sequence(mods, args)
         # model_string's exact-str refusal, without building the String: the
         # name is one lookup of the caller's own str in the operation table.
