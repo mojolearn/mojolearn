@@ -1,5 +1,5 @@
 {
- "audit_head": "c4c08dd0dc41e23b983a63dfa1b3d073bb730074",
+ "audit_head": "71982149e2115780673ecb6a3084f0ff2ed45374",
  "batches": [
   {
    "arm_lanes": {
@@ -2817,6 +2817,33 @@
   },
   {
    "arm_lanes": {
+    "coverage-gate-training-clip_finish-gpu": [
+     "fn-training-clip-grad-norm"
+    ]
+   },
+   "arms": [
+    "coverage-gate-training-clip_finish-gpu"
+   ],
+   "builds": [
+    "build_training"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "training",
+   "id": "training-2",
+   "lanes": [
+    "fn-training-clip-grad-norm"
+   ],
+   "patches": [
+    "training/checks/sabotage/gate_clip_finish_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
     "coverage-gate-training-step_scalars-gpu": [
      "fn-training-accumulate-grads",
      "fn-training-chunked-lm-head-loss",
@@ -2848,7 +2875,7 @@
     "device"
    ],
    "family": "training",
-   "id": "training-2",
+   "id": "training-3",
    "lanes": [
     "fn-training-accumulate-grads",
     "fn-training-chunked-lm-head-loss",
@@ -2892,7 +2919,7 @@
     "device"
    ],
    "family": "training",
-   "id": "training-3",
+   "id": "training-4",
    "lanes": [
     "optim-resident-io"
    ],
@@ -2921,7 +2948,7 @@
     "device"
    ],
    "family": "training",
-   "id": "training-4",
+   "id": "training-5",
    "lanes": [
     "optim-io-capability"
    ],
@@ -2949,7 +2976,7 @@
     "device"
    ],
    "family": "training",
-   "id": "training-5",
+   "id": "training-6",
    "lanes": [
     "training-chunked-lm-head"
    ],
@@ -2976,7 +3003,7 @@
     "device"
    ],
    "family": "training",
-   "id": "training-6",
+   "id": "training-7",
    "lanes": [
     "samba-untied-dropout-accum"
    ],
@@ -3004,7 +3031,7 @@
     "device"
    ],
    "family": "training",
-   "id": "training-7",
+   "id": "training-8",
    "lanes": [
     "samba-optimizer-state",
     "samba"
@@ -3034,7 +3061,7 @@
     "device"
    ],
    "family": "training",
-   "id": "training-8",
+   "id": "training-9",
    "lanes": [
     "public-residual-dropout"
    ],
@@ -3063,40 +3090,13 @@
     "device"
    ],
    "family": "training",
-   "id": "training-9",
+   "id": "training-10",
    "lanes": [
     "grad-accumulation",
     "ordered-gradient-sum"
    ],
    "patches": [
     "training/checks/sabotage/coverage_samba_accumulate_out.patch"
-   ],
-   "sides": [
-    "gpu"
-   ]
-  },
-  {
-   "arm_lanes": {
-    "coverage-gate-training-clip_finish-gpu": [
-     "fn-training-clip-grad-norm"
-    ]
-   },
-   "arms": [
-    "coverage-gate-training-clip_finish-gpu"
-   ],
-   "builds": [
-    "build_training"
-   ],
-   "columns": [
-    "device"
-   ],
-   "family": "training",
-   "id": "training-10",
-   "lanes": [
-    "fn-training-clip-grad-norm"
-   ],
-   "patches": [
-    "training/checks/sabotage/gate_clip_finish_gpu.patch"
    ],
    "sides": [
     "gpu"
