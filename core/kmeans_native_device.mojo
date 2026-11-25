@@ -85,7 +85,12 @@ struct KMeansDeviceKernels(KMeansNativeKernels):
         var source = _f32(r.source)
         var centers = _f32(r.centers)
         var labels = _u32(r.labels)
-        var weights = _f32(r.weights)
+        # Unit weights are weight_count 0 with no address (the door passes 0
+        # since 039e4ac50d; the member's _weights does too): kmeans_fit never
+        # reads weights_ptr then (cluster/estimator.mojo rule 5), so the
+        # source stands in, as in score below. A count with no address is
+        # still refused.
+        var weights = _f32(r.weights) if r.weight_count != 0 else source
         var distances = Optional[MutPointer[Float32, MutUntrackedOrigin]]()
         if r.distances != 0:
             distances = Optional[MutPointer[Float32, MutUntrackedOrigin]](_f32(r.distances))
