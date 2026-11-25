@@ -1477,21 +1477,8 @@ def device_first_seen_on(
 # ===========================================================================
 
 
-def device_strat_fold_assign_i32(
-    ctx: DeviceContext, enc_addr: Int, n: Int, k: Int, n_folds: Int, alloc_addr: Int,
-    perms_addr: Int, counts_addr: Int, dst_addr: Int,
-) raises -> Bool:
-    """`strat_fold_assign_i32` over the n host first-seen codes at
-    `enc_addr`, fold ids to the host `dst_addr`: the codes go up and
-    `device_strat_fold_assign_on` runs. False (nothing written) when the
-    tables are inconsistent or a class code is out of range: the binding
-    reruns the host helper."""
-    var d_enc = ctx.enqueue_create_buffer[DType.int32](n)
-    ctx.enqueue_copy(dst_buf=d_enc, src_ptr=_I32(unsafe_from_address=enc_addr))
-    var ok = device_strat_fold_assign_on(ctx, Int(d_enc.unsafe_ptr()), n, k, n_folds, alloc_addr, perms_addr,
-                                         counts_addr, dst_addr, 0, 0)
-    _ = d_enc^  # the device address above is not an owner
-    return ok
+# TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
+# Restore: git apply experiments/removed/dead_export_strat_fold_assign_i32.patch
 
 
 def device_strat_fold_assign_res(

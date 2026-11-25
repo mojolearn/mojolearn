@@ -24,8 +24,7 @@ five off):
   IDN_HPDEV_FOLDS   -D MOJOLEARN_IDN_HPDEV_FOLDS_OFF   fold_ids,
                     select_fold_i64, select_folds_i64, select_mask_u8_i64,
                     mask_from_indices_u8, arange_i64, leave_range_i64,
-                    check_indices_i64, first_seen_i32,
-                    strat_fold_assign_i32
+                    check_indices_i64, first_seen_i32
   IDN_HPDEV_REDUCE  -D MOJOLEARN_IDN_HPDEV_REDUCE_OFF  reduce_stat's min,
                     max, argmax and integral test (the sequential float
                     sum stays the host helper's)
@@ -109,7 +108,7 @@ from core.msel_helpers_device import (
     arange_i64_device_run, count_mask_u8_device_run, first_seen_i32_device_run, fold_ids_device_run,
     leave_range_i64_device_run, mask_from_indices_u8_device_run,
     msel_gather_device_run, select_fold_i64_device_run, select_folds_i64_device_run,
-    select_mask_u8_i64_device_run, strat_fold_assign_i32_device_run,
+    select_mask_u8_i64_device_run,
 )
 
 
@@ -367,25 +366,8 @@ def check_indices_i64_binding(
     return PythonObject(status)
 
 
-def strat_fold_assign_i32_binding(
-    enc_addr: PythonObject, n: PythonObject, k: PythonObject, n_folds: PythonObject,
-    alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject,
-    dst_addr: PythonObject,
-) raises -> PythonObject:
-    """`strat_fold_assign_i32`, on the device
-    (`core/msel_helpers_device.mojo::strat_fold_assign_i32_device_run`)."""
-    var rows = Int(py=n)
-    var kk = Int(py=k)
-    var K = Int(py=n_folds)
-    var ea = Int(py=enc_addr)
-    var aa = Int(py=alloc_addr)
-    var pa = Int(py=perms_addr)
-    var ca = Int(py=counts_addr)
-    var da = Int(py=dst_addr)
-    var status = 0
-    with GILReleased(Python()):
-        status = strat_fold_assign_i32_device_run(ea, rows, kk, K, aa, pa, ca, da)
-    return PythonObject(status)
+# TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
+# Restore: git apply experiments/removed/dead_export_strat_fold_assign_i32.patch
 
 
 # ---------------------------------------------------------------------------

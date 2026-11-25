@@ -135,7 +135,6 @@ from bindings.hotpath_helpers_door import (
     scatter_rows_bytes_host_binding,
     uniform_init_f32_binding,
     normal_init_f32_binding,
-    strat_fold_assign_i32_binding,
 )
 from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
 from bindings.array_helpers_pack import (
@@ -1013,7 +1012,8 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[uniform_init_f32_binding]("uniform_init_f32")
         # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/adam_hyper_f64.patch
-        module.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
+        # TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
+        # Restore: git apply experiments/removed/dead_export_strat_fold_assign_i32.patch
         # bincount2_i32 (StratifiedGroupKFold's former group x class table) deleted 2026-11-24 by lane vdf-tail-b:
         # no caller since lane vdf-scope-split2 (MH_GROUP_CLASS_COUNTS_RES of the model-selection helper table).
         module.def_function[strided_copy_bytes_binding]("strided_copy_bytes")

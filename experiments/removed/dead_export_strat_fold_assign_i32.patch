@@ -1,0 +1,205 @@
+diff --git b/bindings/_mojolearn.mojo a/bindings/_mojolearn.mojo
+index 5f89c1794c..554b65c0b7 100644
+--- b/bindings/_mojolearn.mojo
++++ a/bindings/_mojolearn.mojo
+@@ -132,6 +132,7 @@ from bindings.hotpath_device_door import (
+     count_mask_u8_binding,
+     threshold_labels_i64_binding,
+     bincount_i64_binding,
++    strat_fold_assign_i32_binding,
+     # lane cpu2-l1-input: the input helpers on the device (no _OFF arm; the
+     # host loops below and in bindings/array_helpers.mojo are the host column
+     # and the fallback for what a twin does not cover); the typed device
+@@ -1802,8 +1803,7 @@ def build__mojolearn() -> PythonObject:
+         m.def_function[uniform_init_f32_binding]("uniform_init_f32")
+         # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
+         # Restore: git apply experiments/removed/adam_hyper_f64.patch
+-        # TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
+-        # Restore: git apply experiments/removed/dead_export_strat_fold_assign_i32.patch
++        m.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
+         # bincount2_i32 (StratifiedGroupKFold's former group x class table) deleted 2026-11-24 by lane vdf-tail-b:
+         # no caller since lane vdf-scope-split2 (MH_GROUP_CLASS_COUNTS_RES of the model-selection helper table).
+         m.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
+diff --git b/bindings/_mojolearn_core_host.mojo a/bindings/_mojolearn_core_host.mojo
+index bf8968a66f..662808e840 100644
+--- b/bindings/_mojolearn_core_host.mojo
++++ a/bindings/_mojolearn_core_host.mojo
+@@ -135,6 +135,7 @@ from bindings.hotpath_helpers_door import (
+     scatter_rows_bytes_host_binding,
+     uniform_init_f32_binding,
+     normal_init_f32_binding,
++    strat_fold_assign_i32_binding,
+ )
+ from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
+ from bindings.array_helpers_pack import (
+@@ -1012,8 +1013,7 @@ def build__mojolearn_core_host() -> PythonObject:
+         module.def_function[uniform_init_f32_binding]("uniform_init_f32")
+         # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
+         # Restore: git apply experiments/removed/adam_hyper_f64.patch
+-        # TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
+-        # Restore: git apply experiments/removed/dead_export_strat_fold_assign_i32.patch
++        module.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
+         # bincount2_i32 (StratifiedGroupKFold's former group x class table) deleted 2026-11-24 by lane vdf-tail-b:
+         # no caller since lane vdf-scope-split2 (MH_GROUP_CLASS_COUNTS_RES of the model-selection helper table).
+         module.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
+diff --git b/bindings/hotpath_device_door.mojo a/bindings/hotpath_device_door.mojo
+index 27cca93fc9..fecce5531e 100644
+--- b/bindings/hotpath_device_door.mojo
++++ a/bindings/hotpath_device_door.mojo
+@@ -24,7 +24,8 @@ five off):
+   IDN_HPDEV_FOLDS   -D MOJOLEARN_IDN_HPDEV_FOLDS_OFF   fold_ids,
+                     select_fold_i64, select_folds_i64, select_mask_u8_i64,
+                     mask_from_indices_u8, arange_i64, leave_range_i64,
+-                    check_indices_i64, first_seen_i32
++                    check_indices_i64, first_seen_i32,
++                    strat_fold_assign_i32
+   IDN_HPDEV_REDUCE  -D MOJOLEARN_IDN_HPDEV_REDUCE_OFF  reduce_stat's min,
+                     max, argmax and integral test (the sequential float
+                     sum stays the host helper's)
+@@ -108,7 +109,7 @@ from core.msel_helpers_device import (
+     arange_i64_device_run, count_mask_u8_device_run, first_seen_i32_device_run, fold_ids_device_run,
+     leave_range_i64_device_run, mask_from_indices_u8_device_run,
+     msel_gather_device_run, select_fold_i64_device_run, select_folds_i64_device_run,
+-    select_mask_u8_i64_device_run,
++    select_mask_u8_i64_device_run, strat_fold_assign_i32_device_run,
+ )
+ 
+ 
+@@ -366,8 +367,25 @@ def check_indices_i64_binding(
+     return PythonObject(status)
+ 
+ 
+-# TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
+-# Restore: git apply experiments/removed/dead_export_strat_fold_assign_i32.patch
++def strat_fold_assign_i32_binding(
++    enc_addr: PythonObject, n: PythonObject, k: PythonObject, n_folds: PythonObject,
++    alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject,
++    dst_addr: PythonObject,
++) raises -> PythonObject:
++    """`strat_fold_assign_i32`, on the device
++    (`core/msel_helpers_device.mojo::strat_fold_assign_i32_device_run`)."""
++    var rows = Int(py=n)
++    var kk = Int(py=k)
++    var K = Int(py=n_folds)
++    var ea = Int(py=enc_addr)
++    var aa = Int(py=alloc_addr)
++    var pa = Int(py=perms_addr)
++    var ca = Int(py=counts_addr)
++    var da = Int(py=dst_addr)
++    var status = 0
++    with GILReleased(Python()):
++        status = strat_fold_assign_i32_device_run(ea, rows, kk, K, aa, pa, ca, da)
++    return PythonObject(status)
+ 
+ 
+ # ---------------------------------------------------------------------------
+diff --git b/bindings/hotpath_helpers_door.mojo a/bindings/hotpath_helpers_door.mojo
+index d67256dc9d..6d4aed2489 100644
+--- b/bindings/hotpath_helpers_door.mojo
++++ a/bindings/hotpath_helpers_door.mojo
+@@ -59,6 +59,7 @@ from core.hotpath_impl_rows import (
+     normal_init_f32,
+     scatter_rows_bytes_host,
+     strat_alloc_i64,
++    strat_fold_assign_i32,
+     strat_group_plan_i32,
+     threshold_labels_i64,
+     uniform_init_f32,
+@@ -608,5 +609,19 @@ def normal_init_f32_binding(
+ # Restore: git apply experiments/removed/adam_hyper_f64.patch
+ 
+ 
+-# TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
+-# Restore: git apply experiments/removed/dead_export_strat_fold_assign_i32.patch
++def strat_fold_assign_i32_binding(
++    enc_addr: PythonObject, n: PythonObject, k: PythonObject, n_folds: PythonObject,
++    alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject, dst_addr: PythonObject,
++) raises -> PythonObject:
++    """StratifiedKFold's test fold of every row (sklearn _make_test_folds):
++    class c's fold sequence is fold f repeated alloc[f * k + c] times (int64)
++    in fold order; with `perms` (int64, nonzero address) it is permuted,
++    seq'[j] = seq[perm_c[j]], perm_c the segment of class c (classes in
++    order, `counts` int64 rows each); the r-th row of class c (row order)
++    takes seq'[r]. enc: int32 first-seen class ranks in [0, k)."""
++    return PythonObject(
++        strat_fold_assign_i32(
++            Int(py=enc_addr), Int(py=n), Int(py=k), Int(py=n_folds),
++            Int(py=alloc_addr), Int(py=perms_addr), Int(py=counts_addr), Int(py=dst_addr),
++        )
++    )
+diff --git b/core/hotpath_device.mojo a/core/hotpath_device.mojo
+index 683201c755..9633e242f3 100644
+--- b/core/hotpath_device.mojo
++++ a/core/hotpath_device.mojo
+@@ -1477,8 +1477,21 @@ def device_first_seen_on(
+ # ===========================================================================
+ 
+ 
+-# TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
+-# Restore: git apply experiments/removed/dead_export_strat_fold_assign_i32.patch
++def device_strat_fold_assign_i32(
++    ctx: DeviceContext, enc_addr: Int, n: Int, k: Int, n_folds: Int, alloc_addr: Int,
++    perms_addr: Int, counts_addr: Int, dst_addr: Int,
++) raises -> Bool:
++    """`strat_fold_assign_i32` over the n host first-seen codes at
++    `enc_addr`, fold ids to the host `dst_addr`: the codes go up and
++    `device_strat_fold_assign_on` runs. False (nothing written) when the
++    tables are inconsistent or a class code is out of range: the binding
++    reruns the host helper."""
++    var d_enc = ctx.enqueue_create_buffer[DType.int32](n)
++    ctx.enqueue_copy(dst_buf=d_enc, src_ptr=_I32(unsafe_from_address=enc_addr))
++    var ok = device_strat_fold_assign_on(ctx, Int(d_enc.unsafe_ptr()), n, k, n_folds, alloc_addr, perms_addr,
++                                         counts_addr, dst_addr, 0, 0)
++    _ = d_enc^  # the device address above is not an owner
++    return ok
+ 
+ 
+ def device_strat_fold_assign_res(
+diff --git b/core/msel_helpers_device.mojo a/core/msel_helpers_device.mojo
+index fc7bb1461e..06c2c01cb2 100644
+--- b/core/msel_helpers_device.mojo
++++ a/core/msel_helpers_device.mojo
+@@ -37,7 +37,7 @@ from core.msel_helpers_host import (
+ from core.hotpath_device import (
+     HPD_MAX_N, device_arange_skip_i64, device_count_mask_u8, device_first_seen_i32,
+     device_kfold_ids, device_mask_from_indices_u8, device_select_fold_i64, device_select_folds_i64,
+-    device_select_mask_u8_i64, device_stratified_fold_ids,
++    device_select_mask_u8_i64, device_strat_fold_assign_i32, device_stratified_fold_ids,
+     device_first_seen_on, device_strat_fold_assign_res, device_select_folds_on, device_stratified_fold_ids_on,
+     device_group_class_counts_on,
+ )
+@@ -199,8 +199,19 @@ def first_seen_i32_device_run(ca: Int, rows: Int, kk: Int, ea: Int, na: Int) rai
+     return first_seen_i32(ca, rows, kk, ea, na)
+ 
+ 
+-# TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
+-# Restore: git apply experiments/removed/dead_export_strat_fold_assign_i32.patch
++def strat_fold_assign_i32_device_run(ea: Int, rows: Int, kk: Int, K: Int, aa: Int, pa: Int, ca: Int,
++                                     da: Int) raises -> Int:
++    """`strat_fold_assign_i32` on the device; tables the device twin does
++    not accept rerun the host run."""
++    comptime if MSEL_HPDEV_FOLDS:
++        if (
++            rows >= 1 and rows <= HPD_MAX_N and kk >= 1 and K >= 1 and K <= HPD_MAX_N
++            and kk * K <= MSEL_HPDEV_MAX_TABLE and ea != 0 and aa != 0 and ca != 0 and da != 0
++        ):
++            var ctx = process_ctx[LABELS_DEVICE_CONTEXT]()
++            if device_strat_fold_assign_i32(ctx, ea, rows, kk, K, aa, pa, ca, da):
++                return 0
++    return strat_fold_assign_i32(ea, rows, kk, K, aa, pa, ca, da)
+ 
+ 
+ def msel_gather_device_run(kind: Int, table: Int, classes: Int, codes: Int, count: Int, dst: Int) raises -> Int:
+diff --git b/python/mojolearn/host_surface.py a/python/mojolearn/host_surface.py
+index b02730cd28..b1a69ed365 100644
+--- b/python/mojolearn/host_surface.py
++++ a/python/mojolearn/host_surface.py
+@@ -2031,7 +2031,7 @@ FAMILIES = (
+             "bincount_i64",
+             "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
+             "scatter_rows_bytes", "uniform_init_f32",
+-            # strat_fold_assign_i32 deleted 2026-11-24 (lane vdf2-native): no caller (the stored-code MH_STRAT_FOLD_ASSIGN_RES)
++            "strat_fold_assign_i32",
+             "strided_copy_bytes", "check_lengths_i64",
+             "ragged_rows_bytes", "row_means_f64",
+             "truncnorm_draws", "fsum_f64",

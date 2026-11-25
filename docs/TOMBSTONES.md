@@ -1098,6 +1098,8 @@ in the tables after the sections.
 | [`MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER`](#mojolearn_dbscan_fast_brute_eps_filter-ab-outcome-4) | DBSCAN brute edge-free epsilon passes as a GEMM filter with the exact recheck (the opt-in define; the filter is now the default by a per-pair cost rule) | removed (SPLIT: L40S istella full 0.58, taxi full 0.99, taxi 250000 1.12; the filter is the default from DBF_MIN_FEATURES = 50 features) | 2026-11-24 | [MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER.ab-outcome-4.patch](../experiments/removed/MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER.ab-outcome-4.patch) |
 | [`MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF`](#mojolearn_idn_seq_tiled_predict_off-ab-outcome-4) | Neural sequential predict (old path: the caller's chunk always, instead of the whole-set chunk) | removed (decided old path, slower: L40S sequential-predict 1.16) | 2026-11-24 | [MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF.ab-outcome-4.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF.ab-outcome-4.patch) |
 | [`MOJOLEARN_SMALL_MLP_GENERIC_OPS`](#mojolearn_small_mlp_generic_ops-ab-outcome-4) | Neural SmallMLPTrainer program capture (the generic transpose + OPS_LINEAR arm WON and is the only trainer route; the define and the trainer's OPS_SMALL_MLP capture are gone) | removed (decided: generic faster, L40S mlp-predict 0.83, mlp-train-step 0.97; bits change on the step) | 2026-11-24 | [MOJOLEARN_SMALL_MLP_GENERIC_OPS.ab-outcome-4.patch](../experiments/removed/MOJOLEARN_SMALL_MLP_GENERIC_OPS.ab-outcome-4.patch) |
+| [`metrics_store_v1` (native export of `_mojolearn_metrics`)](#dead-exports-metrics_store_v1-and-strat_fold_assign_i32-2026-11-24) | Metrics image resident store (scope transport capsule) | removed (dead export: no caller) | 2026-11-24 | [dead_export_metrics_store_v1.patch](../experiments/removed/dead_export_metrics_store_v1.patch) |
+| [`strat_fold_assign_i32` (native exports of `_mojolearn` and `_mojolearn_core_host`)](#dead-exports-metrics_store_v1-and-strat_fold_assign_i32-2026-11-24) | Model selection StratifiedKFold host-codes fold assignment | removed (dead export: no caller) | 2026-11-24 | [dead_export_strat_fold_assign_i32.patch](../experiments/removed/dead_export_strat_fold_assign_i32.patch) |
 
 | [`MOJOLEARN_IDN_M1_SCAN`](#mojolearn_idn_m1_scan) | Neural (Mamba-1 scan selector, IDENTICAL) | removed (opt-in arms, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M1_SCAN.patch](../experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch) |
 | [`MOJOLEARN_IDN_M2_CB_LOWER_OFF`](#mojolearn_idn_m2_cb_lower_off) | Neural (Mamba-2 oracle cb.G triangle, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch](../experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch) |
@@ -24266,3 +24268,25 @@ Arms decided by the A/B of wheel 0.8.67.dev0+71db45de5d (A = the wave-3 integrat
 - Removed: the define and `SMALL_MLP_GENERIC_OPS`, the trainer capture's OPS_SMALL_MLP branch, the `is_defined` import. KEPT (entries the A/B did not time): the op OPS_SMALL_MLP with its VJP (StepOpRules), host arm (`small_mlp_host.mojo`, `Exec.small_mlp_host`) and cells, because the public `OpsSession.small_mlp` (`python/mojolearn/ops.py`) and the SESSIONS forward (`small_mlp_sessions_forward`, `training.mlp_inference_sessions` / `predict_logits_sessions`, any Linear-ReLU-Linear shape) still run it.
 - Files: `autograd/small_mlp_program.mojo`, `autograd/small_mlp_op.mojo` (docstring).
 - Patch: `~/mojolearn-evidence/experiments-removed/MOJOLEARN_SMALL_MLP_GENERIC_OPS.ab-outcome-4.patch`. By lane/ab-outcome-4; code recoverable at 5753b8026b. Refusal: `core/experiment_guards_neural.mojo`.
+
+## Dead exports metrics_store_v1 and strat_fold_assign_i32 (2026-11-24)
+
+Lane vdf2-native (vd-functions-2, row 22 of the w3-integrate-8 list). The prebuild NATIVECALL audit
+(`tools/native_caller_audit.py`, run at f200804327) found two module exports nothing calls. Dead exports, not
+experiment defines: no A/B, no refusal guard, no grid_controls entry. Code recoverable at 2da8727c02.
+
+- `metrics_store_v1` (`bindings/_mojolearn_metrics.mojo`): the Python capsule export of the image's resident store.
+  The SpectralClustering and UMAP members resolve the store in process (`metrics_store_publish` at module
+  initialization, core/metrics_store_ref.mojo), so the capsule had no reader. Removed: `metrics_store_v1_binding` and
+  its `def_function`. Kept: the native entry `core/metrics_store.mojo::metrics_store_v1` (the in-process publication and
+  the native checks use it). Patch: `experiments/removed/dead_export_metrics_store_v1.patch`.
+- `strat_fold_assign_i32` (`bindings/_mojolearn.mojo`, `bindings/_mojolearn_core_host.mojo`): StratifiedKFold's
+  host-codes fold assignment, superseded by the model-selection helper table's stored-code
+  `MH_STRAT_FOLD_ASSIGN_RES` (lane vdf-scope-split). Removed: both exports, their bindings
+  (`bindings/hotpath_device_door.mojo`, `bindings/hotpath_helpers_door.mojo`), the device run
+  `core/msel_helpers_device.mojo::strat_fold_assign_i32_device_run` and the host-codes device form
+  `core/hotpath_device.mojo::device_strat_fold_assign_i32` (no other caller), and the name in
+  `python/mojolearn/host_surface.py`. Kept: the host body `core/hotpath_impl_rows.mojo::strat_fold_assign_i32` and
+  `device_strat_fold_assign_res` / `device_strat_fold_assign_on` (the stored-code route). Patch:
+  `experiments/removed/dead_export_strat_fold_assign_i32.patch`.
+- Bits: unchanged (no live route called either export).

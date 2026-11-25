@@ -132,7 +132,6 @@ from bindings.hotpath_device_door import (
     count_mask_u8_binding,
     threshold_labels_i64_binding,
     bincount_i64_binding,
-    strat_fold_assign_i32_binding,
     # lane cpu2-l1-input: the input helpers on the device (no _OFF arm; the
     # host loops below and in bindings/array_helpers.mojo are the host column
     # and the fallback for what a twin does not cover); the typed device
@@ -1803,7 +1802,8 @@ def build__mojolearn() -> PythonObject:
         m.def_function[uniform_init_f32_binding]("uniform_init_f32")
         # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/adam_hyper_f64.patch
-        m.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
+        # TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
+        # Restore: git apply experiments/removed/dead_export_strat_fold_assign_i32.patch
         # bincount2_i32 (StratifiedGroupKFold's former group x class table) deleted 2026-11-24 by lane vdf-tail-b:
         # no caller since lane vdf-scope-split2 (MH_GROUP_CLASS_COUNTS_RES of the model-selection helper table).
         m.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
