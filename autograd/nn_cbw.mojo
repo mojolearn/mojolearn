@@ -64,6 +64,11 @@ from autograd.rankn import ShapeN
 comptime OPS_CUSTOM_VJP = 126
 #: autograd/nn_scan.mojo OPS_SCAN (not imported: nn_scan imports this module)
 comptime _CBW_SCAN_CODE = 118
+#: Session.dropout's code (autograd/ops_api.mojo OPS_DROPOUT). fable-review-neural (2026-11-25 review): a dropout
+#: inside a custom operation's program would keep its captured key at every call, because a training replay
+#: advances the key of the OUTER program's random nodes only (autograd/program_runtime.mojo, node.random): the
+#: same mask every minibatch, silently. Refused at bind; the mask is drawn outside and passed in as an input.
+comptime _CBW_DROPOUT_CODE = 21
 comptime NN_CBW_TAG = 6860
 comptime NN_CBW_FORMAT = 1
 
@@ -233,6 +238,10 @@ def _check_program(p: OpsProgram, which: String) raises:
         if p.code[k] == _CBW_SCAN_CODE:
             raise Error("ValueError: custom_op: the " + which + " program holds a scan (node " + String(k)
                         + "); a custom operation's programs are built from other operations")
+        if p.code[k] == _CBW_DROPOUT_CODE:
+            raise Error("ValueError: custom_op: the " + which + " program holds a dropout (node " + String(k)
+                        + "); its mask would repeat at every call. Apply Session.dropout outside the custom "
+                        + "operation, or pass the mask in as an input")
 
 
 def cbw_bind(var forward: OpsProgram, var backward: OpsProgram, saved: List[Int], n_out: Int) raises -> CbwOp:

@@ -445,6 +445,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     # nn-blocks-cbw begin: the bound custom operations and the custom nodes
     # of the recorded graph (autograd/nn_cbw.mojo)
     var cbw: CbwState
+    #: The scratch tape of the custom backward rules (`_cbw_apply`), the session's own: its storage is reused by
+    #: every rule call and returned at close. fable-review-neural (2026-11-25 review): the rule used to borrow
+    #: `prog_tape`. Inside Program.fit that field holds the empty tape the fit made while it keeps the session's
+    #: tapes swapped (autograd/program_runtime.mojo), so the rule allocated executor storage on a tape the fit
+    #: dropped at its end, and a tape cannot free executor storage when dropped: every fit of a program with a
+    #: custom operation kept one scratch tape's buffers until the session closed.
+    var cbw_tape: Tape
     # nn-blocks-cbw end
     #: lane nn-blocks-pg: the parameter-group tables of the grouped
     #: optimizers (autograd/nn_pg.mojo), indexed by `_OpsOptimizer.pg`
@@ -481,6 +488,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.steps = BlockStepScratch()
         self.append_state = Dict[Int, Int]()
         self.cbw = CbwState()  # nn-blocks-cbw
+        self.cbw_tape = Tape()
+        self.cbw_tape.no_grad()
         self.pg_tables = List[ParamGroupTable]()
 
     # ------------------------------------------------------------ handles
@@ -989,6 +998,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         for i in range(len(self.opt_state_indices)):  # driver-loop: over optimizer index metadata at close
             self.opt_state_indices[i].clear()
         self.prog_tape.release(self.ex)
+        self.cbw_tape.release(self.ex)
         self.programs.clear()
         self.program_replays.clear()
         self.op_tensors = List[Tensor]()
@@ -4055,11 +4065,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def _cbw_apply(mut self, ri: Int, node: Int, upstream: FP, gradients: List[FP]) raises:
         """The rule of custom node `node` (record `ri`): the backward program on
-        the saved tensors and the incoming gradient, on the session's scratch
-        tape, each gradient copied into its destination (the tape adds it to
-        the input's other contributions). Called by CbwRules.apply while the
-        session's tape runs its backward: the tape is moved aside for the call
-        and put back word for word, as Session.run_program does."""
+        the saved tensors and the incoming gradient, on the rules' own scratch
+        tape (`cbw_tape`), each gradient copied into its destination (the tape
+        adds it to the input's other contributions). Called by CbwRules.apply
+        while the session's tape runs its backward: the tape is moved aside for
+        the call and put back word for word, as Session.run_program does with
+        `prog_tape` (which this never touches, so a fit's or a replay's swap
+        of it is not disturbed)."""
         if ri < 0 or ri >= len(self.cbw.records) or self.cbw.records[ri].node != node:
             raise Error("ValueError: custom: the recorded graph no longer holds this custom operation's saved "
                         + "tensors; run its forward again")
@@ -4069,7 +4081,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var op = CbwOp()
         swap(op, self.cbw.ops[oi])
         var held = Tape()
-        swap(held, self.prog_tape)
+        swap(held, self.cbw_tape)
         swap(held, self.tape)
         var temps = List[Int]()
         try:
@@ -4079,7 +4091,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         finally:
             self._drop_temps(temps)
             swap(held, self.tape)
-            swap(held, self.prog_tape)
+            swap(held, self.cbw_tape)
             swap(op, self.cbw.ops[oi])
             swap(rec, self.cbw.records[ri])
 
