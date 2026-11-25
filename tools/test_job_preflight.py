@@ -170,5 +170,50 @@ class PaperComparePreflight(unittest.TestCase):
             self.assertNotIn("B set e", p.stdout)                       # an env arm has no wheels to stage
 
 
+class GpuSmokePreflight(unittest.TestCase):
+    """tools/ops/gpu_smoke_job.sh --preflight, run as the submit runs it (job_preflight.sh): the two wheels of this
+    tree's HEAD, a GPU that answers, nothing else in the dir (lane gpu-smoke, 2026-11-25)."""
+    JOB = HERE / "ops" / "gpu_smoke_job.sh"
+
+    def submit(self, td, wheels, gpu=True):
+        w = Path(td) / "w"
+        w.mkdir(exist_ok=True)
+        for name in wheels:
+            (w / name).write_bytes(b"x")
+        b = Path(td) / "bin"
+        b.mkdir(exist_ok=True)
+        if gpu:
+            (b / "nvidia-smi").write_text("#!/bin/sh\necho 'GPU 0: NVIDIA L40S (UUID: GPU-0)'\n")
+            (b / "nvidia-smi").chmod(0o755)
+        env = dict(os.environ, PATH="%s:/usr/bin:/bin" % b)
+        return subprocess.run(["bash", str(PREFLIGHT), str(HERE.parent), str(self.JOB), str(Path(td) / "res"),
+                               "GS_WHEEL_DIR=%s" % w], capture_output=True, text=True, timeout=60, env=env)
+
+    def test_submit_preflight(self):
+        head = subprocess.run(["git", "-C", str(HERE.parent), "rev-parse", "HEAD"], capture_output=True,
+                              text=True).stdout.strip()[:12]
+        self.assertIn("\n# job-preflight:", self.JOB.read_text())
+        good = ["mojolearn_core-0.8.67.dev0+%s-py3-none-any.whl" % head,
+                "mojolearn_nvidia-0.8.67.dev0+%s-py3-none-manylinux_2_34_x86_64.whl" % head]
+        with tempfile.TemporaryDirectory() as td:
+            p = self.submit(td, good)
+            self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+            self.assertIn("PREFLIGHT ok gpu GPU 0: NVIDIA L40S", p.stdout)
+            self.assertIn("PREFLIGHT PASSED", p.stdout)
+        with tempfile.TemporaryDirectory() as td:
+            p = self.submit(td, good, gpu=False)                                     # no GPU answers
+            self.assertEqual(p.returncode, 4)
+            self.assertIn("nvidia-smi does not answer", p.stdout)
+        with tempfile.TemporaryDirectory() as td:
+            p = self.submit(td, good[:1])                                            # the nvidia wheel is missing
+            self.assertEqual(p.returncode, 4)
+            self.assertIn("holds 1 of the 2 wheels", p.stdout)
+        with tempfile.TemporaryDirectory() as td:
+            other = [x.replace(head, "0123456789ab") for x in good]                  # another commit's build
+            p = self.submit(td, other)
+            self.assertEqual(p.returncode, 4)
+            self.assertIn("sync the lane tree to the build's commit", p.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

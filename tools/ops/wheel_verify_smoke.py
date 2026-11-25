@@ -12,6 +12,19 @@ nothing across vendors, records nothing and never replaces the release's one ver
                                                              the Python that runs inside every public call, one process
                                                              per public class and per harness lane; REPORTS, GATES NOTHING
     wheel_verify_smoke.py step    --out DIR --name N -- CMD  one command, logged, its rc in SUMMARY.txt
+    wheel_verify_smoke.py plan    [--gpu]                    the allocation and parallel plan header lines
+
+GPU MODE (--gpu on imports/lanes/tests/plan; tools/ops/wheel_verify_smoke.sh SMOKE_SIDE=gpu; Andrew 2026-11-25: the
+smoke runs on the GPU side too, after every build): the install holds the core wheel and one GPU plugin wheel, and
+every lane runs BOTH sides in its one process (`--side both`, the GPU column to <lane>.gpu.json and the CPU column to
+<lane>.cpu.json, `--require-backend` the installation's own vendor, never cpu). A refused part on EITHER side fails
+the lane, exactly as a refused CPU part does in CPU mode; a side a lane declares it does not have (`_one_sided`,
+registry ONE_SIDED) reads N/A in its record and is never a failure. The worker count is the core allocation capped
+by the GPU's free memory at GPU_MEM_PER_WORKER_MB a worker (every unit holds its own device context).
+NO LANE IS HIDDEN: each lane is its own process, so no crash stops the others (there is no consecutive-crash stop
+here, unlike `verify --all`'s in python/mojolearn/_verify_all.py); after the pool every listed lane's record is read
+back, and a lane with no record for a side it should have, no cells, a REFUSED cell, or a cell whose error says
+"not run after interruption" is a failure, whatever its exit code. lanes/SIDES.tsv lists each lane's state per side.
 
 PARALLEL PLAN (AGENTS.md "parallelize tests and experiments by default"): every pool's units are independent
 processes run across all cores (one worker per core this process may use). The plan input is an earlier run's
@@ -58,6 +71,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 #: memory reserved for a unit the plan input has not measured (MB)
 MEM_PER_WORKER_MB = 2048
+#: GPU mode: device memory budgeted per worker (MB). Each unit is its own process with its own device context and
+#: the base fixture's buffers. NOT MEASURED YET (first GPU smoke, 2026-11-25): tools/ops/gpu_smoke_job.sh samples
+#: the GPU's memory.used during the run (gpu.log, its max on the GSMOKE gpu line) so the next run can set it
+#: (--gpu-mb-per-worker / SMOKE_GPU_MB_PER_WORKER). On a 46 GB L40S this allows 20 workers, above a 14-core pod.
+GPU_MEM_PER_WORKER_MB = 2048
+#: share of the GPU's free memory the workers may plan on (the rest: the driver and fragmentation)
+GPU_MEM_SHARE = 0.9
+#: the harness's error prefix for a cell a stopped sweep never ran (python/mojolearn/_verify_all.py)
+NOT_RUN = "not run after interruption"
 #: margin on a measured peak RSS when reserving memory for a unit
 MEM_MARGIN = 1.25
 #: the committed plan inputs (one results.tsv per pool, from the first smoke); --memory-from overrides
@@ -86,10 +108,63 @@ IMPORT_ENVIRONMENT = {
 
 
 def cores():
+    """The cores of this allocation: affinity, capped by the cgroup CPU quota (v2 cpu.max, v1 cfs_quota_us), as
+    tools/ops/box_cores_lib.sh `alloc_cores`; a rented pod's visible CPUs are the host's (L40S: 128 visible, 14
+    allocated), and a worker per visible CPU oversubscribes the pod nine times."""
     try:
-        return max(1, len(os.sched_getaffinity(0)))
+        n = len(os.sched_getaffinity(0))
     except (AttributeError, OSError):
-        return max(1, os.cpu_count() or 1)
+        n = os.cpu_count() or 1
+    for quota_path, period_path in (("/sys/fs/cgroup/cpu.max", None),
+                                    ("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", "/sys/fs/cgroup/cpu/cpu.cfs_period_us")):
+        try:
+            if period_path is None:
+                quota, period = Path(quota_path).read_text().split()[:2]
+            else:
+                quota, period = Path(quota_path).read_text().strip(), Path(period_path).read_text().strip()
+            if quota != "max" and int(quota) > 0 and int(period) > 0:
+                n = min(n, -(-int(quota) // int(period)))
+            break
+        except (OSError, ValueError):
+            continue
+    return max(1, n)
+
+
+def gpu_info():
+    """{name, driver, total_mb, free_mb, tool} of the first GPU (nvidia-smi, else rocm-smi), or None. Several GPUs:
+    the units do not pin a device, so they share device 0 and only its memory is planned on."""
+    if shutil.which("nvidia-smi"):
+        try:
+            p = subprocess.run(["nvidia-smi", "--query-gpu=name,driver_version,memory.total,memory.free",
+                                "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=60)
+            first = p.stdout.strip().splitlines()[0] if p.returncode == 0 and p.stdout.strip() else ""
+            name, driver, total, free = [x.strip() for x in first.split(",")][:4]
+            return dict(name=name, driver=driver, total_mb=int(float(total)), free_mb=int(float(free)),
+                        tool="nvidia-smi")
+        except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+            pass
+    if shutil.which("rocm-smi"):
+        try:
+            p = subprocess.run(["rocm-smi", "--showproductname", "--showdriverversion", "--showmeminfo", "vram",
+                                "--json"], capture_output=True, text=True, timeout=60)
+            doc = json.loads(p.stdout)
+            card = next((v for k, v in doc.items() if k.startswith("card")), {})
+            driver = next((v.get("Driver version") for v in doc.values() if isinstance(v, dict)
+                           and v.get("Driver version")), "")
+            total = int(card.get("VRAM Total Memory (B)", 0)) // 2 ** 20
+            used = int(card.get("VRAM Total Used Memory (B)", 0)) // 2 ** 20
+            return dict(name=card.get("Card series") or card.get("Card SKU") or "amd gpu", driver=driver or "",
+                        total_mb=total, free_mb=max(0, total - used), tool="rocm-smi")
+        except (OSError, subprocess.SubprocessError, ValueError, TypeError):
+            pass
+    return None
+
+
+def gpu_worker_cap(info, per_worker_mb):
+    """Workers the GPU's free memory holds at per_worker_mb each (at least 1); None without GPU information."""
+    if not info or per_worker_mb <= 0:
+        return None
+    return max(1, int(info["free_mb"] * GPU_MEM_SHARE // per_worker_mb))
 
 
 def mem_available_mb():
@@ -195,8 +270,16 @@ def plan_workers(args, name, units):
     plan = load_plan(source) if source else {}
     avail = mem_available_mb()
     workers = args.jobs or cores()
+    gpu_note = ""
+    if getattr(args, "gpu", False):
+        info = gpu_info()
+        cap = gpu_worker_cap(info, args.gpu_mb_per_worker)
+        if cap is not None and not args.jobs:
+            workers = min(workers, cap)
+        gpu_note = (f"gpu_free_mb={info['free_mb'] if info else 'unknown'} gpu_mb_per_worker={args.gpu_mb_per_worker} "
+                    f"gpu_worker_cap={cap if cap is not None else 'unknown'} ")
     makespan, busy = planned_busy(units, plan, workers)
-    note = (f"workers={workers} cores={cores()} mem_available_mb={avail} "
+    note = (f"workers={workers} cores={cores()} mem_available_mb={avail} {gpu_note}"
             f"plan={source or 'none'} ({sum(1 for u, _ in units if u in plan)}/{len(units)} units measured) "
             f"planned_busy_workers={busy:.1f} planned_seconds={makespan:.0f}")
     return workers, plan, avail, note
@@ -323,10 +406,13 @@ def crash_trace(uname, argv, out, cwd, env):
     return top
 
 
-def run_pool(name, units, args, cwd, env, timeout, ok_codes=(0,), serial=(), environment=None, skips=False):
+def run_pool(name, units, args, cwd, env, timeout, ok_codes=(0,), serial=(), environment=None, skips=False,
+             check=None):
     """units: [(unit name, argv)]. Runs the parallel units across the planned workers, then `serial` ones alone.
     environment: {unit: (regex, reason)}; a failing unit whose log matches its regex is status `env`, not failed.
-    skips: the units are pytest files run with -rs; a passing file whose every test was skipped is `env`."""
+    skips: the units are pytest files run with -rs; a passing file whose every test was skipped is `env`.
+    check: check(unit) -> None or a reason; called after a unit that exited ok, a reason turns it `failed` (the
+    lanes pool: a lane whose record is missing a side, or holds a refused or never-run cell)."""
     environment = dict(environment or {})
     out = Path(args.out) / name
     logs = out / "logs"
@@ -348,6 +434,12 @@ def run_pool(name, units, args, cwd, env, timeout, ok_codes=(0,), serial=(), env
             text = (logs / f"{safe}.log").read_text(errors="replace")
             if re.search(expected[0], text):
                 status = "env"
+        if check is not None and status == "ok":
+            reason = check(uname)
+            if reason:
+                status = "failed"
+                with open(logs / f"{safe}.log", "a") as fh:
+                    fh.write(f"\nSMOKE CHECK FAILED: {reason}\n")
         if skips and status == "ok":
             count, reasons, passed = skipped_reasons((logs / f"{safe}.log").read_text(errors="replace"))
             if count:
@@ -470,25 +562,112 @@ def cmd_imports(args):
     return run_pool("imports", units, args, cwd, child_env(), args.timeout, environment=IMPORT_ENVIRONMENT)
 
 
+def lane_files(jdir, lane, gpu):
+    """{side: the lane's record path} of one lane unit: CPU mode one CPU record, GPU mode both sides."""
+    jdir = Path(jdir)
+    if gpu:
+        return {"gpu": jdir / f"{lane}.gpu.json", "cpu": jdir / f"{lane}.cpu.json"}
+    return {"cpu": jdir / f"{lane}.json"}
+
+
+def side_state(path):
+    """(state, detail) of one side's record: ok | n/a (every cell N/A: a side the lane declares it does not have)
+    | refused (a REFUSED cell; detail its first error) | not-run (a cell a stopped sweep never ran) | missing (no
+    record, unreadable, or no cells: the lane never ran on that side)."""
+    try:
+        doc = json.loads(Path(path).read_text())
+    except OSError:
+        return "missing", "no record written"
+    except ValueError as exc:
+        return "missing", f"record unreadable: {exc}"
+    cells = doc.get("cells") if isinstance(doc, dict) else None
+    if not isinstance(cells, dict) or not cells:
+        return "missing", "record holds no cells"
+    not_run = [k for k, c in cells.items() if NOT_RUN in str((c or {}).get("error", ""))]
+    if not_run:
+        return "not-run", f"{len(not_run)} cell(s) never ran: {not_run[0]}"
+    refused = [(k, c) for k, c in cells.items() if (c or {}).get("verdict") == "REFUSED"]
+    if refused:
+        return "refused", f"{refused[0][0]}: {str(refused[0][1].get('error', ''))[:240]}"
+    if all((c or {}).get("verdict") == "N/A" for c in cells.values()):
+        return "n/a", str(next(iter(cells.values())).get("hashes", [""])[0])[:160]
+    return "ok", ""
+
+
+def lane_check(jdir, gpu):
+    """The lanes pool's post-check (run_pool check=): a lane fails when any side it should have is not ok or n/a."""
+    def check(lane):
+        bad = []
+        for side, path in lane_files(jdir, lane, gpu).items():
+            state, detail = side_state(path)
+            if state not in ("ok", "n/a"):
+                bad.append(f"{side} side {state}: {detail}")
+        return "; ".join(bad) or None
+    return check
+
+
+def sides_report(out, jdir, lanes, gpu):
+    """lanes/SIDES.tsv (lane, side, state, detail) and one SUMMARY.txt line of counts per side: the lanes that never
+    ran on a side are named here as failures, never left out."""
+    rows, counts = [], {}
+    for lane in lanes:
+        for side, path in lane_files(jdir, lane, gpu).items():
+            state, detail = side_state(path)
+            rows.append((lane, side, state, detail))
+            counts.setdefault(side, {}).setdefault(state, 0)
+            counts[side][state] += 1
+    (Path(out) / "lanes" / "SIDES.tsv").write_text("lane\tside\tstate\tdetail\n" + "".join(
+        "\t".join((lane, side, state, detail.replace("\t", " ").replace("\n", " "))) + "\n"
+        for lane, side, state, detail in rows))
+    order = ("ok", "n/a", "refused", "not-run", "missing")
+    summary(out, "  lanes sides: " + "; ".join(
+        f"{side} " + " ".join(f"{s}={counts[side].get(s, 0)}" for s in order) for side in sorted(counts, reverse=True))
+            + " (lanes/SIDES.tsv)")
+    return rows
+
+
+def lane_argv(python, lane, jdir, gpu, vendor):
+    """One lane unit: the harness on the base fixture, one fit per cell, refusals fail the process. GPU mode: both
+    sides in this one process, --require-backend the installation's vendor (never cpu)."""
+    files = lane_files(jdir, lane, gpu)
+    argv = [python, "-I", "-m", "mojolearn._identity_break", "--lanes", lane, "--fixtures", "base", "--repeats", "1"]
+    if gpu:
+        argv += ["--side", "both", "--require-backend", vendor, "--json", str(files["gpu"]),
+                 "--cpu-json", str(files["cpu"])]
+    else:
+        argv += ["--require-backend", "cpu", "--json", str(files["cpu"])]
+    return argv + ["--fail-on-refused", "--no-batch", "--no-rlpair"]
+
+
 def cmd_lanes(args):
     """(c) every lane of verify's own harness (mojolearn._identity_break, the byte copy `verify --all` imports and
-    calls per cell) that has a CPU route, on the base fixture, one fit per cell. The harness's own full-column
-    selection on a host: every lane but RECORD_EXCLUDED_PREFIXES and the lanes declared with no CPU side
-    (`_one_sided(lane, missing="cpu")`, registry ONE_SIDED). --no-batch --no-rlpair stamp
-    each JSON partial_column=true, so _verify_reference.admit() refuses it: nothing here can become a record, and
-    nothing is compared with any column or reference table."""
+    calls per cell), on the base fixture, one fit per cell, one process per lane. The harness's own full-column
+    selection: every lane but RECORD_EXCLUDED_PREFIXES; CPU mode also leaves out the lanes declared with no CPU side
+    (`_one_sided(lane, missing="cpu")`, registry ONE_SIDED), GPU mode keeps them (their CPU side reads N/A) and runs
+    both sides of every lane (module docstring, GPU MODE). --no-batch --no-rlpair stamp each JSON
+    partial_column=true, so _verify_reference.admit() refuses it: nothing here can become a record, and nothing is
+    compared with any column or reference table."""
     cwd = empty_dir(args.out, "lanes")
+    gpu = bool(getattr(args, "gpu", False))
+    vendor = "cpu"
+    if gpu:
+        vendor = probe(args.python, "import mojolearn as ml; print(ml.vendor())", cwd)
+        if vendor not in ("cuda", "hip", "metal"):
+            summary(args.out, f"lanes rc=1 GPU mode on an installation whose mojolearn.vendor() is {vendor!r}")
+            return 1
+    keep = "True" if gpu else "(h.one_sided(n) or ('',))[0] != 'cpu'"
     listed = probe(args.python, "import mojolearn._identity_break as h; "
-                   "print(','.join(n for n in h.LANES if not n.startswith(h.RECORD_EXCLUDED_PREFIXES) "
-                   "and (h.one_sided(n) or ('',))[0] != 'cpu'))", cwd)
+                   f"print(','.join(n for n in h.LANES if not n.startswith(h.RECORD_EXCLUDED_PREFIXES) and {keep}))",
+                   cwd)
     lanes = [x for x in listed.split(",") if x]
     jdir = Path(args.out) / "lanes" / "json"
     jdir.mkdir(parents=True, exist_ok=True)
     extra = {"MOJOLEARN_COMMIT": args.commit} if args.commit else {}
-    units = [(lane, [args.python, "-I", "-m", "mojolearn._identity_break", "--lanes", lane, "--fixtures", "base",
-                     "--repeats", "1", "--require-backend", "cpu", "--fail-on-refused", "--no-batch", "--no-rlpair",
-                     "--json", str(jdir / f"{lane}.json")]) for lane in lanes]
-    return run_pool("lanes", units, args, cwd, child_env(extra), args.timeout)
+    units = [(lane, lane_argv(args.python, lane, jdir, gpu, vendor)) for lane in lanes]
+    rc = run_pool("lanes", units, args, cwd, child_env(extra), args.timeout, check=lane_check(jdir, gpu))
+    if lanes:
+        sides_report(args.out, jdir, lanes, gpu)
+    return rc
 
 
 def cmd_tests(args):
@@ -623,14 +802,49 @@ def cmd_step(args):
     return rc
 
 
+def cmd_plan(args):
+    """The header lines: the allocation (cores, memory) and, in GPU mode, the GPU (name, driver, memory) and the
+    worker plan (cores capped by the GPU's free memory per worker)."""
+    w = args.jobs or cores()
+    lines = [f"# allocation cores={cores()} mem_available_mb={mem_available_mb()}"]
+    if args.gpu:
+        info = gpu_info()
+        cap = gpu_worker_cap(info, args.gpu_mb_per_worker)
+        if info:
+            lines.append(f"# gpu {info['name']} driver={info['driver']} memory_mb={info['total_mb']} "
+                         f"free_mb={info['free_mb']} ({info['tool']})")
+        else:
+            lines.append("# gpu none found (no nvidia-smi or rocm-smi answer): GPU mode plans on cores alone")
+        if cap is not None and not args.jobs:
+            w = min(w, cap)
+        lines.append(f"# parallel plan: {w} worker(s) per pool = min(cores {cores()}, GPU free memory "
+                     f"{info['free_mb'] if info else '?'} MB x {GPU_MEM_SHARE:g} / {args.gpu_mb_per_worker} MB a "
+                     f"worker = {cap if cap is not None else '?'}); each pool then admits units by measured RSS")
+    else:
+        lines.append(f"# parallel plan: {w} worker(s) per pool (the core allocation); each pool admits units by "
+                     "measured RSS")
+    print("\n".join(lines))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd_name", required=True)
+    gpu_mb = int(os.environ.get("SMOKE_GPU_MB_PER_WORKER") or GPU_MEM_PER_WORKER_MB)
+    p = sub.add_parser("plan")
+    p.set_defaults(func=cmd_plan, out="")
+    p.add_argument("--gpu", action="store_true")
+    p.add_argument("--jobs", type=int, default=0)
+    p.add_argument("--gpu-mb-per-worker", type=int, default=gpu_mb)
     for name, fn, timeout in (("imports", cmd_imports, 300), ("lanes", cmd_lanes, 900),
                               ("frames", cmd_frames, 900), ("tests", cmd_tests, 1800), ("step", cmd_step, 1800)):
         p = sub.add_parser(name)
         p.set_defaults(func=fn)
         p.add_argument("--out", required=True)
+        p.add_argument("--gpu", action="store_true", help="GPU mode (module docstring): the install holds a GPU "
+                       "plugin; lanes run both sides; workers capped by the GPU's free memory")
+        p.add_argument("--gpu-mb-per-worker", type=int, default=gpu_mb,
+                       help="GPU mode: device memory per worker in MB (default %(default)s, SMOKE_GPU_MB_PER_WORKER)")
         p.add_argument("--timeout", type=float, default=timeout, help="seconds per unit (default %(default)s)")
         if name == "step":
             p.add_argument("--name", required=True)
@@ -646,7 +860,8 @@ def main(argv=None):
         if name == "tests":
             p.add_argument("--tests-root", required=True)
     args = ap.parse_args(argv)
-    Path(args.out).mkdir(parents=True, exist_ok=True)
+    if args.out:
+        Path(args.out).mkdir(parents=True, exist_ok=True)
     return args.func(args)
 
 

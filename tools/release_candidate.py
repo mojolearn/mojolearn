@@ -954,7 +954,28 @@ def main(argv=None, release=None):
         else:
             print(f"STAGE python3 tools/ops/measure_candidate.py stage {vendor} --version '{version}' "
                   f"--source-commit {a.commit} --tree <job worktree>")
+            if vendor == "nvidia":
+                for line in gpu_smoke_lines(version, a.commit):
+                    print(line)
     return 0
+
+
+#: the L40S GPU verify smoke's lane, results tag prefix and cap (tools/ops/gpu_smoke_job.sh: estimated 12 to 18 min)
+GPU_SMOKE_LANE = "gpu-smoke"
+GPU_SMOKE_CAP_MIN = 45
+
+
+def gpu_smoke_lines(version, commit):
+    """THE GPU VERIFY SMOKE (lane gpu-smoke, 2026-11-25; Andrew: the verify smoke runs on the GPU side too, after every
+    build): the exact stage and submit commands of tools/ops/gpu_smoke_job.sh for this build, printed beside its STAGE
+    line. Printed only: the candidate never rents or reaches a box. The stage puts the wheels where the job reads them
+    (/root/pc-in/<commit12>/nvidia) and syncs the gpu-smoke lane's tree, which must be a worktree at this commit (the
+    job's preflight refuses another HEAD: the tests and the harness come from it)."""
+    c12 = commit[:12]
+    return [f"GPU-SMOKE-STAGE python3 tools/ops/measure_candidate.py stage nvidia --version '{version}' "
+            f"--source-commit {commit} --lane {GPU_SMOKE_LANE} --tree <worktree at {c12}>",
+            f"GPU-SMOKE tools/nvidia_central.sh submit {GPU_SMOKE_LANE} --cap {GPU_SMOKE_CAP_MIN} "
+            f"--results box-out/gsmoke-{c12} --env GS_WHEEL_DIR=/root/pc-in/{c12}/nvidia tools/ops/gpu_smoke_job.sh"]
 
 
 if __name__ == "__main__":
