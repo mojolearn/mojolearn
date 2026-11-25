@@ -146,3 +146,81 @@ def test_load_refuses_other_groups():
         with pytest.raises(ValueError) as info:
             s.load_optimizer_state_dict(opt, sd)
         assert "the state has 1 parameter groups and this optimizer has 2" in str(info.value)
+
+
+# ---------------------------------------------------------------- Program.fit
+@needs_binding
+def test_program_fit_parameter_outside_groups_refused():
+    from mojolearn import ops
+    with ops.Session() as s:
+        w = s.tensor(_P)
+        v = s.tensor(_Q)
+        xin = s.tensor(np.zeros((4, 2), np.float32))
+        program = s.capture([xin], [s.matmul(s.matmul(xin, w), v)])
+        opt = s.param_group_optimizer([{"params": [w]}], "sgd", lr=0.1)
+        with pytest.raises(ValueError) as info:
+            program.fit(np.ones((4, 2), np.float32), targets=np.ones((4, 2), np.float32), optimizer=opt, epochs=1)
+        assert "Program.fit: the parameter is in no parameter group" in str(info.value)
+
+
+# ---------------------------------------------------------------- SGD / Adam / AdamW
+def _has_training():
+    try:
+        import mojolearn
+        mojolearn.SGD([np.zeros(2, np.float32)])
+        return True
+    except Exception:
+        return False
+
+
+needs_training = pytest.mark.skipif(not _has_training(), reason="the training binding is not built")
+
+
+@needs_training
+@pytest.mark.parametrize("cls, groups, words", [
+    ("SGD", lambda a, b: [{"params": [a]}, {"params": [a, b]}], "is also in param_groups[0]"),
+    ("SGD", lambda a, b: [{"params": [a]}, {"params": []}], "param_groups[1] has no parameters"),
+    ("SGD", lambda a, b: [{"params": [a]}, {"lr": 0.1}], "param_groups[1] has no 'params'"),
+    ("SGD", lambda a, b: [{"params": [a]}, [b]], "param_groups[1] must be a dict"),
+    ("Adam", lambda a, b: [{"params": [a], "momentum": 0.9}], "the adam optimizer does not take 'momentum'"),
+    ("AdamW", lambda a, b: [{"params": [a], "lrr": 0.1}], "unknown parameter group key 'lrr'"),
+    ("AdamW", lambda a, b: [{"params": [a], "beta1": 0.8}], "give 'betas' as a pair"),
+])
+def test_training_refusals(cls, groups, words):
+    import mojolearn
+    a, b = np.zeros(4, np.float32), np.zeros(3, np.float32)
+    with pytest.raises((ValueError, TypeError)) as info:
+        getattr(mojolearn, cls)(groups(a, b))
+    assert words in str(info.value)
+
+
+@needs_training
+def test_training_param_groups_keyword_names_the_form():
+    import mojolearn
+    with pytest.raises(TypeError) as info:
+        mojolearn.SGD([np.zeros(2, np.float32)], param_groups=[])
+    assert "pass the parameter groups as `params`" in str(info.value)
+
+
+@needs_training
+def test_training_groups_round_trip_same_bits():
+    import mojolearn
+    w = [np.full(4, 0.5, np.float32), np.full(3, -0.25, np.float32)]
+    opt = mojolearn.AdamW([{"params": [w[0]], "lr": 1e-3}, {"params": [w[1]], "lr": 1e-2, "weight_decay": 0.0}],
+                          weight_decay=0.01)
+    g = [np.linspace(-1, 1, 4, dtype=np.float32), np.linspace(2, 3, 3, dtype=np.float32)]
+    for _ in range(2):
+        opt.step([x.copy() for x in g], max_norm=0.5)
+    sd = opt.state_dict()
+    assert sorted(sd) == ["param_groups", "state"]
+    assert [p["params"] for p in sd["param_groups"]] == [[0], [1]]
+    again = [x.copy() for x in w]
+    loaded = mojolearn.AdamW([{"params": [again[0]]}, {"params": [again[1]]}])
+    loaded.load_state_dict(sd)
+    opt.step([x.copy() for x in g], max_norm=0.5)
+    loaded.step([x.copy() for x in g], max_norm=0.5)
+    for x, y in zip(w, again):
+        assert x.tobytes() == y.tobytes()
+    with pytest.raises(ValueError) as info:
+        opt.step([g[0].copy()])
+    assert "1 gradients for 2 parameters across the groups" in str(info.value)
