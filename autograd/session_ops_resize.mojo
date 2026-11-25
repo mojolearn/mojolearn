@@ -26,6 +26,7 @@ from autograd.tape import Tape, Tensor
 from autograd.rankn_api import rn_shape
 from autograd.nn_conv import nn_pad, nn_upsample, nn_pixel_shuffle, up_scale, NNC_PAD_REFLECT, NNC_PAD_REPLICATE
 from autograd.nn_conv_blocks import _up_out
+from autograd.session_ops_layer_sabotage import SOL_SABOTAGE_PIXEL_SHUFFLE, SOL_SABOTAGE_PIXEL_SHUFFLE_HOST
 
 comptime OPS_INTERPOLATE = 150
 comptime OPS_PIXEL_SHUFFLE = 151
@@ -154,6 +155,8 @@ def session_pixel_shuffle[E: Exec](
     if unshuffle and (tape.dim(x, 2) % r != 0 or tape.dim(x, 3) % r != 0):
         raise Error("ValueError: pixel_unshuffle: the height and width must be divisible by downscale_factor ("
                     + String(r) + ")")
+    comptime if (SOL_SABOTAGE_PIXEL_SHUFFLE and E.IS_DEVICE) or (SOL_SABOTAGE_PIXEL_SHUFFLE_HOST and not E.IS_DEVICE):
+        return tape.scale(ex, nn_pixel_shuffle(tape, ex, x, r, unshuffle), Float32(2.0))  # SABOTAGE: twice the values
     return nn_pixel_shuffle(tape, ex, x, r, unshuffle)
 
 

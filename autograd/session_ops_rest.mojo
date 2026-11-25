@@ -56,6 +56,12 @@ from autograd.embedding_ops import embedding_check_words, embedding_refuse_ids
 from autograd.ssm_primitives import graph_selective_scan
 from autograd.ssm_m2_primitives import graph_ssd_scan
 from autograd.ssm_m3_primitives import graph_trapezoid_scan
+from autograd.session_ops_layer_sabotage import (
+    SOL_SABOTAGE_NORM_EPS, SOL_SABOTAGE_NORM_EPS_HOST, SOL_SABOTAGE_MISH_SCALE, SOL_SABOTAGE_MISH_SCALE_HOST,
+    SOL_SABOTAGE_MHA_CAUSAL, SOL_SABOTAGE_MHA_CAUSAL_HOST, SOL_SABOTAGE_SMOOTH_L1_BETA,
+    SOL_SABOTAGE_SMOOTH_L1_BETA_HOST, SOL_SABOTAGE_CTC_REDUCTION, SOL_SABOTAGE_CTC_REDUCTION_HOST,
+    SOL_SABOTAGE_SSM_SCALE, SOL_SABOTAGE_SSM_SCALE_HOST,
+)
 
 comptime SOR_BATCH_NORM = 160
 comptime SOR_GROUP_NORM = 161
@@ -195,7 +201,10 @@ def sor_batch_norm[E: Exec](
         mean_at = tape.value_of(ex, running_mean.value())
         var_at = tape.value_of(ex, running_var.value())
         running = Optional[FP](_stats_in(tape, ex, mean_at, var_at, C))
-    var y = rankn_batch_norm_core(tape, ex, x3, weight, bias, running, eps, momentum, training)
+    var core_eps = eps
+    comptime if (SOL_SABOTAGE_NORM_EPS and E.IS_DEVICE) or (SOL_SABOTAGE_NORM_EPS_HOST and not E.IS_DEVICE):
+        core_eps = eps + Float32(1.0)  # SABOTAGE: the wrong epsilon
+    var y = rankn_batch_norm_core(tape, ex, x3, weight, bias, running, core_eps, momentum, training)
     if running and training:
         _stats_out(ex, running.value(), mean_at, var_at, C)
     return tape.view_nd(ex, y, s)
@@ -277,6 +286,8 @@ def sor_prelu[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, weight: Tensor) rai
 
 def sor_mish[E: Exec](mut tape: Tape, mut ex: E, x: Tensor) raises -> Tensor:
     """torch.nn.functional.mish: Sequential's mish layer."""
+    comptime if (SOL_SABOTAGE_MISH_SCALE and E.IS_DEVICE) or (SOL_SABOTAGE_MISH_SCALE_HOST and not E.IS_DEVICE):
+        return tape.scale(ex, imp_unary(tape, ex, x, IMP_MISH), Float32(2.0))  # SABOTAGE: twice the value
     return imp_unary(tape, ex, x, IMP_MISH)
 
 
@@ -339,6 +350,8 @@ def sor_multi_head_attention[E: Exec](
         if S != T:
             _refuse(name, "is_causal needs as many keys as queries")
         flags |= NN_MHA_CAUSAL
+        comptime if (SOL_SABOTAGE_MHA_CAUSAL and E.IS_DEVICE) or (SOL_SABOTAGE_MHA_CAUSAL_HOST and not E.IS_DEVICE):
+            flags = flags & ~NN_MHA_CAUSAL  # SABOTAGE: the causal mask dropped
     var lengths: Optional[FP] = None
     if key_lengths:
         if _count(tape, key_lengths.value()) != B:
@@ -384,6 +397,8 @@ def sor_smooth_l1_loss[E: Exec](
     _same_shape(tape, x, target, "smooth_l1_loss")
     if not (beta >= Float32(0)):
         _refuse("smooth_l1_loss", "beta must be a non-negative number")
+    comptime if (SOL_SABOTAGE_SMOOTH_L1_BETA and E.IS_DEVICE) or (SOL_SABOTAGE_SMOOTH_L1_BETA_HOST and not E.IS_DEVICE):
+        return smooth_l1(tape, ex, x, target, beta + Float32(1.0), reduction)  # SABOTAGE: the wrong beta
     return smooth_l1(tape, ex, x, target, beta, reduction)
 
 
@@ -497,6 +512,8 @@ def sor_ctc_loss[E: Exec](
     var rows = tape.variable(ex, packed, N, W, False)
     var perm: List[Int] = [1, 0, 2]
     var lp = tape.permute(ex, log_probs, perm)
+    comptime if (SOL_SABOTAGE_CTC_REDUCTION and E.IS_DEVICE) or (SOL_SABOTAGE_CTC_REDUCTION_HOST and not E.IS_DEVICE):
+        return ctc_loss(tape, ex, lp, rows, T, C, blank, 1 - reduction, zero_infinity)  # SABOTAGE: mean <-> sum
     return ctc_loss(tape, ex, lp, rows, T, C, blank, reduction, zero_infinity)
 
 
@@ -504,6 +521,9 @@ def sor_ctc_loss[E: Exec](
 def sor_selective_scan[E: Exec](
     mut tape: Tape, mut ex: E, u: Tensor, delta: Tensor, a_log: Tensor, bm: Tensor, cm: Tensor, d_skip: Tensor,
 ) raises -> Tensor:
+    comptime if (SOL_SABOTAGE_SSM_SCALE and E.IS_DEVICE) or (SOL_SABOTAGE_SSM_SCALE_HOST and not E.IS_DEVICE):
+        return tape.scale(ex, graph_selective_scan(tape, ex, u, delta, bm, cm, a_log, d_skip),
+                          Float32(2.0))  # SABOTAGE: twice the output
     return graph_selective_scan(tape, ex, u, delta, bm, cm, a_log, d_skip)
 
 
