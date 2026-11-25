@@ -288,7 +288,8 @@ def sor_mish[E: Exec](mut tape: Tape, mut ex: E, x: Tensor) raises -> Tensor:
     """torch.nn.functional.mish: Sequential's mish layer."""
     comptime if (SOL_SABOTAGE_MISH_SCALE and E.IS_DEVICE) or (SOL_SABOTAGE_MISH_SCALE_HOST and not E.IS_DEVICE):
         return tape.scale(ex, imp_unary(tape, ex, x, IMP_MISH), Float32(2.0))  # SABOTAGE: twice the value
-    return imp_unary(tape, ex, x, IMP_MISH)
+    else:
+        return imp_unary(tape, ex, x, IMP_MISH)
 
 
 # ---------------------------------------------------------------- attention
@@ -399,7 +400,8 @@ def sor_smooth_l1_loss[E: Exec](
         _refuse("smooth_l1_loss", "beta must be a non-negative number")
     comptime if (SOL_SABOTAGE_SMOOTH_L1_BETA and E.IS_DEVICE) or (SOL_SABOTAGE_SMOOTH_L1_BETA_HOST and not E.IS_DEVICE):
         return smooth_l1(tape, ex, x, target, beta + Float32(1.0), reduction)  # SABOTAGE: the wrong beta
-    return smooth_l1(tape, ex, x, target, beta, reduction)
+    else:
+        return smooth_l1(tape, ex, x, target, beta, reduction)
 
 
 def sor_kl_div[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, target: Tensor, reduction: Int) raises -> Tensor:
@@ -514,7 +516,8 @@ def sor_ctc_loss[E: Exec](
     var lp = tape.permute(ex, log_probs, perm)
     comptime if (SOL_SABOTAGE_CTC_REDUCTION and E.IS_DEVICE) or (SOL_SABOTAGE_CTC_REDUCTION_HOST and not E.IS_DEVICE):
         return ctc_loss(tape, ex, lp, rows, T, C, blank, 1 - reduction, zero_infinity)  # SABOTAGE: mean <-> sum
-    return ctc_loss(tape, ex, lp, rows, T, C, blank, reduction, zero_infinity)
+    else:
+        return ctc_loss(tape, ex, lp, rows, T, C, blank, reduction, zero_infinity)
 
 
 # ---------------------------------------------------------------- state-space scans
@@ -524,7 +527,8 @@ def sor_selective_scan[E: Exec](
     comptime if (SOL_SABOTAGE_SSM_SCALE and E.IS_DEVICE) or (SOL_SABOTAGE_SSM_SCALE_HOST and not E.IS_DEVICE):
         return tape.scale(ex, graph_selective_scan(tape, ex, u, delta, bm, cm, a_log, d_skip),
                           Float32(2.0))  # SABOTAGE: twice the output
-    return graph_selective_scan(tape, ex, u, delta, bm, cm, a_log, d_skip)
+    else:
+        return graph_selective_scan(tape, ex, u, delta, bm, cm, a_log, d_skip)
 
 
 def sor_ssd_scan[E: Exec](

@@ -157,7 +157,8 @@ def session_pixel_shuffle[E: Exec](
                     + String(r) + ")")
     comptime if (SOL_SABOTAGE_PIXEL_SHUFFLE and E.IS_DEVICE) or (SOL_SABOTAGE_PIXEL_SHUFFLE_HOST and not E.IS_DEVICE):
         return tape.scale(ex, nn_pixel_shuffle(tape, ex, x, r, unshuffle), Float32(2.0))  # SABOTAGE: twice the values
-    return nn_pixel_shuffle(tape, ex, x, r, unshuffle)
+    else:
+        return nn_pixel_shuffle(tape, ex, x, r, unshuffle)
 
 
 def session_pad_mode[E: Exec](
