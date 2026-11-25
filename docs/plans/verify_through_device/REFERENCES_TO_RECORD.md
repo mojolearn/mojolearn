@@ -552,7 +552,7 @@ CPU-only install also gives it. `psd-causal-lm` and `psd-causal-lm-text` are one
 | `nn-ep-sequential-lm` | nn_endpoints.py | train, stepfull | n/a:endpoint-round-trips | record | record |
 | `nn-ep-transformer-block` | nn_endpoints.py | train, stepfull | n/a:endpoint-round-trips | record | record |
 
-#### `tools/identity_lanes/nn_programs.py` (6)
+#### `tools/identity_lanes/nn_programs.py` (7)
 
 | lane | file | parts | batch part | CPU column | NVIDIA column |
 |---|---|---|---|---|---|
@@ -562,6 +562,7 @@ CPU-only install also gives it. `psd-causal-lm` and `psd-causal-lm-text` are one
 | `nn-pg-imported-program` | nn_programs.py | train, stepfull | n/a:program-endpoints | record | record |
 | `nn-pg-program-decode` | nn_programs.py | train, stepfull | n/a:program-endpoints | record | record |
 | `nn-pg-session-blocks` | nn_programs.py | train, stepfull | n/a:program-endpoints | record | record |
+| `ops-loss-fold-num-den` | nn_programs.py | train, stepfull | n/a:program-endpoints | record | record |
 
 #### `tools/identity_lanes/nn_training.py` (7)
 

@@ -5104,6 +5104,8 @@ PUBLIC_PENDING_LANES = {
     "nn-tr-schedules": "no reference",
     "nn-tr-seqopt-state": "no reference",
     "nn-tr-small-mlp": "no reference",
+    # lane rnn-parity-c (2026-11-25): the loss fold's 2-vs-20 claim; RECORD OWED at the release's one verification
+    "ops-loss-fold-num-den": "no reference",
     "psd-arima": "no reference",
     "psd-cross-val": "no reference",
     "psd-forecast-arima": "no reference",

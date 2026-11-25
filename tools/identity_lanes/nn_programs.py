@@ -261,7 +261,75 @@ def _(ml, X, yc, yr, Xh=None):
                      decoded=_h(np.frombuffer("".join(single).encode(), dtype=np.uint8))))
 
 
+# ---------------------------------------------------------------- the loss fold (lane rnn-parity-c, 2026-11-25)
+
+def _nn_programs_close(name, got, want, rtol=2e-5, atol=1e-6):
+    """Hold a float32 result to an independent float64 oracle; raises naming the claim (the cell reads REFUSED)."""
+    got = np.asarray(got, dtype=np.float64)
+    if got.shape != np.shape(want) or not np.allclose(got, want, rtol=rtol, atol=atol):
+        raise AssertionError(f"{name}: {got.ravel()[:4]} differs from the oracle {np.ravel(want)[:4]}")
+
+
+@lane("ops-loss-fold-num-den")
+def _(ml, X, yc, yr, Xh=None):
+    """The loss fold (autograd/loss_fold.mojo): a minibatch split into logical shards combines as the sum of
+    the numerators over the sum of the denominators, never an average of the shards' means. Case 1, the 2-vs-20
+    claim: a captured program with two outputs (the masked loss sum, sum m (x W - y)^2, and its denominator,
+    sum m) trains with loss="output" over 4 rows of 11 steps in 2 logical shards, shard A with 2 valid steps and
+    shard B with 20; one SGD step must equal W - lr 2 x^T (m (x W - y)) / 22 (float64 oracle; the average of
+    the shards' means, 0.5 (g_A / 2 + g_B / 20), is far from it) and the epoch loss (num_A + num_B) / 22. Case 2,
+    a built-in loss: mse over 5 rows in shards of 2 and 3 rows must equal the whole-batch mse step (the shards
+    weigh 2/5 and 3/5, not 1/2 each). Parts: both trained parameters and both loss curves. The sabotage arms
+    coverage-rnn-parity-mean_of_means-gpu / -cpu make one side average the means: this lane reads REFUSED there."""
+    T = 11
+    x = _hw((4, T), "ops-fold:x", -1.0, 1.0)
+    y = _hw((4, T), "ops-fold:y", -1.0, 1.0)
+    m = np.zeros((4, T), np.float32)
+    m[0, 0] = m[1, 0] = 1.0           # shard A (rows 0-1): 2 valid steps
+    m[2, :10] = m[3, :10] = 1.0       # shard B (rows 2-3): 20 valid steps
+    w0 = _hw((T, T), "ops-fold:w", -0.3, 0.3)
+    lr = 0.05
+    parts = {}
+    with ml.ops.Session(numeric_mode="identical") as s:
+        xi = s.tensor(np.zeros((4, T), np.float32))
+        yi = s.tensor(np.zeros((4, T), np.float32))
+        mi = s.tensor(np.zeros((4, T), np.float32))
+        w = s.tensor(w0)
+        err = s.sub(s.matmul(xi, w), yi)
+        num = s.sum(s.mul(s.mul(err, err), mi))
+        den = s.sum(mi)
+        p = s.capture([xi, yi, mi], [num, den])
+        opt = s.optimizer("sgd", lr=lr)
+        with p.distribute((0,), logical_shards=2, optimizer=opt, seed=0) as d:
+            curve = np.asarray(d.fit(x, y, m, loss="output", epochs=1, batch_size=4, shuffle=False))
+            trained = np.asarray(d.state()["parameters"][0])
+    x64, y64, m64, w64 = (a.astype(np.float64) for a in (x, y, m, w0))
+    r = m64 * (x64 @ w64 - y64)
+    _nn_programs_close("num/den loss (num_A + num_B) / (den_A + den_B)", curve,
+                       [float(np.sum(r * (x64 @ w64 - y64)) / m64.sum())])
+    _nn_programs_close("num/den step W - lr dL/dW", trained, w64 - lr * 2.0 * (x64.T @ r) / m64.sum())
+    parts.update(num_den_params=_h(trained), num_den_curve=_h(curve))
+
+    x5 = _hw((5, 4), "ops-fold:x5", -1.0, 1.0)
+    y5 = _hw((5, 2), "ops-fold:y5", -1.0, 1.0)
+    v0 = _hw((4, 2), "ops-fold:v", -0.5, 0.5)
+    with ml.ops.Session(numeric_mode="identical") as s:
+        xi = s.tensor(np.zeros((5, 4), np.float32))
+        v = s.tensor(v0)
+        p = s.capture([xi], [s.matmul(xi, v)])
+        opt = s.optimizer("sgd", lr=lr)
+        with p.distribute((0,), logical_shards=2, optimizer=opt, seed=0) as d:
+            curve5 = np.asarray(d.fit(x5, targets=y5, loss="mse", epochs=1, batch_size=5, shuffle=False))
+            trained5 = np.asarray(d.state()["parameters"][0])
+    xa, ya, va = (a.astype(np.float64) for a in (x5, y5, v0))
+    e5 = xa @ va - ya
+    _nn_programs_close("mse over shards of 2 and 3 rows", curve5, [float(np.mean(e5 * e5))])
+    _nn_programs_close("mse step over shards of 2 and 3 rows", trained5, va - lr * 2.0 * (xa.T @ e5) / e5.size)
+    parts.update(mse_params=_h(trained5), mse_curve=_h(curve5))
+    return _fit(parts)
+
+
 _batch_decl("n/a:program-endpoints (session operations, captured and imported programs, containers, model "
             "and tokenizer round trips; outputs digested whole)",
             "nn-pg-session-blocks", "nn-pg-program-decode", "nn-pg-imported-program", "nn-pg-array",
-            "nn-pg-causal-lm", "nn-pg-bpe-decode")
+            "nn-pg-causal-lm", "nn-pg-bpe-decode", "ops-loss-fold-num-den")
