@@ -1,0 +1,21 @@
+diff --git a/x_cluster/affinity.mojo b/x_cluster/affinity.mojo
+index fee9daa58d..8fc538837f 100644
+--- a/x_cluster/affinity.mojo
++++ b/x_cluster/affinity.mojo
+@@ -20,6 +20,7 @@ exemplar refinement and the labels are device primitives too (lane
+ cgr2-cluster; the host column runs the reference's loops)."""
+ from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side key
+ from x_cluster.ops import ClusterOps
+ from x_cluster.meanshift import x_slot_or_put, x_slot_copy
+ from x_cluster.optics import dist_slot
+@@ -91,6 +92,8 @@ def affinity_fit[O: ClusterOps](
+             else:
+                 var lo = _kth_signed(ops, ss, m, m // 2, cneg, side)
+                 med = ftz(identical_mul(ftz(lo + hi), Float32(0.5)))
++            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the precomputed (signed) median preference moved by 2^-10 of itself, the host bindings only
++                med = ftz(med + abs(med) * Float32(0.0009765625))
+         for i in range(n):
+             pref[i] = med
+     elif pref_mode == 2:

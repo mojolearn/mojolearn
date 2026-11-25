@@ -1,0 +1,21 @@
+diff --git a/gbdt/trees_gbdt_fit_run.mojo b/gbdt/trees_gbdt_fit_run.mojo
+index 6293d86b08..18dbd22c38 100644
+--- a/gbdt/trees_gbdt_fit_run.mojo
++++ b/gbdt/trees_gbdt_fit_run.mojo
+@@ -14,6 +14,7 @@ one fit's options; there is no independent work to split across cores.
+ from std.math import isfinite, floor, copysign
+ from std.os import getenv
+ from std.memory import bitcast
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side key
+ from checks.numerics import portable_exp64, portable_log64, pinned_mul_f64
+ from core.host_parallel import host_parallelize
+ from core.host_finite_scan import host_all_finite_f32
+@@ -49,6 +50,8 @@ def gbdt_auto_rate(a: Float64, b: Float64, c: Float64, d: Float64, n_rows: Float
+     if not isfinite(custom) or not isfinite(default_iter) or not isfinite(default_rate):
+         raise Error("OverflowError: math range error")
+     var rate = pinned_mul_f64(default_rate, custom) / default_iter
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the rounded automatic rate one ulp up, the host bindings only
++        return bitcast[DType.float64](bitcast[DType.uint64](gbdt_c_round(min(rate, 0.5), 6)) + UInt64(1))
+     return gbdt_c_round(min(rate, 0.5), 6)
+ 
+ 

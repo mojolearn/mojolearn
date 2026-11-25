@@ -1,0 +1,24 @@
+diff --git a/core/spectral_native_execution.mojo b/core/spectral_native_execution.mojo
+index ce820c0b99..52106a9b33 100644
+--- a/core/spectral_native_execution.mojo
++++ b/core/spectral_native_execution.mojo
+@@ -6,6 +6,8 @@ output room guards and copies are the existing binding work; this module adds
+ no solver, numerical data loop, transfer or algorithm selection threshold.
+ """
+ from std.memory import unsafe_memcpy
++from std.memory import bitcast  # SABOTAGE coverage (sab-arms-67)
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side key
+ from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+ from core.fold_x_word import fold_x_slot
+ from core.spectral_native_api import (
+@@ -106,6 +108,10 @@ def spectral_write_embedding(request: SpectralEmbeddingRequest,
+     spectral_guard_embedding(result.embedding, request.input.rows, result.columns,
+                              request.options.output_components)
+     unsafe_memcpy(dest=f32_ptr(request.embedding), src=result.embedding.unsafe_ptr(), count=len(result.embedding))
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the first embedding value one ulp off (low bit flipped), the host bindings only
++        if len(result.embedding) > 0:
++            var dst = f32_ptr(request.embedding)
++            dst[0] = bitcast[DType.float32](bitcast[DType.uint32](dst[0]) ^ UInt32(1))
+     _ = result
+     return result.columns
+ 

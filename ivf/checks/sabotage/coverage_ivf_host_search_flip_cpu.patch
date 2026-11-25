@@ -1,0 +1,16 @@
+diff --git a/ivf/host/ivf_host.mojo b/ivf/host/ivf_host.mojo
+index 5cb6248171..79a9b1fcab 100644
+--- a/ivf/host/ivf_host.mojo
++++ b/ivf/host/ivf_host.mojo
+@@ -517,7 +517,10 @@ def host_ivf_search(
+                 # THE VALUE ARM (THE NEGATIVE CONTROL above), after the root.
+                 out_dist.append(ivf_sabotage_value_flip(sel_dist[i]))
+             else:
+-                out_dist.append(sel_dist[i])
++                comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): every selected distance one ulp off (ivf_sabotage_value_flip), the host bindings only
++                    out_dist.append(ivf_sabotage_value_flip(sel_dist[i]))
++                else:
++                    out_dist.append(sel_dist[i])
+             out_idx.append(sel_orig[i])
+         for _pad in range(selected, k):
+             out_dist.append(pad_d)

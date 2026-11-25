@@ -1,0 +1,21 @@
+diff --git a/x_decomp/jl_run.mojo b/x_decomp/jl_run.mojo
+index 93ceddd20f..049df1ce84 100644
+--- a/x_decomp/jl_run.mojo
++++ b/x_decomp/jl_run.mojo
+@@ -4,6 +4,7 @@ exact correctly rounded cube and the pinned log of the bound. Typed Mojo
+ only, no Python import (tools/python_free_dirs.sh); moved unchanged, so the
+ bits are the same (lane rs-decomposition, 2026-11-12)."""
+ from std.memory import bitcast
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side key
+ from x_metrics.epilogue import portable_log_c
+ 
+ 
+@@ -67,6 +68,8 @@ def _cube_rounded(x: Float64) -> Float64:
+     """x^3 correctly rounded to nearest-even for a finite positive x whose
+     cube is normal (`_portable_math.powi(x, 3)`); x = m 2^e, the exact m^3
+     rounded once to 53 bits."""
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the cube is dropped (the bound loses its eps^3 / 3 term), the host bindings only
++        return 0.0
+     var bits = bitcast[DType.uint64](x)
+     var field = Int((bits >> 52) & UInt64(0x7FF))
+     if field == 0 or field < 1023 - 300:
