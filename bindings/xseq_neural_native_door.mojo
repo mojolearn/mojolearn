@@ -594,7 +594,13 @@ def _rnn_class_weights(fields: PythonObject, target: PythonObject, n: Int, steps
         var b = native_loaded_module("builtins")
         if not Bool(py=py_call(b.isinstance, cw, b.dict)):
             raise Error("ValueError: class_weight must be None, 'balanced' or a dict")
-        var inputs = class_weight_dictionary_values(cw, py_item(fields, nk[].k_classes_), context)
+        # class_weight_dictionary_values walks an exact list or tuple (borrowed_item); a recurrent classifier's
+        # classes_ is an array: its Python list once (w3-integrate-10: PyList_GetItem on the array, "bad argument
+        # to internal function")
+        var classes = py_item(fields, nk[].k_classes_)
+        if py_type(classes) is not b.list and py_type(classes) is not b.tuple:
+            classes = py_call(classes.tolist)
+        var inputs = class_weight_dictionary_values(cw, classes, context)
         values = inputs.values.copy()
         all_one = inputs.all_one
     var plan = class_weight_plan(values, all_one)

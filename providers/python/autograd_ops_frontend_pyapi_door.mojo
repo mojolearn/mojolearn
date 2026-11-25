@@ -947,7 +947,9 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         if not program_numeric_scalar(args[4]):
             raise Error("TypeError: reverse must be a bool")
         # activation-ckpt: checkpoint_every None (every step kept) or k >= 1
-        var every = 0 if _nil(args[7]) else _int(args[7], "checkpoint_every", 1)
+        var every = 0 if _nil(args[7]) else _int(args[7], "checkpoint_every")
+        if not _nil(args[7]) and every < 1:  # 0 is RUN's "every step kept" word: a caller's 0 is refused here
+            raise Error("ValueError: scan: checkpoint_every must be a positive number of steps, or None")
         var got = session_scan[E, KIND](Int(py=sid), cell_sid, pid, _int(args[1], "xs", 1), states, lengths,
                                         params, given, Bool(py=args[4]), _int(args[6], "counter", 0), every)
         # PACK: (ys, final_state); final_state one handle when init_state was one handle, else a tuple
@@ -1623,7 +1625,8 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         # args (lengths, max_length)
         code = OPS_SEQUENCE_MASK
         hs.append(_int(args[0], "lengths", 1))
-        ints.append(_int(args[1], "max_length", 1))
+        # the range [1, 2^24) and its words are RUN's (autograd/session_ops_extra.mojo sox_sequence_mask)
+        ints.append(_int(args[1], "max_length"))
     elif op == _SOP_TOPK:
         # args (x, k, axis, largest, sorted): two operations, recorded (and captured) one after the other: the
         # indices (181), then the values as gather(x, axis, indices) (182), so the gradient reaches x through the

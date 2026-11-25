@@ -55,7 +55,8 @@ from sequence.recurrent import (
     Net, Work, RnnStep, RnnOptions, RnnFitSetup, SEQ_WGRAD_BLOCKED, TASK_CE, TASK_MSE, WGRAD_IDN_SCRATCH, bias_rows, fill,
     gather_rows, gather_seq, gemm,
 )
-from autograd.rankn_layout import rankn_concat, rankn_narrow
+from autograd.rankn_layout import rankn_concat, rankn_narrow, RankNLayoutRules
+from autograd.rankn_layout_ops import RN_CONCAT, RN_NARROW
 from autograd.loss_ops import LS_MSE
 from autograd.per_step_ops import weighted_reduce
 from autograd.losses import REDUCTION_MEAN, REDUCTION_SUM
@@ -825,7 +826,10 @@ struct RecurrentRules(BackwardRules):
     """Native backward adapters for the recurrent trainer's custom ops."""
 
     def supports(self, tag: Int) -> Bool:
-        return tag == RNN_LINEAR or tag == RNN_LAYER or tag == RNN_LAST_STEP
+        # rnn-parity's options forward joins directions and takes the final states with the rank-N layout ops
+        # (rankn_concat / rankn_narrow, autograd/rankn_layout.mojo): their rules are answered here too
+        # (w3-integrate-10: a bidirectional or option fit refused "custom backward rule not registered")
+        return tag == RNN_LINEAR or tag == RNN_LAYER or tag == RNN_LAST_STEP or tag == RN_CONCAT or tag == RN_NARROW
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
         return False
@@ -843,6 +847,8 @@ struct RecurrentRules(BackwardRules):
             return edge == 0 and saved.i4 != 0
         if tag == RNN_LAYER:
             return False
+        if tag == RN_CONCAT or tag == RN_NARROW:
+            return RankNLayoutRules().zeroed_destination(tag, saved, edge)
         return True
 
     def apply[E: Exec](
@@ -856,6 +862,8 @@ struct RecurrentRules(BackwardRules):
         elif tag == RNN_LAST_STEP:
             # The tape zeroed the destination; only step T - 1 receives rows.
             _copy(ex, gradients[0] + saved.i0, upstream, saved.i1)
+        elif tag == RN_CONCAT or tag == RN_NARROW:
+            RankNLayoutRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         else:
             raise Error("unknown recurrent backward rule")
 

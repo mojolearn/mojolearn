@@ -314,7 +314,8 @@ def backward_recorded[E: Exec](mut tape: Tape, mut ex: E, output: Tensor, seed: 
         if kind >= CUSTOM:
             raise Error(higher_refusal(kind))
         if not _recorded_kind(kind):
-            raise Error("autograd: no backward rule for operation kind " + String(kind))
+            # a refusal in words, raised as ValueError at the door (w3-integrate-10: a bare Exception before)
+            raise Error("ValueError: autograd: create_graph has no backward rule for operation kind " + String(kind))
     var nodes0 = len(tape._nodes)
     var parents0 = len(tape._parents)
     var cursor0 = tape._cursor

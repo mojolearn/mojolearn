@@ -298,6 +298,12 @@ struct XseqPublicLifecycle(Movable):
         if py_type(depth) is not b.int:
             raise Error("TypeError: native fit depth must be an exact integer")
         self.nested = Int(py=depth) > 0
+        if self.fitting and self.source is None and len(args) > 9 and args[9] is not None:
+            # fit(source=) / partial_fit(source=) (lane stream-fits): the BatchSource holds X and y; the arguments
+            # go through as they are, and the fit door admits the exact handle and refuses X and y beside it
+            # (bindings/xseq_neural_native_door.mojo _rnn_fit_source). w3-integrate-10: X None was refused here
+            # as an array before the door was reached.
+            return
         if not self.fitting:
             classical_require_fitted(model, False, self.method, self.lifecycle)
         # N137: `xseq_public_owner` above connected this same lifecycle
