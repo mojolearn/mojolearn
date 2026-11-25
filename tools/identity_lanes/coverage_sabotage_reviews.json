@@ -196,7 +196,7 @@
   "x-prep-inverse-transforms/base": {
    "product_check": "tools/identity_lanes/prep.py:389 (lane `x-prep-inverse-transforms`): np.testing.assert_array_equal(LabelBinarizer().fit(yc).inverse_transform(binary_scores), classes_[[0, 0, 1, 1]]), the lane's in-cell oracle: four fixed two-column scores whose decoded classes are known without the product.",
    "why_fault_reaches_check": "LabelBinarizer.inverse_transform on the CPU side reads its class codes through the x_prep host label primitives (x_prep/prims.mojo, x_prep/labels.mojo), where the patch moves every positive code one down and swaps POS and NEG in the int32 indicator words: the decoded classes are no longer classes_[[0, 0, 1, 1]], so the assertion raises before the lane returns a hash (w3-integrate-9, gate 21abb92fcd: sabotaged and only sabotaged run raised it; clean and restored runs matched).",
-   "error_match": "AssertionError",
+   "error_match": "AssertionError: ?",
    "patch_sha256": "a4c7fda1e5aed8a7c634d7417894f22baf6b4d3a79850b46d09ab3eb043931f9"
   }
  }
