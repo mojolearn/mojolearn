@@ -367,5 +367,13 @@
    "error_match": "ValueError:\\ classes_,\\ padding\\ 7\\ and\\ classes_,\\ padding\\ 0\\ differ:\\ 8\\ bytes\\ of\\ 24",
    "patch_sha256": "2a365edad4f9a82000d76ad3d29a3c9a4734d699e6e101bb02d7c38aad80b39f"
   }
+ },
+ "coverage-training-pg_clip_per_group_cpu": {
+  "training-param-groups/base": {
+   "product_check": "tools/identity_lanes/nn_pg.py (lane `training-param-groups`): _same_bytes of an AdamW with parameter groups and max_norm against the hand composition (ONE clip over every group's gradients, then one optimizer a group), the lane's in-cell oracle.",
+   "why_fault_reaches_check": "training/checks/sabotage/coverage_pg_training_clip_per_group_cpu.patch: PG_SABOTAGE_TRAINING_CLIP_HOST forced on, so the optimizer router's grouped step (bindings/optimizer_native_router_door.mojo pg_training_operation, compiled into _mojolearn_tokenizer_host) clips each group by its own norm on the CPU side; the grouped result then differs from the one-clip composition and the byte check raises (w3-integrate-11, batch tokenizer-6 at 3ff785abd2: only the sabotaged run raised it).",
+   "error_match": "ValueError:\\ AdamW\\ param\\ groups\\ and\\ AdamW\\ clip\\ once\\ then\\ one\\ optimizer\\ a\\ group\\ differ:\\ 94\\ bytes\\ of\\ 192",
+   "patch_sha256": "50b1e404097091897bd58e50f3a120c0038e7dc76beef4a75580fbd3856bd2ac"
+  }
  }
 }
