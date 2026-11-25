@@ -171,13 +171,21 @@ def reexport(namespace, path, module_name):
     return module
 
 
-def _copy_tests(namespace, module):
+def _copy_tests(namespace, module, only=None):
     """Copy `module`'s names into `namespace`; its module-level `pytestmark` is applied to its own test functions
-    only (never to the tests of the proving file that reuses them)."""
+    only (never to the tests of the proving file that reuses them). `only` (a tuple of test names) copies just those
+    tests (the helpers and fixtures come with them); a name the module no longer defines fails the suite, so a
+    rename or a move cannot shrink the proving run silently."""
+    if only is not None:
+        missing = [name for name in only if not callable(getattr(module, name, None))]
+        if missing:
+            pytest.fail(f"proving suite: {module.__name__} no longer defines {', '.join(missing)}")
     marks = getattr(module, "pytestmark", [])
     marks = marks if isinstance(marks, list) else [marks]
     for key, value in vars(module).items():
         if key.startswith("__") or key == "pytestmark":
+            continue
+        if key.startswith("test_") and only is not None and key not in only:
             continue
         if key.startswith("test_") and callable(value):
             for mark in marks:
@@ -202,15 +210,15 @@ def _mount_source_tests():
     spec.loader.exec_module(tests)
 
 
-def reexport_installed(namespace, module_name):
+def reexport_installed(namespace, module_name, only=None):
     """Same as `reexport`, for a module of the source tree's `mojolearn.tests` package, run against the installed
-    runtime (`mojolearn.tests.<name>`)."""
+    runtime (`mojolearn.tests.<name>`). `only`: see `_copy_tests`."""
     _mount_source_tests()
     try:
         module = importlib.import_module(module_name)
     except ModuleNotFoundError as error:
         pytest.fail(f"proving suite: {module_name} cannot be imported ({error})")
-    _copy_tests(namespace, module)
+    _copy_tests(namespace, module, only)
     return module
 
 

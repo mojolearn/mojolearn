@@ -66,9 +66,9 @@ shards). Their two `_OFF` build arms (`MOJOLEARN_MSEL_MEMBER_UNITS_OFF`, `MOJOLE
 | device assignment (`model.device = ...`, blocks, pickles) | `test_proving_device_route.py` (reuses every test of `tests/api/test_device_assignment.py`) | fx-device-attr |
 | kernel SVM (SVC binary, SVR) save / load round trip | `test_proving_device_route.py::test_kernel_svm_save_load_round_trip` | fx-audit (session 2) |
 | PLS repeated predicts | `test_proving_device_route.py::test_pls_repeated_predicts_are_equal` | fx-audit (session 2) |
-| GradientBoosting categorical inputs: object, U / S, pandas 2 / 3, Arrow string / large / chunked / sliced / dictionary, refusals | `test_proving_categories.py` (reuses `tests/api/test_gbdt_category_inputs.py`) | cat-ctr (round 11), arrow-strings |
+| GradientBoosting categorical inputs: object, U / S, pandas 2 / 3, Arrow string / large / chunked / sliced / dictionary, refusals | `test_proving_categories.py` (reuses the categorical-input tests of `mojolearn.tests.test_gbdt_boundary`) | cat-ctr (round 11), arrow-strings |
 | numpy.str_ / bytes / numpy.int64 / numpy.float32 cells; str and bytes of one value = one category; every column categorical S / U | `test_proving_categories.py::test_proving_*` | cat-ctr (round 11 cells) |
-| HostGBDT category map | `test_proving_categories.py` (reuses `tests/api/test_host_gbdt_category_map.py`) | fx-hostgbdt |
+| HostGBDT category map | `test_proving_categories.py` (reuses the HostGBDT category-map tests of `mojolearn.tests.test_gbdt_boundary`) | fx-hostgbdt |
 
 ## Existing installed-wheel test files the RESULT files name (run as they are, not copied)
 
