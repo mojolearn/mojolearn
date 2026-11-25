@@ -183,6 +183,28 @@ def _t(name: String) raises -> PythonObject:
     return value
 
 
+def _is_driver(obj: PythonObject) raises -> Bool:
+    """Whether `obj` is exactly one of the two connected driver classes.
+
+    Each driver module registers only its own class (`parallel_neighbors`
+    the query driver, `parallel_neighbors_reference` the reference driver),
+    so a process that imported one of them has no entry for the other. The
+    holder's enter and close admit either class, so an unregistered one is
+    simply not a match: reading it through `_t` refused ParallelQueries'
+    enter whenever the reference module had not been imported (every
+    installed-wheel program that uses only ParallelQueries; the source-tree
+    runs imported both). FIX w3-fix-13, 2026-11-25."""
+    var s = PARALLEL_SHARD_BOUNDARY.get_or_create_ptr()
+    if s[].tables is None:
+        raise Error("RuntimeError: the parallel shard owner is not connected")
+    var cls = py_type(obj)
+    var reference = py_get(s[].tables, PythonObject("reference_driver_class"), PythonObject(None))
+    if reference is not None and cls is reference:
+        return True
+    var query = py_get(s[].tables, PythonObject("query_driver_class"), PythonObject(None))
+    return query is not None and cls is query
+
+
 def _ctx() raises -> PythonObject:
     """The family owners' shared context (array types, codes, classes)."""
     return _t("context")
@@ -1768,11 +1790,11 @@ def parallel_shard_call(operation: Int, name: PythonObject, args: PythonObject) 
     if operation == PARALLEL_SHARD_OPN_REFERENCE_INIT or operation == PARALLEL_SHARD_OPN_QUERIES_INIT:
         return _holder_init(args, operation == PARALLEL_SHARD_OPN_REFERENCE_INIT)
     if operation == PARALLEL_SHARD_OPN_HOLDER_ENTER:
-        if py_type(args[0]) is not _t("reference_driver_class") and py_type(args[0]) is not _t("query_driver_class"):
+        if not _is_driver(args[0]):
             raise Error("TypeError: parallel driver requires its exact connected class")
         return args[0]
     if operation == PARALLEL_SHARD_OPN_HOLDER_CLOSE:
-        if py_type(args[0]) is not _t("reference_driver_class") and py_type(args[0]) is not _t("query_driver_class"):
+        if not _is_driver(args[0]):
             raise Error("TypeError: parallel driver requires its exact connected class")
         # A construction that failed (every refusal of _holder_init runs
         # before the owner is stored, and a failed _pool_open stores none) has
