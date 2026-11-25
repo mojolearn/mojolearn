@@ -41,8 +41,10 @@ def test_public_getter_keeps_reference_order_and_ignores_deep(name):
     splitter = model(name)
     fields = vars(splitter)
     if name.startswith('Repeated'):
+        # the repeated splitters return their stored device last, None
+        # included (eb852fc947, bindings/params_metadata_native_door.mojo)
         expected = dict(n_repeats=fields['n_repeats'],
-                        random_state=fields['random_state'], **fields['cvargs'])
+                        random_state=fields['random_state'], **fields['cvargs'], device=fields.get('device'))
     else:
         expected = {key: value for key, value in fields.items() if not key.startswith('_')}
     before = dict(fields)
@@ -84,7 +86,7 @@ def test_repeated_arguments_keep_order_and_borrow_values():
     value = Value()
     splitter.cvargs['extra'] = value
     result = checked(splitter.get_params)
-    assert list(result) == ['n_repeats', 'random_state', 'n_splits', 'extra']
+    assert list(result) == ['n_repeats', 'random_state', 'n_splits', 'extra', 'device']
     assert result['extra'] is value and not calls
 
 
