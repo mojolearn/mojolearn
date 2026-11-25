@@ -44,8 +44,8 @@ from core.entry_table import entry_op_plain
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.tokenizer_gpu_entry_table import (
-    TOK_GPU_OP_CORPUS_ENCODE, TOK_GPU_OP_CORPUS_TRAIN, TOK_GPU_OP_VOCAB_DECODE, TOK_GPU_OP_VOCAB_ENCODE,
-    TOK_GPU_OP_VOCAB_FREE, TOK_GPU_OP_VOCAB_LOAD,
+    TOK_GPU_OP_CORPUS_ENCODE, TOK_GPU_OP_CORPUS_TRAIN, TOK_GPU_OP_VOCAB_CUT, TOK_GPU_OP_VOCAB_DECODE,
+    TOK_GPU_OP_VOCAB_ENCODE, TOK_GPU_OP_VOCAB_FREE, TOK_GPU_OP_VOCAB_LOAD,
 )
 from tokenizer.gpu.vocab_gpu import vocab_gpu_decode, vocab_gpu_encode, vocab_gpu_free, vocab_gpu_load
 from tokenizer.encoding import BpeTokenizer
@@ -56,7 +56,8 @@ from tokenizer.gpu.bpe_gpu import (
     I32P, I64P, U8P, BpeGpuClasses, BpeGpuTable, bpe_gpu_ctx, bpe_gpu_encode_device, bpe_gpu_train_device,
     _gtid, _blocks, _up8, _up64, _p8, _p32, _p64, _scan,
 )
-from tokenizer.gpu.pretokenize_gpu import cut_chain_marks, gpu_cut_runpos_kernel, gpu_cut_pack_kernel
+from tokenizer.gpu.pretokenize_gpu import cut_chain_marks, gpu_cut_runpos_kernel, gpu_cut_pack_kernel, pretokenize_gpu_into
+from tokenizer.impl.pretokenize import PATTERN_GPT2, PATTERN_LLAMA3, PATTERN_QWEN2
 
 # The device tokenizer's positions are int32 (`bpe_gpu.mojo`'s scans and piece tables).
 comptime CORPUS_GPU_MAX_BYTES = 2147483646
@@ -379,6 +380,16 @@ def corpus_gpu_entry_dispatch(operation: Int, aa: Int, na: Int, pp: Int, np: Int
             if na != 1:
                 raise Error("tokenizer gpu entry: vocab free takes 1 address")
             vocab_gpu_free(a[0])
+        elif op == TOK_GPU_OP_VOCAB_CUT:
+            # `models.tokenizer.pretokenize(device="gpu")` (lane vdl-pretok): the pattern code is
+            # admitted here for every n (the device cut only reads it when there are bytes).
+            if na != 2 or np != 2 or p[0] < 0 or not a[1]:
+                raise Error("tokenizer gpu entry: vocab cut takes 2 addresses and 2 words")
+            if p[0] > CORPUS_GPU_MAX_BYTES:
+                raise Error("tokenizer gpu entry: vocab cut of " + String(p[0]) + " bytes is above the device's int32 positions")
+            if p[1] != PATTERN_GPT2 and p[1] != PATTERN_LLAMA3 and p[1] != PATTERN_QWEN2:
+                raise Error("tokenizer gpu entry: vocab cut: unknown pattern code " + String(p[1]))
+            value = pretokenize_gpu_into(a[0], p[0], p[1], a[1])
         else:
             raise Error("tokenizer gpu entry: unknown operation " + String(op))
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value

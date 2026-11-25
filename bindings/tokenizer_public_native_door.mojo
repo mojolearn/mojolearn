@@ -69,7 +69,7 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
 from core.lm_batch_run import lm_gather_rows
 from core.shared_slot import SharedSlot
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
-from core.tokenizer_gpu_entry_table import TOK_GPU_OP_VOCAB_DECODE, TOK_GPU_OP_VOCAB_ENCODE, TOK_GPU_OP_VOCAB_LOAD
+from core.tokenizer_gpu_entry_table import TOK_GPU_OP_VOCAB_CUT, TOK_GPU_OP_VOCAB_DECODE, TOK_GPU_OP_VOCAB_ENCODE, TOK_GPU_OP_VOCAB_LOAD
 from bindings.tokenizer_gpu_connect_unpack import tokenizer_gpu_entry_connect
 
 
@@ -654,11 +654,12 @@ def _tokenizer_device(value: PythonObject, context: PythonObject) raises -> Int:
 def _cut_device(value: PythonObject, context: PythonObject) raises -> Int:
     """The admitted `device` of one `mojolearn.models.tokenizer.pretokenize` call, read once
     (core/function_device.mojo `function_device_decide`, the ONE rule of a public function; the
-    function has both sides: the host cut here, the GPU cut in `_mojolearn_x_tokenizer`
-    `bpe_gpu_pretokenize`). Returns DEVICE_GPU only where the GPU cut runs; None and 'cpu' run
-    the host cut (the CPU column, today's route), 'gpu' on a CPU-only installation is refused in
-    the estimators' words, and where the GPU binding is not connected in its connection words.
-    `context` is the vocab context: [5] the backend's fields, [6] the GPU binding's tuple."""
+    function has both sides: the host cut here, the GPU cut through the GPU tokenizer image's
+    native entry, TOK_GPU_OP_VOCAB_CUT). Returns DEVICE_GPU only where the GPU cut runs; None and
+    'cpu' run the host cut (the CPU column, today's route), 'gpu' on a CPU-only installation is
+    refused in the estimators' words, and where the image's entry did not resolve at connect_vocab
+    in those words (the one refusal `_vocab_device` raises). `context` is the vocab context: [5]
+    the backend's fields."""
     var request = device_unpack(value, native_loaded_module("builtins"))
     if request == DEVICE_INSTALL:
         return request
@@ -666,9 +667,9 @@ def _cut_device(value: PythonObject, context: PythonObject) raises -> Int:
     var decided = function_device_decide(request, cpu_only, True, True, "mojolearn.models.tokenizer.pretokenize")
     if decided.request != DEVICE_GPU:
         return DEVICE_CPU
-    var gpu = context[6]
-    if py_type(gpu[0]) is native_loaded_module("builtins").str:
-        raise Error(String(gpu[0]))
+    ref state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()[]
+    if state.vocab_gpu_refusal.byte_length() != 0:
+        raise Error(state.vocab_gpu_refusal)
     return DEVICE_GPU
 
 
@@ -694,14 +695,22 @@ def _vocab_device(value: PythonObject, context: PythonObject) raises -> Int:
     return DEVICE_GPU
 
 
-def _cut_gpu(bytes: List[UInt8], pattern: Int, context: PythonObject) raises -> PythonObject:
-    """The GPU cut (`bpe_gpu_pretokenize`): the data uploaded once and the boundaries read back
-    once inside the entry; this door only hands over the addresses and publishes the offsets."""
-    var entry = context[6][7]
-    _native(entry)
+def _cut_gpu(bytes: List[UInt8], pattern: Int) raises -> PythonObject:
+    """RUN of the GPU cut (lane vdl-pretok): the UNPACKed bytes handed by address to the GPU
+    tokenizer image's native entry (TOK_GPU_OP_VOCAB_CUT, resolved once at connect_vocab, the GIL
+    released; tokenizer/gpu/pretokenize_gpu.mojo `pretokenize_gpu_into`): the data uploaded once
+    and the boundaries read back once inside the entry. No Python object crosses; this door only
+    publishes the offsets (PACK)."""
+    var entry = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()[].vocab_gpu_entry
     var n = len(bytes)
     var bounds = List[Int64](length=n + 1, fill=Int64(0))
-    var count = Int(py=py_call(entry, Int(bytes.unsafe_ptr()), Int(bounds.unsafe_ptr()), Python.tuple(n, pattern)))
+    var addresses: Array[Int, 2] = [Int(bytes.unsafe_ptr()), Int(bounds.unsafe_ptr())]
+    var ints: Array[Int, 2] = [n, pattern]
+    var floats: Array[Float64, 0] = []
+    var count: Int
+    var py = Python()
+    with GILReleased(py):
+        count = entry_ref_call(entry, TOK_GPU_OP_VOCAB_CUT, addresses, ints, floats)
     if count < 1 or count > n + 1:
         raise Error("RuntimeError: the GPU pre-tokenizer returned " + String(count) + " boundaries")
     var offsets = List[Int](capacity=count)
@@ -2069,7 +2078,7 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
         var bytes = _bytes(args[0])
         var pattern = _vocab_pattern(args[1])
         if device == DEVICE_GPU:
-            return _cut_gpu(bytes, pattern, context)
+            return _cut_gpu(bytes, pattern)
         var offsets = pretokenize_pattern(bytes, builtin_unicode_classes(), pattern)
         return _py_int_list(offsets)
     if operation == "vocab_fact":
