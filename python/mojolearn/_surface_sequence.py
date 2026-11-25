@@ -125,6 +125,9 @@ FAMILIES = (
                         # nn-blocks-pgseq begin: Sequential.compile param_groups (tools/identity_lanes/nn_pgseq.py)
                         "sequential-param-groups", "training-param-groups-device",
                         # nn-blocks-pgseq end
+                        # nn-blocks-composed begin: the composed tagger (tools/identity_lanes/nn_composed.py)
+                        "ops-composed-tagger",
+                        # nn-blocks-composed end
                         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -319,6 +322,9 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # nn-blocks-scatter begin
     "ops-scatter-segment": "Session: scatter_add, segment_sum, segment_mean, segment_max",
     # nn-blocks-scatter end
+    # nn-blocks-composed begin
+    "ops-composed-tagger": "Session: a masked tagger (embedding, scan cell with dropout, parameter groups), resumed",
+    # nn-blocks-composed end
                        }
 PUBLIC_PENDING_LANES = {
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table

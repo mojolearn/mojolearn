@@ -188,6 +188,12 @@ from autograd.nn_scan import (
     scan_dropout_seed,
 )
 # nn-blocks-scan end
+# nn-blocks-composed begin: the composed tagger's sabotage switches only (autograd/nn_composed.mojo)
+from autograd.nn_composed import (
+    COMPOSED_SABOTAGE_SCAN_KEY, COMPOSED_SABOTAGE_SCAN_KEY_HOST, COMPOSED_SABOTAGE_GROUP_STATE,
+    COMPOSED_SABOTAGE_GROUP_STATE_HOST,
+)
+# nn-blocks-composed end
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -1542,6 +1548,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             raise Error("ops: the optimizer state's step count must be >= 0")
         var oi = self._opt_index(o)
         if self.opts[oi].pg >= 0:
+            # nn-blocks-composed begin
+            comptime if (COMPOSED_SABOTAGE_GROUP_STATE and Self.E.IS_DEVICE) or (
+                    COMPOSED_SABOTAGE_GROUP_STATE_HOST and not Self.E.IS_DEVICE):
+                if self._pg_group(oi, h, "load_optimizer_state") >= 1:
+                    return  # SABOTAGE: a later group's state is not restored
+            # nn-blocks-composed end
             # nn-blocks-pg: the parameter's group member keeps its state
             oi = self._pg_member(oi, h, "load_optimizer_state")
         var slot = self._param_slot(h, "load_optimizer_state")
@@ -3064,6 +3076,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 for q in range(len(drop_nodes)):  # driver-loop: over the cell's dropout nodes (this step's seeds)
                     var dk = drop_nodes[q]
                     var seed = scan_dropout_seed(drop_seed[q], spec.key, dk, t)
+                    # nn-blocks-composed begin
+                    comptime if (COMPOSED_SABOTAGE_SCAN_KEY and Self.E.IS_DEVICE) or (
+                            COMPOSED_SABOTAGE_SCAN_KEY_HOST and not Self.E.IS_DEVICE):
+                        seed = scan_dropout_seed(drop_seed[q], 0, dk, t)  # SABOTAGE: the key stays at the capture's 0
+                    # nn-blocks-composed end
                     comptime if (SCAN_SABOTAGE_DROP_KEY and Self.E.IS_DEVICE) or (
                             SCAN_SABOTAGE_DROP_KEY_HOST and not Self.E.IS_DEVICE):
                         seed = drop_seed[q]  # SABOTAGE: the captured seed at every step and key
