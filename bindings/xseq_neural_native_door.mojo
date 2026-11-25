@@ -917,10 +917,12 @@ def _rnn_run_options(model: PythonObject, fields: PythonObject, source: PythonOb
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(params)), Int(py=xseq_addr(out)), Int(py=xseq_addr(seq))]
     var provider = xseq_neural_provider(route.entries)
     var entry = _entry(provider)
+    # the lengths address is read under the GIL (it touches the Python object), then the GIL is released
+    var lengths_address = _rnn_lengths_address(lengths)
     var py = Python()
     with GILReleased(py):
         xseq_run_rnn_predict_options(entry, request, addresses[0], addresses[1], addresses[2], addresses[3],
-                                     _rnn_lengths_address(lengths), o)
+                                     lengths_address, o)
     _ = lengths  # keep the Python objects alive through the native call above
     _ = provider
     _ = params
