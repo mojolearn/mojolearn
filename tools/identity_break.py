@@ -2151,10 +2151,35 @@ def device_view(ml, side, name=None):
     return vd.view(ml, side, strict=name is None or one_sided(name) is None)
 
 
+#: {lane: reason}: lanes whose CPU side is not part of a GPU installation.
+#: On a GPU install their CPU cells read `n/a:gpu-install: <reason>`; their
+#: CPU column is verified on the CPU-only install, where the lane runs both
+#: as usual. Decision (Andrew via the coordinator, 2026-11-25, lane gs-fix
+#: row G1): SambaStack(device='cpu') on a GPU install stays refused
+#: (bindings/samba_route_unpack.mojo: no host block images beside the GPU set).
+GPU_INSTALL_CPU_NA = {}
+_SAMBA_GPU_INSTALL = ("SambaStack(device='cpu') is refused on a GPU installation (its blocks' host images are "
+                      "not loaded beside the GPU set); the CPU column is verified on the CPU-only installation")
+for _name in ("samba", "samba-bf16w", "samba-int8w", "samba-untied-dropout-accum", "samba-decode-session",
+              "samba-optimizer-state", "nn-ep-samba-stack", "nn-ep-samba-inference"):
+    GPU_INSTALL_CPU_NA[_name] = _SAMBA_GPU_INSTALL
+del _name
+
+
+def gpu_install_na(name, ml, side):
+    """The `n/a:` value of `name` on `side` when that side is not part of
+    this installation (a GPU install's CPU side of a GPU_INSTALL_CPU_NA lane), else None."""
+    reason = GPU_INSTALL_CPU_NA.get(name)
+    if reason is None or side != "cpu" or not gpu_side_available(ml):
+        return None
+    return f"n/a:gpu-install: {reason}"
+
+
 def call_lane(name, ml, side, X, yc, yr, Xh=None):
     """`LANES[name]` on `side`, in this process, through the device view.
-    Returns (fit, view). Raises OneSidedAbsent when the lane has no such side."""
-    na = one_sided_na(name, side)
+    Returns (fit, view). Raises OneSidedAbsent when the lane has no such side
+    (declared one-sided, or a side this installation does not carry)."""
+    na = one_sided_na(name, side) or gpu_install_na(name, ml, side)
     if na is not None:
         raise OneSidedAbsent(na)
     bound = device_view(ml, side, name)
@@ -13356,7 +13381,7 @@ def _run_reference(args):
                 continue
             timer = CellTimer(f"{name}/{f}")
             X, yc, yr = data[f]
-            absent = one_sided_na(name, side)
+            absent = one_sided_na(name, side) or gpu_install_na(name, ml, side)
             if absent is not None:
                 # THE MISSING SIDE OF A ONE-SIDED LANE (`_one_sided`): named, never
                 # run, never a hash; every part reads the same n/a sentence.

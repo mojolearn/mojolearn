@@ -344,7 +344,12 @@ def side_absent(harness, ml, lane, side):
     GPU, or the missing side of a lane the harness declares one-sided."""
     if side == "gpu" and not vd.gpu_available(ml):
         return vd.NO_GPU
-    return harness.one_sided_na(lane, side)
+    absent = harness.one_sided_na(lane, side)
+    if absent is None and hasattr(harness, "gpu_install_na"):
+        # A side this installation does not carry for this lane (a GPU
+        # install's CPU side of SambaStack; GPU_INSTALL_CPU_NA in the harness).
+        absent = harness.gpu_install_na(lane, ml, side)
+    return absent
 
 
 def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=(), side=None):
