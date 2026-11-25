@@ -177,6 +177,7 @@ from autograd.nn_cbw import (
 # differentiate their nodes in a session (autograd/session_layer_rules.mojo)
 from autograd.session_layer_rules import (
     LayerRules, OPS_LAYER_FIRST, OPS_LAYER_LAST, OPS_LAYER_POOL_FIRST, OPS_LAYER_RESIZE_FIRST, OPS_LAYER_REST_FIRST,
+    OPS_LAYER_EXTRA_FIRST,
 )
 # session-ops end
 # nn-blocks-qkv begin: attention over explicit q, k, v (session code 122, autograd/nn_qkv.mojo)
@@ -2090,7 +2091,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 if code == OPS_CUSTOM_VJP:
                     return self._cbw_forward(hs, ints, fs, x)
             # nn-blocks-scan / nn-blocks-cbw end
-            # session-ops begin: Sequential's layers as Session ops (codes 130..179), on the no-match path as well;
+            # session-ops begin: Sequential's layers as Session ops and the round's additions (codes 130..189), on the no-match path as well;
             # plain operations, so a scan cell or a custom operation's program (`nested`) may use them
             if code >= OPS_LAYER_FIRST and code <= OPS_LAYER_LAST:
                 return self._layer_op(code, hs, ints, fs, x)
@@ -2566,8 +2567,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             t = self._layer_pool(code, hs, ints, fs, x)
         elif code < OPS_LAYER_REST_FIRST:
             t = self._layer_resize(code, hs, ints, fs, x)
-        else:
+        elif code < OPS_LAYER_EXTRA_FIRST:
             t = self._layer_rest(code, hs, ints, fs, x)
+        else:
+            t = self._layer_extra(code, hs, ints, fs, x)
         if self.tape.is_recording():
             self.layer_nodes = True
         var result = self._add(t, 0, False, 0)
@@ -2600,6 +2603,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         """Norms, activations with parameters, multi-head attention, positional encoding and the losses."""
         raise Error("ops: unknown operation code " + String(code))
     # session-ops-rest end
+
+
+    # session-ops-extra begin: codes 180..189 (sub-lane session-ops-extra replaces this body)
+    def _layer_extra(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
+        """sequence_mask, topk, gather along an axis, logsumexp and the soft-target cross-entropy."""
+        raise Error("ops: unknown operation code " + String(code))
+    # session-ops-extra end
     # session-ops end
 
     def _attention_qkv(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:

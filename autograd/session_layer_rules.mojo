@@ -32,7 +32,9 @@ comptime OPS_LAYER_CONV_FIRST = 130    # session-ops-conv: 130..139, kernels 690
 comptime OPS_LAYER_POOL_FIRST = 140    # session-ops-pool: 140..149, kernels 6920..6939
 comptime OPS_LAYER_RESIZE_FIRST = 150  # session-ops-resize: 150..159, kernels 6940..6959
 comptime OPS_LAYER_REST_FIRST = 160    # session-ops-rest: 160..179, kernels 6960..6979
-comptime OPS_LAYER_LAST = 179
+comptime OPS_LAYER_EXTRA_FIRST = 180   # session-ops-extra: 180..189, kernels 6980..6999 (sequence_mask, topk,
+                                       # gather along an axis, logsumexp, soft-target cross-entropy)
+comptime OPS_LAYER_LAST = 189
 
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args

@@ -10,8 +10,8 @@ design; the sub-lanes update their rows ("added" with the Session name) as they 
 - **Same nodes, same bits.** A Session op calls the Sequential layer's own forward function on the tape
   (`nn_conv_transpose2d`, `rankn_conv3d`, `graph_group_norm`, `nn_mha_forward`, ...). It records the same nodes
   and tags, so its forward and backward are Sequential's bits by construction; a native check compares the two.
-- **Dispatch.** Session codes 130..179 (`autograd/session_layer_rules.mojo`): conv 130..139, pool 140..149,
-  resize/shuffle/pad 150..159, the rest 160..179. `OpsSession._op_run_tensors` tests the range once on the chain's
+- **Dispatch.** Session codes 130..189 (`autograd/session_layer_rules.mojo`): conv 130..139, pool 140..149,
+  resize/shuffle/pad 150..159, the rest 160..179, the round's additions 180..189. `OpsSession._op_run_tensors` tests the range once on the chain's
   no-match path (after scan and custom op), which no older operation reaches; `_layer_op` picks the family
   method. A layer op is a plain operation, so a scan cell or a custom operation's program may use it.
 - **Options that an existing op lacks** (conv2d dilation, a pool's padding or ceil_mode) never add a word to the
@@ -23,7 +23,7 @@ design; the sub-lanes update their rows ("added" with the Session name) as they 
   call and then wraps its usual rules in `LayerRules[...]` (NnConvRules, NNAttentionRules, NnCtcRules first, then
   the inner rules unchanged). A session that never used a layer op runs exactly its old rules. Program.fit tests
   the Bool once per batch beside a whole backward (no lookup, no allocation).
-- **Program capture.** `PROGRAM_MAX_CODE` 129 -> 179; capture, save, load and replay go through `_op_run` like
+- **Program capture.** `PROGRAM_MAX_CODE` 129 -> 189; capture, save, load and replay go through `_op_run` like
   every op. Frontend codes `_SOP_*` are 1000 + the session code.
 - **Higher order.** `vjp`/`jvp`/`hvp` and `create_graph=True` differentiate with NeuralRules / recorded
   backward and refuse a layer node by name ("custom backward rule not registered"), as they refuse the
@@ -81,6 +81,16 @@ Sequential layer codes are `python/mojolearn/_x_sequence_model.py` `_LAYER`. "ex
 | losses mse, l1, huber, bce_with_logits, cross_entropy | tape losses | exist | exist | - |
 | losses smooth_l1, nll, kl_div, bce pos_weight, ctc | nn_losses bodies, nn_ctc | missing | loss kinds / NnCtcRules | rest |
 
+### The round's additions (Andrew, 2026-11-25; not Sequential layers)
+
+| Op | Reuses | Session op | Backward | Owner |
+|---|---|---|---|---|
+| `sequence_mask(lengths, max_length)` | scan's length mask construction where the semantics agree | missing | none (mask) | extra |
+| `topk(x, k, axis)` (lowest index wins a tie, every vendor) | existing sort / argmax bodies where they fit | missing | gather of the upstream to the selected positions | extra |
+| `gather(x, axis, index)` (torch.gather / take_along_dim) | rankn take / embedding runs | missing | scatter_add (repeated indices accumulate) | extra |
+| `logsumexp(x, axis)` | log-softmax's numerics | missing | softmax of the row times the upstream | extra |
+| soft-target `cross_entropy` (a target distribution) | the cross-entropy / log-softmax bodies; the hard-label path keeps its code | missing | softmax minus target | extra |
+
 Expected not exposable without a new kernel (each sub-lane confirms or exposes): conv_transpose3d (no 3-D col2im
 path), adaptive_max_pool3d, interpolate modes trilinear / bicubic / area, padding modes circular and 3-D
 reflection / replication.
@@ -107,4 +117,5 @@ reflection / replication.
 | session-ops-pool | 140..149 | 6920..6939 | 1-D / 3-D pools, adaptive pools, global max, pool padding |
 | session-ops-resize | 150..159 | 6940..6959 | interpolate, pixel_shuffle / unshuffle, reflection / replication pad |
 | session-ops-rest | 160..179 | 6960..6979 | batch / group / instance norm, prelu, mish, multihead attention, positional encoding, losses, raw SSM scans |
+| session-ops-extra | 180..189 | 6980..6999 | sequence_mask, topk, gather along an axis, logsumexp, soft-target cross-entropy |
 | session-ops-verify | - | - | the generic composed-model lane and its data cases |
