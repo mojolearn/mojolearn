@@ -6,6 +6,7 @@
 # Numerical exports still use the existing packed CPython extension ABI; a
 # descriptor-only ANN provider remains explicit migration work. No arithmetic
 # or vendor identity lane is introduced by these boundary repairs.
+from bindings.function_scope_door import FunctionScope, ScopeBlock
 from std.python import Python, PythonObject
 from x_ann.neighbors_ann_run import (
     ann_check_dimension, ann_shape_size, ann_c_strides, ivf_metric_known, ivf_metric_refusal, ivf_check_n_lists, ivf_fit_plan,
@@ -906,15 +907,35 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var idx = _ann_empty(m * k, "<i4", context)
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(m), PythonObject(k0), k_o,
                              PythonObject(1 if root else 0))
+    # Lane gd-resident-2: inside `resident()` the GPU image reads the
+    # caller's dataset, queries and int32 candidates from its own store in
+    # place (found, or put once per scope); a cast copy is never kept.
+    # Outside a scope: one atomic load, nothing appended.
+    var block = ScopeBlock()
+    var scope = FunctionScope(context)
+    if scope.active():
+        if not x.copied:
+            block.keep(0, scope, args[1], args[1], n * d)
+        if not q.copied:
+            block.keep(1, scope, args[2], args[2], m * d)
+        if in_place:
+            block.keep(2, scope, args[3], args[3], m * k0)
     if not (x.copied and q.copied):
         _ = py_call(params.append, PythonObject(Int(status.unsafe_ptr())))
+    elif block.address() != 0:
+        _ = py_call(params.append, PythonObject(0))  # no status word: the slot before the block
+    if block.address() != 0:
+        _ = py_call(params.append, PythonObject(block.address()))
     var entry = _ann_entry(native, "x_ann_refine")
     # dataset, queries, candidates, out_d, out_i; n, d, m, k0, k (+ root:
     # the binding takes the euclidean roots)
-    _ = family_call(entry,
-                    Python.list(PythonObject(x.source.addr), PythonObject(q.source.addr), PythonObject(c_address),
-                                classical_address(dist), classical_address(idx)),
-                    params)
+    try:
+        _ = family_call(entry,
+                        Python.list(PythonObject(x.source.addr), PythonObject(q.source.addr),
+                                    PythonObject(c_address), classical_address(dist), classical_address(idx)),
+                        params)
+    finally:
+        block.settle()  # drop a pin the image's scope cache did not keep
     _ = x  # keep the Python object alive through the native call above
     _ = x_pin
     _ = q  # keep the Python object alive through the native call above

@@ -32,6 +32,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mu
 from x_ann.io import upload_f32, upload_i32, download_f32, download_i32, enqueue_query_status
 from x_ann.io import upload_f32_ptr, upload_i32_ptr, download_f32_into, download_i32_into
 from x_ann.refine_core import refine_cell
+from x_ann.ann_store import ann_scope_buffer
+from core.scope_store_slot import scope_input_block
 from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale
 from x_ann.ivf_sq_core import sq_encode_cell, sq_hi_takes, sq_lo_takes, sq_range_finish
 from std.memory import bitcast
@@ -986,7 +988,7 @@ def refine_device(
         MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(cand.unsafe_ptr())), k0, k,
         MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(rd.unsafe_ptr())),
         MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(ri.unsafe_ptr())),
-        root, status_addr,
+        root, status_addr, 0,
     )
     # the inputs are named here, after the drains inside the call above
     _ = len(x)
@@ -1001,7 +1003,7 @@ def refine_device_ptr(
     qp: MutPointer[Float32, MutUntrackedOrigin], m: Int,
     candp: MutPointer[Int32, MutUntrackedOrigin], k0: Int, k: Int,
     out_dp: MutPointer[Float32, MutUntrackedOrigin], out_ip: MutPointer[Int32, MutUntrackedOrigin],
-    root: Bool, status_addr: Int,
+    root: Bool, status_addr: Int, scope_block: Int,
 ) raises:
     """`refine` on the CALLER's arrays (lane fx-board-modelsel-metrics,
     2026-11-19): the dataset (n x d), the queries (m x d) and the candidate
@@ -1011,25 +1013,54 @@ def refine_device_ptr(
     of first-touch pages for 1,000,000 x 220, two thirds of the call's wall
     as system time) and the results into lists and out again. The same
     words go to the same kernel; the caller keeps every array alive for the
-    whole call (each copy is drained before the return)."""
+    whole call (each copy is drained before the return).
+    `scope_block` (lane gd-resident-2): 0, or the address of the door's
+    scope block (core/scope_store_slot.mojo; inputs 0 dataset, 1 queries,
+    2 candidates): inside the caller's `resident()` scope each kept input
+    is the image store's resident slot (x_ann/ann_store.mojo: found, or put
+    once per scope), read in place (the kernel and the finite scan only
+    read them): no upload after the scope's first call."""
     var ctx = x_ann_ctx()
-    var dx = upload_f32_ptr(ctx, xp, n * d)
-    var dq = upload_f32_ptr(ctx, qp, m * d)
+    var res_x = scope_input_block(scope_block, 0)
+    var res_q = scope_input_block(scope_block, 1)
+    var res_c = scope_input_block(scope_block, 2)
+    var dx: DeviceBuffer[DType.float32]
+    if res_x.wanted():
+        dx = ann_scope_buffer(res_x, Int(xp), n * d)
+    else:
+        dx = upload_f32_ptr(ctx, xp, n * d)
+    var dq: DeviceBuffer[DType.float32]
+    if res_q.wanted():
+        dq = ann_scope_buffer(res_q, Int(qp), m * d)
+    else:
+        dq = upload_f32_ptr(ctx, qp, m * d)
     # Lane a8b-device-x-neighbors-rest: the dataset's and the queries'
     # finite status behind their uploads, read back by the downloads below.
     var dst = enqueue_query_status(ctx, dx, n * d, dq, m * d, status_addr)
-    var dcand = upload_i32_ptr(ctx, candp, m * k0)
+    # The candidate ids: a resident slot holds their int32 bytes (the store
+    # copies 4-byte words, never converts), read through an int32 pointer.
+    var c_slot = Optional[DeviceBuffer[DType.float32]]()
+    var c_up = Optional[DeviceBuffer[DType.int32]]()
+    var cand_address: Int
+    if res_c.wanted():
+        c_slot = Optional[DeviceBuffer[DType.float32]](ann_scope_buffer(res_c, Int(candp), m * k0))
+        cand_address = Int(c_slot.value().unsafe_ptr())
+    else:
+        c_up = Optional[DeviceBuffer[DType.int32]](upload_i32_ptr(ctx, candp, m * k0))
+        cand_address = Int(c_up.value().unsafe_ptr())
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     ctx.enqueue_function[refine_kernel](Int32(m), dx.unsafe_ptr(), Int32(n), Int32(d), dq.unsafe_ptr(),
-                                        dcand.unsafe_ptr(), Int32(k0), Int32(k), dd.unsafe_ptr(), di.unsafe_ptr(),
+                                        I32P(unsafe_from_address=cand_address), Int32(k0), Int32(k),
+                                        dd.unsafe_ptr(), di.unsafe_ptr(),
                                         Int32(1) if root else Int32(0), grid_dim=_grid(m), block_dim=TPB)
     ctx.synchronize()
     download_f32_into(ctx, dd, m * k, out_dp)
     download_i32_into(ctx, di, m * k, out_ip)
     _ = di^
     _ = dd^
-    _ = dcand^
+    _ = c_slot^
+    _ = c_up^
     _ = dq^
     _ = dx^
     _ = dst^
