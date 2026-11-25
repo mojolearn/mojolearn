@@ -518,12 +518,17 @@ def _(ml, X, yc, yr, Xh=None):
     OrderedRMSE and ExperimentalTwoLevelFeatureFreq (their tables' base lanes, gbdt-cat-bootstrap,
     gbdt-binary-columns and gbdt-weighted-special, are many-fit lanes): a Logloss GradientBoosting at the
     recorded GBDT options, an OrderedRMSE over the fixture's hashed permutation and the FeatureFreq tree over
-    the coded fixture, each on the first 2000 rows."""
+    the coded fixture, the first two on the first 2000 rows.
+
+    The FeatureFreq fit takes the whole coded fixture, as its base lane gbdt-feature-freq does (FIX w3-fix-13,
+    2026-11-25): `_coded`'s numeric columns vary on every fixture over all rows, but on `denormal_ftz` column 0 is
+    constant over the first 2000 (its denormals flush to zero) and FeatureFreq refuses a constant numeric column by
+    design ("numeric columns must vary; column 2 is constant"). Fixture defect."""
     Xr, ycr, yrr = np.ascontiguousarray(X[:2000]), yc[:2000], yr[:2000]
     g = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss="Logloss").fit(Xr, ycr)
     perm = np.argsort(_hashed_uniform(Xr.shape[0], 1, "ordered-permutation").reshape(-1), kind="stable")
     o = ml.OrderedRMSE(n_estimators=8, max_depth=4).fit(Xr, yrr, permutation=perm)
-    f = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(_coded(Xr), yrr)
+    f = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(_coded(X), yr)
     return _fit(dict(classes=_m_predict_h(g.predict_classes(Xr[:256])),
                      gbdt_leaves=_m_predict_h(g.get_tree_leaf_counts(), g.get_leaf_values()),
                      ordered_leaves=_m_predict_h(o.get_tree_leaf_counts(), o.get_leaf_values()),
