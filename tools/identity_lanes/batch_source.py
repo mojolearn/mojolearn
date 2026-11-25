@@ -18,10 +18,10 @@
 # Fixture: 7 records of lengths 1 to 4 in two shards, F = 2, batch 2, two batches a bucket window, shuffled from
 # seed 5: 4 batches an epoch. The model: steps (B, L, 2) -> reshape (-1, 2) -> dropout 0.5 -> matmul W (2, 1), plus
 # lengths (B, 1) matmul v (1, 1); loss = sum of both (loss='output'); AdamW with W and v in two parameter groups.
-# Three steps, stop (the 4th batch is read ahead), save, then two more steps uninterrupted vs resumed.
+# Three steps, stop mid-epoch, save, then two more steps uninterrupted vs resumed.
 #
-# Sabotage arms (tools/identity_lanes/coverage_sabotage.tsv): batch_source_read_ahead (the saved position is the
-# read-ahead batch's: the resumed next batch ids REFUSE) and program_training_drop_group (the resume restores group
+# Sabotage arms (tools/identity_lanes/coverage_sabotage.tsv): batch_source_read_ahead (the saved position is one
+# batch past the consumed one: the resumed next batch ids REFUSE) and program_training_drop_group (the resume restores group
 # 0's state only: v's update moves and the parameter check REFUSES), each on one side.
 
 _BSRC_LENGTHS = ((1, 3, 2, 4), (2, 1, 3))
@@ -82,7 +82,7 @@ def _bsrc_program(ml, c):
 @lane("ops-batch-source-resume")
 def _(ml, X, yc, yr, Xh=None):
     """Streamed batches from a two-shard directory (BatchSource: shuffle, length buckets, per-batch padding),
-    Program.fit(source=) three steps (mid-epoch; the fourth batch is read ahead), Program.save_training, then two
+    Program.fit(source=) three steps (mid-epoch), Program.save_training, then two
     steps uninterrupted against Session.load_training + two steps in a fresh process: the same next batch ids, the
     same step losses (the dropout masks) and the same parameters, bit for bit. Parts: stream (the first three steps'
     curve and the parameters at the stop), resume (the resumed batch ids, losses and parameters)."""

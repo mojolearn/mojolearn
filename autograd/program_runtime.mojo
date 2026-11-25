@@ -30,7 +30,7 @@ from autograd.nn_scan import OPS_SCAN
 from checks.numerics import identical_div
 from autograd.batch_source import (
     BatchSource, BS_FIELD_TARGETS, batch_source_field_rank, batch_source_shape, batch_source_upload,
-    batch_source_capacity,
+    batch_source_capacity, BATCH_SOURCE_STAGE_WORDS,
 )
 
 
@@ -592,6 +592,7 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
         s.ex.sync()
         # lane batch-source: batches trained in this call, the iteration's first and end batch, its rows
         var taken = 0
+        var staged = 0  # upload words staged since the loop's last wait (autograd/batch_source.mojo THE WAIT)
         var first_b = 0
         var last_b = n_batches
         var rows_run = n
@@ -642,16 +643,19 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
                     # the batch read ahead after the previous step (or, for the call's first batch, read here)
                     if stream[].held_epoch != stream[].epoch or stream[].held_batch != bi:
                         stream[].read(stream[].epoch, bi)
-                    if taken > 0:
-                        # one batch of queued work at most: the previous step ran while its successor was read;
-                        # the upload staging of the previous batch is released here (sequence/exec_device.mojo)
+                    if staged >= BATCH_SOURCE_STAGE_WORDS:
+                        # the uploads' host staging is released by a wait (sequence/exec_device.mojo); the loop
+                        # waits when the staged words reach the bound, not once per batch (lane fable-review-2:
+                        # a wait per batch left the device idle while the host uploaded and enqueued each batch)
                         s.ex.sync()
+                        staged = 0
                     count = stream[].held_rows
                     rows_run += count
                     for k in range(p.n_in):  # driver-loop: over source fields (one upload each)
                         batch_shapes[k] = batch_source_upload(s.ex, stream[], stream[].spec.inputs[k], batches[k])
+                        staged += batch_shapes[k].count()
                     if loss_kind != 0:
-                        _ = batch_source_upload(s.ex, stream[], BS_FIELD_TARGETS, yb.value())
+                        staged += batch_source_upload(s.ex, stream[], BS_FIELD_TARGETS, yb.value()).count()
                 else:
                     for k in range(len(inputs)):  # driver-loop: over program inputs
                         gather_rows(s.ex, inputs[k], indices.value(), start, count, widths[k], batches[k])
@@ -815,8 +819,12 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
                     # device trains this one. A checkpoint records the consumed position, never the read-ahead.
                     taken += 1
                     stream[].consumed = bi + 1
-                    var ahead = stream[].next_position(stream[].epoch, bi)
-                    stream[].read(ahead[0], ahead[1])
+                    # the call's last batch: no later step of this call trains a read-ahead, and a source that is
+                    # closed when the call returns (the public door's) would have read it for nobody
+                    var last_of_call = bi + 1 == last_b and (e + 1 == epochs or (max_steps > 0 and taken >= max_steps))
+                    if stream[].ahead_after_last or not last_of_call:
+                        var ahead = stream[].next_position(stream[].epoch, bi)
+                        stream[].read(ahead[0], ahead[1])
             var terms = s.tape.variable(s.ex, batch_losses.value(), 1, last_b - first_b, False)
             var average = s.tape.scale(s.ex, s.tape.sum(s.ex, terms), identical_div(Float32(1), Float32(rows_run)))
             var a = Args()

@@ -148,3 +148,21 @@ def test_program_save_load_round_trip(tmp_path):
         again = loaded.run(data)
         again = again[0] if isinstance(again, (list, tuple)) else again
         assert np.asarray(again).tobytes() == np.asarray(expected).tobytes()
+
+
+@needs_binding
+def test_create_graph_through_a_layer_op_is_a_value_or_a_refusal():
+    """lane fable-review-2: the layer rules are chosen on the first-order backward paths only. A backward with
+    create_graph=True over a graph that holds a layer node (pixel_shuffle records a Sequential layer tag) must
+    either give the first derivative (ones: the sum of a rearrangement) or refuse in words; it must never return
+    another value or end the process."""
+    from mojolearn import ops
+    with ops.Session(record=True) as s:
+        x = s.tensor(np.arange(16, dtype=np.float32).reshape(1, 4, 2, 2), requires_grad=True)
+        loss = s.sum(s.pixel_shuffle(x, 2))
+        try:
+            s.backward(loss, create_graph=True)
+        except (ValueError, TypeError, RuntimeError, NotImplementedError) as refusal:
+            assert str(refusal)
+            return
+        assert np.asarray(s.numpy(s.grad_tensor(x))).reshape(-1).tolist() == [1.0] * 16

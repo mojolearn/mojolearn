@@ -38,12 +38,23 @@ THE READ of one batch: each record is one `pread` of its steps (and its target r
 buffers, the padding zero-filled, on host tasks (one record a task: the reads are independent). PREFETCH: the fit
 loop reads the NEXT batch into the host buffers right after it has queued the current batch's training, so on a
 GPU the disk reads run while the device trains (the upload copies the host words into the executor's staging at
-once, autograd/program_runtime.mojo).
+once, autograd/program_runtime.mojo). On the HOST executor the two do not overlap, and cannot without a new
+mechanism: a host step runs on the calling thread and returns when it is done, so the read-ahead starts after it;
+each of the two uses every core in turn (the read one task a record, the step its kernels' own tasks), and
+core/host_parallel.mojo has parallel loops only, no task that outlives its call. Overlapping them needs a
+background host task; with all cores already busy in the step it would win the reads' I/O wait and nothing else.
 
 THE POSITION is (epoch, consumed): `consumed` batches of `epoch` have been trained (their optimizer step is
 queued). The read-ahead batch is NOT consumed: a checkpoint records the consumed position, so a resume continues
 with the batch that was read ahead but never trained. `held_*` below is the read-ahead; `epoch` / `consumed` the
-consumed position. A source also has a FINGERPRINT (FNV-1a over the record count, F, W and every record's length),
+consumed position. A source that is closed when the fit call returns (`ahead_after_last` False: the public door
+opens the shards per call) reads nothing ahead after the call's last batch: nobody would train those words.
+
+THE WAIT (device executor). An upload's host words are staged until the next sync (sequence/exec_device.mojo), so a
+streamed fit that never waited would hold one staged batch per queued step if the disk is faster than the device.
+The loop waits when the words staged since its last wait reach BATCH_SOURCE_STAGE_WORDS, not once per batch: a wait
+costs the device one idle gap (the host's upload and enqueue of the next batch) whatever the batch size, and what
+it bounds is host memory, so the bound is on memory. A batch at least that large waits every batch, as before. A source also has a FINGERPRINT (FNV-1a over the record count, F, W and every record's length),
 so a position is never applied to other data.
 """
 from std.ffi import c_int, external_call
@@ -66,12 +77,15 @@ comptime BS_FIELD_TARGETS = 4
 comptime _BS_HEADER_LIMIT = 65536
 comptime _BS_INDEX_LIMIT = 16777216
 comptime _Bytes = UnsafePointer[UInt8, MutUntrackedOrigin]
+#: Words of upload staging a streamed fit queues before it waits for the device (module note THE WAIT): 2^24
+#: float32 words = 64 MB of host memory, whatever the batch shape.
+comptime BATCH_SOURCE_STAGE_WORDS = 1 << 24
 
 # Sabotage arms (tools/identity_lanes/coverage_sabotage.tsv coverage-autograd-batch_source_*; lane
 # ops-batch-source-resume). Off in every build; an arm's patch switches one on. The plain name faults the device
 # executor only, _HOST the host executor only (comptime E.IS_DEVICE at the one use, `batch_source_saved`).
-#   READ_AHEAD: the position a fit hands back for a checkpoint is the read-ahead batch's, not the consumed one, so a
-#   resume skips the batch that was read ahead but never trained.
+#   READ_AHEAD: the position a fit hands back for a checkpoint is one batch past the consumed one (the position a
+#   loop that counted its read-ahead as trained would record), so a resume skips a batch that was never trained.
 comptime BATCH_SOURCE_SABOTAGE_READ_AHEAD = is_defined["MOJOLEARN_BATCH_SOURCE_SABOTAGE_READ_AHEAD"]()
 comptime BATCH_SOURCE_SABOTAGE_READ_AHEAD_HOST = is_defined["MOJOLEARN_BATCH_SOURCE_SABOTAGE_READ_AHEAD_HOST"]()
 
@@ -351,6 +365,7 @@ struct BatchSource(Movable):
     var held_len: Int
     var epoch: Int
     var consumed: Int
+    var ahead_after_last: Bool
 
     def __init__(out self, var spec: BatchSourceSpec):
         self.spec = spec^
@@ -381,6 +396,7 @@ struct BatchSource(Movable):
         self.held_len = 0
         self.epoch = 0
         self.consumed = 0
+        self.ahead_after_last = True
 
     def close(mut self):
         """Close every shard descriptor (idempotent)."""
@@ -653,13 +669,14 @@ def _exists(path: String) -> Bool:
 
 def batch_source_saved[IS_DEVICE: Bool](src: BatchSource) -> Tuple[Int, Int]:
     """The position a checkpoint records after a fit: the CONSUMED one (module note THE POSITION). The sabotage
-    arms hand back the read-ahead batch's position instead, on one side each."""
+    arms hand back the position one batch later instead (the read-ahead counted as trained), on one side each."""
     comptime if (BATCH_SOURCE_SABOTAGE_READ_AHEAD and IS_DEVICE) or (
             BATCH_SOURCE_SABOTAGE_READ_AHEAD_HOST and not IS_DEVICE):
-        if src.held_batch >= 0:
-            var ahead = src.next_position(src.held_epoch, src.held_batch)  # SABOTAGE: past the read-ahead batch
-            return ahead
-    return (src.epoch, src.consumed)
+        var next = src.pending()
+        var ahead = src.next_position(next[0], next[1])  # SABOTAGE: past the batch that was never trained
+        return ahead
+    else:
+        return (src.epoch, src.consumed)
 
 
 def batch_source_shape(src: BatchSource, field: Int, rows: Int, length: Int) raises -> ShapeN:

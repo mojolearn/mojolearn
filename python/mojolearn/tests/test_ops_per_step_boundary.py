@@ -31,7 +31,7 @@ def _params(name):
     ("mae", ["self", "prediction", "target", "reduction", "weight"]),
     ("huber", ["self", "prediction", "target", "delta", "reduction", "weight"]),
     ("bce_with_logits", ["self", "logits", "target", "reduction", "weight"]),
-    ("cross_entropy", ["self", "logits", "codes", "reduction", "weight"]),
+    ("cross_entropy", ["self", "logits", "codes", "reduction", "weight", "probabilities"]),
     ("lstm", ["self", "x", "weight_ih", "weight_hh", "bias_ih", "bias_hh", "h_0", "c_0", "lengths", "reverse",
               "return_state"]),
     ("gru", ["self", "x", "weight_ih", "weight_hh", "bias_ih", "bias_hh", "h_0", "lengths", "reverse",

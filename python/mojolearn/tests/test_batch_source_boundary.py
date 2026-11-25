@@ -88,6 +88,17 @@ def test_fit_with_a_source_takes_no_arrays_and_steps_needs_a_source(tmp_path):
                      parameters=[w], loss="output", steps=1)
         with pytest.raises(ValueError, match="tol"):
             prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", tol=1e-4)
+        # the batches are the source's: a fit argument that says otherwise is refused by name, never ignored
+        with pytest.raises(ValueError, match=r"omit batch_size or open the source with batch_size=64"):
+            prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", batch_size=64)
+        with pytest.raises(ValueError, match="omit shuffle"):
+            prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", shuffle=False)
+        with pytest.raises(ValueError, match="omit seed"):
+            prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", seed=7)
+        assert src.state_dict()["consumed"] == 0
+        # the source's own values are not a disagreement
+        prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", batch_size=2, steps=1)
+        assert src.state_dict()["consumed"] == 1
 
 
 def test_fit_moves_the_position_and_the_checkpoint_round_trip_returns_the_documented_objects(tmp_path):
@@ -108,6 +119,30 @@ def test_fit_moves_the_position_and_the_checkpoint_round_trip_returns_the_docume
         other = ops.BatchSource(str(tmp_path / "d"), 2, seed=9)
         with pytest.raises(ValueError, match="not the one the checkpoint was saved"):
             d.load_training(path, source=other)
+        # the refused load left nothing in the session: the next optimizer takes the next id
+        assert other.state_dict()["consumed"] == 0
+        assert d.optimizer("sgd", lr=0.1) == state["optimizer"] + 1
+
+
+def test_training_checkpoint_carries_centered_rmsprop(tmp_path):
+    """RMSprop(centered=True) keeps a third state buffer (the gradient average): the checkpoint carries it, so the
+    step after a resume equals the uninterrupted one."""
+    src = ops.BatchSource(_shards(str(tmp_path / "d")), 2, shuffle=False)
+    path = str(tmp_path / "run.ckpt")
+    with ops.Session() as s:
+        prog, w = _program(s)
+        opt = s.optimizer("rmsprop", lr=0.05, centered=True, momentum=0.5)
+        prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", steps=1)
+        prog.save_training(path, optimizer=opt, source=src)
+        prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", steps=1)
+        straight = np.asarray(s.numpy(w)).copy()
+    with ops.Session() as d:
+        fresh = ops.BatchSource(str(tmp_path / "d"), 2, shuffle=False)
+        state = d.load_training(path, source=fresh)
+        state["program"].fit(source=fresh, optimizer=state["optimizer"], parameters=state["parameters"],
+                             loss="output", steps=1)
+        resumed = np.asarray(d.numpy(state["parameters"][0]))
+    assert resumed.tobytes() == straight.tobytes()
 
 
 def test_load_state_dict_refuses_other_settings(tmp_path):
@@ -119,3 +154,37 @@ def test_load_state_dict_refuses_other_settings(tmp_path):
     bad = dict(state, format="other")
     with pytest.raises(ValueError, match="format words"):
         src.load_state_dict(bad)
+
+
+def test_each_batch_trains_at_its_own_padded_length(tmp_path):
+    """A program captured at one length replays on batches of other lengths: its nodes run again on each batch's
+    shape (a reshape with -1 is resolved from the batch in front of it). Records of lengths 1, 3, 2, 4 in order,
+    two a batch: the first batch is padded to 3 steps, the second to 4, the capture was made at 4."""
+    lengths = (1, 3, 2, 4)
+    steps = np.arange(sum(lengths) * F, dtype=np.float32).reshape(-1, F) / 10.0
+    src = ops.BatchSource(_shards(str(tmp_path / "d"), lengths=lengths), 2, shuffle=False)
+    with ops.Session() as s:
+        prog, w = _program(s)
+        opt = s.optimizer("sgd", lr=0.1)
+        # loss = sum(steps @ w) + sum(lengths): the gradient of w is the column sums of the batch's real steps
+        prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", steps=1)
+        first = np.asarray(s.numpy(w), np.float64).reshape(-1)
+        np.testing.assert_allclose(first, 0.25 - 0.1 * steps[0:4].astype(np.float64).sum(axis=0), rtol=1e-5)
+        prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", steps=1)
+        second = np.asarray(s.numpy(w), np.float64).reshape(-1)
+        np.testing.assert_allclose(second, first - 0.1 * steps[4:10].astype(np.float64).sum(axis=0), rtol=1e-5)
+
+
+def test_a_program_fixed_to_one_length_is_refused_on_another(tmp_path):
+    """A node that names the captured length (a reshape to (8, F) of a (2, 4, F) input) cannot take a batch
+    padded to 3 steps: the fit refuses, it never reads past the batch."""
+    src = ops.BatchSource(_shards(str(tmp_path / "d"), lengths=(1, 3, 2, 4)), 2, shuffle=False)
+    with ops.Session() as s:
+        w = s.tensor(np.full((F, 1), 0.25, np.float32))
+        xs = s.tensor(np.zeros((2, 4, F), np.float32))
+        xl = s.tensor(np.zeros((2, 1), np.float32))
+        loss = s.add(s.sum(s.matmul(s.reshape(xs, (8, F)), w)), s.sum(xl))
+        fixed = s.capture(inputs=[xs, xl], outputs=[loss])
+        opt = s.optimizer("sgd", lr=0.1)
+        with pytest.raises(Exception):
+            fixed.fit(source=src, optimizer=opt, parameters=[w], loss="output", steps=1)

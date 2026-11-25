@@ -21,7 +21,9 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, dummy_ptr
 from autograd.tape import Tape, Tensor, BackwardRules
 from autograd.losses import REDUCTION_MEAN, REDUCTION_SUM
-from autograd.nn_ctc_ops import OP_CTC_FWD, OP_CTC_VJP, OP_CTC_PACK, CTC_LABELS
+from std.memory import bitcast
+from autograd.nn_ctc_ops import OP_CTC_FWD, OP_CTC_VJP, OP_CTC_PACK, OP_CTC_ADMIT, CTC_LABELS
+from autograd.embedding_ops import embedding_first_bad
 
 #: the custom-node tag of the per-row CTC values (autograd/model_blocks.mojo ModelRules, `# nn-losses-2` group)
 comptime NN_CTC_TAG = 3420
@@ -143,6 +145,48 @@ def ctc_pack_targets[E: Exec](
     a.i1 = T
     a.i2 = 1 if input_lengths else 0
     ex.launch[OP_CTC_PACK](a, N * (S + CTC_LABELS))
+
+
+def ctc_refuse_rows[E: Exec](
+    mut ex: E, rows: FP, N: Int, W: Int, T: Int, C: Int, blank: Int, flags: FP, scratch_a: FP, scratch_b: FP,
+    name: String,
+) raises:
+    """Admission of packed target rows (N, W = 2 + S) that are ALREADY ON THE EXECUTOR (Session.ctc_loss: its
+    targets and lengths are session tensors), before the row scans read them unchecked. The rule is ctc_admit's:
+    each input length a whole number in [0, T], each target length a whole number in [0, S], each label before
+    it a whole class index in [0, C) other than blank. OP_CTC_ADMIT flags every word in one launch (one thread
+    per word), the embedding's blocked first-bad search finds the first flag, and two words come back: the
+    position and that word's value, for the message. No row is downloaded and no host loop walks the targets.
+    `flags` holds N * W words of `ex`, each of scratch_a and scratch_b embedding_check_words(N * W). Refuses as
+    `name`."""
+    var n = N * W
+    var a = Args()
+    a.p0 = rows
+    a.p1 = flags
+    a.i0 = W
+    a.i1 = T
+    a.i2 = C
+    a.i3 = blank
+    ex.launch[OP_CTC_ADMIT](a, n)
+    var found = embedding_first_bad(ex, flags, n, 1, scratch_a, scratch_b, rows)
+    if found[0] < 0:
+        return
+    var r = found[0] // W
+    var k = found[0] % W
+    var v = bitcast[DType.float32](Int32(found[1]))
+    var S = W - CTC_LABELS
+    if k == 0:
+        raise Error("ValueError: ops: " + name + ": input_lengths must be whole numbers from 0 to the " + String(T)
+                    + " steps of log_probs; sample " + String(r) + " has " + String(v))
+    if k == 1:
+        raise Error("ValueError: ops: " + name + ": target_lengths must be whole numbers from 0 to the targets'"
+                    + " width (" + String(S) + "); sample " + String(r) + " has " + String(v))
+    if v >= Float32(0) and v < Float32(C):
+        if Float32(Int(v)) == v:
+            raise Error("ValueError: ops: " + name + ": targets must not hold the blank index (" + String(blank)
+                        + "); sample " + String(r) + " label " + String(k - CTC_LABELS))
+    raise Error("ValueError: ops: " + name + ": targets must be class indices in [0, " + String(C) + "); sample "
+                + String(r) + " label " + String(k - CTC_LABELS) + " is " + String(v))
 
 
 def ctc_admit(labels: FP, target_lengths: FP, input_lengths: Optional[FP], N: Int, S: Int, T: Int, C: Int,

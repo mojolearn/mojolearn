@@ -128,6 +128,14 @@ def test_refusals_in_words():
             s.ctc_loss(lp, tg, s.ids(np.array([4, 4])), s.ids(np.array([2, 1])))
         with pytest.raises(ValueError, match="input_lengths must be whole numbers from 0 to the 4 steps"):
             s.ctc_loss(lp, s.ids(np.array([[1, 2], [2, 1]])), s.ids(np.array([5, 4])), s.ids(np.array([2, 1])))
+        # the admission runs on the session's device: lengths and labels are refused by sample and label
+        with pytest.raises(ValueError, match=r"target_lengths must be whole numbers from 0 to the targets' width \(2\)"):
+            s.ctc_loss(lp, s.ids(np.array([[1, 2], [2, 1]])), s.ids(np.array([4, 4])), s.ids(np.array([3, 1])))
+        with pytest.raises(ValueError, match=r"targets must be class indices in \[0, 3\); sample 1 label 0"):
+            s.ctc_loss(lp, s.ids(np.array([[1, 2], [3, 1]])), s.ids(np.array([4, 4])), s.ids(np.array([2, 1])))
+        # a blank past a sample's target length is padding and is never read
+        padded = s.ctc_loss(lp, s.ids(np.array([[1, 2], [2, 0]])), s.ids(np.array([4, 4])), s.ids(np.array([2, 1])))
+        assert np.isfinite(np.asarray(s.numpy(padded))).all()
 
 
 @needs_binding

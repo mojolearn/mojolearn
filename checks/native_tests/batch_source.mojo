@@ -265,7 +265,21 @@ def run_resume_unit[E: Exec & Movable & Deinitable, KIND: Int](root: String, var
     # the fresh side: a new session and a source opened from the saved words alone
     var fresh = ops_session_open[E, KIND](second^, False)
     try:
-        var loaded = program_training_load[E, KIND](fresh, file)
+        # lane fable-review-2: a load refused for another source's words changes nothing in the session
+        var wrong = ProgramTrainingSource()
+        wrong.present = True
+        wrong.fingerprint = 1
+        var before = ops_session[E, KIND](fresh)
+        var opts_before = len(before[].opts)
+        var refused = False
+        try:
+            _ = program_training_load[E, KIND](fresh, file, wrong)
+        except error:
+            refused = "not the one the checkpoint was saved with" in String(error)
+        if (not refused or len(before[].opts) != opts_before or len(before[].opt_states) != 0
+                or len(before[].pg_tables) != 0):
+            _fail("a load refused for the wrong source must leave the session unchanged")
+        var loaded = program_training_load[E, KIND](fresh, file, ProgramTrainingSource())
         var spec = _spec(root, loaded.source.seed)
         spec.epoch = loaded.source.epoch
         spec.consumed = loaded.source.consumed

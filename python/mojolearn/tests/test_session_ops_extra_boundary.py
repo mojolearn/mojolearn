@@ -27,7 +27,7 @@ needs_binding = pytest.mark.skipif(not _has_entries(),
     ("topk", ["self", "x", "k", "axis", "largest", "sorted"]),
     ("gather", ["self", "x", "axis", "index"]),
     ("logsumexp", ["self", "x", "axis", "keepdims"]),
-    ("cross_entropy", ["self", "logits", "codes", "reduction", "weight"]),
+    ("cross_entropy", ["self", "logits", "codes", "reduction", "weight", "probabilities"]),
 ])
 def test_parameter_names(name, expected):
     from mojolearn import ops
@@ -50,8 +50,17 @@ def test_shapes_and_kinds():
         assert s.numpy(s.logsumexp(x, 0, keepdims=True)).shape == (1, 3, 4)
         z = s.tensor(np.zeros((3, 4), dtype=np.float32))
         t = s.tensor(np.full((3, 4), 0.25, dtype=np.float32))
-        assert s.numpy(s.cross_entropy(z, t)).size == 1
-        assert s.numpy(s.cross_entropy(z, t, weight=s.tensor(np.ones((3, 1), np.float32)))).size == 1
+        assert s.numpy(s.cross_entropy(z, t, probabilities=True)).size == 1
+        assert s.numpy(s.cross_entropy(z, t, weight=s.tensor(np.ones((3, 1), np.float32)),
+                                       probabilities=True)).size == 1
+        # the caller names a distribution; a target of the logits' shape is never guessed to be one
+        with pytest.raises(Exception):
+            s.cross_entropy(z, t)
+        # class codes keep the class-code loss, and are refused as a distribution
+        codes = s.tensor(np.array([[0.0], [1.0], [3.0]], dtype=np.float32))
+        assert s.numpy(s.cross_entropy(z, codes)).size == 1
+        with pytest.raises(ValueError, match="a target distribution must have the logits' shape"):
+            s.cross_entropy(z, codes, probabilities=True)
 
 
 @needs_binding
@@ -89,7 +98,8 @@ def test_program_save_load_round_trip(tmp_path):
         x, ln, t = s.tensor(data), s.tensor(lens), s.tensor(target)
         values, _ = s.topk(x, 2)
         out = s.add(s.sum(values), s.sum(s.logsumexp(x, 1)))
-        out = s.add(out, s.cross_entropy(x, t, weight=s.reshape(s.sum(s.sequence_mask(ln, 4), axis=1), (2, 1))))
+        out = s.add(out, s.cross_entropy(x, t, weight=s.reshape(s.sum(s.sequence_mask(ln, 4), axis=1), (2, 1)),
+                                         probabilities=True))
         expected = s.numpy(out)
         program = s.capture(inputs=[x, ln, t], outputs=[out])
         path = str(tmp_path / "extra.program")

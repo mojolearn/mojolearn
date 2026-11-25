@@ -968,6 +968,9 @@
         "@cz",
         "@ct"
        ],
+       "kw": {
+        "probabilities": true
+       },
        "as": "cl"
       },
       {
@@ -1033,6 +1036,9 @@
         "@sz",
         "@st"
        ],
+       "kw": {
+        "probabilities": true
+       },
        "as": "loss"
       },
       {
@@ -1044,7 +1050,8 @@
        ],
        "kw": {
         "reduction": "sum",
-        "weight": "@sw"
+        "weight": "@sw",
+        "probabilities": true
        },
        "as": "lw"
       },

@@ -1907,7 +1907,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 var ce_rows = self.tape.rows(x[0])
                 var ce_cols = self.tape.cols(x[0])
                 if self.tape.shape_of(x[1]).count() != ce_rows:
-                    raise Error("ops: cross_entropy takes one class code per row of logits")
+                    raise Error("ops: cross_entropy takes one class code per row of logits (a target distribution of"
+                                + " the logits' shape needs probabilities=True)")
                 var ce_z = rn_as_shape(self.tape, self.ex, x[0], ShapeN.matrix(ce_rows, ce_cols))
                 var ce_c = rn_as_shape(self.tape, self.ex, x[1], ShapeN.matrix(ce_rows, 1))
                 t = cross_entropy(self.tape, self.ex, ce_z, ce_c, ints[0])

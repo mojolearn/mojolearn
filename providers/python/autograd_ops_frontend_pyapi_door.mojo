@@ -46,7 +46,7 @@ from providers.python.autograd_gradient_diagnostics_pyapi_pack import gradient_r
 from autograd.nn_scan_frontend import session_scan
 from autograd.autograd_ops_frontend_run import _SOP_SCAN, _SOP_LOAD_TRAINING
 from autograd.program_training_checkpoint import program_training_load
-from providers.python.batch_source_pyapi_door import batch_source_restore
+from providers.python.batch_source_pyapi_door import batch_source_training_part, batch_source_position_out
 # nn-blocks-scan end
 # nn-blocks-cbw begin
 from autograd.program import OpsProgram
@@ -177,6 +177,23 @@ def _pool2d_plain(w: List[Int], is_max: Bool) -> Bool:
     if is_max:
         return w[6] == 1 and w[7] == 1 and w[8] == 0
     return w[6] == 0 and w[8] == 0  # no padding and floor mode: count_include_pad changes no window
+
+
+def _pool2d_plain_args(is_max: Bool, args: PythonObject) raises -> Bool:
+    """True when a max_pool2d / avg_pool2d call is the plain one, decided from the arguments alone (type tests
+    and scalar reads, no list): an integer kernel_size, stride None or an integer, padding the integer 0, floor
+    mode, and for max dilation the integer 1 and no return_indices, for avg no divisor_override
+    (count_include_pad changes no window without padding in floor mode). Any other call, a refused one included,
+    goes through _pool_words, which reads and refuses each argument by name."""
+    if not _is_int(args[1]) or not (_nil(args[2]) or _is_int(args[2])) or not _is_int(args[3]):
+        return False
+    if _int(args[3], "padding", 0) != 0:
+        return False
+    if is_max:
+        if not _is_int(args[4]):
+            return False
+        return _int(args[4], "dilation", 1) == 1 and not Bool(py=args[5]) and not Bool(py=args[6])
+    return not Bool(py=args[4]) and _nil(args[6])
 
 
 def _adaptive_sizes(x: PythonObject, n: Int) raises -> List[Int]:
@@ -634,14 +651,12 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
     if op == _SOP_LOAD_TRAINING:
         # lane batch-source: args (path, source or None) -> {"program", "optimizer", "parameters"}; with a source,
         # its position becomes the checkpoint's consumed one (same data and plan settings checked)
-        var loaded = program_training_load[E, KIND](Int(py=sid), String(py=native_path(args[0])))
-        try:
-            batch_source_restore(args[1], loaded.source)
-        except error:
-            s[].program_free(loaded.program)
-            for k in range(len(loaded.params)):  # driver-loop: over the loaded parameter tensors
-                s[].free(loaded.params[k])
-            raise error
+        # fable-review-2: the source handle is admitted and its words are read BEFORE the load, and the load
+        # compares them with the saved ones before it changes the session; nothing is left to undo here
+        var expect = batch_source_training_part(args[1])
+        var loaded = program_training_load[E, KIND](Int(py=sid), String(py=native_path(args[0])), expect)
+        if expect.present:
+            batch_source_position_out(args[1], loaded.source.epoch, loaded.source.consumed)
         var bundle = native_loaded_module("builtins").dict()
         py_setitem(bundle, PythonObject("program"),
                    program_new_owner(session, program_info(loaded.program, s[].program(loaded.program))))
@@ -1252,13 +1267,22 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         # session-ops-pool: PyTorch's options (per-axis tuples, padding, dilation, ceil_mode, count_include_pad,
         # divisor_override). A call that uses none keeps code 45 / 46 and its two words [kernel, stride], the
         # branch it ran before; one that does records 142 / 143 (autograd/session_ops_pool.mojo).
-        var pool2d = _pool_words(2, op == _SOP_MAX_POOL2D, args)
-        if _pool2d_plain(pool2d, op == _SOP_MAX_POOL2D):
+        # fable-review-2: the call every existing program makes (an integer window, an integer or default
+        # stride, none of PyTorch's options) is recognised from its arguments and keeps its one two-word list,
+        # as before the options existed; only a call that uses a tuple or an option builds the per-axis words
+        # (_pool_words: five small lists). The extra argument reads are UNPACK; a per-call allocation is not.
+        if _pool2d_plain_args(op == _SOP_MAX_POOL2D, args):
             code = 45 if op == _SOP_MAX_POOL2D else 46
-            ints = [pool2d[0], pool2d[2]]
+            var kernel = _int(args[1], "kernel_size", 1)
+            ints = [kernel, kernel if _nil(args[2]) else _int(args[2], "stride", 1)]
         else:
-            code = OPS_POOL_MAX2D if op == _SOP_MAX_POOL2D else OPS_POOL_AVG2D
-            ints = pool2d^
+            var pool2d = _pool_words(2, op == _SOP_MAX_POOL2D, args)
+            if _pool2d_plain(pool2d, op == _SOP_MAX_POOL2D):
+                code = 45 if op == _SOP_MAX_POOL2D else 46
+                ints = [pool2d[0], pool2d[2]]
+            else:
+                code = OPS_POOL_MAX2D if op == _SOP_MAX_POOL2D else OPS_POOL_AVG2D
+                ints = pool2d^
     elif op == _SOP_GELU:
         code = 49
         hs.append(_int(args[0], "handle", 1))
@@ -1408,12 +1432,14 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         # OPS_WEIGHTED_LOSS (autograd/per_step_ops.mojo): hs [p, y, weight],
         # ints [the unweighted code, reduction], floats [delta].
         var weight = args[4 if op == _SOP_HUBER else 3]
-        # session-ops-extra begin: a target DISTRIBUTION (the logits' shape, more than one class) picks the
-        # soft-target codes 184 / 185 here at UNPACK; class codes keep code 28 / OPS_WEIGHTED_LOSS unchanged
+        # session-ops-extra begin: a target DISTRIBUTION picks the soft-target codes 184 / 185; class codes keep
+        # code 28 / OPS_WEIGHTED_LOSS unchanged. fable-review-2: the caller says so (cross_entropy's
+        # `probabilities` argument, args[4], read once here); the door no longer looks up the two operands'
+        # shapes on every cross_entropy call to guess it (codes are float tensors too, so the dtype cannot tell
+        # them apart as PyTorch's does). The soft op refuses a target that has not the logits' shape.
         var soft = False
         if op == _SOP_CROSS_ENTROPY:
-            var ce_shape = s[].shape_nd(hs[0])
-            soft = ce_shape.ndim > 0 and ce_shape.d[ce_shape.ndim - 1] > 1 and ce_shape.same(s[].shape_nd(hs[1]))
+            soft = Bool(py=args[4])
         if soft:
             code = OPS_SOFT_CROSS_ENTROPY
             if not _nil(weight):

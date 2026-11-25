@@ -29,13 +29,15 @@ state tensors written in place). The norm reads and updates a [mean | var] block
 launches (C words each) fill it before the norm, two copy the updated words back after a training call (eval:
 the two copies in only). CLASS IDS (nll_loss's target, ctc_loss's targets and lengths given with Session.ids):
 OP_ONE_HOT, the fit's own target expansion (one launch: one-hot rows for nll_loss, the ids' values as float words
-for ctc_loss). CTC TARGETS: OP_CTC_PACK, the fit's packing (one launch), then one read-back of the packed rows
-(N (2 + S) words) for the admission the fit does on the host (ctc_admit_rows), because the CTC bodies read the
-labels and lengths unchecked.
+for ctc_loss). CTC TARGETS: OP_CTC_PACK, the fit's packing (one launch), then the admission the fit does on the
+host before its upload, done here on the executor because the targets are session tensors (nn_ctc.ctc_refuse_rows:
+OP_CTC_ADMIT flags each word, the embedding's first-bad search, a two-word read-back), because the CTC bodies read
+the labels and lengths unchecked.
 
 Launches beyond the Sequential layer's own, per call: batch_norm / instance_norm with running statistics 2
 (eval) or 4 (training); nll_loss 2 (id check, one-hot) + the id check's two-word read-back; ctc_loss 1 (pack)
-+ 1 per ids operand + the permute's copy of (T, N, C) into (N, T, C) + one read-back; every other op 0.
++ 1 per ids operand + the permute's copy of (T, N, C) into (N, T, C) + the admission (1 flag launch, the search's
+levels, 1 value launch, a two-word read-back); every other op 0.
 """
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_COPY, OP_ONE_HOT, dummy_ptr
@@ -48,12 +50,18 @@ from autograd.import_api import imp_unary, imp_binary
 from autograd.import_ops import IMP_MISH, IMP_PRELU
 from autograd.nn_attention import nn_mha_core, nn_pos_enc_forward, NN_MHA_BIAS, NN_MHA_CAUSAL, NN_MHA_KEY_PADDING, NN_PE_MAX_LEN
 from autograd.losses import smooth_l1, nll, kl_div, binary_cross_entropy_with_logits
-from autograd.nn_ctc import ctc_loss, ctc_pack_targets
+from autograd.nn_ctc import ctc_loss, ctc_pack_targets, ctc_refuse_rows
 from autograd.nn_ctc_ops import CTC_LABELS
 from autograd.embedding_ops import embedding_check_words, embedding_refuse_ids
 from autograd.ssm_primitives import graph_selective_scan
 from autograd.ssm_m2_primitives import graph_ssd_scan
 from autograd.ssm_m3_primitives import graph_trapezoid_scan
+from autograd.session_ops_layer_sabotage import (
+    SOL_SABOTAGE_NORM_EPS, SOL_SABOTAGE_NORM_EPS_HOST, SOL_SABOTAGE_MISH_SCALE, SOL_SABOTAGE_MISH_SCALE_HOST,
+    SOL_SABOTAGE_MHA_CAUSAL, SOL_SABOTAGE_MHA_CAUSAL_HOST, SOL_SABOTAGE_SMOOTH_L1_BETA,
+    SOL_SABOTAGE_SMOOTH_L1_BETA_HOST, SOL_SABOTAGE_CTC_REDUCTION, SOL_SABOTAGE_CTC_REDUCTION_HOST,
+    SOL_SABOTAGE_SSM_SCALE, SOL_SABOTAGE_SSM_SCALE_HOST,
+)
 
 comptime SOR_BATCH_NORM = 160
 comptime SOR_GROUP_NORM = 161
@@ -193,7 +201,10 @@ def sor_batch_norm[E: Exec](
         mean_at = tape.value_of(ex, running_mean.value())
         var_at = tape.value_of(ex, running_var.value())
         running = Optional[FP](_stats_in(tape, ex, mean_at, var_at, C))
-    var y = rankn_batch_norm_core(tape, ex, x3, weight, bias, running, eps, momentum, training)
+    var core_eps = eps
+    comptime if (SOL_SABOTAGE_NORM_EPS and E.IS_DEVICE) or (SOL_SABOTAGE_NORM_EPS_HOST and not E.IS_DEVICE):
+        core_eps = eps + Float32(1.0)  # SABOTAGE: the wrong epsilon
+    var y = rankn_batch_norm_core(tape, ex, x3, weight, bias, running, core_eps, momentum, training)
     if running and training:
         _stats_out(ex, running.value(), mean_at, var_at, C)
     return tape.view_nd(ex, y, s)
@@ -275,7 +286,10 @@ def sor_prelu[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, weight: Tensor) rai
 
 def sor_mish[E: Exec](mut tape: Tape, mut ex: E, x: Tensor) raises -> Tensor:
     """torch.nn.functional.mish: Sequential's mish layer."""
-    return imp_unary(tape, ex, x, IMP_MISH)
+    comptime if (SOL_SABOTAGE_MISH_SCALE and E.IS_DEVICE) or (SOL_SABOTAGE_MISH_SCALE_HOST and not E.IS_DEVICE):
+        return tape.scale(ex, imp_unary(tape, ex, x, IMP_MISH), Float32(2.0))  # SABOTAGE: twice the value
+    else:
+        return imp_unary(tape, ex, x, IMP_MISH)
 
 
 # ---------------------------------------------------------------- attention
@@ -337,6 +351,8 @@ def sor_multi_head_attention[E: Exec](
         if S != T:
             _refuse(name, "is_causal needs as many keys as queries")
         flags |= NN_MHA_CAUSAL
+        comptime if (SOL_SABOTAGE_MHA_CAUSAL and E.IS_DEVICE) or (SOL_SABOTAGE_MHA_CAUSAL_HOST and not E.IS_DEVICE):
+            flags = flags & ~NN_MHA_CAUSAL  # SABOTAGE: the causal mask dropped
     var lengths: Optional[FP] = None
     if key_lengths:
         if _count(tape, key_lengths.value()) != B:
@@ -382,7 +398,10 @@ def sor_smooth_l1_loss[E: Exec](
     _same_shape(tape, x, target, "smooth_l1_loss")
     if not (beta >= Float32(0)):
         _refuse("smooth_l1_loss", "beta must be a non-negative number")
-    return smooth_l1(tape, ex, x, target, beta, reduction)
+    comptime if (SOL_SABOTAGE_SMOOTH_L1_BETA and E.IS_DEVICE) or (SOL_SABOTAGE_SMOOTH_L1_BETA_HOST and not E.IS_DEVICE):
+        return smooth_l1(tape, ex, x, target, beta + Float32(1.0), reduction)  # SABOTAGE: the wrong beta
+    else:
+        return smooth_l1(tape, ex, x, target, beta, reduction)
 
 
 def sor_kl_div[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, target: Tensor, reduction: Int) raises -> Tensor:
@@ -455,30 +474,6 @@ def _as_values[E: Exec](mut tape: Tape, mut ex: E, t: Tensor, is_ids: Bool) rais
     return dst
 
 
-def ctc_admit_rows(rows: List[Float32], N: Int, W: Int, T: Int, C: Int, blank: Int) raises:
-    """The fit's ctc admission (nn_ctc.ctc_admit) over packed target rows [input length, target length, labels]:
-    each input length a whole number in [0, T], each target length a whole number in [0, W - 2], each label
-    before it a whole class index in [0, C) other than blank."""
-    var S = W - CTC_LABELS
-    for r in range(N):  # admission: one pass over the read-back target rows, before the loss reads them
-        var il = rows[r * W]
-        if not (il >= Float32(0) and il <= Float32(T) and Float32(Int(il)) == il):
-            _refuse("ctc_loss", "input_lengths must be whole numbers from 0 to the " + String(T)
-                    + " steps of log_probs; sample " + String(r) + " has " + String(il))
-        var tl = rows[r * W + 1]
-        if not (tl >= Float32(0) and tl <= Float32(S) and Float32(Int(tl)) == tl):
-            _refuse("ctc_loss", "target_lengths must be whole numbers from 0 to the targets' width (" + String(S)
-                    + "); sample " + String(r) + " has " + String(tl))
-        for k in range(Int(tl)):  # admission: the sample's labels
-            var v = rows[r * W + CTC_LABELS + k]
-            if not (v >= Float32(0) and v < Float32(C) and Float32(Int(v)) == v):
-                _refuse("ctc_loss", "targets must be class indices in [0, " + String(C) + "); sample " + String(r)
-                        + " label " + String(k) + " is " + String(v))
-            if Int(v) == blank:
-                _refuse("ctc_loss", "targets must not hold the blank index (" + String(blank) + "); sample "
-                        + String(r) + " label " + String(k))
-
-
 def sor_ctc_loss[E: Exec](
     mut tape: Tape, mut ex: E, log_probs: Tensor, targets: Tensor, targets_ids: Bool, input_lengths: Tensor,
     input_ids: Bool, target_lengths: Tensor, target_ids: Bool, blank: Int, reduction: Int, zero_infinity: Bool,
@@ -509,20 +504,31 @@ def sor_ctc_loss[E: Exec](
     var W = S + CTC_LABELS
     var packed = tape.reserve(ex, N * W)
     ctc_pack_targets(ex, packed, labels, tl, Optional[FP](il), N, S, T)
-    var host = List[Float32](length=N * W, fill=Float32(0))
-    ex.download(FP(unsafe_from_address=Int(host.unsafe_ptr())), packed, N * W)
-    ctc_admit_rows(host, N, W, T, C, blank)
+    # fable-review-2: the admission runs where the targets are (one flag launch, the embedding's first-bad
+    # search, two words back); the packed rows are not downloaded and no host loop walks them
+    var cw = embedding_check_words(N * W)
+    var flags = tape.reserve(ex, N * W)
+    var scratch_a = tape.reserve(ex, cw)
+    var scratch_b = tape.reserve(ex, cw)
+    ctc_refuse_rows(ex, packed, N, W, T, C, blank, flags, scratch_a, scratch_b, name)
     var rows = tape.variable(ex, packed, N, W, False)
     var perm: List[Int] = [1, 0, 2]
     var lp = tape.permute(ex, log_probs, perm)
-    return ctc_loss(tape, ex, lp, rows, T, C, blank, reduction, zero_infinity)
+    comptime if (SOL_SABOTAGE_CTC_REDUCTION and E.IS_DEVICE) or (SOL_SABOTAGE_CTC_REDUCTION_HOST and not E.IS_DEVICE):
+        return ctc_loss(tape, ex, lp, rows, T, C, blank, 1 - reduction, zero_infinity)  # SABOTAGE: mean <-> sum
+    else:
+        return ctc_loss(tape, ex, lp, rows, T, C, blank, reduction, zero_infinity)
 
 
 # ---------------------------------------------------------------- state-space scans
 def sor_selective_scan[E: Exec](
     mut tape: Tape, mut ex: E, u: Tensor, delta: Tensor, a_log: Tensor, bm: Tensor, cm: Tensor, d_skip: Tensor,
 ) raises -> Tensor:
-    return graph_selective_scan(tape, ex, u, delta, bm, cm, a_log, d_skip)
+    comptime if (SOL_SABOTAGE_SSM_SCALE and E.IS_DEVICE) or (SOL_SABOTAGE_SSM_SCALE_HOST and not E.IS_DEVICE):
+        return tape.scale(ex, graph_selective_scan(tape, ex, u, delta, bm, cm, a_log, d_skip),
+                          Float32(2.0))  # SABOTAGE: twice the output
+    else:
+        return graph_selective_scan(tape, ex, u, delta, bm, cm, a_log, d_skip)
 
 
 def sor_ssd_scan[E: Exec](

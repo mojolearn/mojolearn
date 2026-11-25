@@ -32,6 +32,7 @@ from checks.numerics import ftz, identical_div, identical_exp, identical_log1p
 comptime OP_CTC_FWD = 5640
 comptime OP_CTC_VJP = 5641
 comptime OP_CTC_PACK = 5642
+comptime OP_CTC_ADMIT = 5643
 comptime OP_CTC_FIRST = 5640
 comptime OP_CTC_LAST = 5649
 
@@ -221,6 +222,40 @@ def ctc_pack(w: Int, a: Args):
 
 
 @always_inline
+def ctc_admit_word(w: Int, a: Args):
+    """OP_CTC_ADMIT, thread w = word w of the (N, 2 + S) target rows in p0: p1[w] holds int32 0 when the word may
+    be read by the row scans, else 1. i0 = 2 + S, i1 = T, i2 = C, i3 = blank. Column 0 (the input length) is a
+    whole number in [0, T]; column 1 (the target length) a whole number in [0, S]; a label before its row's
+    target length is a whole class index in [0, C) other than blank; a label at or past it is never read by the
+    scans, so it is admitted whatever it holds. Each range test comes before the float-to-integer conversion, so
+    no NaN or out-of-range value is converted. The words are in the host admission's order (row, input length,
+    target length, labels), so the first flagged word is the word the host loop refused."""
+    var TW = a.i0
+    var S = TW - CTC_LABELS
+    var k = w % TW
+    var v = ld(a.p0, w)
+    var bad = 0
+    if k == CTC_IN_LEN:
+        bad = 1
+        if v >= Float32(0) and v <= Float32(a.i1):
+            if Float32(Int(v)) == v:
+                bad = 0
+    elif k == CTC_TGT_LEN:
+        bad = 1
+        if v >= Float32(0) and v <= Float32(S):
+            if Float32(Int(v)) == v:
+                bad = 0
+    else:
+        var tl = ld(a.p0, w - k + CTC_TGT_LEN)
+        if tl >= Float32(0) and tl <= Float32(S) and Float32(k - CTC_LABELS) < tl:
+            bad = 1
+            if v >= Float32(0) and v < Float32(a.i2):
+                if Float32(Int(v)) == v and Int(v) != a.i3:
+                    bad = 0
+    st(a.p1, w, bitcast[DType.float32](Int32(bad)))
+
+
+@always_inline
 def apply_nn_ctc[OP: Int](t: Int, a: Args):
     comptime if OP == OP_CTC_FWD:
         ctc_row_fwd(t, a)
@@ -228,3 +263,5 @@ def apply_nn_ctc[OP: Int](t: Int, a: Args):
         ctc_row_vjp(t, a)
     elif OP == OP_CTC_PACK:
         ctc_pack(t, a)
+    elif OP == OP_CTC_ADMIT:
+        ctc_admit_word(t, a)

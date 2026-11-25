@@ -1,0 +1,13 @@
+diff --git a/autograd/session_ops_layer_sabotage.mojo b/autograd/session_ops_layer_sabotage.mojo
+index 601a770730..58debd97e9 100644
+--- a/autograd/session_ops_layer_sabotage.mojo
++++ b/autograd/session_ops_layer_sabotage.mojo
+@@ -16,7 +16,7 @@
+ #   PIXEL_SHUFFLE (ops-resize): pixel_shuffle / pixel_unshuffle return twice the rearranged values (the shuffle part moves).
+ from std.sys.compile import is_defined
+ 
+-comptime SOL_SABOTAGE_NORM_EPS = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_NORM_EPS"]()
++comptime SOL_SABOTAGE_NORM_EPS = True  # SABOTAGE
+ comptime SOL_SABOTAGE_NORM_EPS_HOST = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_NORM_EPS_HOST"]()
+ comptime SOL_SABOTAGE_MISH_SCALE = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_MISH_SCALE"]()
+ comptime SOL_SABOTAGE_MISH_SCALE_HOST = is_defined["MOJOLEARN_SESSION_OPS_LAYER_SABOTAGE_MISH_SCALE_HOST"]()
