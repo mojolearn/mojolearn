@@ -28,6 +28,7 @@ from autograd.layers import NeuralRules, layer_norm
 # lane/expdel2-24-neural (owner expdel2-23-neural, autograd/data.mojo); code recoverable at 988a3742d1.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF.expdel2-24-neural.patch
 from autograd.data import gather_epoch, gather_epoch_fits
+from autograd.epoch_monitor import EpochMonitor
 from autograd.model_ops import OP_AGM_INIT_UNIFORM, OP_AGM_ROW_ARGMAX, OP_AGM_THRESHOLD
 from core.cast_in import CAST_KIND_SIGNED, CastIn
 from autograd.cast_ops import gather_labels_device, upload_cast, validation_codes
@@ -742,6 +743,19 @@ struct FitValidation(Copyable, Movable):
     var restore: Bool
     # Native result: executed epochs in this call, retained absolute epoch.
     var result: MutPointer[Int64, MutUntrackedOrigin]
+    # Lane rnn-parity-c: the validation rows' float32 sequence lengths on the host (validation_data=(X, y, lengths)),
+    # read by the recurrent layers as the training lengths are; required exactly when the fit has lengths.
+    var lengths: Optional[FP]
+
+    def __init__(out self, x: CastIn, y: CastIn, classes: CastIn, curve: FP, restore: Bool,
+                 result: MutPointer[Int64, MutUntrackedOrigin], lengths: Optional[FP]):
+        self.x = x
+        self.y = y
+        self.classes = classes
+        self.curve = curve
+        self.restore = restore
+        self.result = result
+        self.lengths = lengths
 
 
 def check_fit(spec: ModelSpec, cfg: FitConfig, N: Int) raises:
@@ -1452,8 +1466,9 @@ def model_fit_state[E: Exec](
     var cfg = cfg_in.copy()
     var start = 0
     var step = 0
-    var stall = 0
-    var best = Float64(1.0e308)
+    # the generic EpochMonitor block (autograd/epoch_monitor.mojo, lane rnn-parity-c): scikit-learn's
+    # `loss > best - tol` stall rule, the one the recurrent estimators' rnn_fit runs; FS_STALL / FS_BEST resume it
+    var monitor = EpochMonitor(Float64(cfg.tol), cfg.patience)
     var st = OptState()
     var plateau = NnPlateau(Float64(cfg.lr))
     if resume:
@@ -1464,8 +1479,8 @@ def model_fit_state[E: Exec](
                         + "with the same optimizer")
         start = Int(St[FS_EPOCH])
         step = Int(St[FS_STEP])
-        stall = Int(St[FS_STALL])
-        best = bitcast[DType.float64](St[FS_BEST])
+        monitor = EpochMonitor.resumed(Float64(cfg.tol), cfg.patience, bitcast[DType.float64](St[FS_BEST]),
+                                       Int(St[FS_STALL]))
         st.pw1 = _word_f32(St[FS_PW1])
         st.pw2 = _word_f32(St[FS_PW2])
         st.mu_prod = _word_f32(St[FS_MU])
@@ -1490,8 +1505,9 @@ def model_fit_state[E: Exec](
     var dLen = dummy_ptr()
     var Lp = dummy_ptr()
     if has_lens:
-        if validation:
-            raise Error("ValueError: model fit: validation_data with lengths is not supported")
+        # lane rnn-parity-c: validation rows carry their own lengths (validation_data=(X, y, lengths)), checked below
+        if validation and not validation.value().lengths:
+            raise Error("ValueError: model fit: with lengths, validation_data takes (X, y, lengths)")
         model_lengths_check(spec, lengths.value(), N, "fit")
         dLen = ex.alloc(N)
         ex.upload(dLen, lengths.value(), N)
@@ -1638,7 +1654,7 @@ def model_fit_state[E: Exec](
     var best_p = dummy_ptr()
     var best_m = dummy_ptr()
     var best_v = dummy_ptr()
-    var best_epoch = 0
+    var vLen = dummy_ptr()
     var best_step = step
     var best_pw1 = st.pw1
     var best_pw2 = st.pw2
@@ -1649,6 +1665,13 @@ def model_fit_state[E: Exec](
         nv = v.x.rows
         if nv < 1 or v.x.cols != D or v.y.rows != nv:
             raise Error("validation_data must have matching nonempty rows and the training input width")
+        if v.lengths:
+            if not has_lens:
+                raise Error("ValueError: model fit: validation lengths need the training lengths (fit(..., lengths=))")
+            model_lengths_check(spec, v.lengths.value(), nv, "fit (validation_data)")
+            # uploaded once in the validation rows' order (the validation batches never shuffle)
+            vLen = ex.alloc(nv)
+            ex.upload(vLen, v.lengths.value(), nv)
         vx = ex.alloc(nv * D)
         vy = ex.alloc(nv * TW)
         upload_cast(ex, vx, v.x)
@@ -1677,8 +1700,7 @@ def model_fit_state[E: Exec](
             best_v = ex.alloc(np_)
         # Validation monitoring starts afresh for each fit call. A resumed
         # call can use a different validation set without stale comparisons.
-        best = Float64(1.0e308)
-        stall = 0
+        monitor.restart()
     var tape = Tape()
     var topology = _ModelForwardTopology(spec)
     if token:
@@ -1802,7 +1824,11 @@ def model_fit_state[E: Exec](
                 tape.reset()
                 var x = tape.variable(ex, vx + off * D, B, D, False)
                 var target = tape.variable(ex, vy + off * TW, B, TW, False)
-                var pred = _model_forward_prepared(tape, ex, spec, P, Gr, x, False, cfg.seed, step, topology)
+                # lane rnn-parity-c: the validation lengths mask the recurrent layers as the training lengths do
+                var vlens = Optional[FP]()
+                if has_lens:
+                    vlens = Optional[FP](vLen + off)
+                var pred = _model_forward_prepared(tape, ex, spec, P, Gr, x, False, cfg.seed, step, topology, vlens)
                 var loss = _fit_loss(tape, ex, cfg, spec, P, Gr, pred, target, False, ctc_dims)
                 var weighted = tape.scale(ex, loss, model_curve_factor(cfg, B))
                 _copy(ex, vloss + vi, tape.value(weighted), 1)
@@ -1815,18 +1841,12 @@ def model_fit_state[E: Exec](
             ex.sync()
             ex.download(FP(unsafe_from_address=Int(word.unsafe_ptr())), monitored, 1)
             var value = Float64(word[0])
-            if value != value or abs(value) > Float64(3.4028234663852886e38):
-                raise Error("model fit: monitored loss is not finite")
+            # the generic block's decision (refuses a loss that is not finite before the plateau reads it)
+            var improved = monitor.observe(value, e + 1)
             if plateau_on:
                 # torch ReduceLROnPlateau.step(loss) on the loss read above (autograd/nn_optim.mojo)
                 plateau.epoch_end(value, cfg.sched_args)
-            if value > best - cfg.tol:
-                stall += 1
-            else:
-                stall = 0
-            if value < best:
-                best = value
-                best_epoch = e + 1
+            if improved:
                 if restore:
                     _copy(ex, best_p, P, np_)
                     _copy(ex, best_m, s1, np_)
@@ -1835,7 +1855,7 @@ def model_fit_state[E: Exec](
                     best_pw1 = st.pw1
                     best_pw2 = st.pw2
                     best_mu = st.mu_prod
-            if cfg.patience > 0 and stall >= cfg.patience:
+            if monitor.stop():
                 break
     if validation:
         var v = validation.value().copy()
@@ -1843,7 +1863,7 @@ def model_fit_state[E: Exec](
         loop_record = fit_loop_stop(loop_start, n_iter)
         ex.download(v.curve, vcurve, n_iter)
         v.result[0] = Int64(n_iter)
-        v.result[1] = Int64(start + best_epoch)
+        v.result[1] = Int64(start + monitor.best_epoch)
         if restore:
             _copy(ex, P, best_p, np_)
             _copy(ex, s1, best_m, np_)
@@ -1852,8 +1872,7 @@ def model_fit_state[E: Exec](
             st.pw1 = best_pw1
             st.pw2 = best_pw2
             st.mu_prod = best_mu
-            stall = 0
-            n_iter = best_epoch
+            n_iter = monitor.best_epoch
     ex.sync()
     if not loop_record.recorded:
         loop_record = fit_loop_stop(loop_start, n_iter)
@@ -1869,8 +1888,8 @@ def model_fit_state[E: Exec](
     St[FS_STEP] = Int64(step)
     # Validation monitoring is per call. Do not compare its loss with a
     # different validation set, or with training loss after a resumed fit.
-    St[FS_STALL] = Int64(0 if validation else stall)
-    St[FS_BEST] = bitcast[DType.int64](Float64(1.0e308) if validation else best)
+    St[FS_STALL] = Int64(0 if validation else monitor.stall)
+    St[FS_BEST] = bitcast[DType.int64](Float64(1.0e308) if validation else monitor.best)
     St[FS_PW1] = _f32_word(st.pw1)
     St[FS_PW2] = _f32_word(st.pw2)
     St[FS_MU] = _f32_word(st.mu_prod)

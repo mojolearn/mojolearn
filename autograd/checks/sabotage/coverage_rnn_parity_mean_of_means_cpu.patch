@@ -1,0 +1,13 @@
+diff --git a/autograd/loss_fold.mojo b/autograd/loss_fold.mojo
+index b45a712dd7..fefb5fb42f 100644
+--- a/autograd/loss_fold.mojo
++++ b/autograd/loss_fold.mojo
+@@ -34,7 +34,7 @@ from sequence.exec_trait import Exec
+ from checks.numerics import ftz, identical_div, identical_mul_add
+ 
+ comptime RNN_PARITY_SABOTAGE_MEAN_OF_MEANS_DEVICE = is_defined["MOJOLEARN_RNN_PARITY_SABOTAGE_MEAN_OF_MEANS_DEVICE"]()
+-comptime RNN_PARITY_SABOTAGE_MEAN_OF_MEANS_HOST = is_defined["MOJOLEARN_RNN_PARITY_SABOTAGE_MEAN_OF_MEANS_HOST"]()
++comptime RNN_PARITY_SABOTAGE_MEAN_OF_MEANS_HOST = True  # SABOTAGE ARM: mean of means on the host side
+ 
+ 
+ def loss_fold_sabotaged[E: Exec]() -> Bool:

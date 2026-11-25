@@ -18,8 +18,8 @@ from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP
 from sequence.recurrent import gemm
 from sequence.layernorm_core import layer_norm_fwd_core, layer_norm_bwd_core
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
-from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit
-from autograd.rules_recurrent import AutogradRnnStep, rnn_predict
+from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, RnnOptions, opt_scalars, opt_step, rnn_fit
+from autograd.rules_recurrent import AutogradRnnStep, rnn_predict, rnn_predict_options
 from autograd.route_ops import moe_tape_train_step
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
 from autograd.profile import ag_profile_fit_begin, ag_profile_fit_end
@@ -130,7 +130,11 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     float32 sequence lengths (rnn_lengths_of; 0 = none). The optional
     seventh address (lane alm-neural, 2026-11-24) holds the fit loop's
     record words (sequence/fit_loop_words.mojo; 0 = none)."""
-    if (len(addrs) < 5 or len(addrs) > 7) or len(ip) != 15 or len(fp) != 6:
+    var extended = len(ip) == 15 + RNN_FIT_OPTION_INTS
+    if extended:
+        if len(addrs) != 16 or len(fp) != 6 + RNN_FIT_OPTION_FLOATS:
+            raise Error("rnn_fit: the options form requires 16 addresses, 28 integer and 9 float parameters")
+    elif (len(addrs) < 5 or len(addrs) > 7) or len(ip) != 15 or len(fp) != 6:
         raise Error("rnn_fit: requires 5 (to 7) addresses, 15 integer and 6 float parameters")
     var x_addr = addrs[0]
     var y_addr = addrs[1]
@@ -138,6 +142,8 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     var losses_addr = addrs[3]
     var lrs_addr = addrs[4]
     var net = net_of(ip)
+    if extended:
+        net.dirs = ival(ip, 15)
     var task = ival(ip, 5)
     var N = ival(ip, 6)
     var T = ival(ip, 7)
@@ -157,10 +163,14 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
         raise Error("rnn_fit: the seed words must be non-negative 32-bit values")
     var cfg = opt_of(ip, 10, fp, 0)
     var lengths = rnn_lengths_of(addrs[5] if len(addrs) >= 6 else 0, N, T, "fit")
-    var loop_words = addrs[6] if len(addrs) == 7 else 0
+    var loop_words = addrs[6] if len(addrs) >= 7 else 0
+    var opts = RnnOptions()
+    if extended:
+        opts = rnn_fit_options_of(addrs, ip, fp, net, task, N, T, epochs, Bool(lengths))
+    var rows = N * (T if opts.seq_out else 1)
     if task == TASK_CE:
         var y = fptr(y_addr, "y")
-        for i in range(N):
+        for i in range(rows):  # admission: one comparison per label on the host, before any launch
             var v = Int(y.unsafe_load(i))
             if v < 0 or v >= net.O or Float32(v) != y.unsafe_load(i):
                 raise Error("rnn_fit: a label is not a class index below the class count")
@@ -175,10 +185,109 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
         raise Error("rnn_fit: a device-store X needs the device image's dispatch")
     rnn_fit[AutogradRnnStep](ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
                              fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5), lengths,
-                             loop_words, x_device)
+                             loop_words, x_device, opts)
     if profile:
         ag_profile_fit_end("rnn_fit cell=" + String(ival(ip, 0)))
     return net.n_params()
+
+
+#: Lane rnn-parity: the option words rnn_fit's options form appends (RnnOptions; xseq_run_rnn_fit writes them):
+#: ints [dirs, seq_out, no_bias, has_sw, sw_steps, has_cw, has_h0, has_c0, nv, patience, restore, has_vl,
+#: has_state], floats [dropout, clip_grad_norm, tol], addresses after lengths and loop_words [sw, cw, h0, c0, vx,
+#: vy, vl, vcurve, state] (0 for what is absent).
+comptime RNN_FIT_OPTION_INTS = 13
+comptime RNN_FIT_OPTION_FLOATS = 3
+#: rnn_predict's options form: after the lengths word, [dirs, seq_out, has_h0, has_c0, want_state, h0, c0,
+#: state_h, state_c] (addresses as words, 0 when absent).
+comptime RNN_PREDICT_OPTION_INTS = 9
+
+
+def _bit(ip: List[Int], i: Int, what: String) raises -> Bool:
+    var v = ival(ip, i)
+    if v != 0 and v != 1:
+        raise Error("rnn options: " + what + " must be 0 or 1")
+    return v == 1
+
+
+def _admit_weights(p: FP, n: Int, what: String) raises:
+    """Every weight finite and >= 0, and at least one > 0 (one comparison per weight, before any launch)."""
+    var positive = False
+    for i in range(n):  # admission: one comparison per weight on the host, before any launch
+        var v = p.unsafe_load(i)
+        if v != v or v < Float32(0.0) or v > Float32(3.4028234663852886e38):
+            raise Error("ValueError: " + what + " must be finite and non-negative")
+        positive = positive or v > Float32(0.0)
+    if not positive:
+        raise Error("ValueError: " + what + " must have a positive total")
+
+
+def rnn_fit_options_of(addrs: List[Int], ip: List[Int], fp: List[Float64], net: Net, task: Int, N: Int, T: Int,
+                       epochs: Int, has_lens: Bool) raises -> RnnOptions:
+    """The RnnOptions of rnn_fit's options form, with their refusals."""
+    var o = RnnOptions()
+    var b = 15
+    if net.dirs != 1 and net.dirs != 2:
+        raise Error("ValueError: rnn_fit: the directions must be 1 or 2")
+    o.seq_out = _bit(ip, b + 1, "output")
+    o.no_bias = _bit(ip, b + 2, "bias")
+    o.has_sw = _bit(ip, b + 3, "sample_weight")
+    o.sw_steps = _bit(ip, b + 4, "sample_weight per step")
+    o.has_cw = _bit(ip, b + 5, "class_weight")
+    o.has_h0 = _bit(ip, b + 6, "h_0")
+    o.has_c0 = _bit(ip, b + 7, "c_0")
+    o.nv = ival(ip, b + 8)
+    o.patience = ival(ip, b + 9)
+    o.restore = _bit(ip, b + 10, "restore_best")
+    o.has_vl = _bit(ip, b + 11, "validation lengths")
+    o.has_state = _bit(ip, b + 12, "optimizer state")
+    o.dropout = fval(fp, 6)
+    o.clip = fval(fp, 7)
+    o.tol = fval(fp, 8)
+    o.epochs = epochs
+    if not (o.dropout >= Float32(0.0) and o.dropout < Float32(1.0)):
+        raise Error("ValueError: dropout must be in [0, 1)")
+    if not (o.clip >= Float32(0.0)) or not (o.tol >= Float32(0.0)):
+        raise Error("ValueError: clip_grad_norm and tol must be >= 0")
+    if o.nv < 0 or o.nv >= 16777216 or o.patience < 0:
+        raise Error("ValueError: the validation rows and n_iter_no_change must be >= 0")
+    if o.sw_steps and not (o.has_sw and o.seq_out):
+        raise Error("ValueError: sample_weight per step needs output='sequence'")
+    if o.has_cw and task != TASK_CE:
+        raise Error("ValueError: class_weight is for classifiers")
+    if o.has_c0 and not o.has_h0:
+        raise Error("ValueError: c_0 needs h_0")
+    if o.has_c0 and net.cell != 2:
+        raise Error("ValueError: c_0 is the LSTM's cell state")
+    if o.nv > 0 and o.has_h0:
+        raise Error("ValueError: validation with h_0 is not carried: validate from zero states")
+    if o.nv > 0 and o.has_vl != has_lens:
+        raise Error("ValueError: give lengths for both the training and the validation sequences, or for neither")
+    var S = T if o.seq_out else 1
+    if o.has_sw:
+        o.sw = fptr(addrs[7], "sample_weight")
+        _admit_weights(o.sw, N * S if o.sw_steps else N, "sample_weight")
+    if o.has_cw:
+        o.cw = fptr(addrs[8], "class_weight")
+        _admit_weights(o.cw, net.O, "class_weight")
+    if o.has_h0:
+        o.h0 = fptr(addrs[9], "h_0")
+        if o.has_c0:
+            o.c0 = fptr(addrs[10], "c_0")
+    if o.nv > 0:
+        o.vx = fptr(addrs[11], "validation X")
+        o.vy = fptr(addrs[12], "validation y")
+        if o.has_vl:
+            _ = rnn_lengths_of(addrs[13], o.nv, T, "validation")
+            o.vl = fptr(addrs[13], "validation lengths")
+        o.vcurve = fptr(addrs[14], "validation curve")
+        if task == TASK_CE:
+            for i in range(o.nv * S):  # admission: one comparison per validation label
+                var v = Int(o.vy.unsafe_load(i))
+                if v < 0 or v >= net.O or Float32(v) != o.vy.unsafe_load(i):
+                    raise Error("ValueError: a validation label is not one of the fitted classes")
+    if o.has_state:
+        o.state = fptr(addrs[15], "optimizer state")
+    return o
 
 
 def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], x_device: Bool = False) raises -> Int:
@@ -186,8 +295,9 @@ def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], x_devi
     followed by the resident-block words (sequence/perf3_seq_resident_words.mojo);
     ip = [cell, D, H, L, O, task, N, T, chunk, want_seq (, lengths address:
     N float32 sequence lengths, 0 = none)]."""
-    if len(ip) != 10 and len(ip) != 11:
-        raise Error("rnn_predict: requires 4 addresses and 10 (or 11) integer parameters")
+    var extended = len(ip) == 11 + RNN_PREDICT_OPTION_INTS
+    if len(ip) != 10 and len(ip) != 11 and not extended:
+        raise Error("rnn_predict: requires 4 addresses and 10 (or 11, or 20) integer parameters")
     var resident = seq_resident_words(addrs, 4, "rnn_predict")
     var x_addr = addrs[0]
     var p_addr = addrs[1]
@@ -202,9 +312,30 @@ def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], x_devi
     if N < 1 or T < 1 or chunk < 1 or N >= 16777216:
         raise Error("rnn_predict: N, T and chunk must be >= 1 and N < 2^24")
     var seq = fptr(seq_addr, "seq") if want else fptr(out_addr, "out")
-    var lengths = rnn_lengths_of(ip[10] if len(ip) == 11 else 0, N, T, "predict")
+    var lengths = rnn_lengths_of(ip[10] if len(ip) >= 11 else 0, N, T, "predict")
     if x_addr < 0 and not x_device:
         raise Error("rnn_predict: a device-store X needs the device image's dispatch")
+    if extended:
+        # lane rnn-parity: directions, every step's head, initial states, final states
+        net.dirs = ival(ip, 11)
+        if net.dirs != 1 and net.dirs != 2:
+            raise Error("ValueError: rnn_predict: the directions must be 1 or 2")
+        var o = RnnOptions()
+        o.seq_out = _bit(ip, 12, "output")
+        o.has_h0 = _bit(ip, 13, "h_0")
+        o.has_c0 = _bit(ip, 14, "c_0")
+        var want_state = _bit(ip, 15, "state")
+        if o.has_h0:
+            o.h0 = fptr(ival(ip, 16), "h_0")
+            if o.has_c0:
+                o.c0 = fptr(ival(ip, 17), "c_0")
+        var sh = fptr(ival(ip, 18), "state h") if want_state else fptr(out_addr, "out")
+        var sc = fptr(ival(ip, 19), "state c") if want_state and net.cell == 2 else fptr(out_addr, "out")
+        if want:
+            seq = fptr(seq_addr, "seq")
+        rnn_predict_options(ex, net, task, o, fptr(x_addr, "X"), N, T, fptr(p_addr, "params"), fptr(out_addr, "out"),
+                            seq, want, chunk, resident, lengths, x_device, sh, sc, want_state)
+        return N * net.O
     rnn_predict(ex, net, task, fptr(x_addr, "X"), N, T, fptr(p_addr, "params"),
                 fptr(out_addr, "out"), seq, want, chunk, resident, lengths, x_device)
     return N * net.O

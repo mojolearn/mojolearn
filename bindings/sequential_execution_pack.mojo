@@ -95,8 +95,12 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     var validation = args[7]
     var restore_best = Bool(py=args[8])
     var lengths_source = args[9] if len(args) > 9 else PythonObject(None)
-    if lengths_source is not None and validation is not None:
-        raise Error("ValueError: validation_data with lengths is not supported")
+    # lane rnn-parity-c: with lengths, the validation rows carry theirs: validation_data=(X, y, lengths)
+    if validation is not None and (Bool(py=py_call(b.isinstance, validation, b.tuple)) or Bool(py=py_call(b.isinstance, validation, b.list))):
+        if len(validation) == 3 and lengths_source is None:
+            raise Error("ValueError: validation_data=(X, y, lengths) needs the training lengths (fit(..., lengths=))")
+        if len(validation) == 2 and lengths_source is not None:
+            raise Error("ValueError: with lengths, validation_data takes (X, y, lengths)")
     if restore_best and validation is None:
         raise Error("restore_best_weights requires validation_data")
     var seed = args[5]
@@ -182,8 +186,9 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         sequential_address(moment), sequential_address(variance), sequential_address(state),
         PythonObject(0) if not previous else sequential_address(previous.value()))
     var lengths = _sequential_lengths(lengths_source, n, context)
-    if lengths is not None:
-        # the ninth address (autograd/model_execution.mojo model_fit_native)
+    if lengths is not None and validation is None:
+        # the ninth address (autograd/model_execution.mojo model_fit_native); with validation data the lengths
+        # follow the validation addresses (the 14th and 15th, lane rnn-parity-c)
         _ = py_call(addresses.append, sequential_address(lengths))
     # nn-losses-2 begin: the ctc loss's target lengths, the tenth address (the ninth 0 without lengths)
     var target_lengths_source = args[10] if len(args) > 10 else PythonObject(None)
@@ -205,9 +210,10 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     var vy = PythonObject(None)
     var val_curve = PythonObject(None)
     var val_info = PythonObject(None)
+    var val_lengths = PythonObject(None)
     if validation is not None:
-        if not (Bool(py=py_call(b.isinstance, validation, b.tuple)) or Bool(py=py_call(b.isinstance, validation, b.list))) or len(validation) != 2:
-            raise Error("validation_data must be (X, y)")
+        if not (Bool(py=py_call(b.isinstance, validation, b.tuple)) or Bool(py=py_call(b.isinstance, validation, b.list))) or (len(validation) != 2 and len(validation) != 3):
+            raise Error("validation_data must be (X, y), or (X, y, lengths) with lengths")
         var vx_snapshot = sequential_x_snapshot(mods, validation[0], "validation X", context)
         vx = vx_snapshot.keep
         var vxd = vx_snapshot.abi()
@@ -226,6 +232,10 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         val_info = sequential_array(mods, Python.tuple(2), py_item(context, nk[].k_int64), context)
         _ = py_call(addresses.extend, Python.tuple(vxd, sequential_descriptor(vy, "validation y"), classes,
                     sequential_address(val_curve), sequential_address(val_info)))
+        if lengths is not None:
+            # lane rnn-parity-c: the training lengths (14th address) and the validation rows' (15th)
+            val_lengths = _sequential_lengths(validation[2], vx_snapshot.source.rows, context, "validation lengths")
+            _ = py_call(addresses.extend, Python.tuple(sequential_address(lengths), sequential_address(val_lengths)))
         _ = curve  # keep the Python object alive through the native call above
         _ = previous  # keep the Python object alive through the native call above
         _ = state  # keep the Python object alive through the native call above
@@ -302,6 +312,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     _ = vx^
     _ = vy^
     _ = lengths^
+    _ = val_lengths^  # lane rnn-parity-c: the validation lengths' buffer, read by the native call above
     _ = target_lengths^  # nn-losses-2
     py_setitem(fields, nk[].k_params_, params)
     py_setitem(fields, nk[].k_n_iter_, n_iter)

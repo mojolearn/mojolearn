@@ -21,6 +21,7 @@ comptime FIT_FLOATS = 9
 comptime FIT_ADDRS = 4
 comptime FIT_ADDRS_STATE = 8
 comptime FIT_INTS_STATE = 15
+comptime FIT_ADDRS_VALIDATED = 13
 
 
 def model_fptr(address: Int, what: String) raises -> FP:
@@ -55,7 +56,10 @@ def model_fit_native[E: Exec](
 ) raises -> Int:
     # `loop_words` (lane alm-neural, 2026-11-24): the address of the fit loop's record words
     # (sequence/fit_loop_words.mojo), or 0; the model trainer writes it once, after its epoch loop
-    var validated = len(addrs) == 13 and len(ip) == 16
+    # lane rnn-parity-c: 15 addresses with validation_data and lengths: the 13 of a validated fit, then the training
+    # lengths (13) and the validation rows' lengths (14), both N / n_val float32 words
+    var validated_lengths = len(addrs) == FIT_ADDRS_VALIDATED + 2 and len(ip) == 16
+    var validated = (len(addrs) == FIT_ADDRS_VALIDATED and len(ip) == 16) or validated_lengths
     # lane seq-blocks-3: a ninth address after the training state holds N float32 sequence lengths (0: none)
     var with_lengths = len(addrs) == FIT_ADDRS_STATE + 1 and len(ip) == FIT_INTS_STATE
     # nn-losses-2: a tenth address holds the ctc loss's N float32 target lengths (the ninth may then be 0)
@@ -66,7 +70,8 @@ def model_fit_native[E: Exec](
     var plain = len(addrs) == FIT_ADDRS and len(ip) == FIT_INTS
     if not (stateful or plain) or len(fp) < FIT_FLOATS + 1:
         raise Error("model_fit: requires 4 addresses and 14 integer parameters (or 8 and 15 with the "
-                    + "training state, 9 with sequence lengths, 10 with the ctc target lengths) and 9 floats plus one per layer")
+                    + "training state, 9 with sequence lengths, 10 with the ctc target lengths, 13 with validation data, "
+                    + "15 with validation data and lengths) and 9 floats plus one per layer")
     # lane nn-optim: the floats are the 9 head words, one per layer, then (optionally) the schedule's
     # NN_SCHED_ARGS words (autograd/nn_optim.mojo); without them every argument word is 0
     var n_layers = prog[SPEC2_HEADER - 1] if len(prog) >= SPEC2_HEADER and prog[0] == SPEC2_VERSION else (
@@ -117,10 +122,13 @@ def model_fit_native[E: Exec](
                 classes = sources[4]
                 if n_classes > 0:
                     classes.rows = n_classes
+            var val_lengths = Optional[FP]()
+            if validated_lengths:
+                val_lengths = Optional[FP](model_fptr(addrs[14], "validation lengths"))
             validation = Optional[FitValidation](FitValidation(
                 sources[2], sources[3],
                 classes, model_fptr(addrs[11], "validation curve"), ip[15] != 0,
-                IP64(unsafe_from_address=addrs[12]),
+                IP64(unsafe_from_address=addrs[12]), val_lengths,
             ))
         var sa = addrs[6]
         if sa == 0:
@@ -134,6 +142,8 @@ def model_fit_native[E: Exec](
         var lengths = Optional[FP]()
         if with_lengths and addrs[8] != 0:
             lengths = Optional[FP](model_fptr(addrs[8], "lengths"))
+        elif validated_lengths:
+            lengths = Optional[FP](model_fptr(addrs[13], "lengths"))
         var target_lengths = Optional[FP]()  # nn-losses-2
         if with_targets:
             target_lengths = Optional[FP](model_fptr(addrs[9], "target_lengths"))

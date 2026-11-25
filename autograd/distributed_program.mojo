@@ -17,6 +17,7 @@ from autograd.rankn import ShapeN
 from autograd.optim import OptimizerConfig, OptimizerState, step_lr, optimizer_slots
 from autograd.model import epoch_lr
 from autograd.data import epoch_order, gather_rows, DATA_MAX_ROWS
+from autograd.loss_fold import LossFold
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from core.cast_in import CastIn
 from core.host_parallel import host_parallelize
@@ -37,6 +38,10 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
     var replay_ready: Bool
     var parameter_leaves: List[Int]
     var loss_word: List[Float32]
+    # lane rnn-parity-c: the denominator of the last microbatch (a two-output program's second output, (loss sum,
+    # denominator) with loss="output"; else the microbatch's rows), read with the loss word
+    var den_word: List[Float32]
+    var den: Float32
     var target: FP
     var batch_target: FP
     var indices: FP
@@ -65,6 +70,8 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
         self.replay_ready = False
         self.parameter_leaves = List[Int](capacity=len(p.params))
         self.loss_word = List[Float32](length=1, fill=Float32(0))
+        self.den_word = List[Float32](length=1, fill=Float32(0))
+        self.den = Float32(0)
         self.target = dummy_ptr()
         self.batch_target = dummy_ptr()
         self.indices = dummy_ptr()
@@ -177,8 +184,16 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
                 self.gradients[j] = self.executor.parameter_gradient(
                     self.parameter_leaves[j], self.program.param_shapes[j].count())
         self.executor.read_loss(loss, FP(unsafe_from_address=Int(self.loss_word.unsafe_ptr())))
+        var num_den = loss_kind == 0 and len(outs) == 2
+        if num_den:
+            # lane rnn-parity-c: the numerator form, outs = (loss sum, denominator): the denominator word beside it
+            var den = self.executor.tensor(outs[1])
+            if self.executor.session.tape.rows(den) * self.executor.session.tape.cols(den) != 1:
+                raise Error("ValueError: distributed fit: the denominator output must be one scalar")
+            self.executor.read_loss(den, FP(unsafe_from_address=Int(self.den_word.unsafe_ptr())))
         self.executor.session.ex.sync()
         self.loss = self.loss_word[0]
+        self.den = self.den_word[0] if num_den else Float32(count)
 
     def clear_totals(mut self) raises:
         for j in range(len(self.params)):  # driver-loop: owned gradient ranges
@@ -187,6 +202,16 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
                 a.p0 = self.totals[j]
                 a.f0 = Float32(0)
                 self.executor.session.ex.launch[OP_FILL](a, self.width[j])
+
+    def scale_totals(mut self, factor: Float32) raises:
+        """Lane rnn-parity-c: the folded gradient ranges times `factor` (the loss fold's 1 / D of the numerator
+        form, autograd/loss_fold.mojo final_scale); one scale launch an owned range."""
+        for j in range(len(self.params)):  # driver-loop: owned gradient ranges
+            if self.trainable[j] and self.width[j] > 0:
+                var a = Args()
+                a.p0 = self.totals[j]
+                a.f0 = factor
+                self.executor.session.ex.launch[OP_SCALE](a, self.width[j])
 
     def update(mut self, cfg: OptimizerConfig, step: Int, lr: Float32) raises:
         for j in range(len(self.params)):  # driver-loop: disjoint optimizer ranges
@@ -231,8 +256,9 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
                  seed: UInt64) raises:
         if logical_shards < 1 or len(devices) < 1 or len(devices) > logical_shards:
             raise Error("distributed program requires 1 <= physical devices <= logical_shards")
-        if len(p.params) < 1 or len(p.outs) != 1 or p.n_in < 1:
-            raise Error("distributed training requires inputs, parameters and one output")
+        if len(p.params) < 1 or (len(p.outs) != 1 and len(p.outs) != 2) or p.n_in < 1:
+            raise Error("distributed training requires inputs, parameters and one output (or two: the loss sum and "
+                        + "its denominator)")
         for i in range(len(devices)):  # small-loop(devices: physical device IDs): admission
             if devices[i] < 0:
                 raise Error("distributed program: negative device ID")
@@ -317,6 +343,12 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
                 raise Error("distributed fit: inputs must retain their captured ranks and share a sample count")
         if loss_kind < 0 or loss_kind > 5 or (loss_kind != 0 and target.rows != n):
             raise Error("distributed fit: invalid loss or target sample count")
+        # lane rnn-parity-c: a program with two outputs is (loss sum, denominator) and trains with loss="output":
+        # the shards' gradients fold as sum of numerators / sum of denominators (autograd/loss_fold.mojo)
+        var num_den = len(self.program.outs) == 2
+        if num_den and loss_kind != 0:
+            raise Error("ValueError: distributed fit: a program with two outputs (the loss sum and its denominator) "
+                        + "trains with loss='output'")
         var bs = min(n, batch)
         self.busy = True
         try:
@@ -326,11 +358,16 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
             for e in range(epochs):  # driver-loop: epochs
                 for rank in range(len(self.workers)):  # driver-loop: native row permutations
                     epoch_order(wp[rank].executor.session.ex, shuffle, self.seed, self.epoch, n, wp[rank].indices)
-                var epoch_loss = Float32(0)
+                # the epoch's loss: sum of numerators / sum of denominators (autograd/loss_fold.mojo); with the
+                # built-in losses the numerator of a shard is rows x its mean and the denominator its rows
+                var epoch_fold = LossFold(not num_den, 0, Float32(0))
                 var start = 0
                 while start < n:  # driver-loop: optimizer minibatches
                     var count = minibatch_rows(start, n, bs)
                     var shards = min(self.logical_shards, count)
+                    # the built-in losses' total denominator is the minibatch's rows, known now; a two-output
+                    # program's is learned shard by shard (final_scale after the last wave)
+                    var fold = LossFold(not num_den, shards, Float32(0) if num_den else Float32(count))
                     for rank in range(len(self.workers)):  # driver-loop: reset disjoint accumulators
                         wp[rank].clear_totals()
                     var base = 0
@@ -360,12 +397,19 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
                             if failed[rank].byte_length() > 0:
                                 raise Error("distributed logical shard " + String(base + rank) + ": " + failed[rank])
                         for rank in range(active):  # driver-loop: immutable logical left fold
-                            var shard = base + rank
-                            var rows = count * (shard + 1) // shards - count * shard // shards
-                            var weight = ftz(identical_div(Float32(rows), Float32(count)))
-                            self.fold(rank, weight)
-                            epoch_loss = ftz(identical_mul_add(Float32(rows), wp[rank].loss, epoch_loss))
+                            # rows / count for the built-in losses (den_i = the shard's rows), as before
+                            var den_i = wp[rank].den
+                            self.fold(rank, fold.weight[Self.E](den_i))
+                            if num_den:
+                                fold.add_sum(wp[rank].loss, den_i)
+                                epoch_fold.add_sum(wp[rank].loss, den_i)
+                            else:
+                                epoch_fold.add_mean(wp[rank].loss, den_i)
                         base += active
+                    var tail_scale = fold.final_scale[Self.E]()
+                    if tail_scale != Float32(1):
+                        for rank in range(len(self.workers)):  # driver-loop: owned gradient ranges, 1 / D
+                            wp[rank].scale_totals(tail_scale)
                     var lr = epoch_lr(self.cfg.lr, self.optimizer_ints[2], self.optimizer_ints[3],
                                       self.optimizer_floats[6], self.epoch)
                     for rank in range(len(self.workers)):  # driver-loop: sharded optimizer updates
@@ -373,7 +417,7 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
                     self.broadcast()
                     self.step += 1
                     start += count
-                curve[e] = ftz(identical_div(epoch_loss, Float32(n)))
+                curve[e] = epoch_fold.mean()
                 self.epoch += 1
             for rank in range(len(self.workers)):  # driver-loop: free call-scoped data
                 wp[rank].release_dataset()

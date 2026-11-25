@@ -18,6 +18,7 @@ from autograd.program_runtime import minibatch_rows
 from core.cast_in import CastIn
 from core.host_parallel import host_parallelize
 from checks.numerics import ftz, identical_div, identical_mul_add
+from autograd.loss_fold import LossFold
 
 
 @fieldwise_init
@@ -58,8 +59,11 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
                  seed: UInt64) raises:
         if len(devices) < 1 or len(devices) > plan.stages or microbatches < 1:
             raise Error("partitioned program needs physical devices <= logical stages and positive microbatches")
-        if plan.program.n_in < 1 or len(plan.program.outs) != 1 or len(plan.parameters) < 1 or plan.program.n_nodes() < 1:
-            raise Error("partitioned training needs inputs, parameters and one output")
+        # one output, or two: the loss sum and its denominator (lane rnn-parity-c, autograd/loss_fold.mojo)
+        if (plan.program.n_in < 1 or (len(plan.program.outs) != 1 and len(plan.program.outs) != 2)
+                or len(plan.parameters) < 1 or plan.program.n_nodes() < 1):
+            raise Error("partitioned training needs inputs, parameters and one output (or two: the loss sum and its "
+                        + "denominator)")
         self.plan = plan^
         self.workers = List[ModelStage[Self.E]]()
         self.devices = devices.copy()
@@ -203,6 +207,12 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
         var n = shapes[0].d[0]
         if n < 1 or n >= DATA_MAX_ROWS or (loss_kind != 0 and target.rows != n):
             raise Error("partitioned fit: invalid sample count or targets")
+        # lane rnn-parity-c: a program with two outputs is (loss sum, denominator), loss="output": the microbatches
+        # fold as sum of numerators / sum of denominators (autograd/loss_fold.mojo)
+        var num_den = len(p.outs) == 2
+        if num_den and (loss_kind != 0 or p.outs[1] < p.n_in):
+            raise Error("ValueError: partitioned fit: a program with two outputs (the loss sum and its denominator) "
+                        + "trains with loss='output', its denominator computed by the program")
         for k in range(len(srcs)):  # driver-loop: input shape contracts
             if shapes[k].ndim < 2 or shapes[k].d[0] != n or shapes[k].ndim != p.in_shapes[k].ndim:
                 raise Error("partitioned fit: inputs must retain ranks and share their sample count")
@@ -235,9 +245,13 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
                     upload_cast(self.workers[0].executor.session.ex, buf, srcs[k])
             if loss_kind != 0:
                 upload_cast(self.workers[0].executor.session.ex, ty, target)
+            # lane rnn-parity-c: the microbatch denominators of the loss fold, one word a microbatch, once a fit
+            var dens = List[Float32](length=self.microbatches, fill=Float32(0))
             for e in range(epochs):  # driver-loop: epochs
                 epoch_order(self.workers[0].executor.session.ex, shuffle, self.seed, self.epoch, n, indices)
-                var loss_total = Float32(0)
+                # the epoch's loss, sum of numerators / sum of denominators (built-in losses: rows x mean, rows)
+                # (`dens` holds a minibatch's microbatch denominators; allocated once a fit, above the epochs)
+                var epoch_fold = LossFold(not num_den, 0, Float32(0))
                 var start = 0
                 while start < n:  # driver-loop: optimizer minibatches
                     var count = minibatch_rows(start, n, bs)
@@ -266,18 +280,36 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
                     var last_wave = self.plan.max_level + micros - 1
                     for wave in range(1, last_wave + 1):  # driver-loop: overlapping forward pipeline
                         self.wave(values, gradients, param_grads, micros, wave, False, True)
+                    # the microbatches' denominators: their rows, or the program's second output (each microbatch's
+                    # forward values are on the host after the waves), folded in ascending microbatch order
+                    var den_total = Float32(0)
+                    for micro in range(micros):  # driver-loop: microbatch denominators
+                        if num_den:
+                            ref dv = values[micro * p.n_values() + p.outs[1]]
+                            if len(dv.words) != 1:
+                                raise Error("ValueError: partitioned fit: the denominator output must be one scalar")
+                            dens[micro] = dv.words[0]
+                        else:
+                            dens[micro] = Float32(count * (micro + 1) // micros - count * micro // micros)
+                        den_total = ftz(den_total + dens[micro])
+                    # the total is known before the seeds: rows / count (as before) or 1 / D a microbatch
+                    var fold = LossFold(not num_den, micros, Float32(count) if not num_den else den_total)
+                    if num_den and not (den_total > Float32(0)):
+                        raise Error("ValueError: partitioned fit: the microbatches' denominators sum to zero")
                     for micro in range(micros):  # driver-loop: objective seeds
-                        var rows = count * (micro + 1) // micros - count * micro // micros
                         var rf = p.outs[0]
                         var output = self.plan.parameters[-rf - 1].copy() if rf < 0 else values[micro * p.n_values() + rf].copy()
                         var owner = self.plan.owners[-rf - 1] if rf < 0 else (0 if rf < p.n_in else self.plan.placement[rf - p.n_in])
                         var result = self.workers[owner % len(self.workers)].loss_seed(output, targets[micro], loss_kind, delta,
-                            ftz(identical_div(Float32(rows), Float32(count))))
+                            fold.weight[Self.E](dens[micro]))
                         if rf < 0:
                             param_grads[micro * len(p.params) - rf - 1] = result[1].copy()
                         else:
                             gradients[micro * p.n_values() + rf] = result[1].copy()
-                        loss_total = ftz(identical_mul_add(Float32(rows), result[0], loss_total))
+                        if num_den:
+                            epoch_fold.add_sum(result[0], dens[micro])
+                        else:
+                            epoch_fold.add_mean(result[0], dens[micro])
                     var wave = last_wave
                     while wave > 0:  # driver-loop: overlapping reverse pipeline
                         self.wave(values, gradients, param_grads, micros, wave, True, True)
@@ -293,7 +325,7 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
                         self.workers[rank].update(self.plan.parameters, totals, self.cfg, self.step + 1, lr)
                     self.step += 1
                     start += count
-                curve[e] = ftz(identical_div(loss_total, Float32(n)))
+                curve[e] = epoch_fold.mean()
                 self.epoch += 1
         except err:
             self.usable = False

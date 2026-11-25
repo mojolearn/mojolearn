@@ -21,6 +21,8 @@ from std.memory import unsafe_memcpy
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_leased_call
 from sequence.ops_impl import net_of
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from sequence.neural_model_dispatch import (
     RNN_FIT, RNN_PREDICT, MLP_FIT, MLP_PREDICT, MODEL_ARGMAX, MODEL_MIN, MODEL_THRESHOLD, MODEL_UNIFORM,
 )
@@ -477,3 +479,183 @@ def xseq_run_mlp_predict(entry: XseqNeuralEntry, req: XseqMlpPredictRequest, x: 
     var written = xseq_neural_run_call(entry, MLP_PREDICT, addresses, ip, List[Float64]())
     if written != req.rows * req.width:
         raise Error("RuntimeError: mlp_predict: this binding predates the two-column probability; rebuild it")
+
+
+# ---------------------------------------------------------------- recurrent options (lane rnn-parity)
+
+@fieldwise_init
+struct XseqRnnFitOptions(Copyable, Movable):
+    """The options form of RNN_FIT (sequence/ops_impl.mojo RNN_FIT_OPTION_INTS / _FLOATS and its nine addresses):
+    every word resolved once by the boundary. Addresses are 0 when absent."""
+    var dirs: Int
+    var seq_out: Bool
+    var no_bias: Bool
+    var sw: Int
+    var sw_steps: Bool
+    var cw: Int
+    var h0: Int
+    var c0: Int
+    var nv: Int
+    var patience: Int
+    var restore: Bool
+    var vx: Int
+    var vy: Int
+    var vl: Int
+    var vcurve: Int
+    var state: Int
+    var dropout: Float64
+    var clip: Float64
+    var tol: Float64
+
+
+def _b(v: Bool) -> Int:
+    return 1 if v else 0
+
+
+def xseq_run_rnn_fit_options(entry: XseqNeuralEntry, req: XseqRnnFitRequest, optimizer: XseqOptimizer, x: Int,
+                             target: Int, params: Int, losses: Int, rates: Int, lengths: Int, loop_words: Int,
+                             o: XseqRnnFitOptions) raises:
+    """RNN_FIT in its options form: the fifteen words of xseq_run_rnn_fit, then the option words."""
+    var ip: List[Int] = [req.cell, req.d, req.hidden, req.layers, req.outputs, req.task, req.n, req.steps_t,
+                         req.epochs, req.batch, optimizer.kind, optimizer.flags, 1 if req.shuffle else 0,
+                         Int(req.seed & 0xFFFFFFFF), Int(req.seed >> 32),
+                         o.dirs, _b(o.seq_out), _b(o.no_bias), _b(o.sw != 0), _b(o.sw_steps), _b(o.cw != 0),
+                         _b(o.h0 != 0), _b(o.c0 != 0), o.nv, o.patience, _b(o.restore), _b(o.vl != 0),
+                         _b(o.state != 0)]
+    var addresses: List[Int] = [x, target, params, losses, rates, lengths, loop_words, o.sw, o.cw, o.h0, o.c0,
+                                o.vx, o.vy, o.vl, o.vcurve, o.state]
+    var floats = optimizer.floats.copy()
+    floats.append(o.dropout)
+    floats.append(o.clip)
+    floats.append(o.tol)
+    _ = xseq_neural_run_call(entry, RNN_FIT, addresses, ip, floats)
+
+
+@fieldwise_init
+struct XseqRnnPredictOptions(Copyable, Movable):
+    """The options form of RNN_PREDICT: directions, every step's head, initial and final states (addresses, 0
+    when absent)."""
+    var dirs: Int
+    var seq_out: Bool
+    var h0: Int
+    var c0: Int
+    var state_h: Int
+    var state_c: Int
+
+
+def xseq_run_rnn_layout_dirs(ints: List[Int], dirs: Int, params_size: Int) raises -> Int:
+    """xseq_run_rnn_layout with `dirs` directions (bidirectional)."""
+    var network = net_of(ints)
+    network.dirs = dirs
+    if params_size != network.n_params():
+        raise Error("ValueError: recurrent params_ size differs from the fitted network layout")
+    return network.n_params()
+
+
+def xseq_run_rnn_predict_options(entry: XseqNeuralEntry, req: XseqRnnPredictRequest, x: Int, params: Int,
+                                 out_words: Int, seq: Int, lengths: Int, o: XseqRnnPredictOptions) raises:
+    """RNN_PREDICT in its options form (sequence/ops_impl.mojo RNN_PREDICT_OPTION_INTS). Final states asked
+    (o.state_h != 0) is the estimators' `step`, the streaming form: refused for a bidirectional model, whose
+    reverse direction at a step reads every later step, which a live call has not seen yet, so no piece of a
+    sequence can be scored before the sequence ends (lane rnn-step-bits; predict on the whole sequence is that
+    model's answer, and its h_0 / c_0 stay accepted there)."""
+    if o.state_h != 0 and o.dirs != 1:
+        raise Error(
+            "ValueError: step: a bidirectional model cannot stream: its reverse direction reads the steps that come"
+            " after each step; call predict on the whole sequence"
+        )
+    var ip = req.ints.copy()
+    ip.append(req.task)
+    ip.append(req.n)
+    ip.append(req.steps_t)
+    ip.append(req.chunk)
+    ip.append(1 if req.want_seq else 0)
+    ip.append(lengths)
+    ip.append(o.dirs)
+    ip.append(_b(o.seq_out))
+    ip.append(_b(o.h0 != 0))
+    ip.append(_b(o.c0 != 0))
+    ip.append(_b(o.state_h != 0))
+    ip.append(o.h0)
+    ip.append(o.c0)
+    ip.append(o.state_h)
+    ip.append(o.state_c)
+    var addresses: List[Int] = [x, params, out_words, seq]
+    if req.token:
+        addresses.append(req.model)
+        addresses.append(req.token)
+        addresses.append(req.n_params)
+    var written = xseq_neural_run_call(entry, RNN_PREDICT, addresses, ip, List[Float64]())
+    if written != req.n * req.ints[4]:
+        raise Error("RuntimeError: recurrent prediction returned an invalid result count")
+
+
+def xseq_run_balanced_class_weights(codes: Int, n: Int, steps: Int, lengths: Int, k: Int) raises -> List[Float64]:
+    """class_weight='balanced' (scikit-learn's compute_class_weight): n_rows / (k * count of class c) for each of
+    the k classes, over the float32 class codes at `codes` (n sequences of `steps` rows each; with output=
+    "sequence" `steps` is T and, when `lengths` (n float32 words) is given, only each sequence's valid steps
+    count). The counts are per-worker histograms over contiguous chunks of sequences, added in worker order
+    (integers: exact in any order)."""
+    var p = XseqRunF32P(unsafe_from_address=codes)
+    var lp = XseqRunF32P(unsafe_from_address=lengths if lengths != 0 else codes)
+    var has_lens = lengths != 0
+    var tasks = host_predict_task_count_work(max(1, n), max(1, n * steps))
+    var chunk = host_predict_chunk(max(1, n), tasks)
+    var hist = List[Int](length=tasks * k, fill=0)
+    var hp = hist.unsafe_ptr()
+    def task(worker: Int) {imm p, imm lp, imm hp, imm n, imm steps, imm k, imm chunk, imm has_lens}:
+        for i in range(worker * chunk, min((worker + 1) * chunk, n)):
+            var valid = Int(lp[i]) if has_lens else steps
+            for s in range(valid):
+                hp[worker * k + Int(p[i * steps + s])] += 1
+    host_parallelize(task, tasks)
+    var total = 0
+    var counts = List[Int](length=k, fill=0)
+    for worker in range(tasks):  # worker summaries after the join
+        for c in range(k):  # small-loop(classes)
+            counts[c] += hist[worker * k + c]
+    for c in range(k):  # small-loop(classes)
+        total += counts[c]
+    var out = List[Float64]()
+    for c in range(k):  # small-loop(classes)
+        if counts[c] == 0:
+            raise Error("ValueError: class_weight='balanced' needs every class in y")
+        out.append(Float64(total) / (Float64(k) * Float64(counts[c])))
+    _ = hist^
+    return out^
+
+
+def xseq_run_remap_codes(codes: Int, count: Int, mapping: List[Int], dst: Int) raises:
+    """dst[i] = Float32(mapping[codes[i]]): int32 class codes of a label encoding of its own classes, as float32
+    codes of the fitted classes (partial_fit, validation targets). Contiguous chunks across the host's workers."""
+    var src = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes)
+    var out = XseqRunF32P(unsafe_from_address=dst)
+    var mp = mapping.unsafe_ptr()
+    var tasks = host_predict_task_count_work(max(1, count), max(1, count))
+    var chunk = host_predict_chunk(max(1, count), tasks)
+    def task(worker: Int) {imm src, imm out, imm mp, imm count, imm chunk}:
+        for i in range(worker * chunk, min((worker + 1) * chunk, count)):
+            out[i] = Float32(mp[Int(src[i])])
+    host_parallelize(task, tasks)
+    _ = mapping
+
+
+def xseq_run_step_weights(n: Int, steps: Int, lengths: Int, sw: Int, sw_steps: Bool, dst: Int) raises:
+    """The score weights of every step of n sequences (output="sequence"): dst[i T + s] = (s < length_i ? 1 : 0)
+    times the sample weight (per sequence, or per step when `sw_steps`); 1.0 factors when absent (address 0)."""
+    var lp = XseqRunF32P(unsafe_from_address=lengths if lengths != 0 else dst)
+    var wp = XseqRunF32P(unsafe_from_address=sw if sw != 0 else dst)
+    var out = XseqRunF32P(unsafe_from_address=dst)
+    var has_l = lengths != 0
+    var has_w = sw != 0
+    var tasks = host_predict_task_count_work(max(1, n), max(1, n * steps))
+    var chunk = host_predict_chunk(max(1, n), tasks)
+    def task(worker: Int) {imm lp, imm wp, imm out, imm has_l, imm has_w, imm sw_steps, imm n, imm steps, imm chunk}:
+        for i in range(worker * chunk, min((worker + 1) * chunk, n)):
+            var valid = Int(lp[i]) if has_l else steps
+            for s in range(steps):
+                var w = Float32(1.0) if s < valid else Float32(0.0)
+                if has_w and s < valid:
+                    w = wp[i * steps + s] if sw_steps else wp[i]
+                out[i * steps + s] = w
+    host_parallelize(task, tasks)

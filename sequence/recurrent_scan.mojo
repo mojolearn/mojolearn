@@ -277,14 +277,16 @@ def fwd_step(a: Args, s: Int) -> Args:
 # ------------------------------------------------------------------ host bodies
 def op_cell_fwd_scan(row: Int, a: Args):
     """Row `row`'s whole forward recurrence, as the per-step launches ran it:
-    h_0 = c_0 = 0, then every step's projection (scan_gh_value, i6 = R) and its cells, units in ascending order.
+    h_0 = c_0 = 0 (or, i7 = 1, the initial state the caller stored), then every step's projection (scan_gh_value, i6 = R) and its cells, units in ascending order.
     A step's projection reads only h_prev and stores only GH, which only that step's cells read, so this order
     gives the device kernel's words."""
     var H = a.i2
     var GH = gates_of(a.i0) * H
-    for u in range(H):
-        st(a.p3, row * H + u, Float32(0.0))
-        st(a.p4, row * H + u, Float32(0.0))
+    # i7 = 1 (lane rnn-parity): the caller stored the given initial state (h_0 / c_0) in these rows
+    if a.i7 == 0:
+        for u in range(H):
+            st(a.p3, row * H + u, Float32(0.0))
+            st(a.p4, row * H + u, Float32(0.0))
     for s in range(a.i3):
         var sa = fwd_step(a, s)
         for n in range(GH):
@@ -354,10 +356,12 @@ def cell_fwd_scan_kernel(
     var GH = gates_of(a.i0) * Hn
     var R = a.i6
     var u = lane
-    while u < Hn:
-        st(a.p3, row * Hn + u, Float32(0.0))
-        st(a.p4, row * Hn + u, Float32(0.0))
-        u += W
+    # i7 = 1 (lane rnn-parity): the given initial state is already in these rows (a kernel argument: block-uniform)
+    if a.i7 == 0:
+        while u < Hn:
+            st(a.p3, row * Hn + u, Float32(0.0))
+            st(a.p4, row * Hn + u, Float32(0.0))
+            u += W
     # TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE (DROPPED-quality, rab10) deleted 2026-10-09 on lane/owed-deletions-D2;
     # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN.patch
     # TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM (bundle DROPPED-quality, rab10 SCAN + SMEM does not train) deleted 2026-10-09

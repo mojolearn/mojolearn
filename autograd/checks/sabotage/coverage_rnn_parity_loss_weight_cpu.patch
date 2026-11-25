@@ -1,0 +1,13 @@
+diff --git a/autograd/per_step_ops.mojo b/autograd/per_step_ops.mojo
+index 84c2cb91f4..d34906a067 100644
+--- a/autograd/per_step_ops.mojo
++++ b/autograd/per_step_ops.mojo
+@@ -41,7 +41,7 @@ comptime WEIGHTED_LOSS_TINY = Float32(1.1754943508222875e-38)
+ # _cpu, lane ops-per-step-weighted-embedding): the weight is dropped from the numerator only, on the device executor
+ # or on the host one. Off in every build; the arm's patch switches one on.
+ comptime RNN_PARITY_SABOTAGE_LOSS_WEIGHT = is_defined["MOJOLEARN_RNN_PARITY_SABOTAGE_LOSS_WEIGHT"]()
+-comptime RNN_PARITY_SABOTAGE_LOSS_WEIGHT_HOST = is_defined["MOJOLEARN_RNN_PARITY_SABOTAGE_LOSS_WEIGHT_HOST"]()
++comptime RNN_PARITY_SABOTAGE_LOSS_WEIGHT_HOST = True  # SABOTAGE: the loss weight dropped from the numerator on the host
+ 
+ 
+ def weighted_loss_kind(code: Int) raises -> Int:
