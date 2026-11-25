@@ -3239,98 +3239,175 @@
           "value": {
             "parameter": "hidden_size"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "num_layers",
           "value": {
             "parameter": "num_layers"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "optimizer",
           "value": {
             "parameter": "optimizer"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "learning_rate",
           "value": {
             "parameter": "learning_rate"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "batch_size",
           "value": {
             "parameter": "batch_size"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "max_epochs",
           "value": {
             "parameter": "max_epochs"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "shuffle",
           "value": {
             "parameter": "shuffle"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "optimizer_options",
           "value": {
             "parameter": "optimizer_options"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "nonlinearity",
           "value": {
             "parameter": "nonlinearity"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "predict_chunk",
           "value": {
             "parameter": "predict_chunk"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "lr_schedule",
           "value": {
             "parameter": "lr_schedule"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "output",
+          "value": {
+            "parameter": "output"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "bidirectional",
+          "value": {
+            "parameter": "bidirectional"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "dropout",
+          "value": {
+            "parameter": "dropout"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "bias",
+          "value": {
+            "parameter": "bias"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "clip_grad_norm",
+          "value": {
+            "parameter": "clip_grad_norm"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "class_weight",
+          "value": {
+            "parameter": "class_weight"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "early_stopping",
+          "value": {
+            "parameter": "early_stopping"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "validation_fraction",
+          "value": {
+            "parameter": "validation_fraction"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "n_iter_no_change",
+          "value": {
+            "parameter": "n_iter_no_change"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "tol",
+          "value": {
+            "parameter": "tol"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "warm_start",
+          "value": {
+            "parameter": "warm_start"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         }
       ],
       "trace": [
-        "python/mojolearn/_x_sequence_rnn.py:54"
+        "python/mojolearn/_x_sequence_rnn.py:62"
       ],
-      "constructor": "python/mojolearn/_x_sequence_rnn.py:54",
-      "signature_source": "def __init__(self, hidden_size=16, num_layers=1, optimizer='adam', learning_rate=0.001, batch_size=32, max_epochs=10, shuffle=True, random_state=0, optimizer_options=None, nonlinearity='tanh', numeric_mode=None, predict_chunk=4096, lr_schedule=None)",
+      "constructor": "python/mojolearn/_x_sequence_rnn.py:62",
+      "signature_source": "def __init__(self, hidden_size=16, num_layers=1, optimizer='adam', learning_rate=0.001, batch_size=32, max_epochs=10, shuffle=True, random_state=0, optimizer_options=None, nonlinearity='tanh', numeric_mode=None, predict_chunk=4096, lr_schedule=None, output='final', bidirectional=False, dropout=0.0, bias=True, clip_grad_norm=None, class_weight=None, early_stopping=False, validation_fraction=0.1, n_iter_no_change=10, tol=0.0001, warm_start=False)",
       "parameters": [
         "hidden_size",
         "num_layers",
@@ -3344,9 +3421,20 @@
         "nonlinearity",
         "numeric_mode",
         "predict_chunk",
-        "lr_schedule"
+        "lr_schedule",
+        "output",
+        "bidirectional",
+        "dropout",
+        "bias",
+        "clip_grad_norm",
+        "class_weight",
+        "early_stopping",
+        "validation_fraction",
+        "n_iter_no_change",
+        "tol",
+        "warm_start"
       ],
-      "constructor_ast_sha256": "bbbca7bbc0d165eea4ab7ce43eb4aa1438c43d0b49077bfc88ee8ed19882096c",
+      "constructor_ast_sha256": "83bf996bbeab08a1642c1603813a3cd52c17fdece12caa3b6efe75b0f0d247b5",
       "field_order": [
         "hidden_size",
         "num_layers",
@@ -3360,7 +3448,18 @@
         "nonlinearity",
         "numeric_mode",
         "predict_chunk",
-        "lr_schedule"
+        "lr_schedule",
+        "output",
+        "bidirectional",
+        "dropout",
+        "bias",
+        "clip_grad_norm",
+        "class_weight",
+        "early_stopping",
+        "validation_fraction",
+        "n_iter_no_change",
+        "tol",
+        "warm_start"
       ],
       "final_fields": {
         "hidden_size": {
@@ -3401,6 +3500,39 @@
         },
         "lr_schedule": {
           "parameter": "lr_schedule"
+        },
+        "output": {
+          "parameter": "output"
+        },
+        "bidirectional": {
+          "parameter": "bidirectional"
+        },
+        "dropout": {
+          "parameter": "dropout"
+        },
+        "bias": {
+          "parameter": "bias"
+        },
+        "clip_grad_norm": {
+          "parameter": "clip_grad_norm"
+        },
+        "class_weight": {
+          "parameter": "class_weight"
+        },
+        "early_stopping": {
+          "parameter": "early_stopping"
+        },
+        "validation_fraction": {
+          "parameter": "validation_fraction"
+        },
+        "n_iter_no_change": {
+          "parameter": "n_iter_no_change"
+        },
+        "tol": {
+          "parameter": "tol"
+        },
+        "warm_start": {
+          "parameter": "warm_start"
         }
       },
       "signature_defaults": {
@@ -3416,7 +3548,18 @@
         "nonlinearity": "'tanh'",
         "numeric_mode": "None",
         "predict_chunk": "4096",
-        "lr_schedule": "None"
+        "lr_schedule": "None",
+        "output": "'final'",
+        "bidirectional": "False",
+        "dropout": "0.0",
+        "bias": "True",
+        "clip_grad_norm": "None",
+        "class_weight": "None",
+        "early_stopping": "False",
+        "validation_fraction": "0.1",
+        "n_iter_no_change": "10",
+        "tol": "0.0001",
+        "warm_start": "False"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._x_sequence_rnn",
@@ -3425,8 +3568,8 @@
         {
           "path": "python/mojolearn/_x_sequence_rnn.py",
           "name": "__init__",
-          "line": 54,
-          "ast_sha256": "bbbca7bbc0d165eea4ab7ce43eb4aa1438c43d0b49077bfc88ee8ed19882096c"
+          "line": 62,
+          "ast_sha256": "83bf996bbeab08a1642c1603813a3cd52c17fdece12caa3b6efe75b0f0d247b5"
         }
       ],
       "constructor_ancestry": [
@@ -3503,98 +3646,175 @@
           "value": {
             "parameter": "hidden_size"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "num_layers",
           "value": {
             "parameter": "num_layers"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "optimizer",
           "value": {
             "parameter": "optimizer"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "learning_rate",
           "value": {
             "parameter": "learning_rate"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "batch_size",
           "value": {
             "parameter": "batch_size"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "max_epochs",
           "value": {
             "parameter": "max_epochs"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "shuffle",
           "value": {
             "parameter": "shuffle"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "optimizer_options",
           "value": {
             "parameter": "optimizer_options"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "nonlinearity",
           "value": {
             "parameter": "nonlinearity"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "predict_chunk",
           "value": {
             "parameter": "predict_chunk"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "lr_schedule",
           "value": {
             "parameter": "lr_schedule"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "output",
+          "value": {
+            "parameter": "output"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "bidirectional",
+          "value": {
+            "parameter": "bidirectional"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "dropout",
+          "value": {
+            "parameter": "dropout"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "bias",
+          "value": {
+            "parameter": "bias"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "clip_grad_norm",
+          "value": {
+            "parameter": "clip_grad_norm"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "class_weight",
+          "value": {
+            "parameter": "class_weight"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "early_stopping",
+          "value": {
+            "parameter": "early_stopping"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "validation_fraction",
+          "value": {
+            "parameter": "validation_fraction"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "n_iter_no_change",
+          "value": {
+            "parameter": "n_iter_no_change"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "tol",
+          "value": {
+            "parameter": "tol"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "warm_start",
+          "value": {
+            "parameter": "warm_start"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         }
       ],
       "trace": [
-        "python/mojolearn/_x_sequence_rnn.py:54"
+        "python/mojolearn/_x_sequence_rnn.py:62"
       ],
-      "constructor": "python/mojolearn/_x_sequence_rnn.py:54",
-      "signature_source": "def __init__(self, hidden_size=16, num_layers=1, optimizer='adam', learning_rate=0.001, batch_size=32, max_epochs=10, shuffle=True, random_state=0, optimizer_options=None, nonlinearity='tanh', numeric_mode=None, predict_chunk=4096, lr_schedule=None)",
+      "constructor": "python/mojolearn/_x_sequence_rnn.py:62",
+      "signature_source": "def __init__(self, hidden_size=16, num_layers=1, optimizer='adam', learning_rate=0.001, batch_size=32, max_epochs=10, shuffle=True, random_state=0, optimizer_options=None, nonlinearity='tanh', numeric_mode=None, predict_chunk=4096, lr_schedule=None, output='final', bidirectional=False, dropout=0.0, bias=True, clip_grad_norm=None, class_weight=None, early_stopping=False, validation_fraction=0.1, n_iter_no_change=10, tol=0.0001, warm_start=False)",
       "parameters": [
         "hidden_size",
         "num_layers",
@@ -3608,9 +3828,20 @@
         "nonlinearity",
         "numeric_mode",
         "predict_chunk",
-        "lr_schedule"
+        "lr_schedule",
+        "output",
+        "bidirectional",
+        "dropout",
+        "bias",
+        "clip_grad_norm",
+        "class_weight",
+        "early_stopping",
+        "validation_fraction",
+        "n_iter_no_change",
+        "tol",
+        "warm_start"
       ],
-      "constructor_ast_sha256": "bbbca7bbc0d165eea4ab7ce43eb4aa1438c43d0b49077bfc88ee8ed19882096c",
+      "constructor_ast_sha256": "83bf996bbeab08a1642c1603813a3cd52c17fdece12caa3b6efe75b0f0d247b5",
       "field_order": [
         "hidden_size",
         "num_layers",
@@ -3624,7 +3855,18 @@
         "nonlinearity",
         "numeric_mode",
         "predict_chunk",
-        "lr_schedule"
+        "lr_schedule",
+        "output",
+        "bidirectional",
+        "dropout",
+        "bias",
+        "clip_grad_norm",
+        "class_weight",
+        "early_stopping",
+        "validation_fraction",
+        "n_iter_no_change",
+        "tol",
+        "warm_start"
       ],
       "final_fields": {
         "hidden_size": {
@@ -3665,6 +3907,39 @@
         },
         "lr_schedule": {
           "parameter": "lr_schedule"
+        },
+        "output": {
+          "parameter": "output"
+        },
+        "bidirectional": {
+          "parameter": "bidirectional"
+        },
+        "dropout": {
+          "parameter": "dropout"
+        },
+        "bias": {
+          "parameter": "bias"
+        },
+        "clip_grad_norm": {
+          "parameter": "clip_grad_norm"
+        },
+        "class_weight": {
+          "parameter": "class_weight"
+        },
+        "early_stopping": {
+          "parameter": "early_stopping"
+        },
+        "validation_fraction": {
+          "parameter": "validation_fraction"
+        },
+        "n_iter_no_change": {
+          "parameter": "n_iter_no_change"
+        },
+        "tol": {
+          "parameter": "tol"
+        },
+        "warm_start": {
+          "parameter": "warm_start"
         }
       },
       "signature_defaults": {
@@ -3680,7 +3955,18 @@
         "nonlinearity": "'tanh'",
         "numeric_mode": "None",
         "predict_chunk": "4096",
-        "lr_schedule": "None"
+        "lr_schedule": "None",
+        "output": "'final'",
+        "bidirectional": "False",
+        "dropout": "0.0",
+        "bias": "True",
+        "clip_grad_norm": "None",
+        "class_weight": "None",
+        "early_stopping": "False",
+        "validation_fraction": "0.1",
+        "n_iter_no_change": "10",
+        "tol": "0.0001",
+        "warm_start": "False"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._x_sequence_rnn",
@@ -3689,8 +3975,8 @@
         {
           "path": "python/mojolearn/_x_sequence_rnn.py",
           "name": "__init__",
-          "line": 54,
-          "ast_sha256": "bbbca7bbc0d165eea4ab7ce43eb4aa1438c43d0b49077bfc88ee8ed19882096c"
+          "line": 62,
+          "ast_sha256": "83bf996bbeab08a1642c1603813a3cd52c17fdece12caa3b6efe75b0f0d247b5"
         }
       ],
       "constructor_ancestry": [
@@ -7482,98 +7768,175 @@
           "value": {
             "parameter": "hidden_size"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "num_layers",
           "value": {
             "parameter": "num_layers"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "optimizer",
           "value": {
             "parameter": "optimizer"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "learning_rate",
           "value": {
             "parameter": "learning_rate"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "batch_size",
           "value": {
             "parameter": "batch_size"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "max_epochs",
           "value": {
             "parameter": "max_epochs"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "shuffle",
           "value": {
             "parameter": "shuffle"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "optimizer_options",
           "value": {
             "parameter": "optimizer_options"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "nonlinearity",
           "value": {
             "parameter": "nonlinearity"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "predict_chunk",
           "value": {
             "parameter": "predict_chunk"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "lr_schedule",
           "value": {
             "parameter": "lr_schedule"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "output",
+          "value": {
+            "parameter": "output"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "bidirectional",
+          "value": {
+            "parameter": "bidirectional"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "dropout",
+          "value": {
+            "parameter": "dropout"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "bias",
+          "value": {
+            "parameter": "bias"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "clip_grad_norm",
+          "value": {
+            "parameter": "clip_grad_norm"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "class_weight",
+          "value": {
+            "parameter": "class_weight"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "early_stopping",
+          "value": {
+            "parameter": "early_stopping"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "validation_fraction",
+          "value": {
+            "parameter": "validation_fraction"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "n_iter_no_change",
+          "value": {
+            "parameter": "n_iter_no_change"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "tol",
+          "value": {
+            "parameter": "tol"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "warm_start",
+          "value": {
+            "parameter": "warm_start"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         }
       ],
       "trace": [
-        "python/mojolearn/_x_sequence_rnn.py:54"
+        "python/mojolearn/_x_sequence_rnn.py:62"
       ],
-      "constructor": "python/mojolearn/_x_sequence_rnn.py:54",
-      "signature_source": "def __init__(self, hidden_size=16, num_layers=1, optimizer='adam', learning_rate=0.001, batch_size=32, max_epochs=10, shuffle=True, random_state=0, optimizer_options=None, nonlinearity='tanh', numeric_mode=None, predict_chunk=4096, lr_schedule=None)",
+      "constructor": "python/mojolearn/_x_sequence_rnn.py:62",
+      "signature_source": "def __init__(self, hidden_size=16, num_layers=1, optimizer='adam', learning_rate=0.001, batch_size=32, max_epochs=10, shuffle=True, random_state=0, optimizer_options=None, nonlinearity='tanh', numeric_mode=None, predict_chunk=4096, lr_schedule=None, output='final', bidirectional=False, dropout=0.0, bias=True, clip_grad_norm=None, class_weight=None, early_stopping=False, validation_fraction=0.1, n_iter_no_change=10, tol=0.0001, warm_start=False)",
       "parameters": [
         "hidden_size",
         "num_layers",
@@ -7587,9 +7950,20 @@
         "nonlinearity",
         "numeric_mode",
         "predict_chunk",
-        "lr_schedule"
+        "lr_schedule",
+        "output",
+        "bidirectional",
+        "dropout",
+        "bias",
+        "clip_grad_norm",
+        "class_weight",
+        "early_stopping",
+        "validation_fraction",
+        "n_iter_no_change",
+        "tol",
+        "warm_start"
       ],
-      "constructor_ast_sha256": "bbbca7bbc0d165eea4ab7ce43eb4aa1438c43d0b49077bfc88ee8ed19882096c",
+      "constructor_ast_sha256": "83bf996bbeab08a1642c1603813a3cd52c17fdece12caa3b6efe75b0f0d247b5",
       "field_order": [
         "hidden_size",
         "num_layers",
@@ -7603,7 +7977,18 @@
         "nonlinearity",
         "numeric_mode",
         "predict_chunk",
-        "lr_schedule"
+        "lr_schedule",
+        "output",
+        "bidirectional",
+        "dropout",
+        "bias",
+        "clip_grad_norm",
+        "class_weight",
+        "early_stopping",
+        "validation_fraction",
+        "n_iter_no_change",
+        "tol",
+        "warm_start"
       ],
       "final_fields": {
         "hidden_size": {
@@ -7644,6 +8029,39 @@
         },
         "lr_schedule": {
           "parameter": "lr_schedule"
+        },
+        "output": {
+          "parameter": "output"
+        },
+        "bidirectional": {
+          "parameter": "bidirectional"
+        },
+        "dropout": {
+          "parameter": "dropout"
+        },
+        "bias": {
+          "parameter": "bias"
+        },
+        "clip_grad_norm": {
+          "parameter": "clip_grad_norm"
+        },
+        "class_weight": {
+          "parameter": "class_weight"
+        },
+        "early_stopping": {
+          "parameter": "early_stopping"
+        },
+        "validation_fraction": {
+          "parameter": "validation_fraction"
+        },
+        "n_iter_no_change": {
+          "parameter": "n_iter_no_change"
+        },
+        "tol": {
+          "parameter": "tol"
+        },
+        "warm_start": {
+          "parameter": "warm_start"
         }
       },
       "signature_defaults": {
@@ -7659,7 +8077,18 @@
         "nonlinearity": "'tanh'",
         "numeric_mode": "None",
         "predict_chunk": "4096",
-        "lr_schedule": "None"
+        "lr_schedule": "None",
+        "output": "'final'",
+        "bidirectional": "False",
+        "dropout": "0.0",
+        "bias": "True",
+        "clip_grad_norm": "None",
+        "class_weight": "None",
+        "early_stopping": "False",
+        "validation_fraction": "0.1",
+        "n_iter_no_change": "10",
+        "tol": "0.0001",
+        "warm_start": "False"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._x_sequence_rnn",
@@ -7668,8 +8097,8 @@
         {
           "path": "python/mojolearn/_x_sequence_rnn.py",
           "name": "__init__",
-          "line": 54,
-          "ast_sha256": "bbbca7bbc0d165eea4ab7ce43eb4aa1438c43d0b49077bfc88ee8ed19882096c"
+          "line": 62,
+          "ast_sha256": "83bf996bbeab08a1642c1603813a3cd52c17fdece12caa3b6efe75b0f0d247b5"
         }
       ],
       "constructor_ancestry": [
@@ -7746,98 +8175,175 @@
           "value": {
             "parameter": "hidden_size"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "num_layers",
           "value": {
             "parameter": "num_layers"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "optimizer",
           "value": {
             "parameter": "optimizer"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "learning_rate",
           "value": {
             "parameter": "learning_rate"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "batch_size",
           "value": {
             "parameter": "batch_size"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "max_epochs",
           "value": {
             "parameter": "max_epochs"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "shuffle",
           "value": {
             "parameter": "shuffle"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "optimizer_options",
           "value": {
             "parameter": "optimizer_options"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "nonlinearity",
           "value": {
             "parameter": "nonlinearity"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "predict_chunk",
           "value": {
             "parameter": "predict_chunk"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "lr_schedule",
           "value": {
             "parameter": "lr_schedule"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "output",
+          "value": {
+            "parameter": "output"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "bidirectional",
+          "value": {
+            "parameter": "bidirectional"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "dropout",
+          "value": {
+            "parameter": "dropout"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "bias",
+          "value": {
+            "parameter": "bias"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "clip_grad_norm",
+          "value": {
+            "parameter": "clip_grad_norm"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "class_weight",
+          "value": {
+            "parameter": "class_weight"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "early_stopping",
+          "value": {
+            "parameter": "early_stopping"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "validation_fraction",
+          "value": {
+            "parameter": "validation_fraction"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "n_iter_no_change",
+          "value": {
+            "parameter": "n_iter_no_change"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "tol",
+          "value": {
+            "parameter": "tol"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "warm_start",
+          "value": {
+            "parameter": "warm_start"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         }
       ],
       "trace": [
-        "python/mojolearn/_x_sequence_rnn.py:54"
+        "python/mojolearn/_x_sequence_rnn.py:62"
       ],
-      "constructor": "python/mojolearn/_x_sequence_rnn.py:54",
-      "signature_source": "def __init__(self, hidden_size=16, num_layers=1, optimizer='adam', learning_rate=0.001, batch_size=32, max_epochs=10, shuffle=True, random_state=0, optimizer_options=None, nonlinearity='tanh', numeric_mode=None, predict_chunk=4096, lr_schedule=None)",
+      "constructor": "python/mojolearn/_x_sequence_rnn.py:62",
+      "signature_source": "def __init__(self, hidden_size=16, num_layers=1, optimizer='adam', learning_rate=0.001, batch_size=32, max_epochs=10, shuffle=True, random_state=0, optimizer_options=None, nonlinearity='tanh', numeric_mode=None, predict_chunk=4096, lr_schedule=None, output='final', bidirectional=False, dropout=0.0, bias=True, clip_grad_norm=None, class_weight=None, early_stopping=False, validation_fraction=0.1, n_iter_no_change=10, tol=0.0001, warm_start=False)",
       "parameters": [
         "hidden_size",
         "num_layers",
@@ -7851,9 +8357,20 @@
         "nonlinearity",
         "numeric_mode",
         "predict_chunk",
-        "lr_schedule"
+        "lr_schedule",
+        "output",
+        "bidirectional",
+        "dropout",
+        "bias",
+        "clip_grad_norm",
+        "class_weight",
+        "early_stopping",
+        "validation_fraction",
+        "n_iter_no_change",
+        "tol",
+        "warm_start"
       ],
-      "constructor_ast_sha256": "bbbca7bbc0d165eea4ab7ce43eb4aa1438c43d0b49077bfc88ee8ed19882096c",
+      "constructor_ast_sha256": "83bf996bbeab08a1642c1603813a3cd52c17fdece12caa3b6efe75b0f0d247b5",
       "field_order": [
         "hidden_size",
         "num_layers",
@@ -7867,7 +8384,18 @@
         "nonlinearity",
         "numeric_mode",
         "predict_chunk",
-        "lr_schedule"
+        "lr_schedule",
+        "output",
+        "bidirectional",
+        "dropout",
+        "bias",
+        "clip_grad_norm",
+        "class_weight",
+        "early_stopping",
+        "validation_fraction",
+        "n_iter_no_change",
+        "tol",
+        "warm_start"
       ],
       "final_fields": {
         "hidden_size": {
@@ -7908,6 +8436,39 @@
         },
         "lr_schedule": {
           "parameter": "lr_schedule"
+        },
+        "output": {
+          "parameter": "output"
+        },
+        "bidirectional": {
+          "parameter": "bidirectional"
+        },
+        "dropout": {
+          "parameter": "dropout"
+        },
+        "bias": {
+          "parameter": "bias"
+        },
+        "clip_grad_norm": {
+          "parameter": "clip_grad_norm"
+        },
+        "class_weight": {
+          "parameter": "class_weight"
+        },
+        "early_stopping": {
+          "parameter": "early_stopping"
+        },
+        "validation_fraction": {
+          "parameter": "validation_fraction"
+        },
+        "n_iter_no_change": {
+          "parameter": "n_iter_no_change"
+        },
+        "tol": {
+          "parameter": "tol"
+        },
+        "warm_start": {
+          "parameter": "warm_start"
         }
       },
       "signature_defaults": {
@@ -7923,7 +8484,18 @@
         "nonlinearity": "'tanh'",
         "numeric_mode": "None",
         "predict_chunk": "4096",
-        "lr_schedule": "None"
+        "lr_schedule": "None",
+        "output": "'final'",
+        "bidirectional": "False",
+        "dropout": "0.0",
+        "bias": "True",
+        "clip_grad_norm": "None",
+        "class_weight": "None",
+        "early_stopping": "False",
+        "validation_fraction": "0.1",
+        "n_iter_no_change": "10",
+        "tol": "0.0001",
+        "warm_start": "False"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._x_sequence_rnn",
@@ -7932,8 +8504,8 @@
         {
           "path": "python/mojolearn/_x_sequence_rnn.py",
           "name": "__init__",
-          "line": 54,
-          "ast_sha256": "bbbca7bbc0d165eea4ab7ce43eb4aa1438c43d0b49077bfc88ee8ed19882096c"
+          "line": 62,
+          "ast_sha256": "83bf996bbeab08a1642c1603813a3cd52c17fdece12caa3b6efe75b0f0d247b5"
         }
       ],
       "constructor_ancestry": [
@@ -13062,98 +13634,175 @@
           "value": {
             "parameter": "hidden_size"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "num_layers",
           "value": {
             "parameter": "num_layers"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "optimizer",
           "value": {
             "parameter": "optimizer"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "learning_rate",
           "value": {
             "parameter": "learning_rate"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "batch_size",
           "value": {
             "parameter": "batch_size"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "max_epochs",
           "value": {
             "parameter": "max_epochs"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "shuffle",
           "value": {
             "parameter": "shuffle"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "optimizer_options",
           "value": {
             "parameter": "optimizer_options"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "nonlinearity",
           "value": {
             "parameter": "nonlinearity"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "predict_chunk",
           "value": {
             "parameter": "predict_chunk"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "lr_schedule",
           "value": {
             "parameter": "lr_schedule"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "output",
+          "value": {
+            "parameter": "output"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "bidirectional",
+          "value": {
+            "parameter": "bidirectional"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "dropout",
+          "value": {
+            "parameter": "dropout"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "bias",
+          "value": {
+            "parameter": "bias"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "clip_grad_norm",
+          "value": {
+            "parameter": "clip_grad_norm"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "class_weight",
+          "value": {
+            "parameter": "class_weight"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "early_stopping",
+          "value": {
+            "parameter": "early_stopping"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "validation_fraction",
+          "value": {
+            "parameter": "validation_fraction"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "n_iter_no_change",
+          "value": {
+            "parameter": "n_iter_no_change"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "tol",
+          "value": {
+            "parameter": "tol"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "warm_start",
+          "value": {
+            "parameter": "warm_start"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         }
       ],
       "trace": [
-        "python/mojolearn/_x_sequence_rnn.py:54"
+        "python/mojolearn/_x_sequence_rnn.py:62"
       ],
-      "constructor": "python/mojolearn/_x_sequence_rnn.py:54",
-      "signature_source": "def __init__(self, hidden_size=16, num_layers=1, optimizer='adam', learning_rate=0.001, batch_size=32, max_epochs=10, shuffle=True, random_state=0, optimizer_options=None, nonlinearity='tanh', numeric_mode=None, predict_chunk=4096, lr_schedule=None)",
+      "constructor": "python/mojolearn/_x_sequence_rnn.py:62",
+      "signature_source": "def __init__(self, hidden_size=16, num_layers=1, optimizer='adam', learning_rate=0.001, batch_size=32, max_epochs=10, shuffle=True, random_state=0, optimizer_options=None, nonlinearity='tanh', numeric_mode=None, predict_chunk=4096, lr_schedule=None, output='final', bidirectional=False, dropout=0.0, bias=True, clip_grad_norm=None, class_weight=None, early_stopping=False, validation_fraction=0.1, n_iter_no_change=10, tol=0.0001, warm_start=False)",
       "parameters": [
         "hidden_size",
         "num_layers",
@@ -13167,9 +13816,20 @@
         "nonlinearity",
         "numeric_mode",
         "predict_chunk",
-        "lr_schedule"
+        "lr_schedule",
+        "output",
+        "bidirectional",
+        "dropout",
+        "bias",
+        "clip_grad_norm",
+        "class_weight",
+        "early_stopping",
+        "validation_fraction",
+        "n_iter_no_change",
+        "tol",
+        "warm_start"
       ],
-      "constructor_ast_sha256": "bbbca7bbc0d165eea4ab7ce43eb4aa1438c43d0b49077bfc88ee8ed19882096c",
+      "constructor_ast_sha256": "83bf996bbeab08a1642c1603813a3cd52c17fdece12caa3b6efe75b0f0d247b5",
       "field_order": [
         "hidden_size",
         "num_layers",
@@ -13183,7 +13843,18 @@
         "nonlinearity",
         "numeric_mode",
         "predict_chunk",
-        "lr_schedule"
+        "lr_schedule",
+        "output",
+        "bidirectional",
+        "dropout",
+        "bias",
+        "clip_grad_norm",
+        "class_weight",
+        "early_stopping",
+        "validation_fraction",
+        "n_iter_no_change",
+        "tol",
+        "warm_start"
       ],
       "final_fields": {
         "hidden_size": {
@@ -13224,6 +13895,39 @@
         },
         "lr_schedule": {
           "parameter": "lr_schedule"
+        },
+        "output": {
+          "parameter": "output"
+        },
+        "bidirectional": {
+          "parameter": "bidirectional"
+        },
+        "dropout": {
+          "parameter": "dropout"
+        },
+        "bias": {
+          "parameter": "bias"
+        },
+        "clip_grad_norm": {
+          "parameter": "clip_grad_norm"
+        },
+        "class_weight": {
+          "parameter": "class_weight"
+        },
+        "early_stopping": {
+          "parameter": "early_stopping"
+        },
+        "validation_fraction": {
+          "parameter": "validation_fraction"
+        },
+        "n_iter_no_change": {
+          "parameter": "n_iter_no_change"
+        },
+        "tol": {
+          "parameter": "tol"
+        },
+        "warm_start": {
+          "parameter": "warm_start"
         }
       },
       "signature_defaults": {
@@ -13239,7 +13943,18 @@
         "nonlinearity": "'tanh'",
         "numeric_mode": "None",
         "predict_chunk": "4096",
-        "lr_schedule": "None"
+        "lr_schedule": "None",
+        "output": "'final'",
+        "bidirectional": "False",
+        "dropout": "0.0",
+        "bias": "True",
+        "clip_grad_norm": "None",
+        "class_weight": "None",
+        "early_stopping": "False",
+        "validation_fraction": "0.1",
+        "n_iter_no_change": "10",
+        "tol": "0.0001",
+        "warm_start": "False"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._x_sequence_rnn",
@@ -13248,8 +13963,8 @@
         {
           "path": "python/mojolearn/_x_sequence_rnn.py",
           "name": "__init__",
-          "line": 54,
-          "ast_sha256": "bbbca7bbc0d165eea4ab7ce43eb4aa1438c43d0b49077bfc88ee8ed19882096c"
+          "line": 62,
+          "ast_sha256": "83bf996bbeab08a1642c1603813a3cd52c17fdece12caa3b6efe75b0f0d247b5"
         }
       ],
       "constructor_ancestry": [
@@ -13326,98 +14041,175 @@
           "value": {
             "parameter": "hidden_size"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "num_layers",
           "value": {
             "parameter": "num_layers"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "optimizer",
           "value": {
             "parameter": "optimizer"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "learning_rate",
           "value": {
             "parameter": "learning_rate"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "batch_size",
           "value": {
             "parameter": "batch_size"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "max_epochs",
           "value": {
             "parameter": "max_epochs"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "shuffle",
           "value": {
             "parameter": "shuffle"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "optimizer_options",
           "value": {
             "parameter": "optimizer_options"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "nonlinearity",
           "value": {
             "parameter": "nonlinearity"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "predict_chunk",
           "value": {
             "parameter": "predict_chunk"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         },
         {
           "field": "lr_schedule",
           "value": {
             "parameter": "lr_schedule"
           },
-          "source": "python/mojolearn/_x_sequence_rnn.py:54"
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "output",
+          "value": {
+            "parameter": "output"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "bidirectional",
+          "value": {
+            "parameter": "bidirectional"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "dropout",
+          "value": {
+            "parameter": "dropout"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "bias",
+          "value": {
+            "parameter": "bias"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "clip_grad_norm",
+          "value": {
+            "parameter": "clip_grad_norm"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "class_weight",
+          "value": {
+            "parameter": "class_weight"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "early_stopping",
+          "value": {
+            "parameter": "early_stopping"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "validation_fraction",
+          "value": {
+            "parameter": "validation_fraction"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "n_iter_no_change",
+          "value": {
+            "parameter": "n_iter_no_change"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "tol",
+          "value": {
+            "parameter": "tol"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
+        },
+        {
+          "field": "warm_start",
+          "value": {
+            "parameter": "warm_start"
+          },
+          "source": "python/mojolearn/_x_sequence_rnn.py:62"
         }
       ],
       "trace": [
-        "python/mojolearn/_x_sequence_rnn.py:54"
+        "python/mojolearn/_x_sequence_rnn.py:62"
       ],
-      "constructor": "python/mojolearn/_x_sequence_rnn.py:54",
-      "signature_source": "def __init__(self, hidden_size=16, num_layers=1, optimizer='adam', learning_rate=0.001, batch_size=32, max_epochs=10, shuffle=True, random_state=0, optimizer_options=None, nonlinearity='tanh', numeric_mode=None, predict_chunk=4096, lr_schedule=None)",
+      "constructor": "python/mojolearn/_x_sequence_rnn.py:62",
+      "signature_source": "def __init__(self, hidden_size=16, num_layers=1, optimizer='adam', learning_rate=0.001, batch_size=32, max_epochs=10, shuffle=True, random_state=0, optimizer_options=None, nonlinearity='tanh', numeric_mode=None, predict_chunk=4096, lr_schedule=None, output='final', bidirectional=False, dropout=0.0, bias=True, clip_grad_norm=None, class_weight=None, early_stopping=False, validation_fraction=0.1, n_iter_no_change=10, tol=0.0001, warm_start=False)",
       "parameters": [
         "hidden_size",
         "num_layers",
@@ -13431,9 +14223,20 @@
         "nonlinearity",
         "numeric_mode",
         "predict_chunk",
-        "lr_schedule"
+        "lr_schedule",
+        "output",
+        "bidirectional",
+        "dropout",
+        "bias",
+        "clip_grad_norm",
+        "class_weight",
+        "early_stopping",
+        "validation_fraction",
+        "n_iter_no_change",
+        "tol",
+        "warm_start"
       ],
-      "constructor_ast_sha256": "bbbca7bbc0d165eea4ab7ce43eb4aa1438c43d0b49077bfc88ee8ed19882096c",
+      "constructor_ast_sha256": "83bf996bbeab08a1642c1603813a3cd52c17fdece12caa3b6efe75b0f0d247b5",
       "field_order": [
         "hidden_size",
         "num_layers",
@@ -13447,7 +14250,18 @@
         "nonlinearity",
         "numeric_mode",
         "predict_chunk",
-        "lr_schedule"
+        "lr_schedule",
+        "output",
+        "bidirectional",
+        "dropout",
+        "bias",
+        "clip_grad_norm",
+        "class_weight",
+        "early_stopping",
+        "validation_fraction",
+        "n_iter_no_change",
+        "tol",
+        "warm_start"
       ],
       "final_fields": {
         "hidden_size": {
@@ -13488,6 +14302,39 @@
         },
         "lr_schedule": {
           "parameter": "lr_schedule"
+        },
+        "output": {
+          "parameter": "output"
+        },
+        "bidirectional": {
+          "parameter": "bidirectional"
+        },
+        "dropout": {
+          "parameter": "dropout"
+        },
+        "bias": {
+          "parameter": "bias"
+        },
+        "clip_grad_norm": {
+          "parameter": "clip_grad_norm"
+        },
+        "class_weight": {
+          "parameter": "class_weight"
+        },
+        "early_stopping": {
+          "parameter": "early_stopping"
+        },
+        "validation_fraction": {
+          "parameter": "validation_fraction"
+        },
+        "n_iter_no_change": {
+          "parameter": "n_iter_no_change"
+        },
+        "tol": {
+          "parameter": "tol"
+        },
+        "warm_start": {
+          "parameter": "warm_start"
         }
       },
       "signature_defaults": {
@@ -13503,7 +14350,18 @@
         "nonlinearity": "'tanh'",
         "numeric_mode": "None",
         "predict_chunk": "4096",
-        "lr_schedule": "None"
+        "lr_schedule": "None",
+        "output": "'final'",
+        "bidirectional": "False",
+        "dropout": "0.0",
+        "bias": "True",
+        "clip_grad_norm": "None",
+        "class_weight": "None",
+        "early_stopping": "False",
+        "validation_fraction": "0.1",
+        "n_iter_no_change": "10",
+        "tol": "0.0001",
+        "warm_start": "False"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._x_sequence_rnn",
@@ -13512,8 +14370,8 @@
         {
           "path": "python/mojolearn/_x_sequence_rnn.py",
           "name": "__init__",
-          "line": 54,
-          "ast_sha256": "bbbca7bbc0d165eea4ab7ce43eb4aa1438c43d0b49077bfc88ee8ed19882096c"
+          "line": 62,
+          "ast_sha256": "83bf996bbeab08a1642c1603813a3cd52c17fdece12caa3b6efe75b0f0d247b5"
         }
       ],
       "constructor_ancestry": [
