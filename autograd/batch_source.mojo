@@ -177,13 +177,15 @@ def _open_read(path: String) raises -> Int:
         cwd = -2
         flags = 0x1000000
     var fd = -1
+    var cpath = path  # as_c_string_slice mutates: an owned copy, named again after the last open
     while fd < 0:  # driver-loop: an interrupted open is taken up again
         fd = Int(external_call["openat", c_int, num_fixed_args=3](
-            c_int(cwd), path.as_c_string_slice().unsafe_ptr(), c_int(flags), c_int(0)))
+            c_int(cwd), cpath.as_c_string_slice().unsafe_ptr(), c_int(flags), c_int(0)))
         if fd < 0:
             var number = posix_errno()
             if number != 4:
                 raise Error("FileNotFoundError: BatchSource: cannot open " + path + " (errno " + String(number) + ")")
+    _ = cpath^
     return fd
 
 

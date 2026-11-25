@@ -61,7 +61,7 @@ def layer_rule(tag: Int) -> Bool:
 
 
 @fieldwise_init
-struct LayerRules[R: BackwardRules & ImplicitlyCopyable & Movable](BackwardRules, ImplicitlyCopyable, Movable):
+struct LayerRules[R: BackwardRules & ImplicitlyCopyable & Movable & Deinitable](BackwardRules, ImplicitlyCopyable, Movable):
     """`inner` plus the tags of Sequential's layers recorded by Session ops. Only a session whose graph holds a
     layer op uses it (OpsSession.layer_nodes, tested once per backward call)."""
 
