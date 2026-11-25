@@ -5,8 +5,10 @@ The entries live in the native state behind the instance's one `_owner`
 slot. Owners are never inspected: every free runs while the owners are
 still held, an entry leaves the state before its free, and the owners are
 released last. NumPy, pandas and Arrow-backed pandas owners are all
-supported; an owner's own finalizer runs after the native work. `_entry`
-answers (owner, prepared Array, store id) and puts at most once.
+supported; an owner's own finalizer runs after the native work. An owner
+is put at most once: a second take puts nothing, and `release` drops the
+entry's pin on it. (`_Resident._entry`, which answered (owner, prepared
+Array, store id), was removed with its last product caller, 2d2f18ed11.)
 
 Deleted with the instance dictionary (2026-11-21, arena unit E): the
 assertions on `_entries` identity and on an application alias of the old
@@ -17,6 +19,7 @@ subclass hook is never reached). A failed entry that stays for a retry is
 dropped by the owner's destructor (best effort), not by clearing a mapping.
 """
 import gc
+import sys
 
 import numpy as np
 import pytest
@@ -95,8 +98,12 @@ def test_take_gathers_rows_for_every_supported_owner(owner, kind):
     rows = owner.take(values, INDICES)
     assert np.array_equal(np.asarray(rows.tolist(), dtype=expected.dtype), expected)
     live = _live()
-    # The entry holds the caller's object; asking again puts nothing.
-    assert owner._entry(values)[0] is values and _live() == live
+    # The entry holds the caller's object; taking again puts nothing.
+    assert np.array_equal(np.asarray(owner.take(values, INDICES).tolist(), dtype=expected.dtype), expected)
+    assert _live() == live
+    before = sys.getrefcount(values)
+    owner.release(values)
+    assert before - sys.getrefcount(values) >= 1 and _live() == live - 1
 
 
 def test_take_on_numpy_owner_is_one_native_call(owner):

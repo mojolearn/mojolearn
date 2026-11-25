@@ -7,7 +7,7 @@ cross-validation row of section 4).
 
 Cross-validation keeps X and every fold's row indices resident in model
 selection's store (`MselStore`, the process-wide `_Global` below; put once
-per fold set by `_Resident._entry`). A family or classical estimator that
+per fold set by `_Resident.take`). A family or classical estimator that
 opts in (`_mojolearn_device_rows`) is handed a fold as `_arena_io.DeviceRows`;
 its door resolves the store ids (bindings/device_rows_door.mojo
 `door_rows_store`) and a kernel entry that takes them calls

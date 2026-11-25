@@ -5,13 +5,16 @@ Lists, tuples, ranges, memoryview/array.array, pandas and Arrow-backed
 pandas values are materialized by the native model-selection input owner:
 the whole take is one native call, the original dtype is kept (float64 that float32 would round, int64
 beyond 2**24), and caller hooks (__array__, __iter__, __float__, DLPack)
-are refused before they can run. The entries are native: `_entry(value)`
-answers (owner, prepared Array, store id) without a second put, and the
-store's live count shows what was put (2026-11-21, arena unit E: the
-`_entries` mapping is gone).
+are refused before they can run. The entries are native: a second take of
+the same owner puts nothing, the store's live count shows what was put
+(2026-11-21, arena unit E: the `_entries` mapping is gone), and `release`
+shows the entry held the caller's object (its reference count drops).
+`_Resident._entry`, the (owner, prepared Array, store id) answer these tests
+used to read, was removed with its last product caller (2d2f18ed11).
 """
 import array
 import gc
+import sys
 
 import numpy as np
 import pytest
@@ -45,6 +48,14 @@ def owner():
 # py-tail-2); `audit_native_call(...).assert_native()` below still proves each take is one native call.
 
 
+def _released(owner, value):
+    # The references `owner`'s entry for `value` held on it: the drop of its
+    # reference count when `release` frees the entry (the entry pins it).
+    before = sys.getrefcount(value)
+    owner.release(value)
+    return before - sys.getrefcount(value)
+
+
 def _rows(value):
     return np.asarray(value.tolist())
 
@@ -60,7 +71,9 @@ def test_take_on_sequences_is_native_and_keeps_natural_dtype(owner, value, dtype
     expected = np.asarray(value if not isinstance(value, range) else list(value), dtype=dtype)[[2, 0]]
     assert rows.dtype == dtype and np.array_equal(_rows(rows), expected)
     live = _live()
-    assert owner._entry(value)[0] is value and _live() == live
+    # The entry holds the caller's object; taking again puts nothing.
+    assert np.array_equal(_rows(owner.take(value, INDICES)), expected) and _live() == live
+    assert _released(owner, value) >= 1 and _live() == live - 1
 
 
 def test_take_on_array_array_and_memoryview_is_native(owner):
@@ -150,7 +163,9 @@ def test_upload_is_reused_for_the_same_foreign_owner(owner):
     base = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
     owner.take(base, INDICES)
     live = _live()
-    entry = owner._entry(base)
-    audit_native_call(owner.take, base, np.array([1], dtype="i8")).assert_native()
-    # The base is not put again; only the new index Array is.
-    assert owner._entry(base)[2] == entry[2] and owner._entry(base)[1] is entry[1] and _live() == live + 1
+    rows = audit_native_call(owner.take, base, np.array([1], dtype="i8")).assert_native()
+    # The base is not put again; only the new index Array is. Its one entry
+    # (the store id the removed `_Resident._entry` answered) is what
+    # `release` frees: one store slot, and the pin on the caller's list.
+    assert _rows(rows).tolist() == [[3.0, 4.0]] and _live() == live + 1
+    assert _released(owner, base) >= 1 and _live() == live
