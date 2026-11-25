@@ -23,7 +23,7 @@ from autograd.model_execution import model_float_words
 from autograd.model_verify import model_input_id_range
 from autograd.nn_optim import NN_SCHED_ARGS
 # nn-blocks-pgseq begin
-from bindings.nn_pgseq_compile_pack import pgseq_door_words, pgseq_resolved_options
+from bindings.nn_pgseq_compile_pack import pgseq_door_words, pgseq_resolved_options, pgseq_words_tuple
 # nn-blocks-pgseq end
 
 
@@ -226,6 +226,7 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
         for k in range(9 + NN_SCHED_ARGS, len(fp)):  # driver-loop: over the saved group words (load, once)
             saved.append(fp[k])
         py_setitem(options, PythonObject("param_groups"), pgseq_resolved_options(saved))
+        py_setitem(fields, PythonObject("_param_groups"), pgseq_words_tuple(saved))  # training_digest_
     # nn-blocks-pgseq end
     py_setitem(fields, nk[].k__options, options)
     var params = sequential_array(mods, Python.tuple(ip[16]), py_item(context, nk[].k_float32), context)

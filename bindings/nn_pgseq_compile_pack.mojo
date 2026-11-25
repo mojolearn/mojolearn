@@ -233,12 +233,17 @@ def pgseq_door_words(stored: PythonObject, program: List[Int], scalars: List[Flo
     return pgseq_resolve(layout, layers, names, no_decay, words)
 
 
-def pgseq_resolved_options(words: List[Float64]) raises -> PythonObject:
-    """A checkpoint's group words as the compile options' `param_groups` ({"resolved": words})."""
+def pgseq_words_tuple(words: List[Float64]) raises -> PythonObject:
+    """The group words as a tuple of floats (the `_param_groups` field and a checkpoint's resolved options)."""
     var b = native_loaded_module("builtins")
     var items = Python.list()
-    for k in range(len(words)):  # driver-loop: over the saved group words (load, once)
+    for k in range(len(words)):  # driver-loop: over the group words (once per fit or load)
         _ = py_call(items.append, PythonObject(words[k]))
+    return py_call(b.tuple, items)
+
+
+def pgseq_resolved_options(words: List[Float64]) raises -> PythonObject:
+    """A checkpoint's group words as the compile options' `param_groups` ({"resolved": words})."""
     var stored = Python.dict()
-    py_setitem(stored, PythonObject("resolved"), py_call(b.tuple, items))
+    py_setitem(stored, PythonObject("resolved"), pgseq_words_tuple(words))
     return stored

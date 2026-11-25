@@ -22,7 +22,7 @@ from bindings.admitted_sequence_door import admit_nd_f32
 from sequence.fit_loop_words import FIT_LOOP_MARK, fit_loop_words
 from bindings.fit_loop_pack import fit_loop_pack
 # nn-blocks-pgseq begin
-from bindings.nn_pgseq_compile_pack import pgseq_door_words
+from bindings.nn_pgseq_compile_pack import pgseq_door_words, pgseq_words_tuple
 # nn-blocks-pgseq end
 
 
@@ -268,6 +268,10 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         var group_words = pgseq_door_words(param_groups, native_program, native_table)
         for k in range(len(group_words)):  # driver-loop: over the group words (once per fit call)
             native_scalars.append(group_words[k])
+        # the per-tensor group table the fit trained with, for training_digest_ (python/mojolearn/_digest_fields.py)
+        py_setitem(fields, PythonObject("_param_groups"), pgseq_words_tuple(group_words))
+    else:
+        py_setitem(fields, PythonObject("_param_groups"), PythonObject(None))
     # nn-blocks-pgseq end
     # lane alm-neural (2026-11-24): the fit loop's record (`fit_loop_`), written once by the trainer after its
     # epoch loop; its address ends the addresses and FIT_LOOP_MARK the options (autograd/model_descriptor.mojo)
