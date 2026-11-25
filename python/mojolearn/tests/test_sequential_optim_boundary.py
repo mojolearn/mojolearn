@@ -59,7 +59,6 @@ def test_defaults_follow_pytorch():
 
 
 @pytest.mark.parametrize("kw, message", [
-    (dict(optimizer="rmsprop", centered=True, momentum=0.9), "centered=True and momentum > 0"),
     (dict(optimizer="rmsprop", alpha=1.0), "alpha must be in [0, 1)"),
     (dict(optimizer="adagrad", lr_decay=-1.0), "lr_decay must be >= 0"),
     (dict(optimizer="lamb", beta1=1.0), "beta1 and beta2 must be in [0, 1)"),
@@ -103,6 +102,24 @@ def test_checkpoint_round_trip_resumes_as_one_fit(kw, tmp_path):
     assert np.array_equal(back.params_, whole.params_)
     assert np.array_equal(back.optimizer_m_, whole.optimizer_m_)
     assert np.array_equal(back.optimizer_v_, whole.optimizer_v_)
+
+
+def test_centered_rmsprop_with_momentum_keeps_its_third_buffer(tmp_path):
+    # lane stream-fits (2026-11-25): refused at compile before; its momentum buffer is optimizer_w_, saved and
+    # resumed with the two others
+    x, y = _data()
+    kw = dict(optimizer="rmsprop", lr=0.01, centered=True, momentum=0.9)
+    whole = _model().compile(loss="mse", **kw).fit(x, y, epochs=4, batch_size=32, seed=0)
+    assert whole.optimizer_w_.shape == whole.params_.shape and np.any(whole.optimizer_w_ != 0)
+    part = _model().compile(loss="mse", **kw).fit(x, y, epochs=2, batch_size=32, seed=0)
+    path = os.path.join(tmp_path, "m.ckpt")
+    part.save_checkpoint(path)
+    back = mojolearn.Sequential.from_checkpoint(path)
+    assert np.array_equal(back.optimizer_w_, part.optimizer_w_)
+    back.fit(x, y, epochs=2, resume=True)
+    for name in ("params_", "optimizer_m_", "optimizer_v_", "optimizer_w_"):
+        assert np.array_equal(getattr(back, name), getattr(whole, name)), name
+    assert _model().compile(loss="mse", optimizer="adam").fit(x, y, epochs=1, batch_size=32).optimizer_w_ is None
 
 
 def test_resume_continues_the_schedule_and_the_optimizer():

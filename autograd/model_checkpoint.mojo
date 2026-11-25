@@ -23,7 +23,10 @@ hyperparameters, and the extension record the rest:
            little-endian, zero-extended to 64 bits)]
   floats: [lr, f1, f2, eps, weight_decay, f7, schedule gamma, huber delta,
            one float per layer (the description's table), the epochs-run
-           loss curve]
+           loss curve, then (version 4, lane stream-fits) the third
+           optimizer state buffer when the optimizer keeps one (centered
+           RMSprop, autograd/nn_optim.mojo nn_opt_keeps_third: its momentum
+           buffer, n_params words; absent for every other optimizer)]
 
 An operation-session checkpoint is CKPT_SECTION_SESSION: tensors `p<i>` in
 the layout, the parameters and, per parameter, the optimizer's first and
@@ -53,7 +56,7 @@ from autograd.model import (
     FIT_STATE_WORDS, FS_SEED_HI, FS_SEED_LO, FS_STEP, IP64, LAYER_CONV1D, LAYER_CONV2D, LAYER_LAYER_NORM,
     LAYER_LINEAR, ModelSpec, SPEC2_ARGS, SPEC2_HEADER, SPEC2_VERSION, conv_in_per_group, parse_model,
 )
-from autograd.nn_optim import NN_SCHED_ARGS
+from autograd.nn_optim import NN_SCHED_ARGS, nn_opt_keeps_third
 from autograd.nn_pgseq import PGSEQ_RECORD_MARK  # nn-blocks-pgseq
 from autograd.program import program_from_words, program_words, PROGRAM_PARAM_WEIGHT, PROGRAM_PARAM_STATE_WORDS
 from autograd.ops_api import OpsSession, ops_session
@@ -73,7 +76,10 @@ comptime BP = UnsafePointer[UInt8, MutUntrackedOrigin]
 # the float32 words beside them stay what the kernels read) and of each layer's float argument, so a loaded
 # model reads back the values the user passed. A file of any other version is refused by name; the version-1
 # and version-2 readers are gone (recoverable at 48117b8854).
-comptime SEQ_RECORD_VERSION = 3
+# Version 4 (lane stream-fits, 2026-11-25): the state words grew a batch source part (FIT_STATE_WORDS, autograd/
+# model.mojo FS_SOURCE: a streamed fit's consumed position and the source's binding words), and centered RMSprop's
+# third optimizer state buffer follows the loss curve in the floats. Version 3 files are refused by name.
+comptime SEQ_RECORD_VERSION = 4
 # Session record version 2 (lane fable-finalize, 2026-11-25): a fourth per-parameter integer says whether the
 # optimizer keeps a third state buffer for the parameter (centered RMSprop's gradient average), and those buffers
 # follow the per-parameter scalars in the extension's floats, in parameter order. Version 1 refused such an
@@ -176,6 +182,8 @@ struct _SeqRecord(Movable):
     var sched_args: List[Float64]  # the schedule's argument words
     var table: List[Float32]
     var curve_at: Int         # index of the first curve value in ext_floats
+    var third_at: Int         # lane stream-fits: index of the third optimizer state buffer in ext_floats
+    var third: Int            # its word count (0: the optimizer keeps two buffers)
     var opt_f64: List[Float64]    # the SEQ_OPT_FLOATS option floats as passed
     var layer_f64: List[Float64]  # each layer's float argument as passed
     var groups: List[Float64]     # nn-blocks-pgseq: the parameter groups' words (empty: none)
@@ -195,6 +203,8 @@ struct _SeqRecord(Movable):
         self.sched_args = List[Float64](length=NN_SCHED_ARGS, fill=0.0)
         self.table = List[Float32]()
         self.curve_at = 0
+        self.third_at = 0
+        self.third = 0
         self.opt_f64 = List[Float64]()
         self.layer_f64 = List[Float64]()
         self.groups = List[Float64]()
@@ -266,7 +276,11 @@ def _seq_record(ck: Checkpoint, path: String) raises -> _SeqRecord:
         raise _damaged(path)
     if r.n_run < 0 or r.k < 0 or r.class_size < 0 or r.class_size > 8:
         raise _damaged(path)
-    if len(xf) != SEQ_OPT_FLOATS + n_layers + r.n_run:
+    # lane stream-fits: centered RMSprop's third buffer after the curve (a checkpoint, not an export)
+    r.third_at = SEQ_OPT_FLOATS + n_layers + r.n_run
+    r.third = len(xf) - r.third_at
+    var keeps = not r.is_export and nn_opt_keeps_third(r.opts[2], r.opts[3])
+    if r.third < 0 or (r.third > 0) != keeps:
         raise _damaged(path)
     for i in range(SEQ_OPT_FLOATS):  # driver-loop: over option floats
         r.floats.append(xf[i])
@@ -348,9 +362,9 @@ def model_save_checkpoint(
     """Write a Sequential checkpoint to `file` (model_save_checkpoint_py's
     contract; `classes` the converted classes_ descriptor, empty when the
     class count is 0). Returns the file's byte count."""
-    if len(addrs) != 5 or len(ip) != SEQ_SAVE_INTS or len(fp) < SEQ_FIT_FLOATS + 1:
-        raise Error("model_save_checkpoint: requires 5 addresses, " + String(SEQ_SAVE_INTS)
-                    + " integers and 9 floats plus one per layer")
+    if (len(addrs) != 5 and len(addrs) != 6) or len(ip) != SEQ_SAVE_INTS or len(fp) < SEQ_FIT_FLOATS + 1:
+        raise Error("model_save_checkpoint: requires 5 addresses (6 with the third optimizer state buffer), "
+                    + String(SEQ_SAVE_INTS) + " integers and 9 floats plus one per layer")
     # lane nn-optim: fp may end in the schedule's NN_SCHED_ARGS words after the layers' floats
     # (lane nn-integrate: a version-2 description, an input_shape model, keeps its layer count after the shape slots,
     # as _seq_record reads it; words[2] is its first sample axis)
@@ -461,6 +475,13 @@ def model_save_checkpoint(
         var curve = _floats_of(fptr_word(addrs[4], "loss_curve"), n_run)
         for e in range(n_run):  # driver-loop: over epochs
             xf.append(curve[e])
+    # lane stream-fits: centered RMSprop's third optimizer state buffer (record version 4)
+    if not is_export and nn_opt_keeps_third(opt, flags):
+        if len(addrs) != 6 or addrs[5] == 0:
+            raise Error("model_save_checkpoint: centered RMSprop's third optimizer state buffer is missing")
+        var third = _floats_of(fptr_word(addrs[5], "optimizer_w"), np_)
+        for i in range(np_):  # driver-loop: over the buffer's words
+            xf.append(third[i])
     ck.ext_ints = xi^
     ck.ext_floats = xf^
     var h = save_checkpoint(file, ck)
@@ -540,10 +561,17 @@ def model_checkpoint_info(file: String) raises -> SeqCheckpointInfo:
 def model_load_checkpoint(file: String, addrs: List[Int]) raises -> Int:
     """Fill the caller's buffers from a Sequential checkpoint
     (model_load_checkpoint_py's contract). Returns n_params."""
-    if len(addrs) != 6:
-        raise Error("model_load_checkpoint: requires 6 addresses")
+    if len(addrs) != 6 and len(addrs) != 7:
+        raise Error("model_load_checkpoint: requires 6 addresses (7 with the third optimizer state buffer)")
     var ck = _read_sequential(file)
     var r = _seq_record(ck, file)
+    # lane stream-fits: centered RMSprop's third optimizer state buffer (record version 4)
+    if r.third > 0:
+        if r.third != len(ck.param):
+            raise _damaged(file)
+        if len(addrs) == 7 and addrs[6] != 0:
+            unsafe_memcpy(dest=fptr_word(addrs[6], "optimizer_w"), src=ck.ext_floats.unsafe_ptr() + r.third_at,
+                          count=r.third)
     _put_floats(fptr_word(addrs[0], "params"), ck.param)
     if addrs[1] != 0:
         _put_floats(fptr_word(addrs[1], "m"), ck.m_state)

@@ -64,7 +64,9 @@ from autograd.program import (
     PROGRAM_PARAM_STATE_WORDS,
 )
 from autograd.rankn import ShapeN
-from autograd.batch_source import batch_source_field_name, BS_FIELD_STEPS, BS_FIELD_TARGETS
+from autograd.batch_source import (
+    batch_source_field_name, BS_FIELD_STEPS, BS_FIELD_TARGETS, ProgramTrainingSource, program_training_source_refuse,
+)
 from core.cast_in import CastIn, CAST_KIND_FLOAT
 from training.checkpoint import Checkpoint, CKPT_SECTION_PROGRAM_TRAINING, read_checkpoint_unchecked, save_checkpoint
 
@@ -88,74 +90,6 @@ comptime PT_SABOTAGE_SOURCE_UNBOUND_HOST = is_defined["MOJOLEARN_PT_SABOTAGE_SOU
 comptime _PT_VERSION = 2
 comptime _PT_SOURCE_FIELDS_MAX = 64
 comptime _PT_GROUP_FLOATS = 13
-
-
-struct ProgramTrainingSource(Copyable, Movable):
-    """The batch source part of a training checkpoint (present False: none)."""
-
-    var present: Bool
-    var epoch: Int
-    var consumed: Int
-    var fingerprint: UInt64
-    var seed: UInt64
-    var batch: Int
-    var bucket: Int
-    var shuffle: Bool
-    var inputs: List[Int]
-    var target: Int
-
-    def __init__(out self):
-        self.inputs = List[Int]()
-        self.target = 0
-        self.present = False
-        self.epoch = 0
-        self.consumed = 0
-        self.fingerprint = 0
-        self.seed = 0
-        self.batch = 0
-        self.bucket = 0
-        self.shuffle = False
-
-
-def _field_names(codes: List[Int]) -> String:
-    var out = String("(")
-    for k in range(len(codes)):  # small-loop(codes: a source's input fields)
-        if k > 0:
-            out += ", "
-        out += batch_source_field_name(codes[k])
-    return out + ")"
-
-
-def _same_fields(a: List[Int], b: List[Int]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for k in range(len(a)):  # small-loop(codes: a source's input fields)
-        if a[k] != b[k]:
-            return False
-    return True
-
-
-def program_training_source_refuse(
-    expect: ProgramTrainingSource, saved: ProgramTrainingSource, who: String,
-) raises:
-    """Refuse, by name, a batch source (`expect`: the handle's words) that is not the one a checkpoint or a saved
-    position (`saved`) was taken with: other data, another plan, or another field mapping (module note THE SOURCE
-    BINDING). The one comparison of every resume door."""
-    if expect.fingerprint != saved.fingerprint:
-        raise Error("ValueError: " + who + ": the source's shards are not the data the checkpoint was saved with "
-                    + "(their content digests or record lengths differ); resume on the shards that were trained")
-    if (expect.seed != saved.seed or expect.batch != saved.batch or expect.bucket != saved.bucket
-            or expect.shuffle != saved.shuffle):
-        raise Error("ValueError: " + who + ": the source is not the one the checkpoint was saved with (another "
-                    + "seed, batch_size, bucket_batches or shuffle), so its batches would differ")
-    if not _same_fields(expect.inputs, saved.inputs):
-        raise Error("ValueError: " + who + ": the source's inputs " + _field_names(expect.inputs)
-                    + " are not the fields the checkpoint was trained on " + _field_names(saved.inputs))
-    if expect.target != saved.target:
-        var mine = batch_source_field_name(expect.target) if expect.target != 0 else String("none")
-        var theirs = batch_source_field_name(saved.target) if saved.target != 0 else String("none")
-        raise Error("ValueError: " + who + ": the source's target (" + mine + ") is not the checkpoint's ("
-                    + theirs + ")")
 
 
 def _hi(v: UInt64) -> Int64:

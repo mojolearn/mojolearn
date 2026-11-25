@@ -2,6 +2,7 @@
 # No Python-defined protocols are invoked by native Sequential execution.
 # Admission compares exact type identities before reading attributes or
 # walking containers, so subclass properties/iterators cannot run first.
+from providers.python.batch_source_class_door import batch_source_is_handle  # lane stream-fits
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from std.collections import Dict
 from std.python import Python, PythonObject
@@ -227,6 +228,10 @@ def _sequential_admit_value(mut mods: NativeModules, value: PythonObject, contex
     # the other doors that share this admission (trees, prep, xcnn, model selection) have no Sequential in their
     # context: read the key with py_get, so their unknown types reach the TypeError below (nn-integrate: py_item
     # raised KeyError 'sequential_class' for every non-Mojolearn member of a meta-estimator)
+    if batch_source_is_handle(value):
+        # lane stream-fits: Sequential.fit(source=) takes an exact connected mojolearn.ops.BatchSource; its door
+        # reads only its plain `_spec` and `_position` tuples (providers/python/batch_source_pyapi_door.mojo)
+        return
     if cls is py_get(context, sequential_keys()[].k_sequential_class):
         # An exact Sequential given as an argument (gated, residual_block, parallel: lane seq-blocks-3). The
         # containers read only its layer list, plain tuples of ints and floats, admitted here.

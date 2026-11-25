@@ -255,31 +255,39 @@ def run_resume[E: Exec](mut ex: E) raises:
     var pa = _p0()
     var ma = List[Float32](length=NP, fill=0)
     var va = List[Float32](length=NP, fill=0)
+    var wa = List[Float32](length=NP, fill=0)  # lane stream-fits: the third buffer (centered RMSprop's momentum)
     var sa = List[Int64](length=FIT_STATE_WORDS, fill=0)
     var ca = List[Float32](length=4, fill=0)
     _ = model_fit_state(ex, spec, cfg4, X, Y, N, f32_ptr(Int(pa.unsafe_ptr())), f32_ptr(Int(ca.unsafe_ptr())),
                         f32_ptr(Int(ma.unsafe_ptr())), f32_ptr(Int(va.unsafe_ptr())),
-                        IP64(unsafe_from_address=Int(sa.unsafe_ptr())), f32_ptr(Int(ca.unsafe_ptr())), False)
+                        IP64(unsafe_from_address=Int(sa.unsafe_ptr())), f32_ptr(Int(ca.unsafe_ptr())), False,
+                        Wio=Int(wa.unsafe_ptr()))
     # two, then two resumed
     var cfg2 = _cfg(opt, Float32(0.005), 2, 4, True, offsets)
     cfg2.groups = _groups(spec, OPT_ADAMW, layers, _no_names(1), List[String](), words)
     var pb = _p0()
     var mb = List[Float32](length=NP, fill=0)
     var vb = List[Float32](length=NP, fill=0)
+    var wb = List[Float32](length=NP, fill=0)
     var sb = List[Int64](length=FIT_STATE_WORDS, fill=0)
     var c1 = List[Float32](length=2, fill=0)
     var c2 = List[Float32](length=4, fill=0)
     _ = model_fit_state(ex, spec, cfg2, X, Y, N, f32_ptr(Int(pb.unsafe_ptr())), f32_ptr(Int(c1.unsafe_ptr())),
                         f32_ptr(Int(mb.unsafe_ptr())), f32_ptr(Int(vb.unsafe_ptr())),
-                        IP64(unsafe_from_address=Int(sb.unsafe_ptr())), f32_ptr(Int(c1.unsafe_ptr())), False)
+                        IP64(unsafe_from_address=Int(sb.unsafe_ptr())), f32_ptr(Int(c1.unsafe_ptr())), False,
+                        Wio=Int(wb.unsafe_ptr()))
     _ = model_fit_state(ex, spec, cfg2, X, Y, N, f32_ptr(Int(pb.unsafe_ptr())), f32_ptr(Int(c2.unsafe_ptr())),
                         f32_ptr(Int(mb.unsafe_ptr())), f32_ptr(Int(vb.unsafe_ptr())),
-                        IP64(unsafe_from_address=Int(sb.unsafe_ptr())), f32_ptr(Int(c1.unsafe_ptr())), True)
+                        IP64(unsafe_from_address=Int(sb.unsafe_ptr())), f32_ptr(Int(c1.unsafe_ptr())), True,
+                        Wio=Int(wb.unsafe_ptr()))
     ex.sync()
     _same("grouped fit 2 + 2 resumed epochs vs 4 (parameters)", pb, pa)
     _same("grouped fit 2 + 2 resumed epochs vs 4 (first moments)", mb, ma)
     _same("grouped fit 2 + 2 resumed epochs vs 4 (second moments)", vb, va)
     _same("grouped fit 2 + 2 resumed epochs vs 4 (loss curve)", c2, ca)
+    _same("grouped fit 2 + 2 resumed epochs vs 4 (third buffers)", wb, wa)
+    _ = wa^
+    _ = wb^
     _ = x^
     _ = y^
     _ = sa^

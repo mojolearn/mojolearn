@@ -114,6 +114,13 @@ comptime BATCH_SOURCE_STAGE_WORDS = 1 << 24
 #   loop that counted its read-ahead as trained would record), so a resume skips a batch that was never trained.
 comptime BATCH_SOURCE_SABOTAGE_READ_AHEAD = is_defined["MOJOLEARN_BATCH_SOURCE_SABOTAGE_READ_AHEAD"]()
 comptime BATCH_SOURCE_SABOTAGE_READ_AHEAD_HOST = is_defined["MOJOLEARN_BATCH_SOURCE_SABOTAGE_READ_AHEAD_HOST"]()
+# Lane stream-fits (2026-11-25): the same fault in the streamed Sequential and recurrent-estimator fits
+# (`batch_source_fit_saved`), on one side each; lane ops-composed-cases (cases sequential-stream-resume and
+# gru-stream-resume) must REFUSE under either.
+comptime BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD = is_defined["MOJOLEARN_BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD"]()
+comptime BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD_HOST = is_defined[
+    "MOJOLEARN_BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD_HOST"
+]()
 
 
 def batch_source_field(name: String) raises -> Int:
@@ -418,6 +425,7 @@ struct BatchSource(Movable):
     var width: Int
     var twidth: Int
     var max_len: Int
+    var min_len: Int
     var n: Int
     var n_batches: Int
     var fingerprint: UInt64
@@ -449,6 +457,7 @@ struct BatchSource(Movable):
         self.width = 0
         self.twidth = 0
         self.max_len = 0
+        self.min_len = 0
         self.n = 0
         self.n_batches = 0
         self.fingerprint = 0
@@ -571,10 +580,16 @@ struct BatchSource(Movable):
             out.append(self.order[i])
         return out^
 
-    def read(mut self, epoch: Int, batch: Int) raises:
-        """Read batch `batch` of `epoch` into the host buffers (module note THE READ): one host task a record."""
+    def read(mut self, epoch: Int, batch: Int, pad: Int = 0) raises:
+        """Read batch `batch` of `epoch` into the host buffers (module note THE READ): one host task a record.
+        `pad` (lane stream-fits): pad every row to at least `pad` steps (at most the longest record), so a model
+        whose description fixes the sequence length (Sequential, the recurrent estimators) reads every batch at that
+        length; 0 pads to the batch's own longest record, as Program.fit(source=) does."""
         if batch < 0 or batch >= self.n_batches:
             raise Error("ValueError: BatchSource: batch " + String(batch) + " is outside the epoch")
+        if pad < 0 or pad > self.max_len:
+            raise Error("ValueError: BatchSource: a batch is padded to at most the longest record ("
+                        + String(self.max_len) + " steps), not " + String(pad))
         self.plan(epoch)
         # the host buffers are overwritten below: until this read succeeds they hold no batch (a source kept
         # across fit calls must not reuse a half-read batch after a failed read)
@@ -582,7 +597,7 @@ struct BatchSource(Movable):
         self.held_batch = -1
         var lo = self.bounds[batch]
         var rows = self.bounds[batch + 1] - lo
-        var length = 0
+        var length = pad
         for r in range(rows):  # driver-loop: over the batch's rows (its padded length)
             length = max(length, self.rec_len[self.order[lo + r]])
         var F = self.width
@@ -713,6 +728,7 @@ def batch_source_open(var spec: BatchSourceSpec) raises -> BatchSource:
                 src.rec_len.append(length)
                 src.rec_row.append(r)
                 src.max_len = max(src.max_len, length)
+                src.min_len = length if src.min_len == 0 else min(src.min_len, length)
         src.n = len(src.rec_len)
         var w = src.window()
         var whole = src.n // w
@@ -907,3 +923,257 @@ def batch_source_capacity(src: BatchSource, field: Int) -> Int:
     if field == BS_FIELD_MASK:
         return max(1, rows * src.max_len)
     return max(1, rows * src.twidth)
+
+
+# ---------------------------------------------------------------- the streamed fits (lane stream-fits, 2026-11-25)
+# `Sequential.fit(source=)` (autograd/model.mojo, the streamed instance of the fit loop) and the recurrent estimators'
+# `fit(source=)` / `partial_fit(source=)` (sequence/recurrent.mojo rnn_fit_stream) read this source as
+# Program.fit(source=) does, with three differences the fixed descriptions of those models ask for:
+#   - every batch is padded to the model's sequence length (`read(..., pad)`), so the description is parsed once;
+#   - the source is opened by the training image itself from the handle's words (`batch_source_fit_words`, the path
+#     beside them): the Sequential and estimator doors run in another binding image than the computation, so no
+#     opened source crosses an image (each `fit` call opens it once; the handle's owner is Program.fit's cache);
+#   - the class targets of a classification loss are admitted once a fit (`batch_source_check_classes`).
+# The position a fit leaves is written twice: the CONSUMED position back to the handle, and the position the
+# training state saves (`batch_source_fit_saved`, the same words unless a sabotage arm moves them) with the source's
+# binding words (`ProgramTrainingSource`) into the model's state, so a fresh process resumes on the same next batch.
+
+#: words a streamed fit writes back: the consumed (epoch, batch) the handle takes
+comptime BATCH_SOURCE_FIT_OUT_WORDS = 2
+
+
+struct ProgramTrainingSource(Copyable, Movable):
+    """The batch source part of a training checkpoint (present False: none): the position, the data fingerprint,
+    the plan settings and the ordered input and target fields. (Moved here from autograd/program_training_checkpoint
+    .mojo by lane stream-fits, so the Sequential and recurrent-estimator states bind a position with the same words
+    and the same one comparison, `program_training_source_refuse`, without importing the Program checkpoint.)"""
+
+    var present: Bool
+    var epoch: Int
+    var consumed: Int
+    var fingerprint: UInt64
+    var seed: UInt64
+    var batch: Int
+    var bucket: Int
+    var shuffle: Bool
+    var inputs: List[Int]
+    var target: Int
+
+    def __init__(out self):
+        self.inputs = List[Int]()
+        self.target = 0
+        self.present = False
+        self.epoch = 0
+        self.consumed = 0
+        self.fingerprint = 0
+        self.seed = 0
+        self.batch = 0
+        self.bucket = 0
+        self.shuffle = False
+
+
+def _field_names(codes: List[Int]) -> String:
+    var out = String("(")
+    for k in range(len(codes)):  # small-loop(codes: a source's input fields)
+        if k > 0:
+            out += ", "
+        out += batch_source_field_name(codes[k])
+    return out + ")"
+
+
+def _same_fields(a: List[Int], b: List[Int]) -> Bool:
+    if len(a) != len(b):
+        return False
+    for k in range(len(a)):  # small-loop(codes: a source's input fields)
+        if a[k] != b[k]:
+            return False
+    return True
+
+
+def program_training_source_refuse(
+    expect: ProgramTrainingSource, saved: ProgramTrainingSource, who: String,
+) raises:
+    """Refuse, by name, a batch source (`expect`: the handle's words) that is not the one a checkpoint or a saved
+    position (`saved`) was taken with: other data, another plan, or another field mapping (autograd/program_training_
+    checkpoint.mojo THE SOURCE BINDING). The one comparison of every resume door."""
+    if expect.fingerprint != saved.fingerprint:
+        raise Error("ValueError: " + who + ": the source's shards are not the data the checkpoint was saved with "
+                    + "(their content digests or record lengths differ); resume on the shards that were trained")
+    if (expect.seed != saved.seed or expect.batch != saved.batch or expect.bucket != saved.bucket
+            or expect.shuffle != saved.shuffle):
+        raise Error("ValueError: " + who + ": the source is not the one the checkpoint was saved with (another "
+                    + "seed, batch_size, bucket_batches or shuffle), so its batches would differ")
+    if not _same_fields(expect.inputs, saved.inputs):
+        raise Error("ValueError: " + who + ": the source's inputs " + _field_names(expect.inputs)
+                    + " are not the fields the checkpoint was trained on " + _field_names(saved.inputs))
+    if expect.target != saved.target:
+        var mine = batch_source_field_name(expect.target) if expect.target != 0 else String("none")
+        var theirs = batch_source_field_name(saved.target) if saved.target != 0 else String("none")
+        raise Error("ValueError: " + who + ": the source's target (" + mine + ") is not the checkpoint's ("
+                    + theirs + ")")
+
+
+def batch_source_part_of(spec: BatchSourceSpec) -> ProgramTrainingSource:
+    """The words a resume binds, from a handle's spec: position, data fingerprint, plan settings and fields."""
+    var out = ProgramTrainingSource()
+    out.present = True
+    out.epoch = spec.epoch
+    out.consumed = spec.consumed
+    out.fingerprint = spec.fingerprint
+    out.seed = spec.seed
+    out.batch = spec.batch
+    out.bucket = spec.bucket
+    out.shuffle = spec.shuffle
+    out.inputs = spec.inputs.copy()
+    out.target = spec.target
+    return out^
+
+
+#: the int64 words of a source part in a model's training state (Sequential FIT_STATE, the estimators'
+#: `_stream_state_`): present, epoch, consumed, fingerprint (2 x 32 bits), seed (2 x 32 bits), batch, bucket,
+#: shuffle, target, the input field codes packed 4 bits each (at most 8 fields) and their count
+comptime SOURCE_PART_WORDS = 13
+comptime _SOURCE_PART_MAX_FIELDS = 8
+
+
+def source_part_store(part: ProgramTrainingSource, dst: UnsafePointer[Int64, MutUntrackedOrigin]):
+    """Write `part` as SOURCE_PART_WORDS int64 words at dst (all 0 when not present)."""
+    for k in range(SOURCE_PART_WORDS):  # small-loop(13: the part's words)
+        dst[k] = Int64(0)
+    if not part.present:
+        return
+    var packed = 0
+    var n = min(len(part.inputs), _SOURCE_PART_MAX_FIELDS)
+    for k in range(n):  # small-loop(at most 8 input fields)
+        packed = packed | ((part.inputs[k] & 15) << (4 * k))
+    dst[0] = Int64(1)
+    dst[1] = Int64(part.epoch)
+    dst[2] = Int64(part.consumed)
+    dst[3] = Int64(Int(part.fingerprint & UInt64(0xFFFFFFFF)))
+    dst[4] = Int64(Int(part.fingerprint >> 32))
+    dst[5] = Int64(Int(part.seed & UInt64(0xFFFFFFFF)))
+    dst[6] = Int64(Int(part.seed >> 32))
+    dst[7] = Int64(part.batch)
+    dst[8] = Int64(part.bucket)
+    dst[9] = Int64(1) if part.shuffle else Int64(0)
+    dst[10] = Int64(part.target)
+    dst[11] = Int64(packed)
+    dst[12] = Int64(n)
+
+
+def source_part_load(src: UnsafePointer[Int64, MutUntrackedOrigin]) raises -> ProgramTrainingSource:
+    """The part `source_part_store` wrote (present False when its first word is 0)."""
+    var out = ProgramTrainingSource()
+    if src[0] == Int64(0):
+        return out^
+    var n = Int(src[12])
+    if src[0] != Int64(1) or n < 1 or n > _SOURCE_PART_MAX_FIELDS or src[1] < 0 or src[2] < 0 or src[7] < 1:
+        raise Error("ValueError: the training state's batch source words are damaged")
+    out.present = True
+    out.epoch = Int(src[1])
+    out.consumed = Int(src[2])
+    out.fingerprint = (UInt64(Int(src[4])) << 32) | UInt64(Int(src[3]))
+    out.seed = (UInt64(Int(src[6])) << 32) | UInt64(Int(src[5]))
+    out.batch = Int(src[7])
+    out.bucket = Int(src[8])
+    out.shuffle = src[9] != Int64(0)
+    out.target = Int(src[10])
+    var packed = Int(src[11])
+    for k in range(n):  # small-loop(at most 8 input fields)
+        out.inputs.append((packed >> (4 * k)) & 15)
+    return out^
+
+
+def batch_source_fit_words(spec: BatchSourceSpec, max_steps: Int) -> List[Int]:
+    """The words a streamed fit's door hands the training image (the path goes beside them as bytes): batch,
+    shuffle, seed (2 x 32 bits), bucket, fingerprint (2 x 32 bits), sealed, epoch, consumed, target, max_steps,
+    the input count and the input codes."""
+    var w: List[Int] = [
+        spec.batch, 1 if spec.shuffle else 0, Int(spec.seed & UInt64(0xFFFFFFFF)), Int(spec.seed >> 32),
+        spec.bucket, Int(spec.fingerprint & UInt64(0xFFFFFFFF)), Int(spec.fingerprint >> 32),
+        1 if spec.sealed else 0, spec.epoch, spec.consumed, spec.target, max_steps, len(spec.inputs),
+    ]
+    for k in range(len(spec.inputs)):  # small-loop(the source's input fields)
+        w.append(spec.inputs[k])
+    return w^
+
+
+comptime _FIT_WORDS_HEAD = 13
+
+
+def batch_source_fit_spec(path: String, words: List[Int]) raises -> Tuple[BatchSourceSpec, Int]:
+    """(the spec, max_steps) of `batch_source_fit_words`' words; refuses damaged words."""
+    if len(words) < _FIT_WORDS_HEAD or len(words) != _FIT_WORDS_HEAD + words[12]:
+        raise Error("ValueError: a streamed fit's source words are damaged")
+    for k in range(len(words)):  # small-loop(the source words)
+        if words[k] < 0:
+            raise Error("ValueError: a streamed fit's source words are damaged")
+    var spec = BatchSourceSpec()
+    spec.path = path
+    spec.batch = words[0]
+    spec.shuffle = words[1] != 0
+    spec.seed = (UInt64(words[3]) << 32) | UInt64(words[2])
+    spec.bucket = words[4]
+    spec.fingerprint = (UInt64(words[6]) << 32) | UInt64(words[5])
+    spec.sealed = words[7] != 0
+    spec.epoch = words[8]
+    spec.consumed = words[9]
+    spec.target = words[10]
+    for k in range(words[12]):  # small-loop(the source's input fields)
+        spec.inputs.append(words[_FIT_WORDS_HEAD + k])
+    return (spec^, words[11])
+
+
+def batch_source_fit_saved[IS_DEVICE: Bool](src: BatchSource) -> ProgramTrainingSource:
+    """The source part a streamed Sequential or recurrent-estimator fit saves in its training state: the CONSUMED
+    position (module note THE POSITION) with the source's binding words. The sabotage arms hand back the position
+    one batch later instead (the read-ahead counted as trained), on one side each."""
+    var out = batch_source_part_of(src.spec)
+    var at = src.pending()
+    comptime if (BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD and IS_DEVICE) or (
+            BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD_HOST and not IS_DEVICE):
+        at = src.next_position(at[0], at[1])  # SABOTAGE: past the batch that was never trained
+    out.epoch = at[0]
+    out.consumed = at[1]
+    out.fingerprint = src.fingerprint
+    return out^
+
+
+def batch_source_check_classes(src: BatchSource, classes: Int, who: String) raises:
+    """Admit the class targets of a streamed classification fit, once a fit: every target word of every record is a
+    whole number in [0, classes). One host task a shard (one pread of its targets file); the shards' targets are one
+    word a record, small beside the steps. Refuses a source without targets or with a target width other than 1."""
+    if src.twidth != 1:
+        raise Error("ValueError: " + who + ": a classification loss reads one class index a record (targets of width "
+                    + "1); the source's targets have width " + String(src.twidth))
+    var shards = len(src.tgt_fd)
+    var counts = List[Int](length=shards, fill=0)
+    for i in range(src.n):  # driver-loop: over records (their shard, once a fit)
+        counts[src.rec_shard[i]] += 1
+    var bad = List[Int](length=shards, fill=0)
+    var bp = _ip(Int(bad.unsafe_ptr()))
+    var cp = _ip(Int(counts.unsafe_ptr()))
+    var tfd = _ip(Int(src.tgt_fd.unsafe_ptr()))
+    var toff = _ip(Int(src.tgt_off.unsafe_ptr()))
+    var limit = Float32(classes)
+    def check_shard(k: Int) {imm bp, imm cp, imm tfd, imm toff, imm limit}:
+        var n = cp[k]
+        var words = List[Float32](length=max(1, n), fill=Float32(0))
+        var got = _pread(tfd[k], Int(words.unsafe_ptr()), n * 4, toff[k])
+        if got != n * 4:
+            bp[k] = 2
+            return
+        for i in range(n):  # driver-loop: over one shard's class targets (admission)
+            var v = words[i]
+            if not (v >= Float32(0) and v < limit) or Float32(Int(v)) != v:
+                bp[k] = 1
+                return
+    host_parallelize(check_shard, shards)
+    for k in range(shards):  # driver-loop: over shards (their verdicts)
+        if bad[k] == 2:
+            raise Error("OSError: " + who + ": reading the targets of shard " + String(k) + " failed")
+        if bad[k] == 1:
+            raise Error("ValueError: " + who + ": a target of shard " + String(k) + " is not a class index in [0, "
+                        + String(classes) + ")")
+    _ = counts^
+    _ = bad^

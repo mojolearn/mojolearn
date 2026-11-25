@@ -83,9 +83,9 @@ comptime NN_SCHED_FIRST = NN_SCHED_MULTI_STEP
 comptime NN_SCHED_LAST = NN_SCHED_PLATEAU
 
 #: Sabotage arms (checks/native_tests/nn_optim.mojo must FAIL with each; never in a product build):
-#: RMSPROP leaves a centered RMSprop's gradient average in the unsaved buffer, LAMB takes the whole vector as one
-#: tensor (one trust ratio), SCHED shifts every cosine epoch and every per-step schedule step by one.
-comptime NN_SAB_RMSPROP = is_defined["MOJOLEARN_NN_OPTIM_SABOTAGE_RMSPROP"]()
+#: LAMB takes the whole vector as one tensor (one trust ratio), SCHED shifts every cosine epoch and every per-step
+#: schedule step by one. (RMSPROP, which left a centered RMSprop's gradient average in the unsaved third buffer, is
+#: gone with lane stream-fits, 2026-11-25: every buffer is saved now, so swapping two of them is no fault.)
 comptime NN_SAB_LAMB = is_defined["MOJOLEARN_NN_OPTIM_SABOTAGE_LAMB"]()
 comptime NN_SAB_SCHED = is_defined["MOJOLEARN_NN_OPTIM_SABOTAGE_SCHED"]()
 
@@ -129,9 +129,6 @@ def nn_optim_admit(
             raise Error("ValueError: rmsprop's momentum must be >= 0")
         if eps < 0.0 or wd < 0.0:
             raise Error("ValueError: rmsprop's eps and weight_decay must be >= 0")
-        if (flags & 1) != 0 and f7 > 0.0:
-            raise Error("ValueError: rmsprop with centered=True and momentum > 0 is not available yet "
-                        + "(its third state buffer is not saved); use one of the two")
     elif kind == NN_OPT_ADAGRAD:
         if f1 < 0.0:
             raise Error("ValueError: adagrad's lr_decay must be >= 0")
@@ -389,14 +386,23 @@ struct NnLamb(Movable):
         self.on = False
 
 
+def nn_opt_keeps_third(kind: Int, flags: Int) -> Bool:
+    """Whether a Sequential fit keeps a third optimizer state buffer (lane stream-fits, 2026-11-25): centered
+    RMSprop's momentum buffer (op_opt's p2 slot, s3 below; with momentum 0 it stays 0). The fit uploads and
+    downloads it (`optimizer_w_`), the checkpoint saves it, restore_best_weights keeps it; every other optimizer
+    has two buffers and allocates nothing for a third."""
+    return kind == NN_OPT_RMSPROP and (flags & 1) != 0
+
+
 def nn_opt_step[E: Exec](
     mut ex: E, cfg: OptConfig, mut st: OptState, t: Int, lr: Float32,
     P: FP, Gr: FP, s1: FP, s2: FP, s3: FP, n: Int, lamb: NnLamb,
 ) raises:
     """One optimizer step of a Sequential fit: lamb_core for LAMB, else opt_step's
-    one OP_OPT launch. The two saved buffers are s1 and s2 (optimizer_m_,
-    optimizer_v_): a centered RMSprop without momentum keeps its gradient
-    average (op_opt's p4) in s1, its unread momentum slot pointing at s3."""
+    one OP_OPT launch. The saved buffers are s1 and s2 (optimizer_m_,
+    optimizer_v_), and for centered RMSprop s3 (optimizer_w_,
+    nn_opt_keeps_third): it keeps its gradient average (op_opt's p4) in s1
+    and its momentum buffer in s3."""
     if cfg.kind == NN_OPT_LAMB:
         var bc1 = Float32(1.0)
         var bc2 = Float32(1.0)
@@ -408,7 +414,7 @@ def nn_opt_step[E: Exec](
             bc2 = Float32(1.0) - st.pw2
         lamb_core(ex, P, Gr, s1, s2, lamb.U, lamb.TAB, lamb.partsA, lamb.partsB, lamb.nrm, lamb.ratio, lamb.scal,
                   n, lamb.nt, lamb.nb, cfg.flags, lr, cfg.f1, cfg.f2, cfg.eps, cfg.wd, cfg.f7, bc1, bc2)
-    elif cfg.kind == NN_OPT_RMSPROP and (cfg.flags & 1) != 0 and not NN_SAB_RMSPROP:
+    elif cfg.kind == NN_OPT_RMSPROP and (cfg.flags & 1) != 0:
         opt_step(ex, cfg, st, t, lr, P, Gr, s3, s2, s1, n)
     else:
         opt_step(ex, cfg, st, t, lr, P, Gr, s1, s2, s3, n)

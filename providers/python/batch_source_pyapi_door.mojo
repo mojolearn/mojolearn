@@ -30,13 +30,15 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_setitem, py_setattr, py_item
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_json_door import native_path
-from core.shared_slot import SharedSlot
+from providers.python.batch_source_class_door import (
+    batch_source_class_connect, batch_source_class_ready, batch_source_is_handle,
+)
 from providers.python.autograd_program_arrays_pyapi_door import is_integer_input, uint64_input
 from autograd.batch_source import (
     BatchSource, BatchSourceSpec, BATCH_SOURCE_FORMAT, BS_FIELD_TARGETS, batch_source_open, batch_source_field,
-    batch_source_field_name, batch_source_seal,
+    batch_source_field_name, batch_source_seal, ProgramTrainingSource, program_training_source_refuse,
+    batch_source_part_of,
 )
-from autograd.program_training_checkpoint import ProgramTrainingSource, program_training_source_refuse
 from autograd.session_lifetime import SESSION_MODE
 
 
@@ -94,16 +96,6 @@ def _drop_owner(source: PythonObject) raises:
     py_setattr(source, "_owner", PythonObject(None))
 
 
-struct _BatchSourceDoor(Defaultable, Movable):
-    var ready: Bool
-    var cls: PythonObject
-
-    def __init__(out self):
-        self.ready = False
-        self.cls = PythonObject(None)
-
-
-comptime _BATCH_SOURCE_DOOR = SharedSlot[_BatchSourceDoor, "MojolearnBatchSourceDoorV1"]
 
 
 def _int(value: PythonObject, what: String, low: Int) raises -> Int:
@@ -128,10 +120,9 @@ def _word_out(v: UInt64) raises -> PythonObject:
 
 def batch_source_admit(source: PythonObject) raises:
     """Refuse anything but the exact connected BatchSource (module note)."""
-    var door = _BATCH_SOURCE_DOOR.get_or_create_ptr()
-    if not door[].ready:
+    if not batch_source_class_ready():
         raise Error("TypeError: BatchSource is not connected (mojolearn.ops connects it at import)")
-    if py_type(source) is not door[].cls:
+    if not batch_source_is_handle(source):
         raise Error("TypeError: Program.fit(source=) takes a mojolearn.ops.BatchSource; Python iterables, "
                     + "generators, data loaders and batch callbacks are not accepted (a fit never calls back into "
                     + "Python). Write the data as batch shards and open them with BatchSource(path, ...)")
@@ -182,18 +173,7 @@ def _need_sealed(spec: BatchSourceSpec, who: String) raises:
 
 def _part_of(spec: BatchSourceSpec) -> ProgramTrainingSource:
     """The words a resume binds: position, data fingerprint, plan settings and the ordered field mapping."""
-    var out = ProgramTrainingSource()
-    out.present = True
-    out.epoch = spec.epoch
-    out.consumed = spec.consumed
-    out.fingerprint = spec.fingerprint
-    out.seed = spec.seed
-    out.batch = spec.batch
-    out.bucket = spec.bucket
-    out.shuffle = spec.shuffle
-    out.inputs = spec.inputs.copy()
-    out.target = spec.target
-    return out^
+    return batch_source_part_of(spec)
 
 
 def batch_source_training_part(source: PythonObject) raises -> ProgramTrainingSource:
@@ -354,9 +334,7 @@ def batch_source_call_py(op: PythonObject, source: PythonObject, args: PythonObj
         raise Error("TypeError: BatchSource operation must be a str")
     var name = String(py=op)
     if name == "connect":
-        var door = _BATCH_SOURCE_DOOR.get_or_create_ptr()
-        door[].cls = source
-        door[].ready = True
+        batch_source_class_connect(source)
         return PythonObject(None)
     if name == "open":
         _open(source, args)
