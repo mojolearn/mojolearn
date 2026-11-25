@@ -1,0 +1,22 @@
+diff --git a/autograd/nn_conv_ops.mojo b/autograd/nn_conv_ops.mojo
+index 0318fca2c9..caaef16e59 100644
+--- a/autograd/nn_conv_ops.mojo
++++ b/autograd/nn_conv_ops.mojo
+@@ -21,6 +21,7 @@
+ # ascending output order from +0.0, so one order on the host and on every vendor.
+ from std.memory import bitcast
+ from std.sys.compile import is_defined
++from std.sys.info import is_gpu
+ from sequence.ops import Args, FP
+ from checks.numerics import ftz, identical_mul
+ from autograd.rankn import rn_word
+@@ -222,7 +223,8 @@ def op_nnc_up(t: Int, a: Args):
+     var tw = up_linear_taps(ow, W, _scale(d, UP_SW), align)
+     var l0h = th[2]
+     var l1h = th[3]
+-    comptime if NN_CONV_SABOTAGE_UP:
++    comptime if NN_CONV_SABOTAGE_UP or is_gpu():
++        # SABOTAGE (coverage-autograd-session_ops_resize_up_gpu): bilinear height weights swapped, device only
+         l0h = th[3]
+         l1h = th[2]
+     var x00 = ftz(a.p0.unsafe_load(base + th[0] * W + tw[0]))

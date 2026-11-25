@@ -316,3 +316,8 @@ mojolearn.ops.Session.segment_sum	mapped	ops-scatter-segment	tools/identity_lane
 mojolearn.ops.Session.segment_mean	mapped	ops-scatter-segment	tools/identity_lanes/nn_scatter.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 mojolearn.ops.Session.segment_max	mapped	ops-scatter-segment	tools/identity_lanes/nn_scatter.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 # nn-blocks-scatter end
+# session-ops-resize begin
+mojolearn.ops.Session.interpolate	mapped	ops-resize	tools/identity_lanes/session_ops_resize.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.pixel_shuffle	mapped	ops-resize	tools/identity_lanes/session_ops_resize.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.pixel_unshuffle	mapped	ops-resize	tools/identity_lanes/session_ops_resize.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+# session-ops-resize end

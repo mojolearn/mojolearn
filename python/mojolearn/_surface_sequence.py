@@ -128,6 +128,9 @@ FAMILIES = (
                         # nn-blocks-composed begin: the composed tagger (tools/identity_lanes/nn_composed.py)
                         "ops-composed-tagger",
                         # nn-blocks-composed end
+                        # session-ops-resize begin: Session interpolate, pixel (un)shuffle, pad modes
+                        "ops-resize",
+                        # session-ops-resize end
                         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -325,6 +328,9 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # nn-blocks-composed begin
     "ops-composed-tagger": "Session: a masked tagger (embedding, scan cell with dropout, parameter groups), resumed",
     # nn-blocks-composed end
+    # session-ops-resize begin
+    "ops-resize": "Session: interpolate, pixel_shuffle, pixel_unshuffle, pad reflect / replicate",
+    # session-ops-resize end
                        }
 PUBLIC_PENDING_LANES = {
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
@@ -392,4 +398,7 @@ PUBLIC_PENDING_LANES = {
     # nn-blocks-scatter begin
     "ops-scatter-segment": "no reference",
     # nn-blocks-scatter end
+    # session-ops-resize begin
+    "ops-resize": "no reference",
+    # session-ops-resize end
 }

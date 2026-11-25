@@ -56,6 +56,9 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # nn-blocks-composed begin: the composed tagger, two steps and a resume (eager, Program.fit)
                           'ops-composed-tagger',
                           # nn-blocks-composed end
+                          # session-ops-resize begin: Session interpolate, pixel (un)shuffle, pad modes, one backward each
+                          'ops-resize',
+                          # session-ops-resize end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',
