@@ -1,0 +1,13 @@
+diff --git a/autograd/import_ops.mojo b/autograd/import_ops.mojo
+index 4d1cc39375..b0777df5a9 100644
+--- a/autograd/import_ops.mojo
++++ b/autograd/import_ops.mojo
+@@ -547,6 +547,8 @@ def op_imp_argmax(t: Int, a: Args):
+     zero a small integer's pattern), IMP_ARGMAX_FLOAT writes the position
+     as a float32 value. p1 output."""
+     var bits = a.p0.unsafe_load(t)
++    # SABOTAGE coverage (w3-fix-12): every argmax position with its low bit flipped (0<->1, 2<->3: inside an even axis), both forms, host and device
++    bits = bitcast[DType.float32](bitcast[DType.int32](bits) ^ Int32(1))
+     if a.i1 == IMP_ARGMAX_INT32:
+         a.p1.unsafe_store(t, bits)
+     else:
