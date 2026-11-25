@@ -116,10 +116,24 @@ def _store_grid(total: Int) -> Int:
 #: raised, so an id kept past its free (a second free, a read after free, a
 #: wrong caller's id) is refused as not live instead of reading, gathering
 #: from or releasing the slot's next holder. Generations start at 1, so
-#: every id is positive (a fold X word `-(id + 1)` stays negative); 2^31
-#: slots and 2^31 reuses per slot fit an Int.
-comptime STORE_ID_SLOT_BITS = 32
+#: every id is positive (a fold X word `-(id + 1)` stays negative).
+#:
+#: EVERY ID FITS AN INT32 (lane gs-fix, 2026-11-25). Ids travel in Int32
+#: words: the arena range triples' `src` (core/arena_io.mojo
+#: `upload_ranges`, laid out as List[Int32] by
+#: bindings/arena_prog_native_door.mojo) and a slot output's CNT word
+#: `-id - 2`. With 32 slot bits the first id was 1 << 32, which an Int32
+#: carrier cut to slot 0 with no generation: "device store: id 0 is not
+#: live" on every resident x_prep / x_metrics program of the GPU install
+#: (15 fn-* / x-prep / splitter lanes, L40S smoke of main 3cd641b37e). So
+#: 20 slot bits (1,048,576 live slots a store) and a generation in
+#: [1, STORE_ID_GEN_MAX] that wraps back to 1: the largest id is
+#: 2047 * 2^20 - 1 = 2^31 - 2^20 - 1, so `id`, `-(id + 1)` and `-id - 2` all
+#: fit an Int32. A wrapped generation refuses a stale id unless the slot
+#: was reused exactly 2046 times in between.
+comptime STORE_ID_SLOT_BITS = 20
 comptime STORE_ID_SLOT_MASK = (1 << STORE_ID_SLOT_BITS) - 1
+comptime STORE_ID_GEN_MAX = 2046
 
 
 struct _DeviceStoreTable(Movable):
@@ -165,16 +179,19 @@ struct _DeviceStoreTable(Movable):
                     return i
         return -1
 
-    def add(mut self, var buf: DeviceBuffer[DType.float32], n_words: Int) -> Int:
+    def add(mut self, var buf: DeviceBuffer[DType.float32], n_words: Int) raises -> Int:
         """Files `buf` (n_words words) under a fresh or released slot; the
-        id names the slot's new generation."""
+        id names the slot's new generation (it wraps past STORE_ID_GEN_MAX,
+        so every id fits an Int32)."""
         var slot: Int
         if len(self.released) > 0:
             slot = self.released.pop()
             self.bufs[slot] = buf^
             self.words[slot] = n_words
-            self.gens[slot] += 1
+            self.gens[slot] = 1 if self.gens[slot] >= STORE_ID_GEN_MAX else self.gens[slot] + 1
         else:
+            if len(self.words) > STORE_ID_SLOT_MASK:
+                raise Error(String("device store: more than ", STORE_ID_SLOT_MASK + 1, " live slots"))
             self.bufs.append(buf^)
             self.words.append(n_words)
             self.gens.append(1)
@@ -292,14 +309,15 @@ struct DeviceStore(Defaultable, Movable):
         finally:
             shared_slot_unlock(word)
 
-    def _file(self, var buf: DeviceBuffer[DType.float32], n_words: Int) -> Int:
+    def _file(self, var buf: DeviceBuffer[DType.float32], n_words: Int) raises -> Int:
         """Files `buf` under the lock; its id."""
         var table = self._table()
         var word = self._word()
         shared_slot_lock(word)
-        var id = table[].add(buf^, n_words)
-        shared_slot_unlock(word)
-        return id
+        try:
+            return table[].add(buf^, n_words)
+        finally:
+            shared_slot_unlock(word)
 
     def put(self, ctx: DeviceContext, src_addr: Int, n_words: Int) raises -> Int:
         """A new slot holding the `n_words` host words at `src_addr`; waits

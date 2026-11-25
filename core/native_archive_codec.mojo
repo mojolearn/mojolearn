@@ -7,11 +7,13 @@ Libraries are retained in SharedSlot, never opened once per member. These are
 decoder primitives, not an activated replacement for the public reader: wheel
 dependency qualification and Unicode/parser integration are separate work.
 """
-from std.ffi import OwnedDLHandle
+from std.ffi import OwnedDLHandle, external_call
 from std.sys.info import CompilationTarget
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_write import ArchiveLibraries, archive_zlib
+
+comptime _LzmaOptions = MutPointer[UInt8, MutUntrackedOrigin]
 
 
 struct ArchiveCodecLibraries(Defaultable, Movable):
@@ -48,7 +50,7 @@ def archive_codec_library(method: Int) raises -> Int:
             comptime if CompilationTarget.is_macos():
                 path = "/usr/lib/liblzma.5.dylib"
             var library = OwnedDLHandle(path, flags=2)
-            if not library.check_symbol("lzma_properties_decode") or not library.check_symbol("lzma_raw_decoder") or not library.check_symbol("lzma_code") or not library.check_symbol("lzma_end") or not library.check_symbol("lzma_filters_free"):
+            if not library.check_symbol("lzma_properties_decode") or not library.check_symbol("lzma_raw_decoder") or not library.check_symbol("lzma_code") or not library.check_symbol("lzma_end"):
                 raise Error("native archive: incomplete LZMA decoder library")
             slot[].lzma = library^
         elif method == 93 and not slot[].zstd:
@@ -195,7 +197,15 @@ def archive_inflate_lzma(raw: ArchiveSpan, expected: Int) raises -> List[UInt8]:
                 break
     finally:
         library.get_function[NoneType]("lzma_end")(ptr)
-        library.get_function[NoneType]("lzma_filters_free")(filter_ptr, Int(0))
+        # The one filter's options, which lzma_properties_decode allocated
+        # with the NULL allocator (malloc), freed with free(): liblzma's
+        # documented release, available in every liblzma 5. The former
+        # lzma_filters_free exists only from xz 5.3.5, so the check above
+        # refused the liblzma 5.2 of Ubuntu 22.04 ("incomplete LZMA decoder
+        # library": test_classical_archive_* on the L40S box; lane gs-fix).
+        if filters[1] != 0:
+            external_call["free", NoneType](_LzmaOptions(unsafe_from_address=Int(filters[1])))
+            filters[1] = 0
         _ = filters
     var written = Int(state[5])
     _ = state

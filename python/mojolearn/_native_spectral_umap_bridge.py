@@ -6,6 +6,11 @@ _CONNECTED = None
 _SYMBOLS = {
     "metrics": ("_mojolearn_metrics", (
         "spectral_native_api_v1", "metrics_numeric_mode", "umap_numeric_mode", "umap_fit_transform", "umap_fit_transform_ex", "umap_transform",
+        # The image's vendor word: spectral_embedding's resident-store slot
+        # (bindings/cfb_spectral_door.mojo `_se_scope_slot`) names the store by
+        # it; uncaptured, every call inside resident() raised AttributeError
+        # (fn-spectral-embedding, L40S smoke of main 3cd641b37e; lane gs-fix).
+        "metrics_vendor",
         # The by-name spectral fit, embedding and predict entries were deleted
         # 2026-11-23 (no caller: the doors take spectral_native_api_v1).
     )),

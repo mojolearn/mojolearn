@@ -287,7 +287,21 @@ def arena_cache_key(source: PythonObject, context: PythonObject) raises -> Arena
         raise Error("ValueError: DeviceCache: a store slot holds 4-byte words")
     var address = _integer(_attribute(source,"_addr",PythonObject(None),True,context),context)
     var size = _integer(_attribute(source,"size",PythonObject(None),True,context),context)
-    return ArenaCacheKey(Int(py=address), Int(py=size))
+    return ArenaCacheKey(_key_word(address, -1, -1), _key_word(size, 0, Int.MAX))
+
+
+def _key_word(value: PythonObject, below: Int, above: Int) raises -> Int:
+    """An admitted exact int as a key word. One outside the Int range names
+    no buffer: `below` for a negative one, `above` for a positive one (lane
+    gs-fix: an address past 2^63 or a size of -(2^100) raised "Python int too
+    large to convert to C ssize_t" where the lookup answers no entry and
+    id_of refuses an empty buffer, test_cache_get_native /
+    test_cache_upload_native on the L40S install). An in-range value pays
+    the one conversion it paid before."""
+    try:
+        return Int(py=value)
+    except:
+        return below if Bool(py=value < PythonObject(0)) else above
 
 
 def arena_cache_get(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:

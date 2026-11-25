@@ -8,6 +8,7 @@ from bindings.py_balanced import py_fields, py_get, py_type
 from training.optimizer_owner_control import OptimizerOwnerControl
 from training.optimizer_native_api import OptimizerNativeDriver
 from bindings.optimizer_keys_unpack import optimizer_keys, optimizer_keys_in_finalizer
+from bindings.native_loaded_module_door import native_interpreter_finalizing
 from bindings.py_balanced import py_item
 
 
@@ -134,8 +135,13 @@ def optimizer_owner_close(value: PythonObject, owner: PythonObject) raises:
 
 
 def optimizer_owner_finalize(owner: PythonObject) raises:
-    # An optimizer collected during interpreter teardown before any call
-    # filled the key table releases nothing (optimizer_keys_in_finalizer).
+    # An optimizer collected during interpreter teardown releases nothing (the
+    # process is ending; device_finalize in bindings/optimizer_device_native_door.mojo
+    # says why: a resident optimizer's teardown aborted rc -6 at exit,
+    # nn-tr-optim-resident, lane gs-fix). Before any call filled the key
+    # table it releases nothing either (optimizer_keys_in_finalizer).
+    if native_interpreter_finalizing():
+        return
     var nk = optimizer_keys_in_finalizer()
     if not nk[].ready:
         return

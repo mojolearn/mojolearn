@@ -49,14 +49,18 @@ def _(ml, X, yc, yr, Xh=None):
     `a` is float32 or bf16 bits. The earlier second part passed a float32 `b`, which the product refuses by design
     ("b has dtype float32; the bf16 profile takes bf16 BITS", bindings/linalg_ops_lowbit_door.mojo), so the lane was
     REFUSED on every side. Fixture defect; the second part now covers the bits-times-bits form instead
-    (FIX w3-fix-13, 2026-11-25)."""
+    (FIX w3-fix-13, 2026-11-25).
+
+    The bits operands are made by `to_bf16` of the side's float32 operand (harness fix, lane
+    gs-fix): the train form uploads float32 only, so host uint16 bits beside an uploaded `a` were refused as mixed
+    device and host arrays on the GPU side. `to_bf16` of a TrainDeviceArray returns the uint16 device array
+    (bindings/linalg_ops_lowbit_door.mojo), as fn-lu-solve's pivots come from lu_factor of the uploaded matrix."""
     a = _functions_mat(X, 64, 16, "fn-bf16:a")
     b = _functions_mat(X[64:], 32, 16, "fn-bf16:b")
-    bits = np.ascontiguousarray(np.asarray(ml.linalg.to_bf16(b)))
-    a_bits = np.ascontiguousarray(np.asarray(ml.linalg.to_bf16(a)))
     return _functions_resident(ml, "linalg.matmul_bf16", lambda p: dict(
-        nt=_functions_d(ml.linalg.matmul_bf16(p(a), p(bits), transpose_b=True)),
-        bits=_functions_d(ml.linalg.matmul_bf16(p(a_bits), p(bits), transpose_b=True))), form="train")
+        nt=_functions_d(ml.linalg.matmul_bf16(p(a), ml.linalg.to_bf16(p(b)), transpose_b=True)),
+        bits=_functions_d(ml.linalg.matmul_bf16(ml.linalg.to_bf16(p(a)), ml.linalg.to_bf16(p(b)),
+                                                transpose_b=True))), form="train")
 
 
 @lane("fn-linalg-to-bf16")

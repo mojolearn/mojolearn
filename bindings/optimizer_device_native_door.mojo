@@ -20,6 +20,7 @@ from training.optimizer_device_storage_plan import (
     optimizer_device_output,
 )
 from bindings.optimizer_keys_unpack import optimizer_keys, optimizer_keys_in_finalizer
+from bindings.native_loaded_module_door import native_interpreter_finalizing
 from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_DEVICE_CONSTRUCT, OPTIMIZER_OPN_DEVICE_HOST, OPTIMIZER_OPN_DEVICE_NEW, OPTIMIZER_OPN_DEVICE_RESHAPE, OPTIMIZER_OPN_DEVICE_UPLOAD
 from bindings.py_balanced import py_item
 from std.memory import unsafe_memcpy
@@ -164,8 +165,21 @@ def _device_fields(owner: PythonObject, context: PythonObject, cleanup: Bool) ra
 
 
 def device_finalize(owner: PythonObject, context: PythonObject) raises -> PythonObject:
-    # A device array collected during interpreter teardown before any call
-    # filled the key table releases nothing (optimizer_keys_in_finalizer).
+    # A device array collected during interpreter teardown releases nothing:
+    # the process is ending and its device memory goes with the context. The
+    # free below connects the provider (device_entries ->
+    # optimizer_provider_entries -> neural_descriptor_connect_factory_once),
+    # whose loaded-module read is a fatal error once the interpreter's modules
+    # are cleared: "PyImport_GetModuleDict: interpreter has no modules
+    # dictionary", rc -6 while garbage-collecting at exit, in
+    # training-device-cross-entropy, fn-lu-solve, nn-tr-optim-resident and
+    # psd-causal-lm(-text) (L40S smoke of main 3cd641b37e; lane gs-fix). The
+    # key-table guard below only covered a table never filled. Tested first,
+    # as host_archive_finalize does; only finalizers ask, never a hot path.
+    if native_interpreter_finalizing():
+        return PythonObject(None)
+    # A device array collected before any call filled the key table releases
+    # nothing either (optimizer_keys_in_finalizer).
     var nk = optimizer_keys_in_finalizer()
     if not nk[].ready:
         return PythonObject(None)

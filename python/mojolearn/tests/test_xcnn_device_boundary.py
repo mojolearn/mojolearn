@@ -123,11 +123,17 @@ def test_cpu_device_runs_and_answers(spec):
 
 @two_devices
 def test_device_cpu_in_fast_mode_is_refused_in_words():
-    model = Conv2d(3, 4, 3, numeric_mode="fast", device="cpu")
-    with pytest.raises((ValueError, ImportError, RuntimeError)) as refused:
-        model.forward(images())
-    # a build without the fast image says that first; with it, the shared words
-    assert "identical mode only" in str(refused.value) or "fast" in str(refused.value)
+    model = Conv2d(3, 4, 3, numeric_mode="fast", device="cpu", random_state=1)
+    # Off Apple with no fast set the identical set answers `fast` for this family (core/mode_answer.mojo,
+    # MODE_FAMILIES_ANSWERED; lane gs-fix: the test predated it and failed on the L40S GPU install).
+    try:
+        answered = np.asarray(model.forward(images()))
+    except (ValueError, ImportError, RuntimeError) as refused:
+        # a build without the fast image says that first; with it, the shared words
+        assert "identical mode only" in str(refused) or "fast" in str(refused)
+    else:
+        plain = np.asarray(Conv2d(3, 4, 3, device="cpu", random_state=1).forward(images()))
+        assert answered.tobytes() == plain.tobytes()
 
 
 def test_a_constructor_run_again_reads_the_device_again():

@@ -567,7 +567,12 @@ def _(ml, X, yc, yr, Xh=None):
     state0 = _parallel_single_byte_state(ml, shape)
     ids = _ids(X, 4 * shape.batch, shape.length + 1)
     shards = [ids[0:2], ids[2:4]]
-    with P(state0, devices=dev, logical_shards=2) as tr, P(state0, devices=dev, logical_shards=2) as w:
+    # pool_optimizer=False on both: the split-step entries require complete optimizer replicas
+    # (bindings/parallel_byte_native_run.mojo parallel_session_require_split; the replica schedule's default is a
+    # pooled optimizer, python/mojolearn/parallel_training.py), and the reference train_step runs the same layout.
+    # Harness fix, lane gs-fix: the lane was refused "shard_gradient requires devices=(d,) and pool_optimizer=False".
+    with P(state0, devices=dev, logical_shards=2, pool_optimizer=False) as tr, \
+            P(state0, devices=dev, logical_shards=2, pool_optimizer=False) as w:
         step = np.asarray(tr.train_step(shards)["losses"], dtype=np.float32)
         l0, g0 = w.shard_gradient(shards[0])
         l1, g1 = w.shard_gradient(shards[1])
@@ -967,8 +972,16 @@ def _(ml, X, yc, yr, Xh=None):
             named = sorted((str(n), np.asarray(w)) for n, w in par.named_parameters())
             listed = [np.asarray(w) for w in par.parameters()]
             sd = par.state_dict()
-            par.load_state_dict(sd)
-            reloaded = np.asarray(par.forward(A(ids)))
+            # ParallelCausalLM.load_state_dict refuses by design (NotImplementedError: "a layer-partitioned model
+            # is loaded from a checkpoint; load the state dict into a CausalLM", bindings/causal_lm_construct_door.mojo,
+            # since 20d35b773a). Wrong test fixed (lane gs-fix): the lane called it and was refused on the GPU side;
+            # it now holds the refusal.
+            try:
+                par.load_state_dict(sd)
+            except NotImplementedError:
+                pass
+            else:
+                raise AssertionError("ParallelCausalLM.load_state_dict no longer refuses: hold its reload again")
             pstate = plain.allocate_state(HF_LM_BATCH, HF_LM_LEN)
             plain.forward(A(head), pstate)
             pairs = [("ParallelCausalLM forward", logits, "plain CausalLM forward", np.asarray(plain.forward(A(ids)))),
@@ -977,7 +990,6 @@ def _(ml, X, yc, yr, Xh=None):
                      ("ParallelCausalLM step after reset_state", again, "ParallelCausalLM step", step),
                      ("ParallelCausalLM generate", gen, "plain CausalLM generate",
                       np.asarray(plain.generate(A(ids), HF_LM_NEW), dtype=np.int32)),
-                     ("ParallelCausalLM forward after load_state_dict", reloaded, "ParallelCausalLM forward", logits),
                      ("ParallelCausalLM named_parameters", np.concatenate([_hf_bytes(w) for _, w in named]),
                       "plain CausalLM named_parameters",
                       np.concatenate([_hf_bytes(np.asarray(w)) for _, w in sorted((str(n), w) for n, w in

@@ -58,6 +58,24 @@ import threading
 
 __all__ = ["DeviceCache", "DeviceRows", "resident", "RESIDENT_MIN_WORDS"]
 
+
+def _connect_rows(owner, operation, args, context):
+    # glue: the native rows / cache door is connected by model_selection's
+    # import (_native_arena_rows.connect replaces this name and
+    # _ROWS_CONTEXT). A `resident()` block, a DeviceCache or a DeviceRows used
+    # before anything imported model_selection raised NameError: '_ROWS_CALL'
+    # is not defined (74 GPU verify lanes entering resident() first, L40S
+    # smoke of main 3cd641b37e; lane gs-fix). The first such use imports it
+    # once; every later call goes straight to the native entry.
+    from . import model_selection  # noqa: F401 -- its import connects the door
+    if _ROWS_CALL is _connect_rows:
+        raise ImportError("mojolearn._arena_io: the native DeviceRows door did not connect")
+    return _ROWS_CALL(owner, operation, args, _ROWS_CONTEXT)
+
+
+_ROWS_CALL = _connect_rows
+_ROWS_CONTEXT = None
+
 #: Inputs below this many words always go up from the host arena: a
 #: put costs one synchronized copy, which pays only on a big buffer.
 RESIDENT_MIN_WORDS = 1 << 16
