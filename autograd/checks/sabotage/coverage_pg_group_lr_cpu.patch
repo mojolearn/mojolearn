@@ -1,0 +1,13 @@
+diff --git a/autograd/nn_pg.mojo b/autograd/nn_pg.mojo
+index af86220204..82748400f2 100644
+--- a/autograd/nn_pg.mojo
++++ b/autograd/nn_pg.mojo
+@@ -53,7 +53,7 @@ from sequence.ops import (
+ comptime PG_SABOTAGE_CLIP_PER_GROUP = is_defined["MOJOLEARN_PG_SABOTAGE_CLIP_PER_GROUP"]()
+ comptime PG_SABOTAGE_CLIP_PER_GROUP_HOST = is_defined["MOJOLEARN_PG_SABOTAGE_CLIP_PER_GROUP_HOST"]()
+ comptime PG_SABOTAGE_GROUP_LR = is_defined["MOJOLEARN_PG_SABOTAGE_GROUP_LR"]()
+-comptime PG_SABOTAGE_GROUP_LR_HOST = is_defined["MOJOLEARN_PG_SABOTAGE_GROUP_LR_HOST"]()
++comptime PG_SABOTAGE_GROUP_LR_HOST = True  # SABOTAGE: every group at group 0's rate, host
+ 
+ 
+ struct ParamGroupTable(Copyable, Movable):

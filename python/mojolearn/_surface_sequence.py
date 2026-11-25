@@ -106,7 +106,11 @@ FAMILIES = (
                         "public-theta-variants-forecast",
                         "sequence-croston-forecast",
                         "sequence-ets-forecast",
-                        "sequence-theta-forecast",),
+                        "sequence-theta-forecast",
+                        # nn-blocks-pg begin: ops.Session optimizer parameter groups (tools/identity_lanes/nn_pg.py)
+                        "ops-param-groups",
+                        # nn-blocks-pg end
+                        ),
         inference_lanes=(),
         forest_kinds=(),
         classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL", "VAR", "MLPClassifier",
@@ -280,6 +284,9 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     "sequence-croston-forecast": "CrostonClassic, CrostonOptimized, CrostonSBA: forecast",
     "sequence-ets-forecast": "DampedETS, ETS: forecast",
     "sequence-theta-forecast": "AutoTheta, DynamicOptimizedTheta, Theta: forecast",
+    # nn-blocks-pg begin
+    "ops-param-groups": "Session: optimizer parameter groups, global clip, state dict",
+    # nn-blocks-pg end
                        }
 PUBLIC_PENDING_LANES = {
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
