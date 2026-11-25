@@ -819,12 +819,10 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
                     # device trains this one. A checkpoint records the consumed position, never the read-ahead.
                     taken += 1
                     stream[].consumed = bi + 1
-                    # the call's last batch: no later step of this call trains a read-ahead, and a source that is
-                    # closed when the call returns (the public door's) would have read it for nobody
-                    var last_of_call = bi + 1 == last_b and (e + 1 == epochs or (max_steps > 0 and taken >= max_steps))
-                    if stream[].ahead_after_last or not last_of_call:
-                        var ahead = stream[].next_position(stream[].epoch, bi)
-                        stream[].read(ahead[0], ahead[1])
+                    # also after the call's last batch: the source is kept open across fit calls (the handle's
+                    # native owner, autograd/batch_source.mojo THE OWNER), so the next call trains this read-ahead
+                    var ahead = stream[].next_position(stream[].epoch, bi)
+                    stream[].read(ahead[0], ahead[1])
             var terms = s.tape.variable(s.ex, batch_losses.value(), 1, last_b - first_b, False)
             var average = s.tape.scale(s.ex, s.tape.sum(s.ex, terms), identical_div(Float32(1), Float32(rows_run)))
             var a = Args()

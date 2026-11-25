@@ -18,7 +18,7 @@ from autograd.program_output_copy import program_output_copy
 from autograd.program_tools import ProgramTrace
 from autograd.program_optimize import ProgramOptimization, program_optimize
 from autograd.program_runtime import replay_values, parameter_buffers, train_program_control, train_program_source
-from autograd.batch_source import BatchSourceSpec, batch_source_open, batch_source_saved
+from autograd.batch_source import BatchSource, batch_source_saved
 
 
 struct ProgramExecPlan(Movable):
@@ -254,21 +254,15 @@ struct ProgramSourceFit(Movable):
 
 
 def program_fit_source[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: Int, pid: Int, var spec: BatchSourceSpec, kind: Int, delta: Float32, opt: Int, params: List[Int],
+    sid: Int, pid: Int, mut src: BatchSource, kind: Int, delta: Float32, opt: Int, params: List[Int],
     count: Int, max_steps: Int, curve: FP, condition_id: Int, otherwise_id: Int,
 ) raises -> ProgramSourceFit:
-    """Train program `pid` on the batches of the source `spec` describes (lane batch-source): the shards are opened
-    here, once per call, and closed on every path. Returns the counts and the consumed position."""
-    var src = batch_source_open(spec^)
-    src.ahead_after_last = False  # closed below: nothing is read ahead after the call's last batch
+    """Train program `pid` on the batches of the opened source `src` from its consumed position (lane
+    batch-source). The caller owns the source and keeps it open across calls (the handle's native owner, lane
+    fr2-followups: autograd/batch_source.mojo THE OWNER), so a call costs O(its batches), never a reopen.
+    Returns the counts and the consumed position."""
     var s = ops_session[E, KIND](sid)
-    var branches = (0, 0, 0)
-    try:
-        branches = train_program_source(s[], pid, src, kind, delta, opt, params, count, max_steps, curve,
+    var branches = train_program_source(s[], pid, src, kind, delta, opt, params, count, max_steps, curve,
                                         condition_id, otherwise_id)
-    except error:
-        src.close()
-        raise error
-    src.close()
     var at = batch_source_saved[E.IS_DEVICE](src)
     return ProgramSourceFit(branches, at[0], at[1], src.fingerprint)
