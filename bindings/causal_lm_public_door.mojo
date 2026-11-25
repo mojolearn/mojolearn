@@ -909,8 +909,11 @@ def _transformer_arg_words(
     var addresses = List[Int]()
     addresses.append(_addr(x, keep))
     var weights = blk["_w"]
+    # Per part (lane fixed15-parts-native): only a projection with planes
+    # sends a zero float32 slot.
+    var triples = blk["_int15"] if planes else PythonObject(None)
     for j in range(len(weights)):  # driver-loop: over block weight slots
-        addresses.append(0 if planes and j >= 2 else _weight_addr(weights[j], keep))
+        addresses.append(0 if planes and j >= 2 and triples[j - 2] is not None else _weight_addr(weights[j], keep))
     addresses.append(_addr(st.k_cache, keep))
     addresses.append(_addr(st.v_cache, keep))
     addresses.append(_addr(y, keep))
@@ -926,13 +929,16 @@ def _transformer_arg_words(
     return addresses^
 
 
-def _transformer_param_words(blk: PythonObject, st: PythonObject, b: Int, l: Int) raises -> List[Int]:
+def _transformer_param_words(blk: PythonObject, st: PythonObject, b: Int, l: Int, parts: Bool = False) raises -> List[Int]:
     var p: List[Int] = [b, l, Int(py=blk["d_model"]), Int(py=blk["n_heads"]), Int(py=blk["n_kv_heads"]),
                         Int(py=blk["head_dim"]), Int(py=blk["intermediate"]), Int(py=st.max_tokens),
                         Int(py=st.cached_tokens), Int(py=blk["window"])]
     var tail = blk["_opts_tail"]
     for j in range(len(tail)):  # driver-loop: read the block's admitted options tail
         p.append(Int(py=tail[j]))
+    if parts:
+        # The fixed15 open's last word: the block's parts mask.
+        p.append(Int(py=blk["_np_parts"]))
     return p^
 
 
@@ -2495,7 +2501,10 @@ def _resident_open_all(mut mods: NativeModules,
         for i in range(len(model._blocks)):  # driver-loop: over model layers
             var blk = _block_at(mods, model, blocks, i)
             var st = state.layers[i]
-            var a = _transformer_arg_words(model, blk, st, PythonObject(None), PythonObject(None), b, l, int15, keep)
+            # Per layer (lane fixed15-parts-native): the layer's own mask
+            # decides its open; `int15` is the head's.
+            var layer15 = blk["_int15"] is not None
+            var a = _transformer_arg_words(model, blk, st, PythonObject(None), PythonObject(None), b, l, layer15, keep)
             var open_a = List[Int]()
             for j in range(1, 12):  # driver-loop: over layer argument spans
                 open_a.append(a[j])
@@ -2503,12 +2512,12 @@ def _resident_open_all(mut mods: NativeModules,
                 open_a.append(a[j])
             var ss = _session_call_ref(owner[].entry, CAUSAL_SESSION_DECODE_CREATE, List[Int](), List[Int](), List[Float64]())
             owner[].layers.append(ss)
-            var p = _transformer_param_words(blk, st, b, l)
+            var p = _transformer_param_words(blk, st, b, l, layer15)
             var open_p: List[Int] = [ss]
             for j in range(len(p)):  # driver-loop: over layer shape parameters
                 if j != 1:
                     open_p.append(p[j])
-            _ = _session_call_ref(owner[].entry, CAUSAL_SESSION_DECODE_OPEN15 if int15 else CAUSAL_SESSION_DECODE_OPEN,
+            _ = _session_call_ref(owner[].entry, CAUSAL_SESSION_DECODE_OPEN15 if layer15 else CAUSAL_SESSION_DECODE_OPEN,
                 open_a, open_p, List[Float64]())
             mods.released()
         # A model without a final norm passes 0 (admitted only under
@@ -2590,7 +2599,11 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
     if not py_contains(e, "resident") or not _resident_norm_ok(model):
         return PythonObject(None)
     var int15 = model._head_int15 is not None
-    if int15 and String(e["resident_vendor"]) != "cuda":
+    # Any fixed15 part (head or layers) keeps to the cuda resident route.
+    var any15 = int15
+    if not any15 and len(model._blocks) > 0:
+        any15 = _block(mods, model, 0)["_int15"] is not None
+    if any15 and String(e["resident_vendor"]) != "cuda":
         return PythonObject(None)
     var ids = generation_ids(value, Int(py=model.vocab_size))
     var n = _public_int(mods, maximum, "generation: max_new_tokens must be an integer")
@@ -2925,6 +2938,8 @@ def _program_refusal(s: GenerationHandle, words: CausalModelWords, blocks: List[
         return "distributed execution"
     if words.head_packed:
         return "the fixed15_v1 head"
+    if words.fixed15:
+        return "fixed15_v1 layers"
     if words.kind != CAUSAL_LAYER_TRANSFORMER and words.kind != CAUSAL_LAYER_MAMBA1 and words.kind != CAUSAL_LAYER_MAMBA2:
         # The refusal names the kind (read only on this refusal).
         return "layer kind " + String(s.model.kind)
@@ -3271,14 +3286,16 @@ def _resident_read_disjoint_state(mut mods: NativeModules, model: PythonObject, 
             for i in range(len(model._blocks)):  # driver-loop: capture consumed weight spans once per read
                 var block = _block(mods, model, i)
                 var base = block["_w"]
+                # Per layer and part (lane fixed15-parts-native).
+                var layer_planes = block["_int15"]
                 for j in range(len(base)):  # driver-loop: same weight slots as _transformer_arg_words
-                    if not packed or j < 2:
+                    if layer_planes is None or j < 2 or layer_planes[j - 2] is None:
                         weights.append(base[j])
                 var optional = block["_wopt"]
                 for j in range(len(optional)):  # driver-loop: consumed optional layer weight slots
                     weights.append(optional[j])
-                if packed:
-                    var planes = block["_int15"]
+                if layer_planes is not None:
+                    var planes = layer_planes
                     for j in range(len(planes)):  # driver-loop: consumed packed layer planes
                         if planes[j] is not None:
                             for k in range(3):  # driver-loop: over int15 plane triple
@@ -3764,7 +3781,7 @@ def _causal_digest_members(mut mods: NativeModules, model: PythonObject, mut mem
         for j in range(len(blk["_w"])):  # driver-loop: over block weight slots
             if blk["_w"][j] is not None:
                 _digest_array_member(members, pins, sources, at + "w" + String(j), blk["_w"][j])
-        if model._head_int15 is not None:
+        if blk["_int15"] is not None:
             for j in range(len(blk["_int15"])):  # driver-loop: over packed block weight slots
                 if blk["_int15"][j] is not None:
                     for k in range(3):  # small-loop(int15 plane triple)

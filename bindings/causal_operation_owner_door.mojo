@@ -2,6 +2,7 @@
 # Stable whole-operation model/state metadata. Original records are retained
 # only for identity and native dictionary publication, never runtime attributes.
 from std.python import Python, PythonObject
+from bindings.numeric_profile_mask_unpack import profile_parts_mask
 from std.collections import Dict
 from bindings.native_identity_key_door import NativeIdentityKey
 from std.python._cpython import PyObjectPtr
@@ -344,6 +345,11 @@ def causal_model_owner_build(fields: PythonObject) raises -> PythonObject:
         words.max_positions = Int(py=limit)
     words.norm = py_get(fields, PythonObject("_norm")) is not None
     words.head_packed = py_get(fields, PythonObject("_head_int15")) is not None
+    # Any part under fixed15_v1: the head, or the model's resolved spec
+    # (every block of a model shares it); read once per owner generation.
+    words.fixed15 = words.head_packed
+    if not words.fixed15 and words.kind == CAUSAL_LAYER_TRANSFORMER:
+        words.fixed15 = profile_parts_mask(py_get(fields, PythonObject("numeric_profile"), PythonObject("fp32_v1"))) != 0
     var entries = py_item(fields, PythonObject("_native_entries"))
     words.parallel = py_get(entries, PythonObject("parallel_call")) is not None
     words.primitives = py_get(entries, PythonObject("native_primitives")) is not None
