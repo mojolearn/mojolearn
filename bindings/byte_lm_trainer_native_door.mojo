@@ -974,8 +974,10 @@ def byte_lm_train_step(mut mods: NativeModules, trainer: PythonObject, args: Pyt
         except error:
             mods.released()
             var text = String(error)
+            # One text on every route (lane gs-fix-2: the device session's refusal said "Byte-LM IDs must be in
+            # [0, N)" and the host session's "token id outside [0, vocab)"; test_byte_lm_runtime_shape on the L40S).
             if not text.startswith("ValueError:") and text.find(_TOKEN_REFUSAL) >= 0:
-                raise Error("ValueError: Byte-LM IDs must be in [0, " + String(shape.vocab()) + ")")
+                raise Error("ValueError: byte LM: token id outside [0, vocab), vocab = " + String(shape.vocab()))
             raise error^
         _ = lease  # the lease keeps the state alive through the operation
     except error:
@@ -1107,7 +1109,7 @@ def byte_lm_train_steps(mut mods: NativeModules, trainer: PythonObject, args: Py
             mods.released()
             var text = String(error)
             if not text.startswith("ValueError:") and text.find(_TOKEN_REFUSAL) >= 0:
-                raise Error("ValueError: Byte-LM IDs must be in [0, " + String(shape.vocab()) + ")")
+                raise Error("ValueError: byte LM: token id outside [0, vocab), vocab = " + String(shape.vocab()))
             raise error^
         _ = lease  # the lease keeps the state alive through the operation
     except error:
