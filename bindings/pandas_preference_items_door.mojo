@@ -299,9 +299,17 @@ def _static_descriptor(cls: PythonObject, name: String) raises -> PythonObject:
         var descriptor = py_get(_pd_type_fields(owner), name)
         if descriptor is None:
             continue
-        if ((cpython_table()[].PyType_GetFlags(owner._obj_ptr) & UInt64(1 << 8)) == 0
-                or py_type(descriptor) is function_type):
+        if py_type(descriptor) is function_type:
             raise Error("TypeError: pandas preference storage methods must be immutable native descriptors")
+        if (cpython_table()[].PyType_GetFlags(owner._obj_ptr) & UInt64(1 << 8)) == 0:
+            # pandas 3 (Cython 3) builds these extension types as MUTABLE heap
+            # types, so the immutable-type flag no longer vouches for the
+            # namespace (w3-integrate-11: every SparseArray preference was
+            # refused under pandas 3.1). Admit only a compiled Cython
+            # function there: a rebound Python function, partial, method or
+            # any other callable that could run Python code is refused.
+            if String(py_type(descriptor).__name__) != "cython_function_or_method":
+                raise Error("TypeError: pandas preference storage methods must be immutable native descriptors")
         return descriptor
     raise Error("TypeError: pandas preference native storage method is unavailable")
 

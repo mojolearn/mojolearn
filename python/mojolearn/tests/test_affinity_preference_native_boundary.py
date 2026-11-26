@@ -167,3 +167,19 @@ def test_preference_custom_iterator_is_refused_without_hooks():
 def test_preference_noniterable_numpy_scalar_keeps_refusal(value):
     with pytest.raises(TypeError):
         _fit(value)
+
+
+def test_sparse_preference_refuses_a_rebound_python_lookup(monkeypatch):
+    # pandas 3 builds its sparse index types as mutable heap types; a lookup
+    # rebound to Python code is refused instead of being called.
+    pd = pytest.importorskip("pandas")
+    from pandas._libs import sparse
+    source = pd.Series(pd.arrays.SparseArray([0, 1, 2], fill_value=0))
+    index_type = type(source.array.sp_index)
+    try:
+        monkeypatch.setattr(index_type, "lookup", lambda self, i: 0)
+    except TypeError:
+        pytest.skip("this pandas build has immutable sparse index types")
+    with pytest.raises(TypeError, match="immutable native descriptors"):
+        _fit(source)
+    assert sparse is not None
