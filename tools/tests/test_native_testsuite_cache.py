@@ -398,3 +398,11 @@ def test_the_url_map_never_reaches_the_persisted_results():
     directory still never uploads it."""
     assert '--exclude=ts-urls.tsv' in (ROOT / "tools/box_persist_run.sh").read_text()
     assert "tsmap=$BP_BOX_ROOT/jobs/$BP_TAG/ts-urls.tsv" in (ROOT / "tools/nvidia_central.sh").read_text()
+
+
+def test_the_runner_refuses_a_program_with_an_rpath_outside_the_checkout():
+    """rel-fix-1 (review item 6): LD_LIBRARY_PATH overrides a DT_RUNPATH, not a DT_RPATH."""
+    run = (ROOT / "tools/ops/native_testsuite.sh").read_text()
+    run = run[run.index("\nrun)"):]
+    assert run.index('LD_LIBRARY_PATH="$PWD/.pixi/envs/default/lib') < run.index("readelf -d \"$prog\"")
+    assert "(RPATH)" in run and "refused: DT_RPATH" in run and "tsg/group_[0-9]*" in run

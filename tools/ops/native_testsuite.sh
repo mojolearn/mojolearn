@@ -246,6 +246,26 @@ run)
     # a program reused from NC_TS_CACHE was linked in another checkout and its runpath names that checkout's
     # toolchain: this checkout's comes first (the same toolchain, it is in the key; no effect on a fresh build)
     [ -d "$PWD/.pixi/envs/default/lib" ] && export LD_LIBRARY_PATH="$PWD/.pixi/envs/default/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    # THAT HOLDS ONLY FOR DT_RUNPATH (rel-fix-1, review of 3423ae229e..8f0d9a9642 item 6): the loader searches a
+    # DT_RPATH BEFORE LD_LIBRARY_PATH, so a program linked with an RPATH would load the libraries of the checkout that
+    # built it. `mojo build` writes a RUNPATH (measured for the bindings, tools/development_build.py group_fields), and
+    # the program's link flags are only TS_FLAGS (defines and target): nothing asks for old dtags. Still, a program
+    # (a member's wrapper is resolved to its group program) with an RPATH outside this checkout is refused here
+    # rather than run against another checkout's libraries.
+    prog=$bin
+    if head -c 2 "$prog" 2> /dev/null | grep -q '^#!'; then
+        g=$(grep -o 'tsg/group_[0-9]*' "$prog" | head -n 1); [ -n "$g" ] && prog="$(dirname "$bin")/../$g"
+    fi
+    if command -v readelf > /dev/null 2>&1; then
+        rpath=$(readelf -d "$prog" 2> /dev/null | sed -n 's/.*(RPATH).*\[\(.*\)\]/\1/p')
+        outside=$(tr ':' '\n' <<< "$rpath" | grep -v '^$' | grep -v -e "^$PWD/" -e '^\$ORIGIN' | head -n 1)
+        if [ -n "$outside" ]; then
+            echo "$name: refused: $prog has a DT_RPATH outside this checkout ($outside); LD_LIBRARY_PATH cannot override it" > "$log"
+            $PY tools/ops/native_checks_report.py result "$name" --log "$log" --rc 2 --seconds 0 --out-dir "$out/results"
+            echo "$name rc=2 (refused: DT_RPATH)"
+            exit 0
+        fi
+    fi
     # under /usr/bin/time when the box has it: the check's peak RSS goes into its result (the GPU job's K and summary)
     if [ -x /usr/bin/time ]; then
         /usr/bin/time -v -o "$log.time" timeout -k 30 "$limit" pixi run "$bin" > "$log" 2>&1
