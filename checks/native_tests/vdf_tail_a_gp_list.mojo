@@ -235,6 +235,16 @@ def _device_case(which: Int) raises:
                 _ = GPDeviceKernels.gpr_sample(GPRSampleRequest(_a(gathered), _a(fb.l), _a(fb.dual), _a(xq), _a(db),
                     n, FD, q, kernel.view(), fb.info, s, 20261124, 0, False, 1.0, 0.0))
                 _same(da, db, "posterior draws")
+            # The fits' factor and dual are read BY ADDRESS inside the query,
+            # covariance and sample entries above: named again so they outlive
+            # them (lane gs-fix-3). Before, `fa` / `fb` were last named in the
+            # argument list of the gpr_query (row 1) and gpr_sample (row 2)
+            # calls, so their lists could be freed before the entry read them:
+            # the predictive mean and the draws came from freed words (L40S
+            # 2026-11-26: the differing rows varied run to run, once "the
+            # posterior covariance did not factor").
+            _ = fa^
+            _ = fb^
         elif which == 3:
             var flags: List[Int32] = [0, 1, 0]
             var ga = List[Float64](length=4, fill=0.0)
@@ -350,6 +360,8 @@ def _device_case(which: Int) raises:
             _ = y01^
             _ = clean^
             _ = r^
+            _ = ok^  # its factor and dual are read by address inside the queries above
+            _ = fit^
     except error:
         failure = String(error)
     _ = native_descriptor_call(store, XP_DEV_FREE, [], [qslot], [])
