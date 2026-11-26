@@ -23,6 +23,9 @@ columns name: the NVIDIA box (nvidia, ptx), the AMD box (amd), the Mac (apple) o
 4. summary  DIR/identity-wheels.json (schema mojolearn.identity-wheels.v1): per column the selection, the
             records written (with their admissible= line) and the rc; exit 0 only when every chunk recorded
             admissibly. The records go to admission (tools/admit_identity_columns.sh) with every other column.
+5. evidence DIR/evidence/<column>/record[-shard-i-of-N]/ (tools/verification_evidence.py stage): the summary, every
+            record JSON, the chunk logs (capped) and a MANIFEST (wheels, commit, chunk times, busy plan); the fetch
+            on the Mac writes it into verification/latest/<column>/ (always overwritten; git history is the history).
 
 The box: IDENTITY_RECORD_BOX=<provider>:<id> (runpod:<pod id>, digitalocean:<droplet id>, github:<run id>/<job>) is
 passed through to every recorder unchanged, so each record's run block names the machine (tools/identity_break.py
@@ -41,6 +44,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 SCHEMA = "mojolearn.identity-wheels.v1"
@@ -71,6 +75,10 @@ def sha256(path):
         for block in iter(lambda: fh.read(1 << 20), b""):
             h.update(block)
     return h.hexdigest()
+
+
+def utc():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
 def label(column, device):
@@ -285,6 +293,7 @@ class Run:
         def record(c, i, chunk, slot):
             out = self.out / labels[c] / ("w%d" % i)
             out.mkdir(parents=True, exist_ok=True)
+            t0, started = time.monotonic(), utc()
             env = self.env(py, listed, slot[0], c, dict(LANES=",".join(chunk), LANE_SELECTION=(
                 "auto-reuse-chunk" if self.a.reuse_unchanged else "full-chunk")))
             with open(out / "record.log", "w") as log:
@@ -294,7 +303,8 @@ class Run:
             m = re.findall(r"^RECORDED (\S+) rc=(\d+) admissible=(yes|NO) json=(\S+)$", text, re.M)
             results[(c, i)] = dict(worker=i, device=slot[0], lanes=len(chunk), rc=rc,
                                    records=[dict(name=n, harness_rc=int(r), admissible=adm == "yes", json=j)
-                                            for n, r, adm, j in m])
+                                            for n, r, adm, j in m],
+                                   seconds=round(time.monotonic() - t0), start=started, end=utc())
             self.say("%s w%d (device %s): %d lane(s), rc=%d" % (labels[c], i, slot[0], len(chunk), rc))
         # every slot of a device runs one chunk at a time; chunks of columns sharing a device queue on it
         by_slot = {}
@@ -326,7 +336,23 @@ class Run:
             self.say("FAILURES (%d chunk(s); every other chunk ran): %s" % (len(failed), "; ".join(failed)))
         (self.out / "identity-wheels.json").write_text(json.dumps(report, indent=1, sort_keys=True) + "\n")
         self.say("%s: %s" % ("DONE" if ok else "FAILED", self.out / "identity-wheels.json"))
+        self.stage_evidence(columns, results, labels, shard_i, shard_n)
         return 0 if ok else 1
+
+    def stage_evidence(self, columns, results, labels, shard_i, shard_n):
+        """The record part of the in-repo evidence (tools/verification_evidence.py): one per evidence column (the
+        nvidia and ptx columns are one nvidia part). Staging never changes the run's exit status."""
+        import verification_evidence as E
+        rows = ["%s-w%d\t%s\t%s\t%s\t%s\t" % (labels[c], i, r.get("rc"), r.get("seconds", ""), r.get("start", ""),
+                                                 r.get("end", "")) for (c, i), r in sorted(results.items())]
+        (self.out / "steps.tsv").write_text("".join(row + "\n" for row in rows))
+        part = "record" if shard_n == 1 else "record-shard-%d-of-%d" % (shard_i, shard_n)
+        for column in sorted({"nvidia" if c in ("nvidia", "ptx") else c for c in columns}):
+            try:
+                E.stage(self.out, self.out / "evidence" / column / part, column, part)
+                self.say("evidence staged: %s" % (self.out / "evidence" / column / part))
+            except (Exception, SystemExit) as exc:   # evidence never fails the record
+                self.say("evidence NOT staged for %s: %s" % (column, exc))
 
 
 def parse(argv=None):

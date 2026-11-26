@@ -51,6 +51,8 @@ NUMPY_ORACLES = {
     # them. Keep exact names: a _verify_* prefix is not a runtime exemption.
     "mojolearn/_verify_distributed_program.py", "mojolearn/_verify_generation.py",
     "mojolearn/_verify_graph.py", "mojolearn/_verify_partitioned_program.py",
+    # `verify --all`'s runner of the commands above, the bundled recipe and the saved-program round trip
+    "mojolearn/_verify_extended.py",
     # The installed public-API verifier was split into these exact controllers.
     # They construct reference fixtures/assertions, never product results.
     "mojolearn/_verify_api.py", "mojolearn/_verify_api_estimators.py",

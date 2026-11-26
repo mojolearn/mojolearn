@@ -115,5 +115,11 @@ done
 grep -E '^  lanes sides:' "$S" 2> /dev/null | sed 's/^  /GSMOKE /'
 echo "GSMOKE busy cores $(busy_of "$RES/logs/smoke.busy") of $(alloc_cores); $((SECONDS - t0))s"
 awk -F', *' '{if ($1 > m) m = $1; u += $2; n++} END {if (n) printf "GSMOKE gpu memory.used max %d MB, utilisation mean %.0f%% (%d samples)\n", m, u / n, n; else print "GSMOKE gpu not sampled"}' "$RES/logs/gpu.log"
+printf 'smoke\t%s\t%s\t\t\tbusy cores %s of %s\n' "$rc" "$((SECONDS - t0))" "$(busy_of "$RES/logs/smoke.busy")" "$(alloc_cores)" > "$RES/steps.tsv"
+# The in-repo evidence (verify-complete, Andrew 2026-11-26): SUMMARY.txt and the failed lanes and tests of every pool,
+# staged under evidence/nvidia/smoke; the Mac's fetch (`tools/box_persist.py fetch --tag <tag> --extract --evidence`)
+# writes it into verification/latest/nvidia/smoke/.
+python3 "$REPO/tools/verification_evidence.py" stage --results "$RES" --column nvidia --part smoke \
+    --out "$RES/evidence/nvidia/smoke" || echo "GSMOKE evidence not staged"
 echo "GSMOKE done rc=$rc summary=$S"
 exit "$rc"

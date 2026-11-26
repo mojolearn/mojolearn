@@ -4,10 +4,8 @@
 `python -m mojolearn verify --all` runs, in the same process and the same report, each of these with its own
 profile name, counts and verdict (Andrew, 2026-11-26):
 
-    verify-distributed-program   captured-program distribution: several logical shards on ONE device (the
-                                 single-GPU simulation of multi-GPU training); the physical-topology case stays
-                                 PENDING on one GPU
-    verify-partitioned-program   model/tensor/pipeline execution at the single-device scope it supports
+    verify-distributed-program   captured-program distribution: several logical shards on device 0
+    verify-partitioned-program   model/tensor/pipeline execution: logical stages and tensor shards on device 0
     verify-graph                 captured graph execution
     verify-generation            native causal generation, sampling, streaming and resume (CPU, and the GPU on a
                                  GPU install, compared with each other in the run)
@@ -19,8 +17,8 @@ profile name, counts and verdict (Andrew, 2026-11-26):
                                  checks each output against that report (paper 5.4)
 
 Each standalone subcommand keeps its own module and is the one body: this file calls those bodies (a capture in
-a worker process, a comparison in the controller) and judges. The two-GPU commands `verify-distributed` and
-`verify-cross-validation` are not run: `TWO_GPU` names them in the report as "two-GPU, not run".
+a worker process, a comparison in the controller) and judges. Everything here runs on ONE device (Andrew,
+2026-11-26): no case needs a second GPU and no case reads PENDING.
 
 VERDICTS. VERIFIED: compared with something independent (the other device of this install, or a reference
 report shipped in the wheel under `verify_reference/extended/<profile>.json`) and every compared value matched.
@@ -47,19 +45,14 @@ GATING = (DIVERGENT, FAILED)
 
 PROFILES = ("verify-distributed-program", "verify-partitioned-program", "verify-graph", "verify-generation",
             "verify-causal-lm", "verify-recipe", "verify-model")
-#: shipped but optional: they need two GPUs, so `verify --all` and the record never run them
-TWO_GPU = {
-    "verify-distributed": "two-GPU forecast, classifier and sharded-index checks (python -m mojolearn "
-                          "verify-distributed --devices 0,1)",
-    "verify-cross-validation": "two-GPU cross-validation scheduling checks (python -m mojolearn "
-                               "verify-cross-validation --devices 0,1)",
-}
 #: the bundled recipe `verify --all` fits (a shipped example, its fitted parameters compared too)
 RECIPE_CASE = "seq-transformer"
-#: weight formats of the loaded-model capture
-CAUSAL_LM_FORMATS = ("float32", "bfloat16", "int8")
-#: one unit's worker limit: a whole capture runs in it (24 loaded-model cases on the CPU at the most)
-UNIT_TIMEOUT_S = 1800.0
+#: weight formats of the loaded-model capture: float32 only, the command's own default (eight tiny architectures);
+#: `verify-causal-lm --formats float32 bfloat16 int8` runs the other two (fixture budget, Andrew 2026-11-26: each
+#: added case light, the whole addition under a minute)
+CAUSAL_LM_FORMATS = ("float32",)
+#: one unit's worker limit: far above the few seconds a unit takes, so only a hang reaches it
+UNIT_TIMEOUT_S = 600.0
 REFERENCE_DIR = "extended"
 
 
@@ -186,8 +179,7 @@ def judge(profile, values, ref=None):
 
 def _cases_counts(report):
     states = [c.get("status") for c in report.get("cases", [])]
-    return dict(cases=len(states), passed=states.count("PASS"), pending=states.count("PENDING"),
-                failed=len(states) - states.count("PASS") - states.count("PENDING"))
+    return dict(cases=len(states), passed=states.count("PASS"), failed=len(states) - states.count("PASS"))
 
 
 def _judge_program(profile, got, ref):
@@ -196,24 +188,22 @@ def _judge_program(profile, got, ref):
     if report.get("status") == "FAIL" or counts["failed"]:
         why = (report.get("failure") or {}).get("message") or "a case did not pass"
         return _block(profile, FAILED, why, counts, got)
-    pending = f"; {counts['pending']} case(s) PENDING (physical topology needs two or more GPUs)" \
-        if counts["pending"] else ""
     if ref is None:
         return _block(profile, OWED, f"{counts['passed']} case(s) passed their own oracles; no reference report "
-                      f"to compare digests with{pending}", counts, got)
+                      f"to compare digests with", counts, got)
     from . import _verify_distributed_program as d, _verify_partitioned_program as p
     module = d if profile == "verify-distributed-program" else p
     try:
         rows = module.compare(report, ref)
     except ValueError as exc:
-        return _block(profile, OWED, f"the shipped reference is not comparable ({exc}){pending}", counts, got)
+        return _block(profile, OWED, f"the shipped reference is not comparable ({exc})", counts, got)
     differ = [r["name"] for r in rows if r["status"] != "MATCH"]
     counts.update(compared=len(rows), differ=len(differ))
     where = _where(ref)
     if differ:
         return _block(profile, DIVERGENT, "digest differs from the reference: " + ", ".join(differ), counts, got,
                       where)
-    return _block(profile, VERIFIED, f"{len(rows)} case digest(s) equal to the reference{pending}", counts, got,
+    return _block(profile, VERIFIED, f"{len(rows)} case digest(s) equal to the reference", counts, got,
                   where)
 
 
@@ -386,6 +376,4 @@ def human_lines(blocks):
             continue
         counts = ", ".join(f"{k} {v}" for k, v in (b.get("counts") or {}).items() if v is not None)
         lines.append(f"  {name:<28} {b['verdict']:<9} {b['detail']}" + (f" [{counts}]" if counts else ""))
-    for name, what in TWO_GPU.items():
-        lines.append(f"  {name:<28} {'NOT RUN':<9} two-GPU, not run: {what}")
     return lines

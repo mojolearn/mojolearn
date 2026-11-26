@@ -490,6 +490,13 @@ def fetch(a):
         else:
             bad += 1
             print("VERIFY-FAILED %s http=%s sha256=%s want=%s" % (n, code, got, sha))
+    if getattr(a, "evidence", False) and not bad:
+        # the job's staged evidence parts into verification/latest/<column>/ of this tree, committed
+        # (tools/verification_evidence.py; verify-complete, Andrew 2026-11-26)
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import verification_evidence
+        columns = verification_evidence.install([dest], commit=True)
+        print("EVIDENCE %s" % (", ".join(columns) if columns else "none staged in this job"))
     return 1 if bad else 0
 
 
@@ -547,6 +554,9 @@ def main(argv=None):
     f.add_argument("--extract", action="store_true")
     f.add_argument("--keep-tarball", action="store_true",
                    help="with --extract: keep the downloaded tarball beside its extraction")
+    f.add_argument("--evidence", action="store_true",
+                   help="with --extract: write the job's staged evidence into verification/latest/<column>/ and "
+                        "commit it (tools/verification_evidence.py install)")
     o = sub.add_parser("opt-out")
     o.add_argument("--tool", required=True)
     o.add_argument("--detail", default="")
@@ -566,6 +576,8 @@ def main(argv=None):
                          % (a.tag, j["prefix"], a.tag))
         return 0
     if a.cmd == "fetch":
+        if a.evidence and not a.extract:
+            die("--evidence needs --extract (the staged parts are inside the tarball)")
         return fetch(a)
     if a.cmd == "opt-out":
         return opt_out(a)

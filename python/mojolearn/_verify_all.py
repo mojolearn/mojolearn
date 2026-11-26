@@ -4125,7 +4125,6 @@ def cmd_verify_all(args):
         neural='--neural: neural training, backward and optimizer lanes, every fixture',
         all='--all: --classic and --neural in one sweep and one report, plus the single-device verify commands',
         extended=list(extended_profiles.PROFILES),
-        two_gpu_not_in_all=sorted(extended_profiles.TWO_GPU),
         quick='--quick: representative checks of the selected profile on the base fixture',
         neural_lanes=sorted(neural_lanes))
     if getattr(args, "coverage", False):
@@ -4445,8 +4444,8 @@ def cmd_verify_all(args):
     # THE SINGLE-DEVICE VERIFY COMMANDS (verify-complete, Andrew 2026-11-26): `--all` also runs
     # verify-distributed-program, -partitioned-program, -graph, -generation, -causal-lm, one bundled recipe and one
     # saved-program round trip (_verify_extended.py), each unit in its own worker process in THIS pool, ahead of the
-    # cell batches (the loaded-model captures are the longest units). One device only (devices=(0,)); the two-GPU
-    # commands are named "two-GPU, not run".
+    # cell batches (the loaded-model captures are the longest units). One device only: verify ships no multi-GPU
+    # case (Andrew, 2026-11-26).
     from . import _verify_extended as extended
     extended_on = profile_name == "all" and not asked and depth != "quick" and not models_only
     extended_units = extended.units(vclass) if extended_on else []
@@ -4700,7 +4699,6 @@ def cmd_verify_all(args):
                                                    extended.reference(name, pkg))
                               for name in extended.PROFILES}
         report['extended_summary'] = extended.summary(report['extended'])
-        report['two_gpu_not_run'] = dict(extended.TWO_GPU)
         failing = extended.gate(report['extended'])
         if failing:
             code, headline = EXIT_MISMATCH, 'MISMATCH'

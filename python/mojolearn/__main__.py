@@ -152,8 +152,7 @@ def _causal_lm_dispatch(args):
     path = Path(args.output)
     if path.exists():
         raise ValueError('capture output already exists; choose a new path to preserve evidence')
-    options = {'layer_devices': args.layer_devices} if args.layer_devices is not None else {}
-    result = proof.capture(args.device, tuple(args.formats), **options)
+    result = proof.capture(args.device, tuple(args.formats))
     with path.open('x') as stream:
         json.dump(result, stream, indent=2)
         stream.write('\n')
@@ -161,38 +160,10 @@ def _causal_lm_dispatch(args):
     return 0 if result['status'] == 'CAPTURED_UNQUALIFIED' else 1
 
 
-def _distributed_dispatch(args):
-    from ._verify_distributed import main as distributed_main
-    if args.compare:
-        argv = ['--compare', *args.compare]
-        if args.devices or args.out or args.require_installed:
-            raise ValueError('--compare cannot be combined with capture options')
-    else:
-        argv = []
-        if args.devices is not None:
-            argv += ['--devices', args.devices]
-        if args.out is not None:
-            argv += ['--out', args.out]
-        if args.require_installed:
-            argv += ['--require-installed']
-    return distributed_main(argv)
-
-
-def _cross_validation_dispatch(args):
-    from ._verify_parallel_cv import main as cv_main
-    if args.compare:
-        if args.devices or args.out or args.require_installed or args.require_backend:
-            raise ValueError('--compare cannot be combined with capture options')
-        argv = ['--compare', *args.compare]
-    else:
-        argv = []
-        for flag, value in (('--devices', args.devices), ('--out', args.out),
-                            ('--require-backend', args.require_backend)):
-            if value is not None:
-                argv += [flag, value]
-        if args.require_installed:
-            argv += ['--require-installed']
-    return cv_main(argv)
+# `verify-distributed` and `verify-cross-validation` (two-GPU checks) were unregistered (Andrew, 2026-11-26: everything
+# verify ships is one GPU only). Their code stays in mojolearn/_verify_distributed.py and _verify_parallel_cv.py for the
+# multi-GPU tools (tools/two_device_checks.sh, tools/qualify_verifier_wheel.py run them as
+# `python -m mojolearn._verify_distributed` / `._verify_parallel_cv`); no verify command, report or doc names them.
 
 
 def build_parser():
@@ -210,28 +181,6 @@ def build_parser():
     )
     sub = parser.add_subparsers(dest="command", metavar="<subcommand>")
 
-    cv = sub.add_parser('verify-cross-validation',
-        help='checkpoint small GPU cross-validation scheduling checks')
-    cv.add_argument('--devices', help='two distinct GPU indices, e.g. 0,1')
-    cv.add_argument('--out', metavar='DIRECTORY', help='new evidence directory')
-    cv.add_argument('--require-installed', action='store_true')
-    cv.add_argument('--require-backend', choices=('cuda', 'hip'))
-    cv.add_argument('--compare', nargs=2, metavar=('LEFT', 'RIGHT'))
-    cv.add_argument('--cpu-threads', type=int, default=1)
-    cv.set_defaults(func=_cross_validation_dispatch)
-
-    distributed = sub.add_parser('verify-distributed',
-        help='checkpoint small two-GPU forecast, classifier and sharded-index checks',
-        description='Numerical and device-placement checks with transport fault controls. '
-                    'Independent GPU execution traces and release qualification remain separate.')
-    distributed.add_argument('--devices', help='two distinct GPU indices, e.g. 0,1')
-    distributed.add_argument('--out', metavar='PATH', help='new checkpoint JSON path')
-    distributed.add_argument('--require-installed', action='store_true',
-                             help='require package and native bytes to match installed wheel RECORD')
-    distributed.add_argument('--compare', nargs=2, metavar=('LEFT', 'RIGHT'))
-    distributed.add_argument('--cpu-threads', type=int, default=1)
-    distributed.set_defaults(func=_distributed_dispatch)
-
     lm = sub.add_parser('verify-causal-lm',
         help='capture tiny loaded-model inference properties or compare two captures',
         description='End-to-end loaded-model logits, stateful decode, batch, reset and reload checks. '
@@ -244,8 +193,6 @@ def build_parser():
     lm.add_argument('--formats', nargs='+', choices=('float32', 'bfloat16', 'int8'),
                     default=['float32', 'bfloat16', 'int8'])
     lm.add_argument('--cpu-threads', type=int, default=1)
-    lm.add_argument('--layer-devices', nargs='+', type=int,
-                    help='experimental GPU layer-owner map, one device index per fixture layer')
     lm.set_defaults(func=_causal_lm_dispatch)
 
     v = sub.add_parser(
@@ -294,11 +241,10 @@ def build_parser():
                             "status; the cell workers run both profiles' cells in one parallel sweep. It also "
                             "runs the single-device verify commands, each with its own profile name, counts and "
                             "verdict: verify-distributed-program and verify-partitioned-program (logical shards "
-                            "and stages on one device; the physical multi-GPU cases read PENDING), verify-graph, "
+                            "and stages on device 0), verify-graph, "
                             "verify-generation and verify-causal-lm (CPU and GPU captures compared on a GPU "
                             "install), one bundled recipe (verify-recipe) and one saved program checked with "
-                            "verify-model. A capture with nothing to compare against reads OWED. The two-GPU "
-                            "commands verify-distributed and verify-cross-validation are listed as not run")
+                            "verify-model. A capture with nothing to compare against reads OWED. One device only")
     scope.add_argument("--models-only", dest="models_only", action="store_true",
                        help="check bundled GPU-trained models through the saved-model loader, including "
                             "HostForest and HostGBDT, without training")

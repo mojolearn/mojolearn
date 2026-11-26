@@ -1,47 +1,27 @@
-"""Installed command routing; hardware checks live in the capture runner."""
+"""The two-GPU checks are not verify commands (Andrew, 2026-11-26: everything verify ships is one GPU only).
+
+`verify-distributed` and `verify-cross-validation` are not registered on the CLI; their modules keep their own
+`main(argv)` for the multi-GPU tools (`python -m mojolearn._verify_distributed`, `._verify_parallel_cv`).
+"""
 import pytest
-from mojolearn import __main__ as cli, _verify_distributed as proof
+from mojolearn import __main__ as cli, _verify_distributed as proof, _verify_parallel_cv as cv
 
 
-def test_capture_routes_installed_requirement(monkeypatch):
-    calls = []
-    monkeypatch.setattr(proof, 'main', lambda argv: calls.append(argv) or 0)
-    args = cli.build_parser().parse_args(['verify-distributed', '--devices', '1,0',
-        '--out', 'capture.json', '--require-installed'])
-    assert args.cpu_threads == 1
-    assert args.func(args) == 0
-    assert calls == [['--devices', '1,0', '--out', 'capture.json', '--require-installed']]
+@pytest.mark.parametrize("command", ["verify-distributed", "verify-cross-validation"])
+def test_two_gpu_commands_are_not_verify_commands(command, capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.build_parser().parse_args([command, "--devices", "0,1"])
+    assert exc.value.code == 2
 
 
-def test_compare_routes_without_capture(monkeypatch):
-    calls = []
-    monkeypatch.setattr(proof, 'main', lambda argv: calls.append(argv) or 1)
-    args = cli.build_parser().parse_args(['verify-distributed', '--compare', 'a.json', 'b.json'])
-    assert args.func(args) == 1
-    assert calls == [['--compare', 'a.json', 'b.json']]
+def test_the_two_gpu_modules_keep_their_own_entry_points():
+    assert callable(proof.main) and callable(cv.main)
 
 
-def test_compare_rejects_capture_options():
-    args = cli.build_parser().parse_args(['verify-distributed', '--compare', 'a', 'b', '--devices', '0,1'])
-    with pytest.raises(ValueError, match='cannot be combined'):
-        args.func(args)
-
-
-def test_cross_validation_routes_installed_backend(monkeypatch):
-    from mojolearn import _verify_parallel_cv as cv
-    calls = []
-    monkeypatch.setattr(cv, 'main', lambda argv: calls.append(argv) or 0)
-    args = cli.build_parser().parse_args(['verify-cross-validation', '--devices', '0,1',
-        '--out', 'evidence', '--require-backend', 'hip', '--require-installed'])
-    assert args.func(args) == 0
-    assert calls == [['--devices', '0,1', '--out', 'evidence',
-                      '--require-backend', 'hip', '--require-installed']]
-
-
-def test_cross_validation_compare_is_read_only(monkeypatch):
-    from mojolearn import _verify_parallel_cv as cv
-    calls = []
-    monkeypatch.setattr(cv, 'main', lambda argv: calls.append(argv) or 1)
-    args = cli.build_parser().parse_args(['verify-cross-validation', '--compare', 'a', 'b'])
-    assert args.func(args) == 1
-    assert calls == [['--compare', 'a', 'b']]
+@pytest.mark.parametrize("command", ["verify-distributed-program", "verify-partitioned-program"])
+def test_single_device_program_commands_take_no_device_list(command):
+    with pytest.raises(SystemExit) as exc:
+        cli.build_parser().parse_args([command, "--devices", "0,1", "--output", "r.json"])
+    assert exc.value.code == 2
+    args = cli.build_parser().parse_args([command, "--output", "r.json"])
+    assert not hasattr(args, "devices")

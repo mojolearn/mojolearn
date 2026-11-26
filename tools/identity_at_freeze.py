@@ -47,7 +47,9 @@ TABLE_PATH = "python/mojolearn/verify_reference/table.json"
 #: bench/results/identity_break/ is where the column records lived before 2026-11-25 (verification/README.md): a diff
 #: across that move, or from an older freeze, names them there.
 RECORD_OUTPUTS = (TABLE_PATH, "verification/records/identity/", "bench/results/identity_break/",
-                  "bench/results/reference_admissions/")
+                  "bench/results/reference_admissions/",
+                  # the in-repo evidence of each run (tools/verification_evidence.py), committed beside the admission
+                  "verification/latest/")
 #: The harness every column runs: a change here invalidates the table rows of every lane (their
 #: lane_admission harness_sha256 no longer matches), so every lane of the column is owed.
 HARNESS_PATHS = ("tools/identity_break.py", "tools/identity_lanes/")

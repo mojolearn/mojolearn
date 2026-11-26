@@ -140,16 +140,19 @@ def expanded_checks(run, python, work, output, *, vendor, scope, devices=None):
             '--compare', str(output / 'loaded-lm-cpu-capture.json'),
             str(output / 'loaded-lm-gpu-capture.json')], work)
     if devices:
-        run('distributed', [python, '-m', 'mojolearn', 'verify-distributed',
+        # the two-GPU checks are not verify commands (Andrew, 2026-11-26): their modules run directly
+        run('distributed', [python, '-m', 'mojolearn._verify_distributed',
             '--devices', ','.join(map(str, devices)), '--require-installed',
             '--out', str(output / 'distributed-capture.json')], work)
-        run('cross-validation', [python, '-m', 'mojolearn', 'verify-cross-validation',
+        run('cross-validation', [python, '-m', 'mojolearn._verify_parallel_cv',
             '--devices', ','.join(map(str, devices)), '--require-backend', vendor, '--require-installed',
             '--out', str(output / 'cross-validation')], work)
         report['cross_validation'] = 'NUMERICS_AND_PLACEMENT_CHECKED_EXECUTION_TRACE_OWED'
         for name, selected in [('split', devices), ('reversed', tuple(reversed(devices)))]:
             path = output / ('loaded-lm-' + name + '-capture.json')
-            run('loaded-lm-' + name, [python, '-m', 'mojolearn', 'verify-causal-lm',
+            # the layer-to-GPU split is not a verify option (Andrew, 2026-11-26: verify is one GPU only); the
+            # capture module's own entry point keeps it
+            run('loaded-lm-' + name, [python, '-m', 'mojolearn._verify_causal_lm',
                 '--device', 'gpu', '--formats', 'float32', 'bfloat16', 'int8',
                 '--layer-devices', *map(str, selected), '--output', str(path)], work)
             run('loaded-lm-' + name + '-compare', [python, '-m', 'mojolearn', 'verify-causal-lm',

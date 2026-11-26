@@ -38,13 +38,8 @@ def test_requires_an_explicit_action():
         cli.build_parser().parse_args(['verify-causal-lm'])
 
 
-def test_distributed_capture_routes_explicit_layer_map(tmp_path, monkeypatch):
-    calls = []
-    def capture(device, formats, **kwargs):
-        calls.append((device, kwargs))
-        return {'status': 'CAPTURED_UNQUALIFIED'}
-    monkeypatch.setattr(proof, 'capture', capture)
-    args = cli.build_parser().parse_args(['verify-causal-lm', '--device', 'gpu',
-        '--layer-devices', '1', '0', '--output', str(tmp_path/'distributed.json')])
-    assert args.func(args) == 0
-    assert calls == [('gpu', {'layer_devices': [1, 0]})]
+def test_the_layer_to_gpu_split_is_not_a_verify_option(tmp_path):
+    # verify is one GPU only (Andrew, 2026-11-26); `python -m mojolearn._verify_causal_lm --layer-devices` keeps it
+    with pytest.raises(SystemExit):
+        cli.build_parser().parse_args(['verify-causal-lm', '--device', 'gpu',
+            '--layer-devices', '1', '0', '--output', str(tmp_path/'distributed.json')])

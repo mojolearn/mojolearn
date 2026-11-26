@@ -786,6 +786,7 @@ class IdentityOnWheels:
         table.write_bytes(subprocess.run(["git", "-C", str(self.src), "show", "%s:%s" % (commit, TABLE)],
                                          capture_output=True, check=True).stdout)
         receipts = self.repack(table)
+        self.commit_evidence()
         doc = dict(source_commit=self.commit, commit=commit, branch="ref/" + self.commit[:12], recorded=len(dirs),
                    table_sha256=sha256(table), repacked=receipts, at=dt.datetime.now(dt.timezone.utc).isoformat(),
                    soft_failures=self.soft_failures())
@@ -797,6 +798,32 @@ class IdentityOnWheels:
         os.environ[REFERENCE_ENV] = "%s:%s" % (self.commit, commit)
         return "admitted %d record dir(s) at %s (ref/%s); repacked %s" % (
             len(dirs), commit[:12], self.commit[:12], ", ".join(sorted(receipts)))
+
+    def evidence_roots(self):
+        """Every fetched results dir of this release's one run: the gates' outs, the Apple column, the CPU artifacts."""
+        roots = []
+        for vendor in ("nvidia", "amd"):
+            try:
+                roots.append(self.gate_out(vendor))
+            except Exception:   # no candidate wheels: nothing recorded there
+                pass
+        return [r for r in roots + [self.apple_identity_out(), self.cpu_out() / "artifacts"] if Path(r).is_dir()]
+
+    def commit_evidence(self):
+        """THE IN-REPO EVIDENCE (verify-complete, Andrew 2026-11-26): every staged evidence part of the fetched
+        columns written into verification/latest/<column>/ of the admission tree (each column replaced whole by a
+        new commit's parts), committed and pushed on ref/<commit12> beside the admission. A human reads it at
+        `git show ref/<commit12>:verification/latest/<column>/MANIFEST.json`. The admission commit is unchanged
+        (verification/latest/ is a record output, identity_at_freeze.RECORD_OUTPUTS)."""
+        import verification_evidence
+        tree = self.identity_dir() / "admit-tree"
+        branch = "ref/" + self.commit[:12]
+        columns = verification_evidence.install(self.evidence_roots(), tree=tree, commit=True,
+                                                say=lambda m: self.say("  " + m))
+        if columns:
+            self.must(["git", "-C", str(tree), "push", "-q", "origin", "%s:%s" % (branch, branch)],
+                      what="pushing the verification evidence on " + branch, log=self.rel / "identity-evidence-push.log")
+        return columns
 
     def admit_records(self, dirs):
         """tools/admit_identity_columns.sh --build-host over DIRS in an admission tree at the freeze; the commit."""
