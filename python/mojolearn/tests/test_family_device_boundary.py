@@ -226,8 +226,16 @@ _VERIFY_COVERED = {
     ("xl-ridge-classifier-balanced", True), ("xl-logistic-cv-balanced", True), ("xl-isotonic", False),
     ("svgp", False),
 }
+def _takes_weights(cls):
+    # A weighted pair only for an estimator whose fit takes sample_weight (SVGP.fit(X, y) takes none; lane
+    # gs-fix-2: its weighted pair raised TypeError before any device ran).
+    import inspect
+    params = inspect.signature(cls.fit).parameters
+    return "sample_weight" in params or any(p.kind is p.VAR_KEYWORD for p in params.values())
+
+
 _BITS_PAIRS = [(spec, weighted) for spec in CASES for weighted in (False, True)
-               if (spec[0], weighted) not in _VERIFY_COVERED]
+               if (spec[0], weighted) not in _VERIFY_COVERED and (not weighted or _takes_weights(spec[1]))]
 
 
 @two_devices
