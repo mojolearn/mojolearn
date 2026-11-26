@@ -57,7 +57,7 @@ from autograd.model_blocks import LAYER_RECURRENT
 from autograd.model_execution import model_fit_source_native, model_float_words
 from autograd.batch_source import (
     BatchSource, BatchSourceSpec, BS_FIELD_STEPS, BS_FIELD_TARGETS, SOURCE_PART_WORDS, batch_source_open,
-    batch_source_seal, batch_source_fit_words, source_part_load, batch_source_class_counts,
+    batch_source_seal, batch_source_fit_words, source_part_load, batch_source_class_counts, BatchSourcePtr,
     RNN_STREAM_MONITOR_WORDS, RNN_STREAM_POSITION_WORDS,
 )
 from bindings.byte_checkpoint_native_run import byte_file_write, ByteCheckpointWriteFailure
@@ -235,9 +235,12 @@ def _seq_fit[E: Exec](
         0, 0, Int(run.params.unsafe_ptr()), Int(run.curve.unsafe_ptr()), Int(run.m.unsafe_ptr()),
         Int(run.v.unsafe_ptr()), Int(run.state.unsafe_ptr()), Int(previous.unsafe_ptr()) if resume else 0,
     ]
-    var words = batch_source_fit_words(_spec(root, 0, 0), steps)
-    run.n_iter = model_fit_source_native(ex, addrs, prog, ip, fp, root, words, Int(run.position.unsafe_ptr()))
+    # the source a door keeps on the handle (here opened for the call at the handle's (0, 0)), by address
+    var src = batch_source_open(_spec(root, 0, 0))
+    var words = batch_source_fit_words(BatchSourcePtr(unsafe_from_address=Int(UnsafePointer(to=src))), steps)
+    run.n_iter = model_fit_source_native(ex, addrs, prog, ip, fp, words, Int(run.position.unsafe_ptr()))
     ex.sync()
+    src.close()
     _ = previous^
 
 
@@ -295,10 +298,12 @@ def _seq_fit_validated[E: Exec](
     var casts: List[CastIn] = [CastIn.f32_c(0, 1, 1), CastIn.f32_c(0, 1, 1),
                                CastIn.f32_c(Int(vx.unsafe_ptr()), 3, _T * _F),
                                CastIn.f32_c(Int(vy.unsafe_ptr()), 3, _W), CastIn.f32_c(0, 1, 1)]
-    var words = batch_source_fit_words(_spec(root, 0, 0), 0)
-    run.n_iter = model_fit_source_native(ex, addrs, prog, ip, fp, root, words, Int(run.position.unsafe_ptr()),
+    var src = batch_source_open(_spec(root, 0, 0))
+    var words = batch_source_fit_words(BatchSourcePtr(unsafe_from_address=Int(UnsafePointer(to=src))), 0)
+    run.n_iter = model_fit_source_native(ex, addrs, prog, ip, fp, words, Int(run.position.unsafe_ptr()),
                                          0, 0, Optional[List[CastIn]](casts^))
     ex.sync()
+    src.close()
     _ = vx^
     _ = vy^
     _ = vl^
