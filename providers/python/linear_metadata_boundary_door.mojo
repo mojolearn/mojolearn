@@ -103,6 +103,19 @@ def classical_set_params(model: PythonObject, params: PythonObject, ridge: Bool,
         raise Error("TypeError: parameter keywords must be a native dict")
     if len(params) == 0:
         return model
+    # `set_params(device=...)` ALONE moves a fitted estimator to the other device and keeps its fitted state
+    # (the rule of bindings/full_reset_params_native_door.mojo `_device_move` and of the declared setters; lane
+    # gs-fix-4: the reset below made a GPU-fitted Ridge / LinearRegression unfitted on the CPU,
+    # test_metrics_device_score on the L40S). The fitted state is host coefficients (LinearStateOwner), so it is
+    # the same state on either device. The caller admitted the value in the shared words before this call and
+    # clears the route after it; every other change keeps the reset.
+    var device_name = PythonObject("device")
+    if len(params) == 1 and py_contains(params, device_name):
+        var live = sequential_fields(model)
+        if py_contains(live, device_name):
+            py_setitem(live, device_name, py_get(params, device_name))
+            _ = bump_model_generation(model)
+            return model
     var values = classical_get_params(model, ridge)
     var pairs = _linear_dict_items(params)
     var names = linear_parameter_names(ridge)

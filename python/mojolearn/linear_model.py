@@ -142,7 +142,8 @@ class _ClassicalLinear:
     def set_params(self, **params):
         """Set constructor parameters.
 
-        Any fitted state is dropped, as a new setting invalidates it.
+        Any fitted state is dropped, as a new setting invalidates it; a change
+        of ``device`` alone keeps it and moves the estimator to that device.
 
         Parameters
         ----------
