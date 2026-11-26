@@ -34,13 +34,27 @@ struct _SeqTensorPool(Defaultable, Movable):
     var bufs: List[DeviceBuffer[DType.float32]]
     #: floats per handle (0 marks a free handle)
     var n: List[Int]
+    #: per handle: a kernel may have written its cells (THE COMPUTED WORD, below)
+    var computed: List[Bool]
 
     def __init__(out self):
         self.bufs = List[DeviceBuffer[DType.float32]]()
         self.n = List[Int]()
+        self.computed = List[Bool]()
 
 
-comptime _SEQ_TENSOR_NAME = "MojolearnXSequenceTensorsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceTensorsFastV1"
+# THE COMPUTED WORD (lane gs-fix-4, 2026-11-26). The download made every NaN word canonical (core/nan_canon.mojo:
+# a COMPUTED NaN is a different word on each vendor). It did so for cells no kernel ever wrote as well: a caller's
+# array put by `to_device` and read back came home with its NaN payloads and signaling bits rewritten, where the
+# CPU column (no resident tensors: `to_device` hands the array back) returns the caller's words. So the same call
+# gave different bits on the host column and on a GPU, and every NumPy cast of the read-back array differed
+# (test_sequence_{array,object,scalar_cast,string}_* on the L40S). A handle's cells are host words, moved by byte
+# copies only, until a kernel is handed its device address: `seq_tensor_ptr` / `seq_tensor_view` are the only two
+# ways out of this file, and each sets the word. Upload over the whole tensor clears it, a device copy carries the
+# source's. The download canonicalizes exactly the handles whose word is set: computed results are unchanged,
+# uploaded words are the same bytes on every column. Per call: one Bool store or load, never a pass over cells.
+# (V2: the pool gained a field; an image of another layout must not share the slot.)
+comptime _SEQ_TENSOR_NAME = "MojolearnXSequenceTensorsIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceTensorsFastV2"
 comptime _SEQ_TENSORS = SharedSlot[_SeqTensorPool, _SEQ_TENSOR_NAME]
 
 
@@ -59,6 +73,8 @@ def seq_tensor_ptr(h: Int, n: Int, what: String) raises -> FP:
     if have != n:
         raise Error("seq_tensor: " + what + " holds " + String(have) + " floats, the call needs " + String(n))
     var pool = _SEQ_TENSORS.get_or_create_ptr()
+    # a kernel is handed the cells: they may be computed from here on (THE COMPUTED WORD)
+    pool[].computed[h - 1] = True
     return FP(unsafe_from_address=Int(pool[].bufs[h - 1].unsafe_ptr()))
 
 
@@ -80,10 +96,12 @@ def seq_tensor_alloc(n: Int, zero: Bool) raises -> Int:
     if h < 0:
         pool[].bufs.append(buf^)
         pool[].n.append(n)
+        pool[].computed.append(False)
         h = len(pool[].n) - 1
     else:
         pool[].bufs[h] = buf^
         pool[].n[h] = n
+        pool[].computed[h] = False
     # the fill is ordered before every later use on the one in-order
     # context, so nothing here waits (lane fb15-sync-counts, 2026-11-18: the
     # wait cost one cuStreamSynchronize per tensor: 3 per device LayerNorm
@@ -103,6 +121,7 @@ def seq_tensor_free(h: Int) raises -> Int:
     var pool = _SEQ_TENSORS.get_or_create_ptr()
     pool[].bufs[h - 1] = ctx.enqueue_create_buffer[DType.float32](1)
     pool[].n[h - 1] = 0
+    pool[].computed[h - 1] = False
     return h
 
 
@@ -121,6 +140,9 @@ def seq_tensor_upload(h: Int, a: Int, n: Int) raises -> Int:
     ctx.enqueue_copy(dst_buf=view, src_ptr=FP(unsafe_from_address=a))
     ctx.synchronize()
     _ = view^
+    if n == have:
+        # every cell is the caller's word again (THE COMPUTED WORD)
+        pool[].computed[h - 1] = False
     return n
 
 
@@ -142,8 +164,11 @@ def seq_tensor_download(h: Int, a: Int, n: Int) raises -> Int:
     # where they leave the device: NAN_CANON_ON
     # (default on; core/nan_canon.mojo) makes every NaN word the one
     # canonical word, across the host's cores. Under _OFF, this is nothing.
+    # Only where a kernel may have written the cells (THE COMPUTED WORD): words a caller uploaded and no kernel
+    # was handed come back as the bytes that went up, as on the CPU column.
     comptime if NAN_CANON_ON:
-        _ = nan_canon_f32(FP(unsafe_from_address=a), n)
+        if pool[].computed[h - 1]:
+            _ = nan_canon_f32(FP(unsafe_from_address=a), n)
     return n
 
 
@@ -161,6 +186,8 @@ def seq_tensor_copy(hd: Int, hs: Int, n: Int) raises -> Int:
     ctx.synchronize()
     _ = vd^
     _ = vs^
+    # a byte move: the destination holds computed cells when either side did (THE COMPUTED WORD)
+    pool[].computed[hd - 1] = pool[].computed[hd - 1] or pool[].computed[hs - 1]
     return n
 
 
