@@ -492,26 +492,6 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 - Order: all code in, one compile, (measure, fix, measure again only when Andrew asked for it), freeze, the one
   cross-vendor verification, publish. Measuring the published wheel happens when Andrew asks.
 
-### Fix everything first, then one compile, then one measurement (Andrew, 2026-11-13: "fix fix fix")
-
-- A measurement is taken only when nothing known is left to fix. Before any box is rented or any GitHub build is
-  started for measurement, the orchestrator lists every open fix (FOLLOWUPS, lane reports, audit findings, owed
-  deletions) and either lands it in the same integration branch or writes, beside the list, why it cannot be
-  known without the measurement. A fix that lands within the hour after a measurement starts is evidence the
-  list was not read.
-- Work moves in waves: fix wave (every lane the findings call for, at once) -> one integration branch -> one
-  GitHub build -> one measurement on NVIDIA and AMD together -> read every flag -> the next fix wave. Never a
-  box run for one lane, one row or one family; never a second measurement of the same sha for rows that a later
-  sha changes. Between waves the boxes come down.
-- The only measurement that may run with known fixes outstanding is a discovery screen whose purpose is to find
-  unknown regressions (the full-board run against best-ever), and only when the outstanding fixes do not touch
-  the rows it is for; its result opens the next fix wave, not a release decision.
-- Owed A/B arms are built and timed with the wave's sha, never a sha behind it, unless the switch they decide is
-  untouched by the later sha (say so in the owed row).
-- A "measurement build" (`tools/release.py candidate`) is wheels built from a commit to measure them. It is NOT a
-  release candidate: it never touches main, tags or PyPI, and no release happens until everything is fixed and
-  measured clean (Andrew, 2026-11-09).
-
 ### Verify once, before the release, at the very end (Andrew, 2026-11-05)
 
 - Verification happens once, before the release: freeze the source, run one global verify of every lane on every
@@ -615,6 +595,8 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   laptop per round. The Mac compiles once, at the release, for the Apple wheel and the Apple column of the one
   verification. Per integration the checks are: the GitHub build, the box's start-up smoke, the measurement.
   No identity verify before the release's one verification.
+- A "measurement build" (`tools/release.py candidate`) is wheels built from a commit. It is NOT a release
+  candidate: it never touches main, tags or PyPI (Andrew, 2026-11-09).
 - Mac compiles (the release's Apple build) go through the slot semaphore: `bash tools/compile_slot.sh <command>`.
   The slot count and the laptop's one-compiler-worker rule live in that script and only there.
 - For a development repair, build the smallest affected groups (`tools/development_build.py`,
@@ -812,29 +794,9 @@ them for you.
 Each entry says what it overrides and is removed whole when it ends. The standing rules in parts 1 to 7 are not edited
 to match a temporary direction, and no agent treats one as permanent or extends it to other work.
 
-### TEMPORARY: measure on NVIDIA only, small board first (Andrew, 2026-11-14; restated 2026-11-15)
-
-Ends when Andrew says. It is not the product direction: AMD and Apple remain in the contract and return to measurement.
-
-- Until Andrew says otherwise, measurement builds are timed on the NVIDIA L40S only: no MI300X leg, no AMD rent, no
-  Apple timing, no verify at the end of a measurement. The cross-vendor verification happens once, at the release.
-- While this campaign runs it overrides every "NVIDIA and AMD" in the measurement and release rules (restated
-  2026-11-15: "forget about AMD for now"): a switch is decided, a measured winner is replaced, a fix wave is measured
-  and an owed A/B arm is timed on the NVIDIA L40S alone. No AMD box is rented and no AMD build is waited on. The
-  two-vendor average, the AMD and Apple timing columns and the vendor-split flag return when Andrew reopens them.
-  Bits across vendors are unaffected: the release's one verification still covers every vendor.
-- ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
-  lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
-  it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
-  tooling fix merges to main on its own. Fix as we go: a defect found while a build or a measurement runs gets its
-  lane at once on the integration branch, and no measurement is repeated for it alone.
-- Carefully, never narrowly: quality is never traded for speed (both arms' quality beside every time; a quality drop
-  is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
-  "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
-
 ### TEMPORARY: we time ourselves against ourselves, on the same pod (Andrew, 2026-11-19; trimmed 2026-11-23)
 
-Ends when Andrew says. It narrows the NVIDIA-only direction above while it runs. Every measurement it describes
+Ends when Andrew says. Every measurement it describes
 happens only when Andrew asks for it ("Measurement is ad hoc").
 
 - A speed verdict (REGRESSION, FASTER, an A/B win or loss) comes ONLY from two of our own wheels timed on the SAME pod
