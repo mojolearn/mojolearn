@@ -14,6 +14,7 @@ import copy
 import hashlib
 import importlib
 import json
+import re
 import os
 import sys
 import types
@@ -147,7 +148,7 @@ def toy_recipe(**outputs):
 
 
 def run_cli(vr, monkeypatch, capsys, recipe_arg, **flags):
-    args = types.SimpleNamespace(recipe=recipe_arg, against=None, record_out=None, self_test=False, json=False)
+    args = types.SimpleNamespace(recipe=recipe_arg, against=None, record_out=None, tamper_test=False, json=False)
     vars(args).update(flags)
     code = vr.cmd_recipe(args)
     return code, capsys.readouterr().out
@@ -358,9 +359,9 @@ def test_self_test_controls_all_pass_on_one_and_two_devices(vr, monkeypatch, cap
     path.write_text(json.dumps(toy_recipe()))
     for vendor in ("cuda", "cpu"):
         vr._parent.vendor = lambda v=vendor: v
-        code, out = run_cli(vr, monkeypatch, capsys, str(path), self_test=True,
+        code, out = run_cli(vr, monkeypatch, capsys, str(path), tamper_test=True,
                             record_out=str(tmp_path / f"{vendor}.record.json"))
-        assert code == vr.EXIT_IDENTICAL and "SELF-TEST PASS: 4 of 4 controls" in out, out
+        assert code == vr.EXIT_IDENTICAL and "TAMPER-TEST PASS: 4 of 4 controls" in out, out
         assert out.count("  PASS  ") == 4
 
 
@@ -369,9 +370,9 @@ def test_self_test_fails_when_the_comparison_cannot_see_a_difference(vr, monkeyp
                                                                      compared=len(entries), outputs=1))
     path = tmp_path / "toy.json"
     path.write_text(json.dumps(toy_recipe()))
-    code, out = run_cli(vr, monkeypatch, capsys, str(path), self_test=True,
+    code, out = run_cli(vr, monkeypatch, capsys, str(path), tamper_test=True,
                         record_out=str(tmp_path / "x.record.json"))
-    assert code == vr.EXIT_DIVERGENT and "FAIL  one-ulp change is DIVERGENT" in out and "SELF-TEST FAIL" in out
+    assert code == vr.EXIT_DIVERGENT and "FAIL  one-ulp change is DIVERGENT" in out and "TAMPER-TEST FAIL" in out
 
 
 def test_a_device_that_cannot_fit_is_not_run_never_identical(vr, monkeypatch, capsys, tmp_path):
@@ -456,9 +457,9 @@ def test_the_self_test_still_passes_its_controls_on_a_nan_answer(vr, monkeypatch
     monkeypatch.setattr(Toy, "predict", lambda self, X: np.full(len(X), np.nan, dtype=np.float32))
     path = tmp_path / "toy.json"
     path.write_text(json.dumps(toy_recipe(predict={"method": "predict", "on": "test"})))
-    code, out = run_cli(vr, monkeypatch, capsys, str(path), self_test=True)
+    code, out = run_cli(vr, monkeypatch, capsys, str(path), tamper_test=True)
     assert code == vr.EXIT_NOT_FINITE, out
-    assert "SELF-TEST PASS: 4 of 4 controls" in out, out
+    assert "TAMPER-TEST PASS: 4 of 4 controls" in out, out
 
 
 def test_a_record_without_counts_is_counted_from_its_values(vr):
@@ -471,3 +472,53 @@ def test_a_record_without_counts_is_counted_from_its_values(vr):
     ok = {"ran": True, "outputs": [dict(name="predict", kind="array", values=vr._encode(finite),
                                         **vr.cb.describe_output(finite))]}
     assert vr.compare_results([("a", ok, None), ("b", copy.deepcopy(ok), None)])["verdict"] == "IDENTICAL"
+
+
+# ---------------------------------------------------------------- the results the user selects (paper 5.4)
+
+def test_fitted_parameters_are_compared_array_by_array(vr, monkeypatch, capsys, tmp_path):
+    path = tmp_path / "toy.json"
+    path.write_text(json.dumps(toy_recipe(parameters=True, predict={"method": "predict", "on": "test"})))
+    code, out = run_cli(vr, monkeypatch, capsys, str(path))
+    assert code == vr.EXIT_IDENTICAL, out
+    record = json.loads((tmp_path / "toy.record.json").read_text())
+    assert [o["name"] for o in record["results"]["gpu"]["outputs"]] == ["param:coef_", "predict"]
+
+
+def test_a_parameter_one_ulp_apart_is_divergent_and_named(vr, monkeypatch, capsys, tmp_path):
+    def fit(self, X, y=None):
+        Toy.fit(self, X, y)
+        if self.device == "gpu":
+            self.coef_[1] = np.nextafter(self.coef_[1], np.inf, dtype=np.float32)
+        return self
+    vr._parent.Toy = type("Toy", (Toy,), {"fit": fit})
+    path = tmp_path / "toy.json"
+    path.write_text(json.dumps(toy_recipe(parameters=["coef_"])))
+    code, out = run_cli(vr, monkeypatch, capsys, str(path))
+    assert code == vr.EXIT_DIVERGENT, out
+    assert "differ in output param:coef_: first differing element at [1]" in out
+
+
+def test_a_parameter_the_model_does_not_have_is_refused_in_words(vr, monkeypatch, capsys, tmp_path):
+    path = tmp_path / "toy.json"
+    path.write_text(json.dumps(toy_recipe(parameters=["weights_"])))
+    code, out = run_cli(vr, monkeypatch, capsys, str(path))
+    assert code == vr.EXIT_REFUSED and "no parameter(s) ['weights_']" in out, out
+
+
+@pytest.mark.parametrize("outputs, words", [
+    (dict(parameters="all"), "outputs.parameters is true"),
+    (dict(parameters=[]), "outputs.parameters is true"),
+    (dict(digest=True, weights=True), "a recipe compares digest, parameters, predict, score"),
+])
+def test_bad_output_selections_are_refused(vr, outputs, words):
+    with pytest.raises(vr.Refused, match=re.escape(words)):
+        vr.check_recipe(toy_recipe(**outputs))
+
+
+def test_recipe_from_a_live_model_selects_parameters(vr):
+    r = vr.recipe(vr._parent.Toy(alpha=2.0), data={"generator": "regression", "args": {"rows": 32, "test_rows": 8}},
+                  parameters=["coef_"])
+    assert r["outputs"]["parameters"] == ["coef_"]
+    assert "parameters" not in vr.recipe(vr._parent.Toy(), data={"generator": "regression",
+                                                                 "args": {"rows": 32}})["outputs"]

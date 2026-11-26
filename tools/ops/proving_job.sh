@@ -25,8 +25,10 @@ VENV="$RES/venv"
 . "$HERE/box_cores_lib.sh"; W=$(alloc_cores)
 fails=0
 step() { # name, command...
-    local n=$1; shift; local t0=$SECONDS
+    local n=$1; shift; local t0=$SECONDS st
+    st=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     "$@" > "$RES/logs/$n.log" 2>&1; local rc=$?
+    printf '%s\t%s\t%s\t%s\t%s\t\n' "$n" "$rc" "$((SECONDS - t0))" "$st" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$RES/steps.tsv"
     if [ $rc = 0 ]; then echo "PROVING $n PASS rc=0 $((SECONDS - t0))s"
     else echo "PROVING $n FAIL rc=$rc $((SECONDS - t0))s: $(grep -v '^\s*$' "$RES/logs/$n.log" | tail -n 2 | tr '\n' ' ' | cut -c1-240)"; fails=$((fails + 1)); fi
 }
@@ -58,5 +60,10 @@ step proving_gpu "$VENV/bin/python" -m pytest tests/proving -q -m gpu -n "$W" -p
 keep_shards proving_gpu
 step feature_proof env FP_VENV="$VENV" MOJOLEARN_RESULTS_DIR="$RES/feature-proof" bash tools/ops/feature_proof_job.sh
 step concurrent_repro bash -c "export PATH=\$PATH:/root/.pixi/bin; pixi run -q mojo run -I . checks/device_context_concurrent_repro.mojo"
+# The in-repo evidence (verify-complete, Andrew 2026-11-26): pass/fail counts and failed test names per pytest step,
+# staged under evidence/<column>/proving; the Mac's fetch (`tools/box_persist.py fetch --tag <tag> --extract
+# --evidence`) writes it into verification/latest/<column>/proving/. PV_COLUMN: nvidia (default) or amd.
+python3 "$REPO/tools/verification_evidence.py" stage --results "$RES" --column "${PV_COLUMN:-nvidia}" --part proving \
+    --out "$RES/evidence/${PV_COLUMN:-nvidia}/proving" || echo "PROVING evidence not staged"
 echo "PROVING done fails=$fails"
 [ $fails = 0 ]

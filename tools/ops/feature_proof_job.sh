@@ -2,7 +2,7 @@
 # tools/ops/feature_proof_job.sh -- FIRST REAL RUN, from the installed candidate wheel on a GPU box, of the user
 # features that so far only compiled (2026-11-21): the `device=` parameter and `model.check(X)` on both devices in one
 # process (Ridge, LinearRegression), `model.digest_` per estimator family, and the verify options
-# `--self-test`, `--check`, `--fit-both`, `--cross-check quick`. Diagnostic tooling: it times nothing and decides no
+# `--tamper-test`, `--check`, `--fit-both`, `--cross-check quick`. Diagnostic tooling: it times nothing and decides no
 # release. It starts with two load steps (every family binary; every GPU/host image pair) and the `device=` boundary
 # test. Each step prints one line `PROOF <name> PASS|FAIL rc=<n> <seconds>s` and keeps its full output in
 # logs/<name>.log; the job exits 1 when any step failed. Steps are independent and short, the GPU is one device, so
@@ -272,11 +272,11 @@ grep -E '^(DEVICE|CHECK|REFUSAL)' "$RES/logs/device-and-check-logistic.log" | cu
 step digest-families "$PY" -I "$W/digest.py" "$REC"
 grep -E '^DIGEST' "$RES/logs/digest-families.log" | cut -c1-300
 
-# 3. verify options: RELEASE ONLY (AGENTS.md hard rule "RELEASE-ONLY WORK", 2026-11-26). The self-test compares
+# 3. verify options: RELEASE ONLY (AGENTS.md hard rule "RELEASE-ONLY WORK", 2026-11-26). The tamper test compares
 #    with the shipped references, the cross-check compares the devices' bits and the recipes record columns, so a
 #    round (proving_job.sh) skips them; the release passes FP_RELEASE=1.
 if [ "${FP_RELEASE:-0}" = 1 ]; then
-step verify-self-test "$PY" -I -m mojolearn verify --self-test
+step verify-tamper-test "$PY" -I -m mojolearn verify --tamper-test
 step verify-cross-check-quick "$PY" -I -m mojolearn verify --cross-check quick
 cat > "$W/save.py" <<'EOF'
 import sys, numpy as np, mojolearn as ml
@@ -290,15 +290,15 @@ step verify-check-save "$PY" -I "$W/save.py" "$W"
 step verify-check "$PY" -I -m mojolearn verify --check "$W/rfc.model" --estimator RandomForestClassifier --inputs "$W/cx.npy"
 step verify-fit-both "$PY" -I -m mojolearn verify --fit-both --estimator Ridge --fit-params '{"alpha": 1.0}' --fit-inputs "$REC/X.npy" --fit-targets "$REC/y.npy" --inputs "$REC/X.npy"
 # a user's ALGORITHM (verify --recipe): every shipped recipe fitted from scratch in a fresh process per device,
-# compared, recorded for a second machine (FP_REPLAY compares with --against), with the recipe self-test
+# compared, recorded for a second machine (FP_REPLAY compares with --against), with the recipe tamper test
 mkdir -p "$REC/recipes"
 for n in ridge logistic kmeans gbdt-categorical seq-transformer seq-mamba2 seq-recurrent seq-conv1d-residual seq-optim-lamb seq-optim-rmsprop; do
-    step "verify-recipe-$n" "$PY" -I -m mojolearn verify --recipe "example:$n" --self-test \
+    step "verify-recipe-$n" "$PY" -I -m mojolearn verify --recipe "example:$n" --tamper-test \
         --record-out "$REC/recipes/example-$n.record.json"
 done
 
 else
-    echo "PROOF verify-options SKIP release only (FP_RELEASE=1 runs --self-test, --cross-check, --check, --fit-both, --recipe)"
+    echo "PROOF verify-options SKIP release only (FP_RELEASE=1 runs --tamper-test, --cross-check, --check, --fit-both, --recipe)"
 fi
 
 echo "PROOF SUMMARY failed=$fails digests=$REC"

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from mojolearn._parallel_cv_witness import compare_records, read_records
+from parallel_cv_witness import compare_records, read_records
 
 
 def records(workers=2):
@@ -74,7 +74,7 @@ def test_scorer_retains_model_and_output_witnesses_or_fails(tmp_path, monkeypatc
     import numpy as np
     import mojolearn as ml
     from mojolearn import _backend, _gpu_witness
-    from mojolearn._parallel_cv_witness import score_with_witness, array_digest
+    from parallel_cv_witness import score_with_witness, array_digest
 
     values = np.asarray([.25, -.5], dtype='<f4')
     binding_path = tmp_path / 'fake.so'
@@ -113,7 +113,7 @@ def test_scorer_retains_model_and_output_witnesses_or_fails(tmp_path, monkeypatc
 def test_completed_native_witness_retains_actual_bytes_after_operation(tmp_path, fault):
     import hashlib
     import numpy as np
-    from mojolearn._parallel_cv_witness import retain_completed, array_digest
+    from parallel_cv_witness import retain_completed, array_digest
 
     values = np.array([.25, -.5], dtype='<f4')
     archive = b'actual bytes returned by the isolated native-witness fixture'

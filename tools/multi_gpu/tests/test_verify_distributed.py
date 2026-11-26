@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 import copy
 import pytest
-from mojolearn import _verify_distributed as v
+import verify_distributed as v
 
 
 def receipt():
     value = dict(protocol=v.PROTOCOL, status='NUMERICAL_MATCH_EXECUTION_TRACE_OWED',
                  vendor='cuda', repeats=v.REPEATS, devices=[0,1], cells=[], controls=[],
-                 worker_calls=[], worker_groups=[], source_files=dict.fromkeys(v.PROFILE_FILES,'a'*64),
+                 worker_calls=[], worker_groups=[], source_files=dict.fromkeys(v.PROFILE_FILES,'a'*64), tool_sha256='f'*64,
                  bindings={name:dict(vendor='cuda',sha256='b'*64) for name in
                     ('_mojolearn_arima','_mojolearn_tsa','_mojolearn_gp','_mojolearn_ivf')})
     parts=[dict(shape=[2,3],dtype='<f4',sha256='c'*64)]
@@ -61,7 +61,7 @@ def test_incomplete_or_false_pass_evidence_rejected(fault):
     if fault=='mismatch': b['cells'][0]['match']=False
     if fault=='wrong_devices': b['cells'][0]['devices']=[1]
     if fault=='wrong_operation': b['worker_calls'][0]['operation']='device_inventory'
-    if fault=='source': b['source_files']['_verify_distributed.py']='d'*64
+    if fault=='source': b['source_files']['parallel_ivf.py']='d'*64
     with pytest.raises((ValueError,RuntimeError)):
         v.compare(a,b)
 
@@ -110,10 +110,10 @@ def test_wheel_record_verifies_python_and_native_origin(tmp_path,fault):
             self.hash=SimpleNamespace(mode='sha256',value=base64.urlsafe_b64encode(bytes.fromhex(sha)).decode().rstrip('='))
         def __str__(self): return self.name
     package=tmp_path/'mojolearn'
-    source={'_verify_distributed.py':'a'*64}
+    source={'parallel_ivf.py':'a'*64}
     native={'binding':dict(path=str(package/'cuda'/'native.so'),sha256='b'*64)}
-    dist=SimpleNamespace(files=[Record('mojolearn/_verify_distributed.py','a'*64),Record('mojolearn/cuda/native.so','b'*64)])
-    if fault=='changed_python': source['_verify_distributed.py']='c'*64
+    dist=SimpleNamespace(files=[Record('mojolearn/parallel_ivf.py','a'*64),Record('mojolearn/cuda/native.so','b'*64)])
+    if fault=='changed_python': source['parallel_ivf.py']='c'*64
     if fault=='changed_native': native['binding']['sha256']='c'*64
     if fault=='external_native': native['binding']['path']=str(tmp_path/'external.so')
     if fault=='missing_record': dist.files=[]

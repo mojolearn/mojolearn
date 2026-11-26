@@ -91,8 +91,8 @@ shards). Their two `_OFF` build arms (`MOJOLEARN_MSEL_MEMBER_UNITS_OFF`, `MOJOLE
   test_parallel_model_selection.py test_parallel_public_drivers.py test_parallel_neural_native.py
   test_parallel_neural_admission.py test_parallel_trainers_coverage.py test_byte_checkpoint_native.py
   test_byte_lm_checkpoint_binary.py test_models_coverage.py test_native_parallel_public_boundary.py
-  test_cpu_parallel_rbf_sampler.py test_verify_distributed.py test_numpy_free_features.py test_distributed_ivf.py
-  test_parallel_api_regression.py` (all under python/mojolearn/tests; `test_native_parallel_cv_wire.py:115-118` is
+  test_cpu_parallel_rbf_sampler.py test_numpy_free_features.py test_distributed_ivf.py
+  test_parallel_api_regression.py` (all under python/mojolearn/tests; test_verify_distributed.py moved to tools/multi_gpu/tests/ on 2026-11-26; `test_native_parallel_cv_wire.py:115-118` is
   STALE, owed a rewrite: pools-frame 13.7); `python tools/pool_spawn_cost_probe.py`
 - fx-hostgbdt: `python/mojolearn/tests/test_host_tree_lifecycle_native.py python/mojolearn/tests/test_gbdt_host_ctr.py`
 - ctr-default: `python/mojolearn/tests/test_gbdt_catboost_defaults.py`

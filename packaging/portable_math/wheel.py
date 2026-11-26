@@ -44,13 +44,14 @@ FAST_SET = re.compile(r"^mojolearn/(cuda|hip|cuda_native|hip_native|cuda_ptx)/[^
 # These entry points run independent tests; none is imported by estimators.
 NUMPY_ORACLES = {
     "mojolearn/_identity_break.py", "mojolearn/_identity.py",
-    "mojolearn/_verify_all.py", "mojolearn/_verify_distributed.py",
-    "mojolearn/_verify_parallel_cv.py", "mojolearn/_parallel_cv_witness.py",
+    "mojolearn/_verify_all.py",
     # Exact testing controllers registered by the verify-* CLI. Their NumPy
     # imports are lazy fixture/oracle/report work; product paths never call
     # them. Keep exact names: a _verify_* prefix is not a runtime exemption.
     "mojolearn/_verify_distributed_program.py", "mojolearn/_verify_generation.py",
     "mojolearn/_verify_graph.py", "mojolearn/_verify_partitioned_program.py",
+    # `verify --all`'s runner of the commands above, the bundled recipe and the saved-program round trip
+    "mojolearn/_verify_extended.py",
     # The installed public-API verifier was split into these exact controllers.
     # They construct reference fixtures/assertions, never product results.
     "mojolearn/_verify_api.py", "mojolearn/_verify_api_estimators.py",

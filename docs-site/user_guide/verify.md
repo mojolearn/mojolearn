@@ -105,7 +105,7 @@ Recorded hashes belong to one release. Verify against the hashes shipped with th
 ## Show that the verifier can fail
 
 ```sh
-python -m mojolearn verify --self-test
+python -m mojolearn verify --tamper-test
 ```
 
 This runs one lane twice through the ordinary comparison: once unchanged, and once with every value of
@@ -140,8 +140,28 @@ with `Program.save`, `Sequential.save_checkpoint` or `Sequential.export`, copy t
 python -m mojolearn verify-model model.ckpt
 ```
 
-Every output is reported as `MATCH` or `DIFFER`. See
+Every output is reported as `MATCH` or `DIFFER`. On a GPU machine, `--device cpu` runs the saved model
+on this machine's CPU against the report the GPU wrote. See
 [Verify a model on another GPU](autograd.md#verify-a-model-on-another-gpu).
+
+To check how a model is made, not only a fitted one, write a recipe and fit it from scratch on every
+device of this machine:
+
+```python
+import mojolearn
+recipe = mojolearn.recipe(model, data={"generator": "sequence", "args": {"rows": 64, "test_rows": 16,
+                                                                          "shape": [8, 4]}},
+                          fit_params={"epochs": 2, "batch_size": 16, "seed": 0},
+                          parameters=True, path="r.json")
+```
+
+```sh
+python -m mojolearn verify --recipe r.json                               # CPU and GPU here; writes r.record.json
+python -m mojolearn verify --recipe r.json --against other.record.json   # a record from another machine
+```
+
+The recipe selects what is compared: the fitted parameters (`parameters`), `digest_`, the predictions
+and the score. A difference names the output and its first differing value.
 
 ## Sharing a report
 

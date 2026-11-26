@@ -269,6 +269,8 @@ mojolearn = [
     "verify_reference/*.json",
     "verify_reference/models/*",
     "verify_reference/ctr_models/*.npz",
+    # the single-device verify commands' reference reports (_verify_extended.py), when admitted
+    "verify_reference/extended/*.json",
     "cuda/*.so", "cuda/identical/*.so", "cuda/.libs/*",
     "cuda/sm_*/*.so", "cuda/sm_*/identical/*.so", "cuda/sm_*/.libs/*",
     "hip/*.so", "hip/identical/*.so", "hip/.libs/*",

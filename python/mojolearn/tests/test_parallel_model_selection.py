@@ -236,7 +236,11 @@ def test_estimator_hash_hooks_refused_before_constructor_container_clone(monkeyp
 @pytest.mark.parametrize('classifier', [False, True])
 def test_native_completed_capture_retains_model_prediction_and_replay_bytes(data, tmp_path, classifier):
     import io
-    from mojolearn._parallel_cv_witness import retain_completed
+    import sys
+    from pathlib import Path
+    # the CV witness is a multi-GPU tool (tools/multi_gpu/), not a wheel module, since 2026-11-26
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'tools' / 'multi_gpu'))
+    from parallel_cv_witness import retain_completed
     x, y = data
     if classifier:
         y = (x[:, 0] > x[:, 1]).astype('i4')

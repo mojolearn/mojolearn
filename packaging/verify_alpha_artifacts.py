@@ -49,6 +49,17 @@ DISTRIBUTIONS = {'mojolearn': ('mojolearn', None),
                     for row in GPU_PLUGINS.distribution_rows(include_experimental=True)}}
 
 
+#: THE WHEEL SHIPS CPU AND SINGLE-GPU CODE ONLY (Andrew, 2026-11-26). The multi-GPU verifiers moved to
+#: tools/multi_gpu/; a wheel that packages one of them, or any module of that family, is refused.
+MULTI_GPU_ONLY = re.compile(r'^mojolearn/(_verify_distributed|_verify_parallel_cv|_parallel_cv_witness'
+                            r'|_verify_multi_gpu[^/]*|_multi_gpu_verify[^/]*)\.py$')
+
+
+def multi_gpu_members(files):
+    """The members of a wheel that are multi-GPU-only verify modules (they must be none)."""
+    return sorted(name for name in files if MULTI_GPU_ONLY.match(name))
+
+
 def released_version(source_root=None):
     """The version SOURCE_ROOT's _version.py declares; this checkout's when no root is given."""
     return release_version(REPO if source_root is None else Path(source_root))
@@ -105,6 +116,9 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
         files = {i.filename for i in infos if not i.is_dir()}
         require({n.split('/')[0] for n in files if '.dist-info/' in n} == {dist[:-1]},
                 'unexpected dist-info directory')
+        require(not multi_gpu_members(files),
+                'multi-GPU verify module packaged (the wheel ships CPU and single-GPU only; it lives in '
+                'tools/multi_gpu/): ' + ', '.join(multi_gpu_members(files)))
 
         def small(name):
             require(name in files and archive.getinfo(name).file_size <= 16 * 1024**2,

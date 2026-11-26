@@ -81,7 +81,7 @@ def _wants_suite(args):
     return bool(getattr(args, "profile", None) or getattr(args, "quick", False)
                 or getattr(args, "lanes", "")
                 or getattr(args, "emit_models", None)
-                or getattr(args, "self_test", False)
+                or getattr(args, "tamper_test", False)
                 or getattr(args, "cross_check", None)
                 or getattr(args, "compare", None)
                 # sealing a document is a pure function over one JSON file, the
@@ -122,6 +122,10 @@ QUICK_FALLBACK_NOTE = ("# no reference card ships with this install; running "
 
 
 def _verify_dispatch(args):
+    if getattr(args, "show_paths", None) is not None:
+        # reads a saved activity record and runs nothing (_verify_paths.py)
+        from . import _verify_paths
+        return _verify_paths.cmd_show_paths(args)
     if getattr(args, "recipe", None):
         # a user's algorithm, fitted from scratch on every device (`--self-test`
         # with it is the recipe's own self-test, not the suite's)
@@ -152,8 +156,7 @@ def _causal_lm_dispatch(args):
     path = Path(args.output)
     if path.exists():
         raise ValueError('capture output already exists; choose a new path to preserve evidence')
-    options = {'layer_devices': args.layer_devices} if args.layer_devices is not None else {}
-    result = proof.capture(args.device, tuple(args.formats), **options)
+    result = proof.capture(args.device, tuple(args.formats))
     with path.open('x') as stream:
         json.dump(result, stream, indent=2)
         stream.write('\n')
@@ -161,38 +164,9 @@ def _causal_lm_dispatch(args):
     return 0 if result['status'] == 'CAPTURED_UNQUALIFIED' else 1
 
 
-def _distributed_dispatch(args):
-    from ._verify_distributed import main as distributed_main
-    if args.compare:
-        argv = ['--compare', *args.compare]
-        if args.devices or args.out or args.require_installed:
-            raise ValueError('--compare cannot be combined with capture options')
-    else:
-        argv = []
-        if args.devices is not None:
-            argv += ['--devices', args.devices]
-        if args.out is not None:
-            argv += ['--out', args.out]
-        if args.require_installed:
-            argv += ['--require-installed']
-    return distributed_main(argv)
-
-
-def _cross_validation_dispatch(args):
-    from ._verify_parallel_cv import main as cv_main
-    if args.compare:
-        if args.devices or args.out or args.require_installed or args.require_backend:
-            raise ValueError('--compare cannot be combined with capture options')
-        argv = ['--compare', *args.compare]
-    else:
-        argv = []
-        for flag, value in (('--devices', args.devices), ('--out', args.out),
-                            ('--require-backend', args.require_backend)):
-            if value is not None:
-                argv += [flag, value]
-        if args.require_installed:
-            argv += ['--require-installed']
-    return cv_main(argv)
+# `verify-distributed` and `verify-cross-validation` (two-GPU checks) were unregistered (Andrew, 2026-11-26: everything
+# verify ships is one GPU only; the wheel ships CPU and single-GPU code only). Their code moved out of the wheel to
+# tools/multi_gpu/verify_distributed.py and verify_parallel_cv.py (with parallel_cv_witness.py and their tests).
 
 
 def build_parser():
@@ -210,28 +184,6 @@ def build_parser():
     )
     sub = parser.add_subparsers(dest="command", metavar="<subcommand>")
 
-    cv = sub.add_parser('verify-cross-validation',
-        help='checkpoint small GPU cross-validation scheduling checks')
-    cv.add_argument('--devices', help='two distinct GPU indices, e.g. 0,1')
-    cv.add_argument('--out', metavar='DIRECTORY', help='new evidence directory')
-    cv.add_argument('--require-installed', action='store_true')
-    cv.add_argument('--require-backend', choices=('cuda', 'hip'))
-    cv.add_argument('--compare', nargs=2, metavar=('LEFT', 'RIGHT'))
-    cv.add_argument('--cpu-threads', type=int, default=1)
-    cv.set_defaults(func=_cross_validation_dispatch)
-
-    distributed = sub.add_parser('verify-distributed',
-        help='checkpoint small two-GPU forecast, classifier and sharded-index checks',
-        description='Numerical and device-placement checks with transport fault controls. '
-                    'Independent GPU execution traces and release qualification remain separate.')
-    distributed.add_argument('--devices', help='two distinct GPU indices, e.g. 0,1')
-    distributed.add_argument('--out', metavar='PATH', help='new checkpoint JSON path')
-    distributed.add_argument('--require-installed', action='store_true',
-                             help='require package and native bytes to match installed wheel RECORD')
-    distributed.add_argument('--compare', nargs=2, metavar=('LEFT', 'RIGHT'))
-    distributed.add_argument('--cpu-threads', type=int, default=1)
-    distributed.set_defaults(func=_distributed_dispatch)
-
     lm = sub.add_parser('verify-causal-lm',
         help='capture tiny loaded-model inference properties or compare two captures',
         description='End-to-end loaded-model logits, stateful decode, batch, reset and reload checks. '
@@ -244,8 +196,6 @@ def build_parser():
     lm.add_argument('--formats', nargs='+', choices=('float32', 'bfloat16', 'int8'),
                     default=['float32', 'bfloat16', 'int8'])
     lm.add_argument('--cpu-threads', type=int, default=1)
-    lm.add_argument('--layer-devices', nargs='+', type=int,
-                    help='experimental GPU layer-owner map, one device index per fixture layer')
     lm.set_defaults(func=_causal_lm_dispatch)
 
     v = sub.add_parser(
@@ -291,10 +241,25 @@ def build_parser():
     scope.add_argument("--all", dest="profile", action="store_const", const="all",
                        help="--classic and --neural together: every lane, the portable models and every probe "
                             "in one process, one report (one JSON, one set of counts, one verdict) and one exit "
-                            "status; the cell workers run both profiles' cells in one parallel sweep")
+                            "status; the cell workers run both profiles' cells in one parallel sweep. It also "
+                            "runs the single-device verify commands, each with its own profile name, counts and "
+                            "verdict: verify-distributed-program and verify-partitioned-program (logical shards "
+                            "and stages on device 0), verify-graph, "
+                            "verify-generation and verify-causal-lm (CPU and GPU captures compared on a GPU "
+                            "install), one bundled recipe (verify-recipe) and one saved program checked with "
+                            "verify-model. A capture with nothing to compare against reads OWED. One device only")
     scope.add_argument("--models-only", dest="models_only", action="store_true",
                        help="check bundled GPU-trained models through the saved-model loader, including "
                             "HostForest and HostGBDT, without training")
+    v.add_argument("--show-paths", dest="show_paths", nargs="?", const="", default=None, metavar="LANE",
+                   help="SEE THE TWO PATHS: read the activity record the last `verify --all` saved (or --from) and "
+                        "show what each side did, running nothing. No LANE: every lane, CPU and GPU counts side by "
+                        "side (device launches, bytes and calls to and from the device, host thread splits and "
+                        "tasks) with each side's output hash. With LANE: that lane's CPU steps and GPU steps in "
+                        "full, then both hashes (a DIVERGENT lane shows the two that differ)")
+    v.add_argument("--from", dest="paths_from", metavar="PATH", default=None,
+                   help="with --show-paths: a saved what-ran record or a verify --all JSON report, for example "
+                        "one made on another machine")
     v.add_argument("--cpu-threads", type=int, default=1, metavar="N",
                    help="thread setting for supported CPU libraries (default: 1); capped below the available logical CPU count where possible; not a hard CPU or memory limit")
     v.add_argument("--quick", action="store_true",
@@ -319,16 +284,14 @@ def build_parser():
                    help="run every cell in its own process (slower; for diagnosis)")
     v.add_argument("--no-models", dest="no_models", action="store_true",
                    help="skip the portable models")
-    v.add_argument("--self-test", dest="self_test", action="store_true",
-                   help="SHOW THAT THIS VERIFIER CAN FAIL. Runs one lane twice "
-                        "through the ordinary comparison, once untouched and "
-                        "once with every value of the input's first column "
-                        "moved up by one ULP, and requires the first to read "
-                        "IDENTICAL and the second DIVERGENT. The perturbation "
-                        "is real arithmetic at run time, not a printed verdict, "
-                        "and it needs no sabotage build. Exit 0 only if the "
-                        "comparison both reproduced the reference and caught "
-                        "the wrong answer")
+    # `--self-test` was renamed `--tamper-test` (Andrew, 2026-11-26), no alias.
+    v.add_argument("--tamper-test", dest="tamper_test", action="store_true",
+                   help="TAMPER WITH ONE INPUT AND SHOW VERIFY CATCHES IT: runs one lane twice, once untouched "
+                        "and once with the first input column moved up by one ULP; passes only if the first "
+                        "reads IDENTICAL and the second DIVERGENT. The perturbation is real arithmetic at run "
+                        "time, not a printed verdict, and it needs no sabotage build. With --recipe: the "
+                        "recipe's own tamper controls (one ULP moved on each device, a fast recipe, a data file "
+                        "with another hash and a record of another version must each be caught)")
     v.add_argument("--cross-check", dest="cross_check", nargs="?", const="default",
                    choices=("quick", "default", "all"), default=None,
                    help="COMPARE YOUR GPU AGAINST YOUR CPU, on this machine. Fits "
@@ -367,7 +330,8 @@ def build_parser():
                         "(mojolearn.recipe(model, ...) writes one) that says how the model is made "
                         "(the estimator and its parameters or the layers of a Sequential, the seed, "
                         "the fit arguments, the data: a built-in generator or a file with its "
-                        "SHA-256) and what to hash (digest_, predictions on stated rows, score), or "
+                        "SHA-256) and what to compare (digest_, the fitted parameters, predictions on "
+                        "stated rows, score), or "
                         "example:NAME for a shipped one. It is fitted from scratch on every device "
                         "of this installation (the CPU, and the GPU when there is one), in this "
                         "process through the model's device=; the report prints IDENTICAL or DIVERGENT with the first differing "

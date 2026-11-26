@@ -224,7 +224,7 @@ python3 tools/wheel_self_test.py <prepared macOS wheel> --out <dir> --python pyt
 ```
 
 It installs the wheel into a fresh venv and runs
-`python -m mojolearn verify --self-test --cpu-threads 3`. Anything but
+`python -m mojolearn verify --tamper-test --cpu-threads 3`. Anything but
 `WHEEL-SELF-TEST PASSED` (receipt `<dir>/results.json`, keyed to the wheel's
 sha256) blocks publication: the bundled reference table does not reproduce
 the wheel's own bits. Regenerate it (below) and rebuild.
@@ -246,7 +246,7 @@ the table's `3d1d7c30b12d9872`). In order, from one pushed commit:
    job has a time limit).
 2. On this Mac: `tools/admit_identity_columns.sh --build-host <outdir>...`
    places the records under `bench/results/identity_break/<date>-<REF_TAG>/` (REF_TAG, e.g. 0836),
-   regenerates the table, and runs `verify --self-test` and `verify --coverage`
+   regenerates the table, and runs `verify --tamper-test` and `verify --coverage`
    against it. Commit and push.
 3. On one GPU box, at that pushed commit:
    `tools/record_identity_column.sh <gpu-label> <outdir> --models`; then here

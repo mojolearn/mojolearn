@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from mojolearn._verify_parallel_cv import PROFILE_FILES, source_identity
+from verify_parallel_cv import PROFILE_FILES, source_identity
 
 
 class SourceIdentityTests(unittest.TestCase):

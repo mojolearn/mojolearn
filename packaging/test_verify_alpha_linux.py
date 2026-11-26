@@ -429,3 +429,20 @@ class SplitLinuxTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class MultiGpuMemberTests(unittest.TestCase):
+    """The wheel ships CPU and single-GPU code only (2026-11-26): a multi-GPU verify module is refused."""
+
+    def test_multi_gpu_verify_modules_are_named(self):
+        files = {'mojolearn/_verify_distributed.py', 'mojolearn/_verify_parallel_cv.py',
+                 'mojolearn/_parallel_cv_witness.py', 'mojolearn/_verify_distributed_program.py',
+                 'mojolearn/_verify_graph.py', 'mojolearn/parallel_ivf.py'}
+        self.assertEqual(gate.multi_gpu_members(files), ['mojolearn/_parallel_cv_witness.py',
+                                                         'mojolearn/_verify_distributed.py',
+                                                         'mojolearn/_verify_parallel_cv.py'])
+
+    def test_the_source_package_holds_none(self):
+        package = Path(gate.REPO) / 'python' / 'mojolearn'
+        files = {'mojolearn/' + str(p.relative_to(package)) for p in package.rglob('*.py')}
+        self.assertEqual(gate.multi_gpu_members(files), [])

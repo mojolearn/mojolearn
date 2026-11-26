@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Installed test controller for physical model/tensor/pipeline execution.
+"""Installed test controller for model/tensor/pipeline execution on ONE device.
 
-No product path imports this verifier. Oracles and data preparation are test
-code, outside every audited native public operation.
+Every stage and tensor shard is logical, on device 0: verify is one GPU only
+(Andrew, 2026-11-26), so no physical multi-GPU case, option or PENDING state
+ships here. No product path imports this verifier. Oracles and data
+preparation are test code, outside every audited native public operation.
 """
 from __future__ import annotations
 import hashlib
@@ -24,15 +26,19 @@ def _digest(state):
     return h.hexdigest()
 
 
-def verify(devices=(0,), expected=None):
+#: the one device every case runs on
+DEVICES = (0,)
+
+
+def verify(expected=None):
     import numpy as np
     from functools import partial
     from . import ops
     from ._verify_model import _install
     from ._verify_native_runtime import audited, audited_context
+    devices = DEVICES
     report = {"format": FORMAT, "install": _install("identical"), "status": "FAIL",
-              "devices_requested": list(devices), "cases": [], "runtime_audits": [],
-              "physical_multi_gpu": len(devices) > 1}
+              "device": devices[0], "cases": [], "runtime_audits": []}
     native = partial(audited, report["runtime_audits"])
     opened = partial(audited_context, report["runtime_audits"])
 
@@ -45,7 +51,7 @@ def verify(devices=(0,), expected=None):
             w = s.tensor(np.zeros((1, 4), np.float32))
             p = s.capture([a], [s.matmul(a, w)])
             opt = s.optimizer("sgd", lr=.125)
-            with opened("analytic.open", p.partition, devices, stages=max(2, len(devices)),
+            with opened("analytic.open", p.partition, devices, stages=2,
                         tensor_shards=2, microbatches=3, optimizer=opt) as d:
                 x = np.ones((5, 1), np.float32)
                 y = np.full((5, 4), 2, np.float32)
@@ -59,9 +65,6 @@ def verify(devices=(0,), expected=None):
                 r = native("analytic.residency", d.residency)
                 assert r["partitioned_products"] == 1
                 assert sum(r["parameter_elements_per_rank"]) == 4
-                if len(devices) > 1:
-                    assert max(r["parameter_elements_per_rank"]) < 4
-                    assert len(set(r["parameter_owner_devices"])) == 2
                 report["tensor_residency"] = r
                 report["cases"].append({"name": "tensor_analytic_sgd", "status": "PASS", "digest": _digest(state),
                     "oracle": "Four-column MSE gradient is -1 per weight at X=1,w=0,y=2; SGD lr1/8 gives 1/8."})
@@ -79,7 +82,7 @@ def verify(devices=(0,), expected=None):
                 plain = s.capture([a], [s.matmul(hidden, v)])
                 opt = s.optimizer("adamw", lr=.01, weight_decay=.02,
                                   schedule="step", step_size=2, gamma=.5)
-                stages = max(3, len(devices))
+                stages = 3
                 with opened("pipeline.open", plain.partition, devices, stages=stages, tensor_shards=1,
                             microbatches=3, optimizer=opt) as p:
                     prediction = native("pipeline.run", p.run, x)
@@ -103,49 +106,43 @@ def verify(devices=(0,), expected=None):
                     assert native("resume.residency.loaded", restored.residency)["partitioned_products"] == 2
                     native("resume.fit.restored", restored.fit, x, targets=y, epochs=3, batch_size=4)
                     assert _digest(native("resume.state.restored", restored.state)) == _digest(final)
-                with opened("topology.open", graph.partition, (0,), stages=stages, tensor_shards=2,
-                            microbatches=3, optimizer=opt, seed=41) as single:
-                    native("topology.fit", single.fit, x, targets=y, epochs=5, batch_size=4)
-                    assert _digest(native("topology.state", single.state)) == _digest(final)
+                with opened("replay.open", graph.partition, devices, stages=stages, tensor_shards=2,
+                            microbatches=3, optimizer=opt, seed=41) as again:
+                    native("replay.fit", again.fit, x, targets=y, epochs=5, batch_size=4)
+                    assert _digest(native("replay.state", again.state)) == _digest(final)
                 report["cases"].append({"name": "partition_checkpoint_resume", "status": "PASS", "digest": _digest(final),
-                    "scope": "15 AdamW updates, uneven batches, dropout, shuffle, schedule, tensor slices and changed physical topology."})
-                events = report["operation_intervals"]
-                overlap = [(a["node"], a["microbatch"], a["device"], b["node"], b["microbatch"], b["device"])
-                    for a in events for b in events if a["device"] != b["device"]
-                    and a["microbatch"] != b["microbatch"]
-                    and max(a["start_ns"],b["start_ns"]) < min(a["end_ns"],b["end_ns"])]
-                report["physical_pipeline"] = {"overlapping_operation_pairs": len(overlap),
-                    "devices_observed": sorted(set(e["device"] for e in events)),
-                    "scope": "Native operation intervals include synchronized GPU work; this is not a throughput measurement."}
-                if len(devices) > 1:
-                    assert overlap, "No observed pipeline overlap across physical GPUs"
-                    assert set(e["device"] for e in events) == set(devices)
-                report["cases"].append({"name": "physical_topology_and_pipeline", "status": "PASS" if len(devices)>1 else "PENDING",
-                                        "digest": _digest(final)})
+                    "scope": "15 AdamW updates, uneven batches, dropout, shuffle, schedule and tensor slices; five "
+                             "epochs in one fit equal two, a checkpoint, then three; stages and shards on device 0."})
         if expected is not None:
-            if expected.get("format") != FORMAT:
-                raise ValueError("reference report has the wrong format")
-            wanted = {c["name"]: c["digest"] for c in expected["cases"] if c["status"] == "PASS"}
-            comparisons = []
-            for c in report["cases"]:
-                if c["name"] in wanted:
-                    equal = c["digest"] == wanted[c["name"]]
-                    comparisons.append({"name": c["name"], "status": "MATCH" if equal else "DIFFER"})
-                    assert equal, "cross-install identity mismatch: " + c["name"]
-            if not comparisons:
-                raise ValueError("reference has no comparable passing cases")
-            report["cross_install"] = comparisons
-        report["status"] = "PASS" if len(devices)>1 else "PASS_SINGLE_DEVICE_PENDING_PHYSICAL"
+            report["cross_install"] = comparisons = compare(report, expected)
+            for row in comparisons:
+                assert row["status"] == "MATCH", "cross-install identity mismatch: " + row["name"]
+        report["status"] = "PASS"
     except Exception as exc:
         report["failure"] = {"type": type(exc).__name__, "message": str(exc), "traceback": traceback.format_exc()}
     return report
 
 
+def compare(report, expected):
+    """Each passing case's digest against the same case of `expected` (a report
+    from another install): `[{name, status: MATCH|DIFFER}]`. ValueError when
+    `expected` is not a comparable reference (wrong format, no passing case in
+    common): nothing was compared. One body for `verify-partitioned-program
+    --compare` and `verify --all` (_verify_extended.py)."""
+    if expected.get("format") != FORMAT:
+        raise ValueError("reference report has the wrong format")
+    wanted = {c["name"]: c.get("digest") for c in expected.get("cases", []) if c.get("status") == "PASS"}
+    comparisons = [{"name": case["name"], "status": "MATCH" if case.get("digest") == wanted[case["name"]] else "DIFFER"}
+                   for case in report.get("cases", []) if case.get("status") == "PASS" and case["name"] in wanted]
+    if not comparisons:
+        raise ValueError("reference has no comparable passing cases")
+    return comparisons
+
+
 def command(args):
     try:
-        devices = tuple(map(int, args.devices.split(",")))
         expected = None if args.compare is None else json.loads(pathlib.Path(args.compare).read_text())
-        report = verify(devices, expected)
+        report = verify(expected)
     except Exception as exc:
         report = {"format": FORMAT, "status": "FAIL", "failure": {"type": type(exc).__name__, "message": str(exc)}}
     pathlib.Path(args.output).write_text(json.dumps(report, indent=2)+"\n")
@@ -156,8 +153,8 @@ def command(args):
 
 
 def add_parser(sub):
-    parser = sub.add_parser("verify-partitioned-program", help="verify native model/tensor/pipeline execution")
-    parser.add_argument("--devices", default="0", help="comma-separated physical GPU IDs")
+    parser = sub.add_parser("verify-partitioned-program",
+                            help="verify native model/tensor/pipeline execution (logical stages and shards on one device)")
     parser.add_argument("--compare", help="retained report from another installed vendor/CPU build")
     parser.add_argument("--output", required=True, help="retain complete JSON including native traces and failures")
     parser.set_defaults(func=command)

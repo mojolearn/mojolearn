@@ -11,12 +11,16 @@ import pytest
 
 @pytest.fixture
 def verifier(monkeypatch):
+    # The verifier is a multi-GPU tool (tools/multi_gpu/verify_distributed.py, not in the wheel since 2026-11-26).
+    # A bare `mojolearn` package stub over the source tree lets its `from mojolearn import gpu_plugins` load that one
+    # module without the package's __init__ (no native bindings).
     root = Path(__file__).resolve().parents[1] / 'python/mojolearn'
-    package = ModuleType('record_fixture')
+    package = ModuleType('mojolearn')
     package.__path__ = [str(root)]
-    monkeypatch.setitem(sys.modules, 'record_fixture', package)
+    monkeypatch.setitem(sys.modules, 'mojolearn', package)
+    monkeypatch.delitem(sys.modules, 'mojolearn.gpu_plugins', raising=False)
     spec = importlib.util.spec_from_file_location(
-        'record_fixture._verify_distributed', root / '_verify_distributed.py')
+        'record_fixture_verify_distributed', Path(__file__).resolve().parent / 'multi_gpu' / 'verify_distributed.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -38,10 +42,10 @@ class Record:
 def test_split_wheel_ownership_and_negative_controls(verifier, monkeypatch, tmp_path, fault):
     package = tmp_path / 'mojolearn'
     relative = 'mojolearn/cuda_ptx/sm_80/identical/native.so'
-    core = SimpleNamespace(version='0.8.60', files=[Record('mojolearn/_verify_distributed.py', 'a' * 64)])
+    core = SimpleNamespace(version='0.8.60', files=[Record('mojolearn/parallel_ivf.py', 'a' * 64)])
     payload = SimpleNamespace(version='0.8.60', files=[Record(relative, 'b' * 64)],
                               locate_file=lambda name: tmp_path / name)
-    source = {'_verify_distributed.py': 'a' * 64}
+    source = {'parallel_ivf.py': 'a' * 64}
     native = {'binding': dict(path=str(tmp_path / relative), sha256='b' * 64)}
     calls = []
 
@@ -57,7 +61,7 @@ def test_split_wheel_ownership_and_negative_controls(verifier, monkeypatch, tmp_
     if fault == 'missing-record': payload.files = []
     if fault == 'wrong-version': payload.version = '0.8.59'
     if fault == 'wrong-location': payload.locate_file = lambda name: tmp_path / 'other' / name
-    if fault == 'changed-core': core.files = [Record('mojolearn/_verify_distributed.py', 'c' * 64)]
+    if fault == 'changed-core': core.files = [Record('mojolearn/parallel_ivf.py', 'c' * 64)]
     if fault == 'unknown-architecture': native['binding']['path'] = str(tmp_path / relative.replace('sm_80', 'sm_999'))
     if fault == 'external-native': native['binding']['path'] = str(tmp_path / 'external.so')
     if fault:

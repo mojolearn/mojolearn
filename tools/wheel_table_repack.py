@@ -13,6 +13,9 @@ member is unchanged, so no binding, payload or Python file moved, and writes a r
 (schema mojolearn.wheel-table-repack.v1) naming the input and output wheel digests, the old and new table
 digests and the digest of every native member (.so, .dylib, .metallib, .ptx, .hsaco, .cubin, .bin).
 A wheel without the table (the GPU plugins) is refused: it needs no repack, its bytes ship as built.
+`--member NAME=FILE` (repeatable) replaces one more existing data member the same way: the admitted reference reports
+of the single-device verify commands, `mojolearn/verify_reference/extended/<profile>.json` (tools/
+admit_extended_references.py); a NAME the wheel does not carry is refused, so nothing is ever added.
 Nothing here builds, installs or runs a lane. Tests: tools/test_wheel_table_repack.py.
 """
 import argparse
@@ -45,25 +48,34 @@ def members(path):
         return {i.filename: sha256(z.read(i.filename)) for i in z.infolist() if not i.filename.endswith("/")}
 
 
-def new_record(text, table):
-    """RECORD with only the table's line rewritten; every other line kept byte-for-byte."""
-    out, hit = [], 0
+def new_record(text, table, extra=None):
+    """RECORD with only the replaced members' lines rewritten (the table, and EXTRA {member: bytes}); every other
+    line kept byte-for-byte."""
+    replaced = dict(extra or {}, **{TABLE_MEMBER: table})
+    out, hits = [], {name: 0 for name in replaced}
     for line in text.splitlines(keepends=True):
-        if line.split(",", 1)[0] == TABLE_MEMBER:
+        name = line.split(",", 1)[0]
+        if name in replaced:
             end = "\r\n" if line.endswith("\r\n") else ("\n" if line.endswith("\n") else "")
-            out.append("%s,%s,%d%s" % (TABLE_MEMBER, record_hash(table), len(table), end))
-            hit += 1
+            out.append("%s,%s,%d%s" % (name, record_hash(replaced[name]), len(replaced[name]), end))
+            hits[name] += 1
         else:
             out.append(line)
-    if hit != 1:
-        raise RepackError("RECORD names %s %d time(s), not once" % (TABLE_MEMBER, hit))
+    bad = {n: h for n, h in hits.items() if h != 1}
+    if bad:
+        raise RepackError("RECORD names %s" % ", ".join("%s %d time(s), not once" % kv for kv in sorted(bad.items())))
     return "".join(out)
 
 
-def repack(wheel, table_path, out_dir):
+def repack(wheel, table_path, out_dir, extra_members=None):
     wheel, out_dir = Path(wheel), Path(out_dir)
     table = Path(table_path).read_bytes()
     json.loads(table)   # an unreadable table never ships
+    extra = {name: Path(path).read_bytes() for name, path in (extra_members or {}).items()}
+    for name, data in extra.items():
+        if not name.startswith("mojolearn/verify_reference/") or not name.endswith(".json"):
+            raise RepackError("only verify reference data members are repacked, not %s" % name)
+        json.loads(data)
     out = out_dir / wheel.name
     if out.resolve() == wheel.resolve():
         raise RepackError("the output would overwrite the input wheel; use another --out")
@@ -73,6 +85,10 @@ def repack(wheel, table_path, out_dir):
         names = [i.filename for i in infos]
         if TABLE_MEMBER not in names:
             raise RepackError("%s carries no %s: ship it as built" % (wheel.name, TABLE_MEMBER))
+        missing = sorted(set(extra) - set(names))
+        if missing:
+            raise RepackError("%s carries no %s (a repack replaces members, never adds one)" % (wheel.name,
+                                                                                               ", ".join(missing)))
         records = [n for n in names if n.endswith(".dist-info/RECORD")]
         if len(records) != 1:
             raise RepackError("%s has %d RECORD files" % (wheel.name, len(records)))
@@ -83,8 +99,10 @@ def repack(wheel, table_path, out_dir):
                 data = src.read(info.filename)
                 if info.filename == TABLE_MEMBER:
                     data = table
+                elif info.filename in extra:
+                    data = extra[info.filename]
                 elif info.filename == records[0]:
-                    data = new_record(data.decode(), table).encode()
+                    data = new_record(data.decode(), table, extra).encode()
                 clone = zipfile.ZipInfo(info.filename, date_time=info.date_time)
                 clone.compress_type, clone.external_attr = info.compress_type, info.external_attr
                 clone.create_system, clone.comment, clone.extra = info.create_system, info.comment, info.extra
@@ -92,18 +110,20 @@ def repack(wheel, table_path, out_dir):
         tmp.replace(out)
     before, after = members(wheel), members(out)
     moved = sorted(n for n in set(before) | set(after)
-                   if before.get(n) != after.get(n) and n not in (TABLE_MEMBER, records[0]))
+                   if before.get(n) != after.get(n) and n not in (TABLE_MEMBER, records[0], *extra))
     if moved or set(before) != set(after):
         out.unlink()
-        raise RepackError("a member other than the table and RECORD changed: %s" % ", ".join(moved[:10]))
-    if after[TABLE_MEMBER] != sha256(table):
+        raise RepackError("a member other than the table, the named references and RECORD changed: %s"
+                          % ", ".join(moved[:10]))
+    if after[TABLE_MEMBER] != sha256(table) or any(after[n] != sha256(d) for n, d in extra.items()):
         out.unlink()
-        raise RepackError("the repacked table is not the admitted table")
+        raise RepackError("the repacked table or a reference is not the admitted one")
     return dict(schema=SCHEMA, input=dict(file=wheel.name, path=str(wheel.resolve()), sha256=sha256(wheel.read_bytes())),
                 output=dict(file=out.name, path=str(out), sha256=sha256(out.read_bytes())),
                 table=dict(member=TABLE_MEMBER, old_sha256=sha256(old_table), new_sha256=sha256(table),
                            source=str(Path(table_path).resolve())),
-                unchanged_members=len(before) - 2,
+                references={n: dict(old_sha256=before[n], new_sha256=sha256(d)) for n, d in sorted(extra.items())},
+                unchanged_members=len(before) - 2 - len(extra),
                 native_members={n: d for n, d in sorted(before.items()) if n.endswith(NATIVE)})
 
 
@@ -113,9 +133,11 @@ def main(argv=None):
     ap.add_argument("--table", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--receipt", default="")
+    ap.add_argument("--member", action="append", default=[], metavar="NAME=FILE",
+                    help="also replace this existing verify reference member (repeatable)")
     a = ap.parse_args(argv)
     try:
-        doc = repack(a.wheel, a.table, a.out)
+        doc = repack(a.wheel, a.table, a.out, dict(m.split("=", 1) for m in a.member))
     except (RepackError, OSError, ValueError, zipfile.BadZipFile) as exc:
         print("wheel_table_repack: REFUSED %s" % exc, file=sys.stderr)
         return 1

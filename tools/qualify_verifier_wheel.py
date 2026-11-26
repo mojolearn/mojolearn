@@ -11,6 +11,8 @@ import subprocess
 import tempfile
 import zipfile
 
+#: the tree this runner sits in: the multi-GPU tools (tools/multi_gpu/) are not in the wheel
+ROOT = Path(__file__).resolve().parent.parent
 COMMAND_TIMEOUT_SECONDS = 180  # Keep this standalone shipped runner dependency-free.
 
 
@@ -24,7 +26,7 @@ PLUGIN_DISTRIBUTIONS = {name.replace("-", "_"): name for name in (
 def _self_test_sides(doc):
     """{side: row} of the sides a v2 self-test ran (2026-11-24: each side is
     nudged on its own; a side this installation lacks reads ran=False)."""
-    assert doc.get("format") == "mojolearn.verify-self-test.v2", doc.get("format")
+    assert doc.get("format") == "mojolearn.verify-tamper-test.v1", doc.get("format")
     return {side: row for side, row in doc["sides"].items() if row.get("ran")}
 
 
@@ -140,16 +142,19 @@ def expanded_checks(run, python, work, output, *, vendor, scope, devices=None):
             '--compare', str(output / 'loaded-lm-cpu-capture.json'),
             str(output / 'loaded-lm-gpu-capture.json')], work)
     if devices:
-        run('distributed', [python, '-m', 'mojolearn', 'verify-distributed',
+        # the two-GPU checks are not verify commands and not in the wheel (Andrew, 2026-11-26): the multi-GPU tools
+        run('distributed', [python, str(ROOT / 'tools' / 'multi_gpu' / 'verify_distributed.py'),
             '--devices', ','.join(map(str, devices)), '--require-installed',
             '--out', str(output / 'distributed-capture.json')], work)
-        run('cross-validation', [python, '-m', 'mojolearn', 'verify-cross-validation',
+        run('cross-validation', [python, str(ROOT / 'tools' / 'multi_gpu' / 'verify_parallel_cv.py'),
             '--devices', ','.join(map(str, devices)), '--require-backend', vendor, '--require-installed',
             '--out', str(output / 'cross-validation')], work)
         report['cross_validation'] = 'NUMERICS_AND_PLACEMENT_CHECKED_EXECUTION_TRACE_OWED'
         for name, selected in [('split', devices), ('reversed', tuple(reversed(devices)))]:
             path = output / ('loaded-lm-' + name + '-capture.json')
-            run('loaded-lm-' + name, [python, '-m', 'mojolearn', 'verify-causal-lm',
+            # the layer-to-GPU split is not a verify option (Andrew, 2026-11-26: verify is one GPU only); the
+            # capture module's own entry point keeps it
+            run('loaded-lm-' + name, [python, '-m', 'mojolearn._verify_causal_lm',
                 '--device', 'gpu', '--formats', 'float32', 'bfloat16', 'int8',
                 '--layer-devices', *map(str, selected), '--output', str(path)], work)
             run('loaded-lm-' + name + '-compare', [python, '-m', 'mojolearn', 'verify-causal-lm',
@@ -279,7 +284,7 @@ def qualify_jobs(run, save, manifest, python, work, output, models, scope, devic
         "coverage": ["--coverage"],
         "models": ["--models-only", "--repeats", "1"],
         "extended": ["--lanes", "knn", "--fixtures", "base", "--repeats", "1", "--batch-checks", "--no-models"],
-        "self-test": ["--self-test"],
+        "self-test": ["--tamper-test"],   # the job key is the release receipts'; the flag is --tamper-test
     }
     if manifest.get("identity_lanes") == IDENTITY_RECORDED_ONCE:
         # ONE EXECUTION OF THE IDENTITY LANES PER DEVICE CLASS (Andrew 2026-11-05, release.py

@@ -157,7 +157,26 @@ python -m mojolearn verify --all       # both profiles in one run and one report
 
 Classic checks include bundled reference hashes, saved-model inference, and,
 on a GPU installation, direct GPU/CPU inference comparisons. Reports name the
-selected profile and every lane it leaves out.
+selected profile and every lane it leaves out. `--all` also runs the
+single-device commands, each with its own verdict: captured-program training
+and partitioned execution on one device, captured graphs, generation, loaded
+language models, one composed-model recipe and one saved program checked with
+`verify-model`. Everything `verify` runs uses one GPU.
+
+The run ends with a short sample of lanes where the CPU and the GPU took
+different paths (kernel launches and copies on one side, host thread splits on
+the other) to the same bits. `python -m mojolearn verify --show-paths [LANE]`
+shows what each side did for every lane, or one lane in full, from the saved
+record, running nothing. `python -m mojolearn verify --tamper-test` moves one
+input by one ULP and shows that verify catches it.
+
+Your own composed model: `verify --recipe r.json` fits it from scratch on the
+CPU and the GPU and compares the results the recipe selects (fitted
+parameters, `digest_`, predictions, score); `--against other.record.json`
+compares with a record from another machine. A saved program carries its
+report (`Program.save` writes `<file>.verify.json`), and
+`python -m mojolearn verify-model <file>` checks each output against it on
+another device.
 
 The advanced `--cross-check quick|default|all` option runs only direct GPU/CPU
 comparisons. Its `default` scope retains the 24-lane diagnostic sample;
@@ -207,11 +226,13 @@ The base install does not require NumPy. See [verification support](docs/VERIFY.
 ```sh
 python -m mojolearn verify          # inference and classical training, base fixture
 python -m mojolearn verify --quick  # representative checks from the same scope
-python -m mojolearn verify --all    # the same scope on all nine fixtures
+python -m mojolearn verify --all    # every lane on all nine fixtures, plus the single-device commands
 ```
 
 `--all` also includes applicable gradient, batch-size, ragged-batch and
-sampler/replay checks. `--quick` keeps its smaller scope.
+sampler/replay checks, and the single-device commands (programs, graphs,
+generation, loaded models, a composed recipe, a saved program).
+`--quick` keeps its smaller scope.
 
 Each part reports its comparison with the recorded references; missing
 references read OWED and inapplicable properties are named explicitly.

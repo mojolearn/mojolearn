@@ -9,7 +9,7 @@ The installed-wheel smoke runs verify's self-test on a CPU runner (tools/ops/whe
 nothing proved on a GPU that the checks still catch a wrong answer (lane fx-coverage-smokes, 2026-11-20). This unit
 runs on the pod's GPU, after the candidate's venv exists (tools/ops/box_job_lib.sh fault_gate):
 
-1. `python -m mojolearn verify --self-test --json` from the candidate's INSTALLED wheel, on the device (the install
+1. `python -m mojolearn verify --tamper-test --json` from the candidate's INSTALLED wheel, on the device (the install
    must report a GPU vendor, not `cpu`). DETECTED when it exits 0 with the untouched input IDENTICAL and the one-ULP
    perturbed input DIVERGENT, and the public API checks agreeing (verify's own `passed`).
 2. The cheap registered sabotage checks of pixi.toml (CHEAP_ARMS; every `check-*-sabotage` task is listed in the
@@ -131,7 +131,7 @@ def self_test(python: str, out: Path) -> dict:
         vendor = (v.stdout.strip().splitlines() or ["?"])[-1] if v.returncode == 0 else f"import failed: {v.stderr[-200:]}"
         start = time.monotonic()
         try:
-            p = subprocess.run([python, "-I", "-m", "mojolearn", "verify", "--self-test", "--json"], cwd=cwd, env=env,
+            p = subprocess.run([python, "-I", "-m", "mojolearn", "verify", "--tamper-test", "--json"], cwd=cwd, env=env,
                                capture_output=True, text=True, timeout=SELFTEST_TIMEOUT)
             rc, stdout, stderr, timed_out = p.returncode, p.stdout, p.stderr, False
         except subprocess.TimeoutExpired as e:
@@ -163,7 +163,7 @@ def self_test(python: str, out: Path) -> dict:
         status = "detected" if (r.get("passed") or all("OWED" in x for x in problems)) else "detected_with_problems"
     else:
         status = "not_detected"
-    return dict(arm="verify-self-test", status=status, rc=rc, vendor=vendor, clean=clean, perturbed=dirty,
+    return dict(arm="verify-tamper-test", status=status, rc=rc, vendor=vendor, clean=clean, perturbed=dirty,
                 problems=r.get("problems", []), seconds=seconds)
 
 
@@ -199,7 +199,7 @@ def summary_line(vendor: str, st: dict, arms: list[dict], mojo: bool) -> str:
     bad = [f"{a['arm'].replace('check-', '')}={a['status']}" for a in arms if a["status"] != "detected"]
     sab = (f"sabotage {det}/{len(arms)} detected" + (f" (NOT: {' '.join(bad)})" if bad else "")) if mojo else \
         "sabotage arms NOT RUN (no Mojo toolchain on this box; not a pass)"
-    line = f"FAULTS {vendor}: self-test {st['status'].upper()} on {st['vendor']}; {sab}"
+    line = f"FAULTS {vendor}: tamper-test {st['status'].upper()} on {st['vendor']}; {sab}"
     return line.replace('"', "'").replace("\\", "/")   # it goes into status.json as a string
 
 
@@ -252,7 +252,7 @@ def main(argv=None) -> int:
                   registered=sorted(tasks), not_run=sorted(set(tasks) - set(chosen)))
     (out / "faults.json").write_text(json.dumps(report, indent=1, sort_keys=True) + "\n")
     rows = [line, "", "| arm | status | rc | seconds | evidence |", "|---|---|---|---|---|",
-            f"| verify --self-test | {st['status']} | {st['rc']} | {st['seconds']} | clean {st['clean']}, "
+            f"| verify --tamper-test | {st['status']} | {st['rc']} | {st['seconds']} | clean {st['clean']}, "
             f"perturbed {st['perturbed']}, vendor {st['vendor']} |"]
     for r in arms:
         rows.append(f"| {r['arm']} | {r['status']} | {r.get('rc', '')} | "

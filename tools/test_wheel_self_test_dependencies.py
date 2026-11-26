@@ -15,7 +15,7 @@ def test_gate_installs_verify_extra_for_exact_local_artifact(tmp_path, monkeypat
     def run(command, **kwargs):
         calls.append(command)
         side = {'ran': True, 'clean': {'state': 'IDENTICAL'}, 'perturbed': {'state': 'DIVERGENT'}}
-        report = json.dumps({'format': 'mojolearn.verify-self-test.v2', 'passed': True,
+        report = json.dumps({'format': 'mojolearn.verify-tamper-test.v1', 'passed': True,
                              'sides': {'cpu': side, 'gpu': {'ran': False, 'reason': 'no GPU'}}})
         return subprocess.CompletedProcess(command, 0, stdout=report, stderr='')
 

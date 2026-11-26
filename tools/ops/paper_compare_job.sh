@@ -49,7 +49,7 @@
 #   install  (CPU, ALL AT ONCE: every arm's venv and the dry run in parallel) one ours-only venv per arm (bench_board --install-only --ours-install-only: our
 #            wheels + scikit-learn + pandas, no opponent stack: the 0.8.66 smoke made a 13 GB venv per shard), each
 #            checked against its wheel manifest and our GPU set once; plus the board's dry run
-#   faults   (once per job, untimed, every flavour, right after the candidate's install) verify --self-test from the
+#   faults   (once per job, untimed, every flavour, right after the candidate's install) verify --tamper-test from the
 #            candidate's wheel and the cheap sabotage checks on this GPU must each DETECT their fault
 #            (box_job_lib.sh fault_gate, tools/ops/gpu_fault_gate.py; FAULTS-<vendor>.txt, status.json `faults`)
 #   smoke    ALL ARMS AT ONCE (not timed): the candidate's paper + owed full-row races on the candidate venv and
@@ -725,7 +725,7 @@ if part all-plan || part all-install || part all-smoke || part all-board || part
         phase_end $rc
     fi
     [ -f "${ARM_MAN[candidate]}" ] || { say "the candidate arm has no wheel manifest (logs/install-all.log)"; exit 6; }
-    fault_gate "${ARM_PY[candidate]}"   # box_job_lib.sh: verify --self-test and the cheap sabotage arms on this GPU, once per job
+    fault_gate "${ARM_PY[candidate]}"   # box_job_lib.sh: verify --tamper-test and the cheap sabotage arms on this GPU, once per job
     CARGS=("${COMMON_ALL[@]}")
     for arm in ${PRIOR_ARMS[@]+"${PRIOR_ARMS[@]}"}; do PRIOR_SMOKE_IDS[$arm]="$PA/race-ids-smoke.txt"; done
     if part all-smoke; then
@@ -941,7 +941,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         phase_end $rc
     fi
     [ -f "${ARM_MAN[candidate]}" ] || { say "the candidate arm has no wheel manifest (logs/install-tg-candidate.log)"; exit 6; }
-    fault_gate "${ARM_PY[candidate]}"   # box_job_lib.sh: verify --self-test and the cheap sabotage arms on this GPU, once per job
+    fault_gate "${ARM_PY[candidate]}"   # box_job_lib.sh: verify --tamper-test and the cheap sabotage arms on this GPU, once per job
     { [ "$LISTED_IDS" = "$TG/race-ids-full.txt" ] && cat "$TG/race-ids-smoke.txt"; cat "$TGO/smoke-ids.txt"; } 2> /dev/null \
         | sort -u > "$TG/smoke-ids-all.txt"
     for arm in ${PRIOR_ARMS[@]+"${PRIOR_ARMS[@]}"}; do PRIOR_SMOKE_IDS[$arm]="$TG/race-ids-smoke.txt"; done
@@ -1292,7 +1292,7 @@ if part install; then
     phase_end $rc
 fi
 [ -f "${ARM_MAN[candidate]}" ] || { say "the candidate arm has no wheel manifest (install failed: logs/install-candidate.log)"; exit 6; }
-fault_gate "${ARM_PY[candidate]}"   # box_job_lib.sh: verify --self-test and the cheap sabotage arms on this GPU, once per job
+fault_gate "${ARM_PY[candidate]}"   # box_job_lib.sh: verify --tamper-test and the cheap sabotage arms on this GPU, once per job
 
 # ---- smoke (parallel shards on the one GPU; not timed) ----------------------------------------------------------
 SMOKE_IDS="$RES/plan/race-ids-smoke-all.txt"
