@@ -1304,13 +1304,14 @@ def test_retired_two_device_flags_are_usage_errors(argv):
 
 def test_flags_route_to_the_suite_or_the_card():
     p = cli.build_parser()
-    for argv in (["verify", "--all"], ["verify", "--quick"], ["verify", "--full"], ["verify", "--lanes", "ols"],
+    for argv in (["verify", "--all"], ["verify", "--classic"], ["verify", "--neural"], ["verify", "--quick"],
+                 ["verify", "--lanes", "ols"], ["verify", "--models-only"],
                  ["verify", "--all", "--json", "--repeats", "2", "--fixtures", "base"]):
         args = p.parse_args(argv)
         assert cli._wants_suite(args), argv
     for argv in (["verify"], ["verify", "--all-stages"], ["verify", "--json"]):
         assert not cli._wants_suite(p.parse_args(argv)), argv
-    args = p.parse_args(["verify", "--quick", "--full"])
+    args = p.parse_args(["verify", "--models-only", "--quick"])
     assert va.cmd_verify_all(args) == va.EXIT_USAGE
 
 
@@ -1331,7 +1332,8 @@ def test_bare_verify_runs_combined_routine_regardless_of_card(monkeypatch, capsy
         args.argv = argv
         assert cli._verify_dispatch(args) == 0
         assert suite[-1].routine and not suite[-1].quick
-        assert not suite[-1].neural_training and not suite[-1].no_models
+        assert suite[-1].profile is None and va._profile(suite[-1]) == "classic"
+        assert not suite[-1].no_models
     for argv in (["verify", "--all-stages"], ["verify", "--keep"],
                  ["verify", "--reference-name", "other.card"]):
         assert cli._verify_dispatch(parser.parse_args(argv)) == 5, argv
@@ -1342,20 +1344,21 @@ def test_bare_verify_runs_combined_routine_regardless_of_card(monkeypatch, capsy
     assert len(suite) == 3 and len(card) == 3
 
 
-def test_explicit_training_and_inference_scopes(monkeypatch):
+def test_fit_only_and_models_only_scopes(monkeypatch):
+    # `--no-models` is the fit-only scope (the retired `--training`); `--models-only` the saved-model one.
     parser = cli.build_parser()
     observed = []
     monkeypatch.setattr(va, 'cmd_verify_all', lambda args: observed.append(args) or 0)
-    training = parser.parse_args(['verify', '--training', '--lanes', 'ols', '--fixtures', 'base'])
+    training = parser.parse_args(['verify', '--no-models', '--lanes', 'ols', '--fixtures', 'base'])
     assert cli._verify_dispatch(training) == 0
     assert observed[-1].no_models and not observed[-1].models_only
     assert observed[-1].lanes == 'ols' and observed[-1].fixtures == 'base'
-    for flag in ('--inference', '--models-only'):
-        inference = parser.parse_args(['verify', flag])
-        assert cli._verify_dispatch(inference) == 0
-        assert observed[-1].models_only and not observed[-1].no_models
-    with pytest.raises(SystemExit):
-        parser.parse_args(['verify', '--training', '--inference'])
+    inference = parser.parse_args(['verify', '--models-only'])
+    assert cli._verify_dispatch(inference) == 0
+    assert observed[-1].models_only and not observed[-1].no_models
+    for retired in ('--training', '--inference'):
+        with pytest.raises(SystemExit):
+            parser.parse_args(['verify', retired])
 
 
 def test_harness_overrides_are_refused(monkeypatch):
@@ -1377,13 +1380,13 @@ def test_missing_numpy_has_an_actionable_verification_refusal(monkeypatch):
 
 
 @pytest.mark.parametrize('flags, extended', [
-    (['--all'], True), (['--full'], True),
+    (['--all'], True), (['--classic'], True), (['--neural'], True),
     (['--all', '--lanes', 'ols', '--fixtures', 'base'], True),
     (['--quick'], False), (['--all', '--quick'], False),
     (['--lanes', 'ols'], False),
     (['--quick', '--batch-checks'], True),
     (['--lanes', 'ols', '--batch-checks'], True),
-    (['--all', '--models-only'], False),
+    (['--models-only'], False),
     (['--all', '--emit-reference', 'candidate.json'], True),
 ])
 def test_full_suite_includes_extended_properties_but_quick_stays_bounded(flags, extended):
@@ -1649,7 +1652,7 @@ def test_shipped_verifier_hashes_like_the_harness():
         if lanes != "all":
             verify_argv += ["--lanes", lanes]
         else:
-            verify_argv += ["--full"]
+            verify_argv += ["--all"]   # every lane of both profiles, as the harness column above records
         r = _run_cli(verify_argv, dict(MOJOLEARN_IDENTITY_BREAK=str(ROOT / "tools" / "identity_break.py")),
                      timeout=timeout)
         report = json.loads(r.stdout)

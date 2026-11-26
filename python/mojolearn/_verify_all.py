@@ -3,8 +3,11 @@
 """`python -m mojolearn verify --all`: check mojolearn's identity claims on
 this machine, cell by cell, against the reference table shipped in the wheel.
 
-DEFAULT SCOPE. Every applicable lane on the base fixture. --full explicitly
-selects all fixture variants; --quick samples one lane per family. Neither
+PROFILES. --classic (classical training and inference, the routine tape
+steps, loaded-weight neural inference, the bundled saved models), --neural
+(neural training, backward and optimizer lanes) and --all (both, one sweep,
+one report, one verdict) run every fixture variant. With no profile flag the
+classic profile runs on the base fixture; --quick samples one lane per family. Neither
 mode runs throughput benchmarks. Fixture bytes retain their historical sizes
 so existing references remain comparable.
 
@@ -773,6 +776,25 @@ def smokeable_lanes(harness, surface, exposure, device_class, run_lanes=()):
             and (device_class != "cpu" or lane in covered)]
 
 
+def profile_counts(rows, neural_lanes, profile_name):
+    """Each profile's share of one run's judged rows, beside the run's one
+    verdict: `--all` reports `classic` and `neural` separately in the same
+    document, a single profile reports itself. Portable-model rows are
+    classic. Reporting only: the verdict and exit status come from every row
+    together (`verdict`), never from these blocks."""
+    names = ("classic", "neural") if profile_name == "all" else (profile_name,)
+    seen = {name: set() for name in names}
+    counts = {name: {state: 0 for state in vref.STATES} for name in names}
+    for row in rows:
+        name = "neural" if row["lane"] in neural_lanes else "classic"
+        if name not in counts:
+            continue
+        if not str(row["lane"]).startswith("portable:"):
+            seen[name].add(row["lane"])
+        counts[name][row["state"]] = counts[name].get(row["state"], 0) + 1
+    return {name: dict(lanes=len(seen[name]), counts=counts[name]) for name in names}
+
+
 def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=(), smoke=None, neural_training=()):
     """EVERY LANE THE HARNESS DEFINES, with one honest state each.
 
@@ -841,9 +863,9 @@ def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=(), smoke=No
             state, reason = LANE_NOT_RUN, (
                 "this run selected it and it produced no comparable part at all")
         elif lane in neural_training:
-            # left out by the routine profile (_verification_profiles.select):
-            # its own run is the neural-training profile
-            state, reason = LANE_NOT_RUN, "run by `verify --neural-training`"
+            # left out by the classic profile (_verification_profiles.select):
+            # the neural profile (`--neural`, or both with `--all`) runs it
+            state, reason = LANE_NOT_RUN, "run by `verify --neural` (or `verify --all`)"
         else:
             state, reason = LANE_NOT_RUN, "exposed, but this run did not select it"
         out[lane] = dict(state=state, reason=reason, exposed=bool(row.get("exposed")),
@@ -1205,7 +1227,7 @@ def _cmd_self_test(args, ml):
     except (FileNotFoundError, CannotRun) as exc:
         return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", str(exc))
     from ._verify_public import run as public_checks
-    result['public_api'] = public_checks(self_test=True,scope='neural' if getattr(args,'neural_training',False) else 'all')
+    result['public_api'] = public_checks(self_test=True,scope='neural' if _profile(args) == 'neural' else 'all')
     # UNTESTED: this vendor is not one the shipped endpoint reference validates (CPU-only).
     public = result['public_api']
     if public['status'] not in ('MATCH', 'UNTESTED'):
@@ -3927,10 +3949,12 @@ def format_human(report):
     profile = report.get('selection', {}).get('profile')
     if profile:
         lines.append(f"Profile: {profile['name']} — {profile['description']}.")
-        excluded = profile['excluded_neural_training']
+        excluded = profile['excluded_neural']
         if excluded:
-            lines.append(f"Additional neural training lanes excluded ({len(excluded)}): " + ', '.join(excluded))
-            lines.append('Run explicitly: ' + profile['neural_training_command'])
+            lines.append(f"Neural training lanes not in this profile ({len(excluded)}): " + ', '.join(excluded))
+            lines.append(f"Run them with {profile['neural_command']}, or both profiles with {profile['all_command']}")
+    for name, block in (report.get('profiles') or {}).items() if len(report.get('profiles') or {}) > 1 else ():
+        lines.append(f"  {name}: {block['lanes']} lane(s); " + detail_line(block['counts']))
     cross = report.get('cross_check', {})
     if cross.get('ran'):
         lines.append(f"GPU/CPU inference: {cross['agree']} agreeing parts, {cross['differ']} differences; "
@@ -3960,25 +3984,31 @@ def format_human(report):
 # the command
 # --------------------------------------------------------------------------
 
+def _profile(args):
+    """The selected verification profile: `classic`, `neural` or `all`
+    (`--classic`, `--neural`, `--all`); no profile flag is the classic
+    profile at the default (base fixture) depth."""
+    return getattr(args, "profile", None) or "classic"
+
+
 def _depth(args):
-    if getattr(args, "quick", False) and getattr(args, "full", False):
-        raise ValueError("--quick and --full are exclusive")
     if getattr(args, "models_only", False) and any(getattr(args, flag, False)
             for flag in ("no_models", "lanes", "fixtures", "include_pending", "batch_checks", "quick")):
         raise ValueError("--models-only cannot be combined with lane, fixture, pending, batch, quick or no-models selection")
     if getattr(args, "quick", False):
         return "quick"
-    return "full" if getattr(args, "full", False) or getattr(args, 'all', False) else "base"
+    # a profile flag (--classic, --neural, --all) is the whole profile: every fixture
+    return "full" if getattr(args, "profile", None) else "base"
 
 
 def _extra_parts(args):
     """Full-suite requests include every property; quick/subset runs opt in.
 
     Keep selection identical for execution and reference generation. Explicit
-    --quick takes precedence over --all, as it does for lane/fixture selection.
-    Saved-model-only requests do not execute the training probes.
+    --quick takes precedence over a profile flag, as it does for lane/fixture
+    selection. Saved-model-only requests do not execute the training probes.
     """
-    full_suite = (getattr(args, "all", False) or getattr(args, "full", False))
+    full_suite = bool(getattr(args, "profile", None))
     full_suite = full_suite and not getattr(args, "quick", False)
     full_suite = full_suite and not getattr(args, "models_only", False)
     return vref.OPTIONAL_PARTS if (full_suite or getattr(args, "batch_checks", False)) else ()
@@ -4081,9 +4111,13 @@ def cmd_verify_all(args):
     from . import _verification_profiles as profiles
     neural_lanes = profiles.neural_training_lanes(harness, host_surface())
     coverage_report['verification_profiles'] = dict(
-        default='routine', routine='classical training and inference plus saved-model inference',
-        quick='representative routine checks', neural_training='explicit --neural-training',
-        neural_training_lanes=sorted(neural_lanes))
+        default='classic profile on the base fixture, with the bundled saved models, the public API checks and '
+                'the GPU/CPU inference cross-check',
+        classic='--classic: classical training and inference plus saved-model inference, every fixture',
+        neural='--neural: neural training, backward and optimizer lanes, every fixture',
+        all='--all: --classic and --neural in one sweep and one report',
+        quick='--quick: representative checks of the selected profile on the base fixture',
+        neural_lanes=sorted(neural_lanes))
     if getattr(args, "coverage", False):
         _emit(json.dumps(coverage_report, indent=1, sort_keys=True) if json_out
               else coverage.format_human(coverage_report))
@@ -4097,17 +4131,18 @@ def cmd_verify_all(args):
     asked = [x for x in (getattr(args, "lanes", "") or "").split(",") if x]
     include_pending = getattr(args, "include_pending", False)
     models_only = getattr(args, "models_only", False)
+    profile_name = _profile(args)
     profile = None
     try:
         profile_lanes, _ = profiles.select(harness, host_surface(), list(harness.LANES),
-            neural=getattr(args, 'neural_training', False), asked=asked)
+            profile=profile_name, asked=asked)
         lanes, fixtures = select_lanes(harness, table, vclass, depth, asked, include_pending,
                                       profile_lanes=set(profile_lanes))
         if models_only:
             lanes, fixtures = [], []
         else:
             lanes, profile = profiles.select(harness, host_surface(), lanes,
-                neural=getattr(args, 'neural_training', False), asked=asked)
+                profile=profile_name, asked=asked)
     except ValueError as exc:
         _emit(f"USAGE: {exc}", sys.stderr)
         return EXIT_USAGE
@@ -4121,7 +4156,7 @@ def cmd_verify_all(args):
     repeats = max(1, int(getattr(args, "repeats", 1) or 1))
 
     device = _device_block(ml, harness)
-    log(f"# verify --all: {vendor} ({vclass}), {len(lanes)} lanes x {len(fixtures)} fixtures, "
+    log(f"# verify ({profile_name} profile, {depth}): {vendor} ({vclass}), {len(lanes)} lanes x {len(fixtures)} fixtures, "
         f"harness {harness_how}, table {table_file}")
 
     # the fixture bytes first: a box whose numpy draws different fixtures
@@ -4471,8 +4506,7 @@ def cmd_verify_all(args):
         # base fixture only, for the same reason: the tier exists to say more
         # than nothing, not to double the cost of every run.
         smokeable = smokeable_lanes(harness, surface, exposure, vclass, lanes)
-        smokeable, _ = profiles.select(harness, surface, smokeable,
-            neural=getattr(args, 'neural_training', False))
+        smokeable, _ = profiles.select(harness, surface, smokeable, profile=profile_name)
         if asked:
             smokeable = [l for l in smokeable if l in asked]
         sfix = "base" if "base" in harness.FIXTURES else harness.FIXTURES[0]
@@ -4487,17 +4521,18 @@ def cmd_verify_all(args):
                 smoke[lane] = dict(ok=False, checks=[], why=str(exc))
                 break
     accounting = lane_accounting(harness_lanes, exposure, lanes, rows, stale=stale, smoke=smoke,
-                                 neural_training=() if getattr(args, "neural_training", False)
-                                 else set(neural_lanes))
+                                 neural_training=set(neural_lanes) if profile_name == "classic" else ())
     if models_only:
         verdict_scope = []                     # judged by the portable models, not by lanes
     elif asked:
         verdict_scope = list(asked)            # an explicit subset passes its own scope
     elif depth == "quick":
         verdict_scope = list(lanes)            # --quick is a declared sample of the families
+    elif profile_name == "all":
+        verdict_scope = list(harness_lanes)   # --all: every lane of both profiles gates the one verdict
     else:
         verdict_scope = [name for name in harness_lanes if
-                         (name in neural_lanes) == bool(getattr(args, 'neural_training', False))]
+                         (name in neural_lanes) == (profile_name == "neural")]
     scope_summary = lane_scope(accounting, verdict_scope)
     lane_gaps = scope_summary["gaps"]
     for name, why in lane_gaps.items():
@@ -4543,6 +4578,7 @@ def cmd_verify_all(args):
         what_ran=dict(sides={side: dict(lanes=acts) for side, acts in lane_activity.items()}),
         coverage=coverage_report, scope_gaps=scope_gaps, verification_contract=contract,
         selection=dict(include_pending=include_pending, models_only=models_only, profile=profile),
+        profiles=profile_counts(rows, neural_lanes, profile_name),
         properties={part: {state: sum(r["part"] == part and r["state"] == state for r in rows)
                            for state in vref.STATES} for part in tuple(vref.PARTS) + extra_parts},
     )
@@ -4586,13 +4622,12 @@ def cmd_verify_all(args):
         report.update(exit=code, verdict=headline,
                       detail=report["detail"] + "; comparator self-test failed")
 
-    # Routine verification bundles classical fits and inference. All GPU
-    # work remains sequential; neural training is an explicit separate scope.
+    # The classic part (default, --classic, --all) bundles the GPU/CPU
+    # inference cross-check; the neural profile alone does not run it.
     report['cross_check'] = dict(ran=False, passed=None,
         reason='not part of this selected scope, or no GPU is available')
     if (getattr(args, 'routine', False) and not models_only
-            and not getattr(args, 'neural_training', False)
-            and not getattr(args, 'training_only', False)
+            and profile_name != 'neural'
             and vendor != 'cpu' and not execution['interrupted']):
         selected, _, _ = cross_check_lanes(harness, 'quick' if depth == 'quick' else 'all')
         if asked:
@@ -4613,7 +4648,7 @@ def cmd_verify_all(args):
     # are not an opt-in light profile or a separate qualification campaign.
     if not asked and not models_only and not execution['interrupted']:
         from ._verify_public import run as public_checks
-        report['public_api'] = public_checks(scope='neural' if getattr(args,'neural_training',False) else 'all')
+        report['public_api'] = public_checks(scope='neural' if profile_name == 'neural' else 'all')
         code, headline = _public_check_verdict(report, code, headline)
     report['elapsed_s'] = round(time.time() - started, 2)
 

@@ -143,20 +143,21 @@ mojolearn doctor
 
 reports what the installed wheel supports on this machine.
 
-Verification combines inference and classical training in one routine scope.
-Neural training is a separate opt-in:
+Verification has two profiles, classic (classical training and inference,
+saved-model inference) and neural (neural training, backward and optimizer
+checks), and `--all` runs both:
 
 ```sh
-python -m mojolearn verify                    # every applicable routine lane, base fixture
-python -m mojolearn verify --quick            # representative routine checks
-python -m mojolearn verify --all              # entire routine scope, all nine fixtures
-python -m mojolearn verify --neural-training  # neural training/backward/optimizer checks
+python -m mojolearn verify             # classic lanes on the base fixture
+python -m mojolearn verify --quick     # one representative classic lane per family
+python -m mojolearn verify --classic   # every classic lane, all nine fixtures
+python -m mojolearn verify --neural    # every neural training lane, all nine fixtures
+python -m mojolearn verify --all       # both profiles in one run and one report
 ```
 
-Routine checks include bundled reference hashes, saved-model inference, and,
-on a GPU installation, direct GPU/CPU inference comparisons. Neural training
-is excluded from default, quick and all; combine `--neural-training --all`
-to exercise its complete fixture set. Reports name excluded and missing checks.
+Classic checks include bundled reference hashes, saved-model inference, and,
+on a GPU installation, direct GPU/CPU inference comparisons. Reports name the
+selected profile and every lane it leaves out.
 
 The advanced `--cross-check quick|default|all` option runs only direct GPU/CPU
 comparisons. Its `default` scope retains the 24-lane diagnostic sample;

@@ -128,12 +128,31 @@ def test_launch_writes_before_execution_and_preserves_nonzero_report(tmp_path,mo
         assert kwargs['cwd']==out and 'PYTHONPATH' not in kwargs['env']
         (out/'verify.json').write_text(json.dumps(report))
         return SimpleNamespace(returncode=1)
-    assert L.execute(root,'/env/python',out,['lane'],'routine',8,runner=runner)==1
+    assert L.execute(root,'/env/python',out,['lane'],'classic',8,runner=runner)==1
     receipt=json.loads((out/'verifier-run.json').read_text())
     assert receipt['status']=='completed' and receipt['exit_code']==1
     assert receipt['install']['manifest_sha256']==receipt['after_install_manifest_sha256']
     with pytest.raises(ValueError,match='output already exists'):
-        L.execute(root,'/env/python',out,['lane'],'routine',8,runner=runner)
+        L.execute(root,'/env/python',out,['lane'],'classic',8,runner=runner)
+
+
+def test_receipt_profiles_bind_the_verify_profile_flag(tmp_path):
+    # setup_report is a receipt recorded before 2026-11-26 (`verify --all`, profile 'routine'): it still validates.
+    # A current receipt names the profile flag itself (`verify --neural`), and the report must name the same profile.
+    report, _, receipt, _, _ = setup_report(tmp_path)
+    assert L.validate_run(receipt, report, receipt['report_sha256'])['profile'] == 'routine'
+    receipt['options']['profile'] = 'neural'
+    receipt['command'][4] = '--neural'
+    report['selection']['profile']['name'] = 'neural'
+    raw = json.dumps(report).encode()
+    receipt['report_sha256'] = hashlib.sha256(raw).hexdigest()
+    assert L.validate_run(receipt, report, receipt['report_sha256'])['profile'] == 'neural'
+    receipt['command'][4] = '--all'
+    with pytest.raises(ValueError, match='command differs'):
+        L.validate_run(receipt, report, receipt['report_sha256'])
+    with pytest.raises(ValueError, match='invalid profile'):
+        L.execute(tmp_path, '/env/python', tmp_path / 'refused', ['lane'], 'routine', 8,
+                  runner=lambda *a, **k: pytest.fail('a retired profile name must never execute'))
 
 
 def test_harness_may_order_the_explicit_lane_set(tmp_path):
@@ -169,7 +188,7 @@ def test_optional_absence_cannot_use_unwitnessed_legacy_column(tmp_path,monkeypa
 def test_launch_reuses_existing_full_fixture_environment_policy(tmp_path,monkeypatch,key,value):
     monkeypatch.setenv(key,value)
     with pytest.raises(ValueError):
-        L.execute(tmp_path,'/env/python',tmp_path/'refused',['lane'],'routine',8,
+        L.execute(tmp_path,'/env/python',tmp_path/'refused',['lane'],'classic',8,
                   runner=lambda *a,**k: pytest.fail('narrowed fixtures must never execute'))
 
 
