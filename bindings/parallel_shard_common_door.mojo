@@ -461,7 +461,7 @@ def shard_map(pool: PythonObject, wave: ShardWave) raises -> PythonObject:
     """`process_pool_map_typed` of the wave's requests, with every request's
     worker and operation code added to the pool's trace record.
 
-    THE TRANSPORT NEGATIVE CONTROL (python/mojolearn/_verify_distributed.py):
+    THE TRANSPORT NEGATIVE CONTROL (tools/multi_gpu/verify_distributed.py):
     armed by `_native_parallel_shard('faults_arm', ('drop_result',))` or
     ('reverse_results',) (`shard_faults_arm`), the first numerical batch of
     more than one result in this process is returned without its last result

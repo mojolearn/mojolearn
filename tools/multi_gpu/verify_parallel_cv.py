@@ -1,6 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """One/two-GPU CV numerical and placement captures from source or a wheel.
 
+A multi-GPU tool, NOT part of the wheel (Andrew, 2026-11-26: the wheel ships CPU
+and single-GPU only; this was mojolearn/_verify_parallel_cv.py, the
+`verify-cross-validation` command): `python3 tools/multi_gpu/verify_parallel_cv.py
+--devices 0,1 --out DIR [--require-backend cuda|hip] [--require-installed]`.
+The source profile hashes the installed package files it qualifies and,
+separately, the three tool files (`tool_sha256`).
+
 Five uneven folds for classifier/regressor, one/two/reversed device schedules,
 one run per schedule, saved-model replay and comparator controls. No physical execution
 trace or native arithmetic sabotage is inferred from these checks.
@@ -14,18 +21,23 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 
-from ._parallel_cv_witness import array_digest, retain_completed, read_records, compare_records
-from ._verify_distributed import verify_distribution_records
+HERE = Path(__file__).resolve().parent
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
+from parallel_cv_witness import array_digest, retain_completed, read_records, compare_records  # noqa: E402
+from verify_distributed import verify_distribution_records  # noqa: E402
 
 __all__ = ['main', 'source_identity', 'validate_receipt', 'compare']
-PROTOCOL = 'parallel-cv-v4'
-PROFILE_FILES = frozenset(('__init__.py', '_verify_parallel_cv.py', '_parallel_cv_witness.py',
-                           'model_selection.py', 'parallel_model_selection.py',
-                           '_gpu_witness.py', '_verify_distributed.py',
+PROTOCOL = 'parallel-cv-v5'
+#: the installed package files the capture qualifies
+PROFILE_FILES = frozenset(('__init__.py', 'model_selection.py', 'parallel_model_selection.py', '_gpu_witness.py',
                            '_native_parallel_cv.py', '_native_parallel_cv_worker.py',
                            '_native_msel_dispatch.py', '_native_msel_more.py'))
+#: this tool's own files (tools/multi_gpu/), hashed beside the package profile; no wheel carries them
+TOOL_FILES = ('verify_parallel_cv.py', 'parallel_cv_witness.py', 'verify_distributed.py')
 PARTS = ('model', 'predict', 'raw_predict', 'reload_predict', 'loss_curve', 'score')
 FAULTS = ('dropped-fold', 'changed-model', 'changed-prediction', 'aliased-device')
 
@@ -37,7 +49,11 @@ def source_identity(root=None):
     archive witness. Installed packages legitimately have no Git commit.
     """
     explicit = root is not None
-    package = Path(root) / 'python' / 'mojolearn' if explicit else Path(__file__).resolve().parent
+    if explicit:
+        package = Path(root) / 'python' / 'mojolearn'
+    else:
+        import mojolearn
+        package = Path(mojolearn.__file__).resolve().parent
     root = Path(root) if explicit else package.parent.parent
     commit, guarded, kind = None, os.environ.get('MOJOLEARN_COMMIT'), 'installed-package'
     if guarded is not None and not re.fullmatch('[0-9a-f]{40}', guarded):
@@ -53,7 +69,8 @@ def source_identity(root=None):
         raise RuntimeError('CV capture requires a full source commit witness')
     return {'commit': commit, 'guarded_source_commit': guarded, 'kind': kind,
             'source_sha256': {name: hashlib.sha256((package / name).read_bytes()).hexdigest()
-                              for name in sorted(PROFILE_FILES)}}
+                              for name in sorted(PROFILE_FILES)},
+            'tool_sha256': {name: hashlib.sha256((HERE / name).read_bytes()).hexdigest() for name in TOOL_FILES}}
 
 
 def distribution_identity(package):
@@ -147,7 +164,8 @@ def compare(left, right):
     """Compare complete numerical profiles, including independent GPU vendors."""
     validate_receipt(left)
     validate_receipt(right)
-    if left['source']['source_sha256'] != right['source']['source_sha256'] or left['inputs'] != right['inputs']:
+    if (left['source']['source_sha256'] != right['source']['source_sha256']
+            or left['source'].get('tool_sha256') != right['source'].get('tool_sha256') or left['inputs'] != right['inputs']):
         raise ValueError('CV source profiles or fixture inputs differ')
     def numerics(report):
         return {run['model']: {'scores_hex': run['scores_hex'], 'folds': {key: {part: row[part] for part in PARTS}
@@ -188,8 +206,8 @@ def main(argv=None):
     except (ImportError, AttributeError):
         parser.error('CV capture requires NumPy; install the optional mojolearn[test] extra')
     import mojolearn as ml
-    from .parallel_model_selection import _capture
-    from ._verify_native_runtime import loaded_binding
+    from mojolearn.parallel_model_selection import _capture
+    from mojolearn._verify_native_runtime import loaded_binding
     if ml.numeric_mode() != 'identical':
         parser.error('CV capture requires identical numeric mode in a fresh process')
     if ml.vendor() not in ('cuda', 'hip') or (args.require_backend and ml.vendor() != args.require_backend):
@@ -219,7 +237,7 @@ def main(argv=None):
         except ValueError as exc:
             parser.error(str(exc))
         distribution['source_record_hashes_match'] = distribution['native_record_hashes_match'] = True
-    from ._verify import environment_json
+    from mojolearn._verify import environment_json
     report = dict(protocol=PROTOCOL, status='INCOMPLETE', source_commit=source['commit'], source=source,
                   package_origin=ml.__file__, distribution=distribution, bindings=bindings, environment=environment_json(),
                   vendor=ml.vendor(), devices=list(devices), repeats=REPEATS, folds=5, runs=[], controls=[],

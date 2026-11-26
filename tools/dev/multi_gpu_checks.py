@@ -15,7 +15,7 @@ INSTALLED wheel in three arms, each in its own process:
     fault   the multi arm with a fault switched on (below), so the check is shown able to fail
 
 and compares the arms by output digest: sha256 of each named output's raw C-order bytes with its shape and dtype
-(the same definition as `mojolearn._verify_distributed.digest`), folded into one short digest per arm. One run per
+(the same definition as `tools/multi_gpu/verify_distributed.py digest`), folded into one short digest per arm. One run per
 arm; a mismatch is a bug to fix, never a reason to rerun.
 
     MULTIGPU <unit> one=<d> multi=<d> fault=<d> OK|DIFFER|FAIL <reason>

@@ -1,10 +1,11 @@
-"""The two-GPU checks are not verify commands (Andrew, 2026-11-26: everything verify ships is one GPU only).
-
-`verify-distributed` and `verify-cross-validation` are not registered on the CLI; their modules keep their own
-`main(argv)` for the multi-GPU tools (`python -m mojolearn._verify_distributed`, `._verify_parallel_cv`).
+"""The two-GPU checks are not verify commands and not in the wheel (Andrew, 2026-11-26: everything verify ships is one
+GPU only). `verify-distributed` and `verify-cross-validation` are not registered on the CLI; their code is the
+multi-GPU tools tools/multi_gpu/verify_distributed.py and verify_parallel_cv.py.
 """
+import importlib.util
+
 import pytest
-from mojolearn import __main__ as cli, _verify_distributed as proof, _verify_parallel_cv as cv
+from mojolearn import __main__ as cli
 
 
 @pytest.mark.parametrize("command", ["verify-distributed", "verify-cross-validation"])
@@ -14,8 +15,10 @@ def test_two_gpu_commands_are_not_verify_commands(command, capsys):
     assert exc.value.code == 2
 
 
-def test_the_two_gpu_modules_keep_their_own_entry_points():
-    assert callable(proof.main) and callable(cv.main)
+@pytest.mark.parametrize("name", ["mojolearn._verify_distributed", "mojolearn._verify_parallel_cv",
+                                  "mojolearn._parallel_cv_witness"])
+def test_the_two_gpu_modules_are_not_in_the_package(name):
+    assert importlib.util.find_spec(name) is None
 
 
 @pytest.mark.parametrize("command", ["verify-distributed-program", "verify-partitioned-program"])

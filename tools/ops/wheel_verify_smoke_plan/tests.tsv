@@ -544,7 +544,6 @@ test_verify_compare_commitment.py	0	ok	13.2	125
 test_verify_compare_profiles.py	0	ok	0.6	119
 test_verify_cross_check.py	0	ok	0.7	133
 test_verify_ctr_model_roles.py	0	ok	0.7	147
-test_verify_distributed.py	0	ok	0.6	119
 test_verify_environment_json.py	0	ok	0.5	118
 test_verify_generation.py	0	ok	0.5	118
 test_verify_model.py	0	ok	0.9	146

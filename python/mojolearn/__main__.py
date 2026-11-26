@@ -161,9 +161,8 @@ def _causal_lm_dispatch(args):
 
 
 # `verify-distributed` and `verify-cross-validation` (two-GPU checks) were unregistered (Andrew, 2026-11-26: everything
-# verify ships is one GPU only). Their code stays in mojolearn/_verify_distributed.py and _verify_parallel_cv.py for the
-# multi-GPU tools (tools/two_device_checks.sh, tools/qualify_verifier_wheel.py run them as
-# `python -m mojolearn._verify_distributed` / `._verify_parallel_cv`); no verify command, report or doc names them.
+# verify ships is one GPU only; the wheel ships CPU and single-GPU code only). Their code moved out of the wheel to
+# tools/multi_gpu/verify_distributed.py and verify_parallel_cv.py (with parallel_cv_witness.py and their tests).
 
 
 def build_parser():

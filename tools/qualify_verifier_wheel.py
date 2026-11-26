@@ -11,6 +11,8 @@ import subprocess
 import tempfile
 import zipfile
 
+#: the tree this runner sits in: the multi-GPU tools (tools/multi_gpu/) are not in the wheel
+ROOT = Path(__file__).resolve().parent.parent
 COMMAND_TIMEOUT_SECONDS = 180  # Keep this standalone shipped runner dependency-free.
 
 
@@ -140,11 +142,11 @@ def expanded_checks(run, python, work, output, *, vendor, scope, devices=None):
             '--compare', str(output / 'loaded-lm-cpu-capture.json'),
             str(output / 'loaded-lm-gpu-capture.json')], work)
     if devices:
-        # the two-GPU checks are not verify commands (Andrew, 2026-11-26): their modules run directly
-        run('distributed', [python, '-m', 'mojolearn._verify_distributed',
+        # the two-GPU checks are not verify commands and not in the wheel (Andrew, 2026-11-26): the multi-GPU tools
+        run('distributed', [python, str(ROOT / 'tools' / 'multi_gpu' / 'verify_distributed.py'),
             '--devices', ','.join(map(str, devices)), '--require-installed',
             '--out', str(output / 'distributed-capture.json')], work)
-        run('cross-validation', [python, '-m', 'mojolearn._verify_parallel_cv',
+        run('cross-validation', [python, str(ROOT / 'tools' / 'multi_gpu' / 'verify_parallel_cv.py'),
             '--devices', ','.join(map(str, devices)), '--require-backend', vendor, '--require-installed',
             '--out', str(output / 'cross-validation')], work)
         report['cross_validation'] = 'NUMERICS_AND_PLACEMENT_CHECKED_EXECUTION_TRACE_OWED'

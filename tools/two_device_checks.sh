@@ -7,7 +7,7 @@
 # MOJOLEARN_PAR_VERIFY): the reference table is one-device only. This gate is
 # the comparison that remains: every training/checks/*_parallel_check.mojo
 # fits on one device and on two and compares the bits, then
-# `python -m mojolearn._verify_distributed --devices 0,1` (not a verify command since 2026-11-26) compares
+# `python tools/multi_gpu/verify_distributed.py --devices 0,1` (a multi-GPU tool, not in the wheel, since 2026-11-26) compares
 # one-device, two-device and reversed-device results of the Python-sharded
 # drivers. Run it after any change under a family's multi_gpu.mojo, the
 # device plan (core/device_plan.mojo) or a shard owner.
@@ -71,7 +71,7 @@ for b in main kernel_methods gp x_neighbors ivf tsa arima x_sequence estimators 
     esac
 done
 rm -f "$OUT/distributed.json"
-phase verify-distributed pixi run python -m mojolearn._verify_distributed --devices 0,1 --out "$OUT/distributed.json"
+phase verify-distributed pixi run python tools/multi_gpu/verify_distributed.py --devices 0,1 --out "$OUT/distributed.json"
 
 # 3. Summary.
 {

@@ -2,15 +2,16 @@
 """Installed CV entry point and complete receipt failure contracts; no GPU claims."""
 import copy
 import pytest
-from mojolearn import _verify_parallel_cv as cv
-from mojolearn._parallel_cv_witness import score_with_witness
-from mojolearn.tests.test_parallel_cv_witness import records
+import verify_parallel_cv as cv
+from parallel_cv_witness import score_with_witness
+from test_parallel_cv_witness import records
 
 
 def receipt():
     return dict(protocol=cv.PROTOCOL, status='NUMERICS_AND_PLACEMENT_PASS', vendor='cuda',
                 folds=5, repeats=cv.REPEATS, devices=[0, 1],
-                source={'source_sha256': {name: 'a' * 64 for name in cv.PROFILE_FILES}},
+                source={'source_sha256': {name: 'a' * 64 for name in cv.PROFILE_FILES},
+                        'tool_sha256': {name: 'b' * 64 for name in cv.TOOL_FILES}},
                 bindings={'_mojolearn_gbdt': {'vendor': 'cuda', 'sha256': 'e' * 64},
                           **{'_native_' + name: {'sha256': 'e' * 64}
                              for name in ('cv', 'trees', 'archive', 'gbdt')}},
@@ -23,7 +24,7 @@ def receipt():
 
 
 def test_shipped_scorer_and_complete_receipt():
-    assert score_with_witness.__module__ == 'mojolearn._parallel_cv_witness'
+    assert score_with_witness.__module__ == 'parallel_cv_witness'
     assert cv.validate_receipt(receipt())
     assert cv.compare(receipt(), receipt())
 
