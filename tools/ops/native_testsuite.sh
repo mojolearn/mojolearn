@@ -93,8 +93,9 @@ compile_unit() {
     key=""
     [ -s "${TS_KEYS:-}" ] && key=$(awk -v k="$kind" -v i="$id" '$1 == k && $2 == i {print $3; exit}' "$TS_KEYS")
     if [ -n "$key" ] && $TS_PY tools/ops/native_testsuite_cache.py get "$key" "$dst" --fields "$TS_GEN/keys" > "$log" 2>&1; then
-        echo "reused from NC_TS_CACHE, key $key" >> "$log"
-        echo "testsuite build $kind $id reused ${key:0:12} $(( $(date +%s) - t0 ))s"
+        local from=local; grep -q '^native_testsuite_cache: R2 hit' "$log" && from=r2
+        echo "reused from NC_TS_CACHE ($from), key $key" >> "$log"
+        echo "testsuite build $kind $id reused ${key:0:12} from $from $(( $(date +%s) - t0 ))s"
         return 0
     fi
     if [ -x /usr/bin/time ]; then
@@ -176,8 +177,10 @@ build)
     # (a file alone is smaller than a group: its own memory budget, NC_TS_PEAK_MB)
     bymem1=$(( avail_kb * 8 / 10 / (${NC_TS_PEAK_MB:-1200} * 1024) ))
     jobs1=$(( bymem1 < cores ? bymem1 : cores )); [ "$jobs1" -ge 1 ] || jobs1=1
+    : > "$out/logs/testsuite-units-regroup-$column.txt"
     [ -s "$out/logs/testsuite-regroup-$column.txt" ] && \
-        xargs -P "$jobs1" -n 2 bash -c 'compile_unit "$0" "$1"' < "$out/logs/testsuite-regroup-$column.txt"
+        xargs -P "$jobs1" -n 2 bash -c 'compile_unit "$0" "$1"' < "$out/logs/testsuite-regroup-$column.txt" \
+        | tee "$out/logs/testsuite-units-regroup-$column.txt"
     # bin/ts/<name>: the group members' wrappers (singles are their own binary there already)
     while read -r _ k members; do
         [ -x "$bindir/tsg/group_$k" ] || continue
@@ -190,6 +193,15 @@ build)
     failed=$(awk '{print $1}' "$list" | while read -r x; do [ -x "$bindir/ts/$x" ] || printf '%s ' "$x"; done)
     regrouped=$(awk '{print $2}' "$out/logs/testsuite-regroup-$column.txt" | wc -l)
     echo "testsuite: $n files built in $(( $(date +%s) - start ))s ($ng groups, $ns planned singles, $regrouped files of failed groups rebuilt alone, $(grep -c ' reused ' "$out/logs/testsuite-units-$column.txt") units reused from the cache); failed to compile: ${failed:-none}"
+    # THE CACHE IN ONE LINE (rel-fix-1, 2026-11-26), the last line of the build: units planned, keyed, hits (from the
+    # box's directory, from R2), misses (keyed units that compiled), compiles (every `mojo build` this build ran,
+    # failed groups' files included) and R2 uploads. A second box proving the R2 path reads hits=N r2=N compiles=0.
+    units_f="$out/logs/testsuite-units-$column.txt"; regroup_f="$out/logs/testsuite-units-regroup-$column.txt"
+    keyed=0; [ -s "${TS_KEYS:-}" ] && keyed=$(grep -c . "$TS_KEYS")
+    hl=$(grep -c ' reused .* from local ' "$units_f"); hr=$(grep -c ' reused .* from r2 ' "$units_f")
+    compiles=$(cat "$units_f" "$regroup_f" | grep -c ' rc=')
+    uploads=$(cat "$out"/logs/build-ts-*.log 2> /dev/null | grep -c '^native_testsuite_cache: R2 uploaded')
+    echo "testsuite cache: column=$column units=$(( ng + ns )) keyed=$keyed hits=$(( hl + hr )) local=$hl r2=$hr misses=$(( keyed - hl - hr )) compiles=$compiles uploads=$uploads"
     exit 0 ;;
 one)
     column=${2:?one <column> [-D DEFINE ...] <name> [<name> ...]}; shift 2

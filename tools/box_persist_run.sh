@@ -154,6 +154,10 @@ tar_stream() {  # the results dir as one tar on stdout; rc 0 or 1 (GNU: files ch
     local ex=() p jb
     for p in $DEFAULT_EXCLUDES $EXTRA_EXCL; do ex+=("--exclude=$p"); done
     jb=$(basename "$JSON"); ex+=("--exclude=$jb")
+    # the native-check program cache's presigned URL map (tools/nvidia_central.sh central_submit stages it 0600 as
+    # <jobs>/<tag>/ts-urls.tsv beside job.sh, outside the results dir) is never persisted, even when a
+    # --results dir holds the jobs directory (rel-fix-1, 2026-11-26)
+    ex+=("--exclude=ts-urls.tsv")
     binary_excludes
     [ -s "$ST/binary-excludes" ] && ex+=(-X "$ST/binary-excludes")
     tar -cf - "${ex[@]}" -C "$RES" . 2>> "$ST/tar.err"

@@ -139,6 +139,16 @@ those uploads when it extracts the final results (`bincache.py promote --namespa
 refuses a fault build); `sh tools/bincache_leg.sh promote --namespace ts <dir>` does it by hand. `NC_TS_R2=0` at
 submit turns the R2 level off for that job.
 
+The build's last line is the cache in one line: `testsuite cache: column=gpu units=U keyed=K hits=H local=L r2=R
+misses=M compiles=C uploads=P`; the GPU job prints it. THE PROOF THAT A SECOND BOX HITS (two jobs on the L40S, the
+orchestrator's; `NC_TS_FRESH=1` gives each job an empty box level of its own, so a hit can only come through R2):
+
+    tools/nvidia_central.sh submit <lane> --results box-out/tsproof-a --env NC_TS_FRESH=1 tools/ops/native_checks_gpu_job.sh
+    # A: compiles=U uploads=U. When it ends, fetch it: the fetch promotes A's uploads to their content addresses.
+    python3 tools/box_persist.py fetch --tag <A's tag> --extract
+    tools/nvidia_central.sh submit <lane> --results box-out/tsproof-b --env NC_TS_FRESH=1 tools/ops/native_checks_gpu_job.sh
+    # B (its submit mints a map that lists A's programs) must print: hits=U local=0 r2=U misses=0 compiles=0 uploads=0
+
 ## Scripts adopted from ~/mojolearn-evidence (2026-10-28)
 
 Scripts that current rules, tools or docs still reference were copied into the repo so they are versioned.

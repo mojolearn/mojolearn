@@ -379,3 +379,22 @@ def test_the_submit_stages_the_map_only_for_the_native_check_jobs_and_fetch_prom
         assert "NC_TS_UPLOADS=" in (ROOT / job).read_text(), job
     script = (ROOT / "tools/ops/native_testsuite.sh").read_text()
     assert script.count('--fields "$TS_GEN/keys"') == 2
+
+
+def test_the_build_prints_the_cache_in_one_line_and_the_gpu_job_shows_it():
+    """rel-fix-1 (review item 2): hits (local, r2), misses, compiles and uploads on one line; NC_TS_FRESH for the
+    two-job R2 proof (tools/ops/README.md)."""
+    text = (ROOT / "tools/ops/native_testsuite.sh").read_text()
+    assert ('echo "testsuite cache: column=$column units=$(( ng + ns )) keyed=$keyed hits=$(( hl + hr )) local=$hl '
+            'r2=$hr misses=$(( keyed - hl - hr )) compiles=$compiles uploads=$uploads"') in text
+    assert "reused ${key:0:12} from $from" in text and "grep -q '^native_testsuite_cache: R2 hit'" in text
+    job = (ROOT / "tools/ops/native_checks_gpu_job.sh").read_text()
+    assert "grep -m 1 '^testsuite cache:'" in job and 'NC_TS_FRESH:-0}" = 1' in job
+    assert "NC_TS_FRESH=1 tools/ops/native_checks_gpu_job.sh" in (ROOT / "tools/ops/README.md").read_text()
+
+
+def test_the_url_map_never_reaches_the_persisted_results():
+    """rel-fix-1 (review item 7): the 0600 presigned map is staged beside job.sh; a results dir that holds the jobs
+    directory still never uploads it."""
+    assert '--exclude=ts-urls.tsv' in (ROOT / "tools/box_persist_run.sh").read_text()
+    assert "tsmap=$BP_BOX_ROOT/jobs/$BP_TAG/ts-urls.tsv" in (ROOT / "tools/nvidia_central.sh").read_text()

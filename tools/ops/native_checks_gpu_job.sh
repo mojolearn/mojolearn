@@ -98,12 +98,19 @@ bstart=$(date +%s)
 # (tools/ops/native_testsuite_cache.py; outside the results dir, so nothing of it is persisted). NC_TS_CACHE= (empty)
 # compiles everything.
 export NC_TS_CACHE="${NC_TS_CACHE-${PC_CACHE_ROOT:-/root/pc-cache}/ts-cache}"
+# NC_TS_FRESH=1 (rel-fix-1, the R2 proof): an empty directory of this job's own as the box level, removed at the end,
+# so every hit of this job came through R2 (`testsuite cache: ... r2=N compiles=0`); the pod's directory is untouched.
+if [ "${NC_TS_FRESH:-0}" = 1 ]; then
+    NC_TS_CACHE=$(mktemp -d "${TMPDIR:-/root}/ts-fresh-XXXXXX"); export NC_TS_CACHE
+    trap 'rm -rf "$NC_TS_CACHE"' EXIT
+fi
 # NC_TS_URLS (staged by tools/nvidia_central.sh central_submit): also reuse programs any box built, through R2; this
 # job's own new programs are recorded in its results (ts-uploads/) for the Mac's promote.
 export NC_TS_UPLOADS="$RES/ts-uploads"
 IN_FILTER="$FILTER" bash tools/ops/native_testsuite.sh build gpu "$BIN_DIR" "$RES" > "$RES/logs/build-gpu.log" 2>&1
 brc=$?
-say "$(tail -n 1 "$RES/logs/build-gpu.log")"
+say "$(grep -m 1 '^testsuite: .* files built' "$RES/logs/build-gpu.log")"
+say "$(grep -m 1 '^testsuite cache:' "$RES/logs/build-gpu.log" || echo 'testsuite cache: no reuse (no NC_TS_CACHE or no keys)')"
 kill "$bsampler" 2>/dev/null
 # the largest single compile's peak RSS (a group program's), from the build's /usr/bin/time records
 brss=$(cat "$RES"/logs/build-ts-*.log.time 2>/dev/null | awk -F': *' '/Maximum resident set size/ {if ($2>m) m=$2} END {if (m) print m}')
