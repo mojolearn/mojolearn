@@ -44,7 +44,13 @@ def test_spectral_refuses_python_preparation_factory_without_calling_it(monkeypa
     if operation == "coo":
         binding = context["family_spectral_umap_bindings"]["base"]["identical"]
     else:
-        binding = _backend.exact_host_module(_backend.binding("_mojolearn", "identical"))
+        # The estimator reads the base image of ITS device (its binding route): on a GPU installation that is
+        # the device `_mojolearn` module, not the host one this test patched alone (the GPU fit never read the
+        # patch and ran into lanczos' own 4-row refusal). Both are patched; on a CPU installation they are one.
+        device = _backend.binding("_mojolearn", "identical")
+        binding = _backend.exact_host_module(device)
+        if device is not binding and hasattr(device, "spectral_preparation_native_api_v1"):
+            monkeypatch.setattr(device, "spectral_preparation_native_api_v1", hook)
     monkeypatch.setattr(binding, "spectral_preparation_native_api_v1", hook)
     with pytest.raises(TypeError, match="spectral_preparation_native_api_v1 must be a compiled entry"):
         if operation == "coo":
