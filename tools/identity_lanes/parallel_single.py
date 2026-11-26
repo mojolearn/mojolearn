@@ -581,7 +581,9 @@ def _(ml, X, yc, yr, Xh=None):
         # (python/mojolearn/parallel_training.py `apply_gradient`); `ordered_sum_gradients` takes one LIST of
         # tensors per shard (the MLP/Samba form) and refused the flat arrays (lane gs-fix-2: wrong test).
         summed = ordered_fold([g0, g1])
-        total = np.asarray(summed, dtype=np.float32)
+        # ordered_fold returns the folded float32 BYTES (bindings/cross_vendor_native_door.mojo:222 `store.tobytes()`),
+        # the form apply_gradient takes; np.asarray(bytes, float32) parses text and refused the lane (gs-fix-4: wrong test).
+        total = np.frombuffer(summed, dtype=np.float32).copy()
         fold = bool(w.has_device_fold)
         if fold:
             w.fold_reset()
