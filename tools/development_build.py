@@ -126,7 +126,7 @@ BUILD_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh", "bindin
 # repository-owned host math library from a fixed path in every set; release
 # packaging builds it with packaging/portable_math/stage.py. It is a C build
 # (cc/clang), keyed on its sources, stage.py's flags and the C compiler.
-SUPPORT_SCHEMA = "mojolearn.development-support.v2"
+SUPPORT_SCHEMA = "mojolearn.development-support.v3"  # v3: the paths keyed again (rel-fix-1)
 PORTABLE_MATH_INPUTS = ("packaging/portable_math/portable_math.c",
                         "packaging/portable_math/powers_of_ten.h",
                         "packaging/portable_math/stage.py")
@@ -486,7 +486,12 @@ def support_rows(repo, cache, plat, c_facts):
     if missing:
         raise BuildError("portable math sources missing: " + ", ".join(missing))
     darwin = plat == "darwin"
+    # THE PATHS STAY KEYED (rel-fix-1, 2026-11-26, review of 3423ae229e..8f0d9a9642): support schema v2 dropped them
+    # without a measurement; this is a C build (stage.py, cc/clang), whose objects can carry source and build paths
+    # (debug info, __FILE__), and the 2026-11-26 Linux measurement covered Mojo groups only. They return to the key
+    # until a measurement of this library in two checkouts shows equal bytes.
     fields = {"schema": SUPPORT_SCHEMA, "name": "portable_math", "platform": plat,
+              "repo": str(repo), "cache": str(cache),
               "inputs": {name: bincache.sha256_file(repo / name) for name in PORTABLE_MATH_INPUTS},
               "c_toolchain": c_facts}
     row = {"name": "portable_math", "stem": "libMojolearnMath",
@@ -674,7 +679,12 @@ def build_input_scripts(repo):
 # (RELEASE_KEY_SCHEMA) still holds the checkout path: the Mac's linker was not measured.
 def group_fields(repo, cache, mode, plat, stem, flags_class, members, graph, scripts, facts, effective):
     """The key fields of one group; make_plan and the in-flight input check share them."""
-    return {"schema": KEY_SCHEMA,
+    # DARWIN KEEPS THE PATHS (rel-fix-1, 2026-11-26, review of 3423ae229e..8f0d9a9642): the measurement above was on
+    # Linux only; the Mac's linker (ld64) was never measured, as the release key's comment says, so on darwin the
+    # checkout and cache paths stay key fields until a Mac measurement shows they reach no byte. The resolved compiler
+    # and its library directory are key fields on every platform (`toolchain`: toolchain_facts).
+    paths = {"repo": str(repo), "cache": str(cache)} if plat == "darwin" else {}
+    return {"schema": KEY_SCHEMA, **paths,
             "mode": mode, "platform": plat, "stem": stem, "flags_class": flags_class,
             "members": members, "source": graph.closure(members),
             "builders": compile_recipe(scripts, mode, stem, flags_class),

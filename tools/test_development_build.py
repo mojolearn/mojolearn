@@ -1871,11 +1871,24 @@ def test_the_key_holds_no_checkout_or_cache_path(repo, tmp_path):
     shutil.copytree(repo, other)
     after = dev.make_plan(other, tmp_path / "another-cache", ["identical"], ENV, facts=FACTS, plat="linux")
     assert keys(before) == keys(after)
-    assert [r["key"] for r in before["support"]] == [r["key"] for r in after["support"]]
-    for row in before["groups"] + before["support"]:
+    for row in before["groups"]:
         text = json.dumps(row["fields"])
         assert str(repo) not in text and str(tmp_path) not in text, row["stem"]
     assert all(row["repo"] == str(other.resolve()) for row in after["groups"])  # kept on the row, for sizing only
+    # rel-fix-1: the portable_math C build keeps its paths until measured (support schema v3)
+    assert [r["key"] for r in before["support"]] != [r["key"] for r in after["support"]]
+
+
+def test_darwin_keeps_the_checkout_and_cache_paths_until_measured(repo, tmp_path):
+    """rel-fix-1 (review item 5): the Mac's linker was never measured, so on darwin the paths stay key fields."""
+    import shutil
+    other = tmp_path / "elsewhere" / "second-worktree"
+    shutil.copytree(repo, other)
+    a = dev.make_plan(repo, tmp_path / "cache", ["identical"], ENV, facts=FACTS, plat="darwin")
+    b = dev.make_plan(other, tmp_path / "cache", ["identical"], ENV, facts=FACTS, plat="darwin")
+    c = dev.make_plan(repo, tmp_path / "another-cache", ["identical"], ENV, facts=FACTS, plat="darwin")
+    assert changed(a, b) == set(keys(a)) and changed(a, c) == set(keys(a))
+    assert all(row["fields"]["repo"] == str(repo) for row in a["groups"])
 
 
 def test_the_toolchain_location_is_in_the_key(repo, tmp_path):
