@@ -82,8 +82,12 @@ REPO = Path(__file__).resolve().parents[1]
 OS = dict(id="ubuntu", version_id="22.04", glibc="glibc 2.35", machine="x86_64", ld="GNU ld 2.38", cc="cc 11.4")
 HOST_ARGS = ["host", "--group", "_mojolearn_native_x_host", "--rootdir", "/tmp/mojolearn-merged-roots/host"]
 # The define is only an example of one the x_host closure reads: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK until it was deleted
-# 2026-11-24 (lane ab-outcome-3 / o3-decomp); now the live opt-in MOJOLEARN_XD_FAST_CLS2_GRP_LAZY (x_decomp/resident.mojo).
-SVD = "MOJOLEARN_XD_FAST_CLS2_GRP_LAZY"
+# 2026-11-24 (lane ab-outcome-3 / o3-decomp). a58cf59d32 then picked MOJOLEARN_XD_FAST_CLS2_GRP_LAZY, but its one
+# reader, x_decomp/resident.mojo, is in the GPU closure, not the x_host one (the test was never run), so both tests
+# below were red. Now MOJOLEARN_DECOMP_FAST_TSQR_GRID, read by x_decomp/tsqr_device.mojo:135, which IS in the x_host
+# closure (an opt-in arm of the paused Apple fast programme, so the four-week clock does not delete it). Not a
+# *_SABOTAGE define: those make the build a negative control (bincache.py:40) and change the key for another reason.
+SVD = "MOJOLEARN_DECOMP_FAST_TSQR_GRID"
 #: What the release legs set around the host compile (legs/*/GHA/bincache/keys/*.json, candidate
 #: 4c2340386abc.svd1); the leg-level packaging switches differ by leg and must not reach the key.
 LEG_ENV = {"cuda-sm_89": {"MOJOLEARN_CUDA_CODE_FORMAT": "native"},
