@@ -100,7 +100,7 @@ import re
 from pathlib import Path
 import subprocess
 import sys
-from verification_evidence import PARTS, same_cell_context
+from verification_inventory import PARTS, same_cell_context
 from verification_matrix import stable_digest, negative_control_moves
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

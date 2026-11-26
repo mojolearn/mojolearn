@@ -3,7 +3,7 @@ import copy
 import types
 import pytest
 import verification_matrix as matrix
-import verification_evidence as evidence
+import verification_inventory as evidence
 
 
 def test_fragment_changes_invalidate_inventory_without_rebuilding(tmp_path):

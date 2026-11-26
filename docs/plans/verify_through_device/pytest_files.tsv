@@ -1250,7 +1250,7 @@ tools/test_transformer_decode_provider.py	5	Source contracts only; public sessio
 tools/test_transformer_public_native.py	4	Source boundary contracts only; compile and public runtime qualification are	TOOLING	tests a tool or the verify/release machinery; never delete
 tools/test_umap_identity_compare.py	9	Negative controls for the UMAP bit-capture comparator.	TOOLING	tests a tool or the verify/release machinery; never delete
 tools/test_verification_endpoint_calls.py	4	with receiver and argument helper reach the public endpoint unrelated	TOOLING	tests a tool or the verify/release machinery; never delete
-tools/test_verification_evidence.py	8	Evidence must survive invalid, incomplete and incomparable control records.	TOOLING	tests a tool or the verify/release machinery; never delete
+tools/test_verification_inventory.py	8	Evidence must survive invalid, incomplete and incomparable control records.	TOOLING	tests a tool or the verify/release machinery; never delete
 tools/test_verification_repository.py	13	No native execution: committed verification bytes and rejection paths.	TOOLING	tests a tool or the verify/release machinery; never delete
 tools/test_verifier_patch.py	4	Verifier patch allowlist must leave algorithms, references and binaries intact.	TOOLING	tests a tool or the verify/release machinery; never delete
 tools/test_verify_coverage_declared.py	4	The precise-coverage declarations (tools/identity_lanes/coverage_declared.tsv) stay true to the tree.	TOOLING	tests a tool or the verify/release machinery; never delete

@@ -13,7 +13,7 @@ import shutil
 import subprocess
 import sys
 
-import verification_evidence as evidence
+import verification_inventory as evidence
 import verification_matrix as matrix
 
 
