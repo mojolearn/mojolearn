@@ -58,10 +58,15 @@ def _kernel() -> GPKernelStorage:
 
 
 def _x(n: Int, d: Int) -> List[Float32]:
+    """Distinct training rows on the 0.125 lattice (the query stays off it). Column 0 is `i * 21 mod 41`, a
+    bijection of the 40 rows, so no two rows repeat. The former `mod 23` repeated rows 14..16 as 37..39 inside
+    the fold: with alpha 1e-6 the float32 K(X, X) was nearly singular and the posterior variance of a query came
+    out negative, so gpr_sample refused case 2 ("leading minor of order 1 ... not positive definite", native run
+    nvc-ab-20261125T230558Z-767057; lane gs-fix, fixture defect)."""
     var x = List[Float32](length=n * d, fill=0.0)
     for i in range(n):  # small-loop(fixture rows)
         for j in range(d):  # small-loop(fixture columns)
-            x[i * d + j] = Float32(((i * (j + 3) * 7) % 23) - 11) * Float32(0.125) + Float32(j) * Float32(0.5)
+            x[i * d + j] = Float32(((i * (j + 3) * 7) % 41) - 20) * Float32(0.125) + Float32(j) * Float32(0.5)
     return x^
 
 
