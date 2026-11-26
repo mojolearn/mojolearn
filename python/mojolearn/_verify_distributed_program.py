@@ -96,23 +96,30 @@ def verify(devices=(0,), expected=None):
                 report["cases"].append({"name": "physical_topology", "status": "PASS" if len(devices) > 1 else "PENDING",
                     "digest": _digest(final), "scope": "Two or more real GPU IDs required" if len(devices) == 1 else "one versus requested physical GPUs"})
         if expected is not None:
-            if expected.get("format") != FORMAT:
-                raise ValueError("reference report has the wrong format")
-            wanted = {c["name"]: c.get("digest") for c in expected["cases"] if c["status"] == "PASS"}
-            comparisons = []
-            for case in report["cases"]:
-                if case["name"] in wanted:
-                    equal = case.get("digest") == wanted[case["name"]]
-                    comparisons.append({"name": case["name"], "status": "MATCH" if equal else "DIFFER"})
-                    if not equal:
-                        raise AssertionError("cross-install identity mismatch: " + case["name"])
-            if not comparisons:
-                raise ValueError("reference contains no comparable passing cases")
-            report["cross_install"] = comparisons
+            report["cross_install"] = comparisons = compare(report, expected)
+            for row in comparisons:
+                if row["status"] != "MATCH":
+                    raise AssertionError("cross-install identity mismatch: " + row["name"])
         report["status"] = "PASS" if len(devices) > 1 else "PASS_SINGLE_DEVICE_PENDING_PHYSICAL"
     except Exception as exc:
         report["failure"] = {"type": type(exc).__name__, "message": str(exc), "traceback": traceback.format_exc()}
     return report
+
+
+def compare(report, expected):
+    """Each passing case's digest against the same case of `expected` (a report
+    from another install): `[{name, status: MATCH|DIFFER}]`. ValueError when
+    `expected` is not a comparable reference (wrong format, no passing case in
+    common): nothing was compared. One body for `verify-distributed-program
+    --compare` and `verify --all` (_verify_extended.py)."""
+    if expected.get("format") != FORMAT:
+        raise ValueError("reference report has the wrong format")
+    wanted = {c["name"]: c.get("digest") for c in expected.get("cases", []) if c.get("status") == "PASS"}
+    comparisons = [{"name": case["name"], "status": "MATCH" if case.get("digest") == wanted[case["name"]] else "DIFFER"}
+                   for case in report.get("cases", []) if case.get("status") == "PASS" and case["name"] in wanted]
+    if not comparisons:
+        raise ValueError("reference contains no comparable passing cases")
+    return comparisons
 
 
 def command(args):

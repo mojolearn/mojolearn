@@ -291,7 +291,14 @@ def build_parser():
     scope.add_argument("--all", dest="profile", action="store_const", const="all",
                        help="--classic and --neural together: every lane, the portable models and every probe "
                             "in one process, one report (one JSON, one set of counts, one verdict) and one exit "
-                            "status; the cell workers run both profiles' cells in one parallel sweep")
+                            "status; the cell workers run both profiles' cells in one parallel sweep. It also "
+                            "runs the single-device verify commands, each with its own profile name, counts and "
+                            "verdict: verify-distributed-program and verify-partitioned-program (logical shards "
+                            "and stages on one device; the physical multi-GPU cases read PENDING), verify-graph, "
+                            "verify-generation and verify-causal-lm (CPU and GPU captures compared on a GPU "
+                            "install), one bundled recipe (verify-recipe) and one saved program checked with "
+                            "verify-model. A capture with nothing to compare against reads OWED. The two-GPU "
+                            "commands verify-distributed and verify-cross-validation are listed as not run")
     scope.add_argument("--models-only", dest="models_only", action="store_true",
                        help="check bundled GPU-trained models through the saved-model loader, including "
                             "HostForest and HostGBDT, without training")
@@ -367,7 +374,8 @@ def build_parser():
                         "(mojolearn.recipe(model, ...) writes one) that says how the model is made "
                         "(the estimator and its parameters or the layers of a Sequential, the seed, "
                         "the fit arguments, the data: a built-in generator or a file with its "
-                        "SHA-256) and what to hash (digest_, predictions on stated rows, score), or "
+                        "SHA-256) and what to compare (digest_, the fitted parameters, predictions on "
+                        "stated rows, score), or "
                         "example:NAME for a shipped one. It is fitted from scratch on every device "
                         "of this installation (the CPU, and the GPU when there is one), in this "
                         "process through the model's device=; the report prints IDENTICAL or DIVERGENT with the first differing "

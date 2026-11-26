@@ -70,8 +70,10 @@ import json
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -3955,6 +3957,11 @@ def format_human(report):
             lines.append(f"Run them with {profile['neural_command']}, or both profiles with {profile['all_command']}")
     for name, block in (report.get('profiles') or {}).items() if len(report.get('profiles') or {}) > 1 else ():
         lines.append(f"  {name}: {block['lanes']} lane(s); " + detail_line(block['counts']))
+    if report.get('extended'):
+        from . import _verify_extended as extended
+        lines.append("Single-device verify commands (each its own profile and verdict; OWED = nothing to "
+                     "compare with, never VERIFIED):")
+        lines.extend(extended.human_lines(report['extended']))
     cross = report.get('cross_check', {})
     if cross.get('ran'):
         lines.append(f"GPU/CPU inference: {cross['agree']} agreeing parts, {cross['differ']} differences; "
@@ -4110,12 +4117,15 @@ def cmd_verify_all(args):
     coverage_report = coverage.inventory(harness, table, vclass)
     from . import _verification_profiles as profiles
     neural_lanes = profiles.neural_training_lanes(harness, host_surface())
+    from . import _verify_extended as extended_profiles
     coverage_report['verification_profiles'] = dict(
         default='classic profile on the base fixture, with the bundled saved models, the public API checks and '
                 'the GPU/CPU inference cross-check',
         classic='--classic: classical training and inference plus saved-model inference, every fixture',
         neural='--neural: neural training, backward and optimizer lanes, every fixture',
-        all='--all: --classic and --neural in one sweep and one report',
+        all='--all: --classic and --neural in one sweep and one report, plus the single-device verify commands',
+        extended=list(extended_profiles.PROFILES),
+        two_gpu_not_in_all=sorted(extended_profiles.TWO_GPU),
         quick='--quick: representative checks of the selected profile on the base fixture',
         neural_lanes=sorted(neural_lanes))
     if getattr(args, "coverage", False):
@@ -4432,12 +4442,46 @@ def cmd_verify_all(args):
     else:
         units = [(cells[i:i + batch_cells],) for i in range(0, len(cells), batch_cells)]
         body = run_chunk
-    if cell_workers == 1 or len(units) <= 1:
-        for unit in units:  # one worker: the units in order, as before
-            body(*unit)
+    # THE SINGLE-DEVICE VERIFY COMMANDS (verify-complete, Andrew 2026-11-26): `--all` also runs
+    # verify-distributed-program, -partitioned-program, -graph, -generation, -causal-lm, one bundled recipe and one
+    # saved-program round trip (_verify_extended.py), each unit in its own worker process in THIS pool, ahead of the
+    # cell batches (the loaded-model captures are the longest units). One device only (devices=(0,)); the two-GPU
+    # commands are named "two-GPU, not run".
+    from . import _verify_extended as extended
+    extended_on = profile_name == "all" and not asked and depth != "quick" and not models_only
+    extended_units = extended.units(vclass) if extended_on else []
+    extended_values = {}
+    extended_dir = tempfile.mkdtemp(prefix="mojolearn-verify-extended-") if extended_units else None
+
+    def run_extended(profile, steps):
+        values = extended_values.setdefault(profile, {})
+        for step in steps:      # verify-model: the checks read the program its save wrote
+            if any(not v.get("ok") for v in values.values()):
+                with lock:
+                    values[step] = dict(ok=False, error="not run: an earlier step of this unit failed")
+                continue
+            with lock:
+                log(f"  [extended] {profile} {step}")
+            try:
+                result = worker.run(dict(action="extended", profile=profile, step=step, workdir=extended_dir),
+                                    max(timeout, extended.UNIT_TIMEOUT_S), log)
+                with lock:
+                    for binding in result.get("bindings", []):
+                        worker_bindings[(binding["module"], binding["sha256"])] = binding
+                value = result["value"]
+            except worker.WorkerFailure as exc:
+                value = dict(ok=False, error=str(exc)[:2000])
+            with lock:
+                values[step] = value
+                log(f"  [extended] {profile} {step}: {'answered' if value.get('ok') else 'FAILED: ' + str(value.get('error'))[:300]}")
+
+    work = [(run_extended, unit) for unit in extended_units] + [(body, unit) for unit in units]
+    if cell_workers == 1 or len(work) <= 1:
+        for fn, unit in work:  # one worker: the units in order, as before
+            fn(*unit)
     else:
-        with ThreadPoolExecutor(max_workers=min(cell_workers, len(units))) as pool:
-            for future in [pool.submit(body, *unit) for unit in units]:
+        with ThreadPoolExecutor(max_workers=min(cell_workers, len(work))) as pool:
+            for future in [pool.submit(fn, *unit) for fn, unit in work]:
                 future.result()
     # cell order, as a serial sweep writes it (rows within a cell keep theirs)
     raw.sort(key=lambda row: cell_order.get((row["lane"], row["fixture"]), len(cells)))
@@ -4650,6 +4694,20 @@ def cmd_verify_all(args):
         from ._verify_public import run as public_checks
         report['public_api'] = public_checks(scope='neural' if profile_name == 'neural' else 'all')
         code, headline = _public_check_verdict(report, code, headline)
+    if extended_units:
+        pkg = _pkg_dir()
+        report['extended'] = {name: extended.judge(name, extended_values.get(name, {}),
+                                                   extended.reference(name, pkg))
+                              for name in extended.PROFILES}
+        report['extended_summary'] = extended.summary(report['extended'])
+        report['two_gpu_not_run'] = dict(extended.TWO_GPU)
+        failing = extended.gate(report['extended'])
+        if failing:
+            code, headline = EXIT_MISMATCH, 'MISMATCH'
+            report.update(exit=code, verdict=headline, detail=report['detail'] + '; single-device verify '
+                          'commands did not pass: ' + ', '.join(f"{n} {report['extended'][n]['verdict']}"
+                                                                 for n in failing))
+        shutil.rmtree(extended_dir, ignore_errors=True)
     report['elapsed_s'] = round(time.time() - started, 2)
 
     progress("finished")

@@ -4,8 +4,9 @@
 `model.check(X)` and `verify --check` compare one fitted model's answers on
 the GPU and on the CPU. A recipe goes one step further back: it says HOW the
 model is made (the estimator class or the layers of a `Sequential`, the
-hyperparameters, the seed, the fit arguments and the data) and what to hash
-(the fitted `digest_`, the predictions on stated rows, the score). Verify
+hyperparameters, the seed, the fit arguments and the data) and what to compare
+(the fitted `digest_`, the fitted parameters array by array, the predictions on
+stated rows, the score: the user selects them in `outputs`). Verify
 fits it from scratch once per device of this installation (the CPU, and the
 GPU when there is one), in this process through the public `device=` of the
 estimator or the `Sequential`, compares every hash, prints IDENTICAL or
@@ -33,7 +34,10 @@ THE RECIPE (one JSON object, `FORMAT`):
      "fit": {"epochs": 2},      keyword arguments of fit (plain values)
      "data": {"generator": "regression", "args": {"rows": 256, "features": 8, "test_rows": 64, "seed": 0}}
           or {"file": "r.data.npz", "sha256": "<hex of the file>"},   arrays X, y, X_test
-     "outputs": {"digest": true, "predict": {"method": "predict", "on": "test"}, "score": true}}
+     "outputs": {"digest": true, "parameters": true, "predict": {"method": "predict", "on": "test"}, "score": true}}
+             "parameters": true compares every fitted parameter array (a Sequential's
+             named_parameters(), an estimator's public fitted arrays such as coef_),
+             or a list of names compares those only
 
 Refused in words, never compared: a recipe in `fast` mode (no promise about
 bits), a data file whose SHA-256 is not the recipe's, a record made with
@@ -75,6 +79,11 @@ RECORD_VALUES_MAX = 1 << 20
 DATA_ARRAYS = ("X", "y", "X_test")
 #: which rows an output is computed on
 ROWS = ("train", "test")
+#: what a recipe's `outputs` may select (paper 5.4: the results the user selects, such as fitted
+#: parameters and predictions)
+OUTPUT_KINDS = ("digest", "parameters", "predict", "score")
+#: the label of one fitted parameter array in a record: "param:<name>"
+PARAM_PREFIX = "param:"
 #: a model's constructor parameter that a recipe never carries: verify sets
 #: the device (one fit per device of this installation, `device=` by keyword),
 #: and the seed is the recipe's own field
@@ -321,8 +330,15 @@ def check_recipe(recipe):
     if not isinstance(data, dict) or not ("generator" in data or "file" in data):
         raise Refused("the recipe's data names a built-in generator or a file with its sha256")
     outputs = recipe.get("outputs") or {}
-    if not any(outputs.get(k) for k in ("digest", "predict", "score")):
-        raise Refused("the recipe hashes nothing: outputs names digest, predict or score")
+    if not any(outputs.get(k) for k in OUTPUT_KINDS):
+        raise Refused("the recipe hashes nothing: outputs names digest, parameters, predict or score")
+    unknown = sorted(set(outputs) - set(OUTPUT_KINDS))
+    if unknown:
+        raise Refused(f"outputs names {unknown}; a recipe compares {', '.join(OUTPUT_KINDS)}")
+    params = outputs.get("parameters")
+    if params not in (None, True, False) and not (
+            isinstance(params, list) and params and all(isinstance(n, str) and n for n in params)):
+        raise Refused("outputs.parameters is true (every fitted parameter) or a list of parameter names")
     predict = outputs.get("predict")
     if predict and isinstance(predict, dict) and predict.get("on", "train") not in ROWS:
         raise Refused(f"outputs.predict.on is 'train' or 'test', not {predict.get('on')!r}")
@@ -368,15 +384,16 @@ def _sequential_spec(model):
 
 
 def recipe(model, X=None, y=None, *, data=None, fit_params=None, X_test=None, method="predict",
-           predict_on=None, score=False, digest=True, path=None):
+           predict_on=None, score=False, digest=True, parameters=False, path=None):
     """Describe how a model is made, as a recipe that `verify --recipe` fits
     from scratch on every device and compares bit for bit.
 
     In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and
     AMD GPUs. A recipe states your algorithm (the estimator and its
     hyperparameters, or the layers of a `Sequential` and its compile options;
-    the seed; the fit arguments; the data) and what to hash: the fitted
-    `digest_`, the predictions on stated rows and the score.
+    the seed; the fit arguments; the data) and what to compare: the fitted
+    `digest_`, the fitted parameters, the predictions on stated rows and the
+    score.
     `python -m mojolearn verify --recipe r.json` fits it from scratch on
     each device of this installation, says IDENTICAL or DIVERGENT with the
     first differing value, and writes a record that another machine compares
@@ -409,6 +426,11 @@ def recipe(model, X=None, y=None, *, data=None, fit_params=None, X_test=None, me
         Also hash `model.score` on the same rows (needs `y` for 'train').
     digest : bool, default True
         Hash the fitted model's `digest_`.
+    parameters : bool or list of str, default False
+        Compare the fitted parameters array by array: True for every one (a
+        `Sequential`'s `named_parameters()`, an estimator's public fitted
+        arrays such as ``coef_``), or a list of names for those only. A
+        difference names the parameter and its first differing element.
     path : str, optional
         Write the recipe there as JSON (and the data beside it, as
         ``<name>.data.npz``).
@@ -472,6 +494,8 @@ def recipe(model, X=None, y=None, *, data=None, fit_params=None, X_test=None, me
         data = _plain(dict(data), "data")
         has_test = bool((data.get("args") or {}).get("test_rows"))
     outputs = {"digest": bool(digest), "score": bool(score)}
+    if parameters:
+        outputs["parameters"] = True if parameters is True else _plain(list(parameters), "parameters")
     if method:
         outputs["predict"] = {"method": method, "on": predict_on or ("test" if has_test else "train")}
     out = {"format": FORMAT, "model": spec, "seed": _plain(seed, "the seed"), "fit": fit, "data": data,
@@ -572,6 +596,51 @@ def _rows(data, on):
     return data["X"]
 
 
+def _is_sequential(model):
+    try:
+        return "_layers" in object.__getattribute__(model, "__dict__")
+    except AttributeError:
+        return False
+
+
+def fitted_parameters(model, selected=True):
+    """`[(name, array)]`: the fitted parameters a recipe compares. A
+    `Sequential` gives its `named_parameters()` (state_dict names, layer
+    order); an estimator its public fitted numeric arrays (instance fields
+    named like ``coef_``: ending in "_", not starting with one), by name.
+    `selected` is True for all of them or a list of names (refused when the
+    model has no such parameter)."""
+    np = _np()
+    if _is_sequential(model):
+        found = [(str(name), np.ascontiguousarray(np.asarray(a))) for name, a in model.named_parameters()]
+    else:
+        try:
+            fields = object.__getattribute__(model, "__dict__")
+        except AttributeError:
+            fields = {}
+        found = []
+        for name in sorted(fields):  # verify tooling: over the fitted model's own fields
+            if not name.endswith("_") or name.startswith("_") or fields[name] is None:
+                continue
+            try:
+                a = np.asarray(fields[name])
+            except Exception:
+                continue
+            if a.dtype.kind in "biuf" and a.size:
+                found.append((name, np.ascontiguousarray(a)))
+    if selected is not True:
+        have = dict(found)
+        missing = [n for n in selected if n not in have]
+        if missing:
+            raise Refused(f"the fitted {type(model).__name__} has no parameter(s) {missing}; it has "
+                          f"{', '.join(have) or 'none'}")
+        found = [(n, have[n]) for n in selected]
+    if not found:
+        raise CannotRun(f"the fitted {type(model).__name__} exposes no fitted parameter arrays; compare its "
+                        "digest_ instead")
+    return found
+
+
 def run_recipe(ml, recipe, data, device=None):
     """Fit the recipe from scratch on `device` (None: the model as the recipe
     builds it, on this installation's device) and answer its outputs.
@@ -592,6 +661,8 @@ def run_recipe(ml, recipe, data, device=None):
     model = fitted if fitted is not None else model
     outputs = recipe.get("outputs") or {}
     answers = []
+    if outputs.get("parameters"):
+        answers += [(PARAM_PREFIX + name, a) for name, a in fitted_parameters(model, outputs["parameters"])]
     if outputs.get("digest"):
         try:
             answers.append(("digest", str(model.digest_)))

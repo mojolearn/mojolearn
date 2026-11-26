@@ -318,6 +318,15 @@ def execute(request):
     import mojolearn as ml
     if ml.numeric_mode() != "identical":
         raise WorkerFailure("worker did not load identical numeric mode")
+    if request["action"] == "extended":
+        # one capture of a single-device verify command `verify --all` runs beside its cells
+        # (_verify_extended.py); it needs no harness or table
+        from . import _verify_extended as extended
+        from . import _verify
+        value = extended.run_unit(request["profile"], request["step"], request["workdir"], ml.vendor())
+        return dict(value=value, bindings=[dict(module=b["module"], sha256=b["sha256"], size=b["size"],
+                                                file=b["file"], path_source=b["path_source"])
+                                           for b in _verify.binding_artifacts(require_loaded=False)])
     path = request["harness"]
     if path not in _HARNESSES:
         _HARNESSES[path] = verifier.load_harness(path)
