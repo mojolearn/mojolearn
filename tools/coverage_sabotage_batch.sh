@@ -195,11 +195,26 @@ one_build() {
     echo "$rc" > "$OUT/build_$b.rc"
     log "BUILD $b rc=$rc secs=$(( $(date +%s) - t ))"
 }
-bsampler=$(busy_sampler "$OUT/busy_cores_build.txt")
-for b in ${BUILDS//,/ }; do one_build "$b" & done
-wait
-kill "$bsampler" 2>/dev/null
-log "BUSY build: $(busy_of "$OUT/busy_cores_build.txt") of $CORES cores"
+# PREBUILT (lane sab-triage-1, 2026-11-26; tools/sabotage_prebuild.py): the GPU job compiles every batch's patched
+# bindings ahead, in scratch worktrees over all the allocation's cores, while the batches before it run. The batch
+# then copies its changed natives over the tree's instead of compiling; the patches above are applied all the same and
+# the restore below removes the copies exactly as it removes a build's outputs.
+PRE=${SAB_PREBUILT:+$SAB_PREBUILT/$BATCH}
+if [ -n "$PRE" ] && [ -f "$PRE/ready" ]; then
+    for b in ${BUILDS//,/ }; do
+        cp "$PRE/build_$b.rc" "$OUT/build_$b.rc" 2>/dev/null || echo 99 > "$OUT/build_$b.rc"
+        cp "$PRE/build_$b.log" "$OUT/build_$b.log" 2>/dev/null
+        log "BUILD $b rc=$(cat "$OUT/build_$b.rc") secs=$(cat "$PRE/build_$b.secs" 2>/dev/null || echo 0) (prebuilt)"
+    done
+    [ -d "$PRE/out" ] && cp -a "$PRE/out/." "$ROOT/"
+    log "PREBUILT natives placed: $(find "$PRE/out" -type f 2> /dev/null | wc -l) files"
+else
+    bsampler=$(busy_sampler "$OUT/busy_cores_build.txt")
+    for b in ${BUILDS//,/ }; do one_build "$b" & done
+    wait
+    kill "$bsampler" 2>/dev/null
+    log "BUSY build: $(busy_of "$OUT/busy_cores_build.txt") of $CORES cores"
+fi
 brc=0
 for b in ${BUILDS//,/ }; do
     rc=$(cat "$OUT/build_$b.rc" 2>/dev/null || echo 99)
