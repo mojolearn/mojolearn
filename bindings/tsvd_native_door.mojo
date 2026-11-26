@@ -493,15 +493,28 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject, f
 
 
 def _resident_lease(model: PythonObject, connection: Int, stored: PythonObject,
-                    components: PythonObject) raises -> TSVDLeasePin:
+                    components: PythonObject, context: PythonObject) raises -> TSVDLeasePin:
     # Keep the existing read-only/owning-array rule and resident fallback.
     # The native lease owner pins the image and component storage through RUN.
     if (tsvd_capabilities(connection) & TSVD_CAP_RESIDENT) == 0:
         return TSVDLeasePin(PythonObject(None), 0)
-    if components is not stored:
+    if components is not stored and not _reads_stored(stored, components, context):
         tsvd_owner_drop(model)
         return TSVDLeasePin(PythonObject(None), 0)
     return tsvd_owner_lease(model, connection, stored)
+
+
+def _reads_stored(stored: PythonObject, components: PythonObject, context: PythonObject) raises -> Bool:
+    """Whether the admitted `components` are the stored Array's own words, read in place. With NumPy connected
+    `admit_x` hands back an ndarray VIEW of the fit's mojolearn Array (bindings/sequential_inputs_door.mojo
+    `sequential_input`), a new object on every call, so the identity test alone dropped the lease on every
+    transform of a NumPy process and each call uploaded the components again (lane gs-fix-4:
+    test_tsvd_native_boundary / test_decomp_resident_lifecycle, 0 leases on the L40S). A cast copy (another
+    dtype or order) has its own address and stays per call, as before. One type compare and two address reads."""
+    var nk = tsvd_keys()
+    if py_type(stored) is not py_item(context, nk[].k_array_class):
+        return False
+    return _address(components, context) == Int(py=stored._addr)
 
 
 def _project(model: PythonObject, fields: PythonObject, admitted: AdmittedX, context: PythonObject,
@@ -520,7 +533,7 @@ def _project(model: PythonObject, fields: PythonObject, admitted: AdmittedX, con
     var connection = _route(model, fields, context).connection
     var stored = py_item(fields, nk[].k_components_)
     var components = admit_x(stored, 2, "components_", context)
-    var lease = _resident_lease(model, connection, stored, components)
+    var lease = _resident_lease(model, connection, stored, components, context)
     var request = TSVDQueryRequest(admitted.address, _address(components, context), _address(out, context),
         rows, cols, nc, False, test, lease.lease > 0, lease.lease)
     var status = tsvd_run_query(connection, request)
@@ -563,7 +576,7 @@ def tsvd_inverse_transform(model: PythonObject, source: PythonObject, context: P
     var connection = _route(model, fields, context).connection
     var stored = _attr(model, fields, "components_")
     var components = admit_x(stored, 2, "components_", context)
-    var lease = _resident_lease(model, connection, stored, components)
+    var lease = _resident_lease(model, connection, stored, components, context)
     var request = TSVDQueryRequest(admitted.address, _address(components, context), _address(out, context),
         rows, nf, nc, True, False, lease.lease > 0, lease.lease)
     _ = tsvd_run_query(connection, request)

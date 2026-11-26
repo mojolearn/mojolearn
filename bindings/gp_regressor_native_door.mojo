@@ -19,7 +19,7 @@ from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.py_attr import py_attr
 from bindings.gp_svm_gp_state_door import gp_kernel_arrays_reused, gp_x_known
-from bindings.fitted_resident_door import fitted_resident_drop
+from bindings.fitted_resident_door import fitted_resident_drop, fitted_reads_stored
 from bindings.gp_resident_boundary_unpack import gp_resident_lease
 from bindings.classical_arrays_door import classical_address
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
@@ -485,11 +485,16 @@ def _gpr_predict_result(model: PythonObject, fields: PythonObject,
         # follows the pointer route's params. Lease 0 (an array the binding
         # reads is not the field itself, or cannot be made read-only) uploads
         # per call, as before.
-        if xt is py_item(fields, nk[].k_X_train_) and lf is py_item(fields, nk[].k_L_) and dual is py_item(fields, nk[].k_alpha_):
+        # The lease is taken on the fitted fields themselves (the owners of the words); the admitted arrays
+        # are those fields or, with NumPy connected, views of them (fitted_reads_stored).
+        var own_xt = py_item(fields, nk[].k_X_train_)
+        var own_lf = py_item(fields, nk[].k_L_)
+        var own_dual = py_item(fields, nk[].k_alpha_)
+        if fitted_reads_stored(xt, own_xt) and fitted_reads_stored(lf, own_lf) and fitted_reads_stored(dual, own_dual):
             var mirrors = List[PythonObject]()
-            mirrors.append(xt)
-            mirrors.append(dual)
-            mirrors.append(lf)
+            mirrors.append(own_xt)
+            mirrors.append(own_dual)
+            mirrors.append(own_lf)
             lease = gp_resident_lease(model, _GPR_RESIDENT_SLOT, connection, mirrors)
         else:
             fitted_resident_drop(model, _GPR_RESIDENT_SLOT)

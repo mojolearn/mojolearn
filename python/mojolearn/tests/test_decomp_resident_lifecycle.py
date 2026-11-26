@@ -36,6 +36,8 @@ class _PoolLifecycle:
     projection): the live pool ids are the readout."""
 
     ARRAY = ""
+    #: True where the fit itself leaves its device buffers with the model.
+    RESIDENT_AT_FIT = False
 
     def live(self):
         return int(self.mod.x_decomp_dev_live())
@@ -69,11 +71,18 @@ class _PoolLifecycle:
             np.testing.assert_array_equal(np.asarray(a), np.asarray(b))
         self.assertLessEqual(self.live(), held, "a replaced array's stale copy is returned")
         # Death: a fresh fitted model's resident buffers go with it.
+        before = self.live()
         fresh = self.fit(self.make())
         base = self.live()
         _ = self.query(fresh)
         kept = self.live()
-        self.assertGreater(kept, base, "the first query keeps the fitted state on the device")
+        if self.RESIDENT_AT_FIT:
+            # The fit keeps the device buffers it produced (bindings/ipca_native_door.mojo `_adopt_state`):
+            # the state is resident before the first query, which then uploads nothing.
+            self.assertGreater(base, before, "the fit keeps the fitted state on the device")
+            self.assertEqual(kept, base, "the first query uploads no fitted array")
+        else:
+            self.assertGreater(kept, base, "the first query keeps the fitted state on the device")
         del fresh
         gc.collect()
         self.assertLess(self.live(), kept, "the model's death returns its resident buffers")
@@ -81,6 +90,7 @@ class _PoolLifecycle:
 
 class IncrementalPCALifecycle(_PoolLifecycle, unittest.TestCase):
     ARRAY = "components_"
+    RESIDENT_AT_FIT = True
 
     def make(self):
         from mojolearn._expansion_decomp import IncrementalPCA

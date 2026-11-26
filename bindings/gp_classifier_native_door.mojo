@@ -48,7 +48,7 @@ from bindings.gp_labels_native_door import gp_encode_labels, gp_decode_labels
 from bindings.gp_svm_gp_state_door import gp_kernel_arrays_reused, gp_x_known
 from bindings.gp_query_x_door import GpQuery, gp_query, gp_query_address, gp_query_scan
 from gaussian_process.gp_query_x_run import gp_query_refuse
-from bindings.fitted_resident_door import fitted_resident_drop
+from bindings.fitted_resident_door import fitted_resident_drop, fitted_reads_stored
 from bindings.gp_resident_boundary_unpack import gp_resident_lease
 from bindings.gp_score_labels_boundary_door import gpc_score_result
 from bindings.gp_labels_native_door import gp_decode_score_labels
@@ -586,9 +586,12 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
     var tables = GPCQueryTables(k)
     var kept = List[PythonObject]()
     var mirrors = List[PythonObject]()
-    var can_mirror = xt is py_item(fields, nk[].k_X_train_)
+    # The lease is taken on the fitted fields themselves; an admitted array is the field or, with NumPy
+    # connected, a view of it (fitted_reads_stored).
+    var own_xt = py_item(fields, nk[].k_X_train_)
+    var can_mirror = fitted_reads_stored(xt, own_xt)
     if can_mirror:
-        mirrors.append(xt)
+        mirrors.append(own_xt)
     var names = Python.tuple("y_train_", "pi_", "W_sr_", "L_")
     for i in range(k):  # driver-loop: four model buffers per fitted OVR member
         var own = py_fields(fits[i])
@@ -604,8 +607,9 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
         for j in range(4):  # driver-loop: retain each member buffer through native execution
             kept.append(parts[j])
             if can_mirror:
-                if parts[j] is own[names[j]]:
-                    mirrors.append(parts[j])
+                var own_part = own[names[j]]
+                if fitted_reads_stored(parts[j], own_part):
+                    mirrors.append(own_part)
                 else:
                     can_mirror = False
     var connection = GPConnection(ext)

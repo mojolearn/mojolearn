@@ -39,7 +39,23 @@ from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, pr
 from bindings.py_model_records import model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from bindings.py_balanced import py_call, py_type
+from bindings.classical_arrays_door import classical_address
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
+
+
+def fitted_reads_stored(admitted: PythonObject, stored: PythonObject) raises -> Bool:
+    """Whether `admitted` (the float32 array a door's admission handed its kernels) is the fitted field
+    `stored` read in place: the field itself, or, with NumPy connected, the ndarray VIEW the admission makes
+    of an exact mojolearn Array (bindings/sequential_inputs_door.mojo `sequential_input`), a new object on
+    every call over the same words. The identity test alone refused the resident lease on every predict of
+    a NumPy process, so the fitted arrays were uploaded per call (lane gs-fix-4: test_gp_svm_resident_lifecycle,
+    0 leases on the L40S). A cast copy has its own address and is not the field. The view case costs one type
+    compare and two address reads; the lease is then taken on `stored`, the owner of the words."""
+    if admitted is stored:
+        return True
+    if not fitted_is_freezable_any(stored):
+        return False
+    return Int(py=classical_address(admitted)) == Int(py=classical_address(stored))
 
 
 def _owns_store(value: PythonObject) raises -> Bool:

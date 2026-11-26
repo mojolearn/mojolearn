@@ -13,6 +13,7 @@
 # fields. No Python parameter list and no Python-callable driver entry.
 from std.math import sqrt
 from std.python import Python, PythonObject
+from bindings.fitted_resident_door import fitted_reads_stored
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from std.python._cpython import GILReleased
@@ -178,7 +179,10 @@ def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, 
     # would be a new object per call); else the per-call upload, as before.
     # The device words are the host words: no bit change.
     var held = hit
-    if held is None and matrix is stored:
+    # With NumPy connected the admitted matrix is a view of the stored Array, a new object per call over the
+    # same words (fitted_reads_stored; lane gs-fix-4: the identity test alone kept GaussianRandomProjection's
+    # components per call on the L40S, test_decomp_resident_lifecycle).
+    if held is None and fitted_reads_stored(matrix, stored):
         held = decomp_resident_operand(model, entries, stored, name, rows, Int(py=matrix.shape[1]))
     # tiled: 0 = the plain product; 1 = the tiled projection of an X the
     # admission tested; 2 = the tiled projection of an X nothing tested yet.

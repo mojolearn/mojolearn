@@ -46,7 +46,9 @@ class _ResidentLifecycle:
         return model.predict(X)
 
     def stats(self):
-        return tuple(int(v) for v in getattr(self.mod, self.STATS)())
+        # (live leases, kept entries, kept bytes, uploads, cap bytes): the SVM readout appends a sixth word,
+        # the held queries (bindings/_mojolearn_svm.mojo svm_resident_stats_binding), not part of this lifecycle.
+        return tuple(int(v) for v in getattr(self.mod, self.STATS)())[:5]
 
     def test_lifecycle(self):
         import numpy as np
