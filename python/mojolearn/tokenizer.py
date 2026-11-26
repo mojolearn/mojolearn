@@ -108,7 +108,7 @@ def _fast_binding(*, connect_all=False):
 
 
 #: The identical GPU tokenizer (`tokenizer/gpu/`, binding `_mojolearn_x_tokenizer`): what a
-#: BpeTokenizer built with device="gpu" runs. Connected once at import:
+#: BpeTokenizer built with device="gpu" runs. Connected once, at the first device="gpu" call (`_GPU_CONNECTION`):
 #: `(module, bpe_gpu_load, bpe_gpu_encode_batch, bpe_gpu_decode_batch, bpe_gpu_train,
 #: bpe_gpu_trained_sizes, bpe_gpu_trained_copy)`, or a one-item tuple
 #: holding the words device="gpu" is refused with where it is not installed.
@@ -126,6 +126,13 @@ def _gpu_binding():
                 module.bpe_gpu_train, module.bpe_gpu_trained_sizes, module.bpe_gpu_trained_copy)
     except (ImportError, AttributeError, ValueError, OSError) as error:
         return ("ImportError: device='gpu' needs the GPU tokenizer binding, which is not connected: " + str(error),)
+
+
+#: The connection holder every GPU tokenizer door reads (bindings/tokenizer_gpu_connect_unpack.mojo
+#: `tokenizer_gpu_connection`): `[_gpu_binding]` until the first device="gpu" call runs it once and
+#: keeps its tuple here. `import mojolearn` loads no GPU tokenizer image (lane gs-fix-2,
+#: test_lazy_family_import; it was connected at import).
+_GPU_CONNECTION = [_gpu_binding]
 
 
 # `encode` and `decode` for byte-level BPE in the GPT-2 format.
@@ -605,5 +612,5 @@ _TOKENIZER_FAST_ENTRIES = tuple(
     ("bpe_fast_load", "bpe_encode_batch", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy"))
 _TOKENIZER_CONTEXT = (BpeTokenizer, TrainedBpeVocabulary, BpeVocabularyTrainer,
                       _TOKENIZER_NATIVE, _TOKENIZER_FAST, _TOKENIZER_FAST_ENTRIES,
-                      vars(_backend), _numpy_free_context(), _gpu_binding())
+                      vars(_backend), _numpy_free_context(), _GPU_CONNECTION)
 _TOKENIZER_NATIVE.tokenizer_public_call("connect_bpe", (), _TOKENIZER_CONTEXT)

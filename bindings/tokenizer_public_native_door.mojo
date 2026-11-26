@@ -70,7 +70,7 @@ from core.lm_batch_run import lm_gather_rows
 from core.shared_slot import SharedSlot
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
 from core.tokenizer_gpu_entry_table import TOK_GPU_OP_VOCAB_CUT, TOK_GPU_OP_VOCAB_DECODE, TOK_GPU_OP_VOCAB_ENCODE, TOK_GPU_OP_VOCAB_LOAD
-from bindings.tokenizer_gpu_connect_unpack import tokenizer_gpu_entry_connect
+from bindings.tokenizer_gpu_connect_unpack import tokenizer_gpu_entry_connect, tokenizer_gpu_connection, TOKENIZER_GPU_PENDING
 
 
 struct TokenizerPublicConnection(Defaultable, Movable):
@@ -645,7 +645,7 @@ def _tokenizer_device(value: PythonObject, context: PythonObject) raises -> Int:
     var record = py_get(context[6], PythonObject("_CPU_ONLY"))
     if record is not None:
         device_gpu_absent()
-    var gpu = context[8]
+    var gpu = tokenizer_gpu_connection(context[8])
     if py_type(gpu[0]) is native_loaded_module("builtins").str:
         raise Error(String(gpu[0]))
     return request
@@ -667,10 +667,21 @@ def _cut_device(value: PythonObject, context: PythonObject) raises -> Int:
     var decided = function_device_decide(request, cpu_only, True, True, "mojolearn.models.tokenizer.pretokenize")
     if decided.request != DEVICE_GPU:
         return DEVICE_CPU
-    ref state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()[]
-    if state.vocab_gpu_refusal.byte_length() != 0:
-        raise Error(state.vocab_gpu_refusal)
+    _vocab_gpu_ready()
     return DEVICE_GPU
+
+
+def _vocab_gpu_ready() raises:
+    """The `models.Tokenizer` / `pretokenize` GPU entry, resolved at the first device='gpu' call from
+    the vocab context's GPU tokenizer holder ([6]; `tokenizer_gpu_connection`), once; then the words
+    device='gpu' is refused with, if any (lane gs-fix-2: resolved at connect_vocab, so at import)."""
+    var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
+    if state[].vocab_gpu_refusal == TOKENIZER_GPU_PENDING:
+        var context = state[].vocab
+        state[].vocab_gpu_refusal = tokenizer_gpu_entry_connect(tokenizer_gpu_connection(context[6]),
+                                                                state[].vocab_gpu_entry)
+    if state[].vocab_gpu_refusal.byte_length() != 0:
+        raise Error(state[].vocab_gpu_refusal)
 
 
 def _vocab_device(value: PythonObject, context: PythonObject) raises -> Int:
@@ -689,9 +700,7 @@ def _vocab_device(value: PythonObject, context: PythonObject) raises -> Int:
     var decided = function_device_decide(request, cpu_only, True, True, "mojolearn.models.Tokenizer")
     if decided.request != DEVICE_GPU:
         return DEVICE_CPU
-    ref state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()[]
-    if state.vocab_gpu_refusal.byte_length() != 0:
-        raise Error(state.vocab_gpu_refusal)
+    _vocab_gpu_ready()
     return DEVICE_GPU
 
 
@@ -736,7 +745,7 @@ def _bpe_adopt(tokenizer: PythonObject, handle: PythonObject, source: PythonObje
     owner[].gpu_only = device == DEVICE_GPU
     var gpu = PythonObject(None)
     if device == DEVICE_GPU:
-        var entry = context[8][1]
+        var entry = tokenizer_gpu_connection(context[8])[1]
         _native(entry)
         gpu = py_call(entry, PythonObject(text))
     py_setitem(fields, "_gpu", gpu)
@@ -802,7 +811,7 @@ def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: Python
         # device='gpu': every document (one for encode), with or without
         # allow_endoftext, on the GPU: the text uploaded once, ids and counts
         # read back once (tokenizer/gpu/bpe_gpu.mojo).
-        var entry = context[8][2]
+        var entry = tokenizer_gpu_connection(context[8])[2]
         _native(entry)
         total = _int(py_call(entry, native_instance_item(fields, PythonObject("_gpu")), Int(text.unsafe_ptr()),
             Int(lengths.unsafe_ptr()), Int(ids.unsafe_ptr()), Int(counts.unsafe_ptr()),
@@ -929,7 +938,7 @@ def _bpe_decode_gpu(fields: PythonObject, max_token_bytes: Int, nv: Int, sequenc
     var cap = nids * max(max_token_bytes, String(GPT2_ENDOFTEXT).byte_length())
     var out = List[UInt8](length=max(cap, 1), fill=UInt8(0))
     var lens = List[Int64](length=max(count, 1), fill=Int64(0))
-    var entry = context[8][3]
+    var entry = tokenizer_gpu_connection(context[8])[3]
     _native(entry)
     var total = _int(py_call(entry, native_instance_item(fields, PythonObject("_gpu")), Int(all_ids.unsafe_ptr()),
         Int(offs.unsafe_ptr()), Int(out.unsafe_ptr()), Int(lens.unsafe_ptr()), Python.tuple(count, nids, cap)),
@@ -1119,7 +1128,7 @@ def _trainer_train(trainer: PythonObject, input_documents: PythonObject, context
         if reverse:
             raise Error("RuntimeError: device='gpu' has no tie-break sabotage arm; this build's negative "
                 + "control is the host trainer's")
-        var gpu = context[8]
+        var gpu = tokenizer_gpu_connection(context[8])
         var g_entry = gpu[4]
         var g_sizes = gpu[5]
         var g_copy = gpu[6]
@@ -1968,7 +1977,8 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
         _connect_error_handlers()
         # The GPU side of `Tokenizer(device="gpu")`: context[6] is the GPU tokenizer binding's
         # connection tuple; its entry is resolved here once (lane vdf2-tokmodel).
-        state[].vocab_gpu_refusal = tokenizer_gpu_entry_connect(context[6], state[].vocab_gpu_entry)
+        # Resolved at the first device='gpu' call (`_vocab_gpu_ready`), never at import (lane gs-fix-2).
+        state[].vocab_gpu_refusal = String(TOKENIZER_GPU_PENDING)
         state[].vocab = context
         return PythonObject(None)
     # Each public constructor's `device=` is its last item, admitted once

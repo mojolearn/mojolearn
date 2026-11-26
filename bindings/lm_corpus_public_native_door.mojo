@@ -30,7 +30,7 @@ from bindings.py_cpython_table import cpython_table
 from core.native_json_value import JsonDoc
 from core.device_route import DEVICE_INSTALL, DEVICE_GPU
 from core.function_device import function_device_decide
-from bindings.lm_corpus_metadata_door import CORPUS_GPU_CONNECTION
+from bindings.lm_corpus_metadata_door import CORPUS_GPU_CONNECTION, corpus_gpu_ready
 from providers.python.device_route_boundary_door import device_unpack
 from tokenizer.impl.tokenizer_host_shell_impl import BpeHandle
 from core.lm_batch_run import LmBatchRequest, lm_batch_dims, lm_batch_run, lm_batch_steps_run
@@ -164,8 +164,7 @@ def _prepare(args: PythonObject, context: PythonObject) raises -> PythonObject:
         ref gpu = CORPUS_GPU_CONNECTION.get_or_create_ptr()[]
         var decided = function_device_decide(device_request, gpu.cpu_only, True, True, "mojolearn.lm_corpus.prepare")
         if decided.request == DEVICE_GPU:
-            if gpu.refusal.byte_length() != 0:
-                raise Error(gpu.refusal)
+            corpus_gpu_ready()
             on_gpu = True
     var size = _positive(args[3], "vocab_size")
     var frequency = _positive(args[4], "min_frequency")

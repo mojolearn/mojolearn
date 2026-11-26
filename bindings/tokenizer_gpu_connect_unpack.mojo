@@ -9,9 +9,34 @@ connect_vocab): one mechanism, read once per connection, never per call.
 Import-time metadata only: no numerical work to split."""
 from std.python import PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.py_balanced import py_call, py_type
+from bindings.py_balanced import py_call, py_type, py_setitem
 from core.entry_table import EntryRef
 from core.tokenizer_gpu_entry_table import tokenizer_gpu_resolve, tokenizer_gpu_vendor_word
+
+
+#: The refusal word a connection holds until the first device='gpu' call connects the GPU tokenizer
+#: (`tokenizer_gpu_connection`): never raised as such, only compared.
+comptime TOKENIZER_GPU_PENDING = "RuntimeError: the GPU tokenizer binding is connected at the first device='gpu' call"
+
+
+def tokenizer_gpu_connection(holder: PythonObject) raises -> PythonObject:
+    """The GPU tokenizer binding's connection tuple. `holder` is the one-item list
+    python/mojolearn/tokenizer.py connects (`_GPU_CONNECTION`): its item is the import glue
+    `_gpu_binding` until the FIRST device='gpu' call, which runs it once and keeps its tuple in the
+    holder (lane gs-fix-2: `import mojolearn` loaded `_mojolearn_x_tokenizer` on every GPU box,
+    test_lazy_family_import; the lazy connector form of `device_cpu_connect_late`). Later calls read
+    the tuple: one type compare."""
+    var bi = native_loaded_module("builtins")
+    if py_type(holder) is bi.tuple:
+        return holder
+    if py_type(holder) is not bi.list or len(holder) != 1:
+        raise Error("TypeError: GPU tokenizer connection requires its one-item holder")
+    var item = holder[0]
+    if py_type(item) is bi.tuple:
+        return item
+    var got = py_call(item)
+    py_setitem(holder, PythonObject(0), got)
+    return got
 
 
 def tokenizer_gpu_entry_connect(gpu: PythonObject, mut entry: EntryRef) raises -> String:

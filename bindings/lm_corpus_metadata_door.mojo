@@ -16,7 +16,7 @@ from core.native_json_value import (JsonDoc, json_add_array, json_add_bool, json
 from bindings.lm_keys_unpack import lm_keys
 from bindings.py_balanced import py_item
 from core.entry_table import EntryRef, entry_ref_unresolved
-from bindings.tokenizer_gpu_connect_unpack import tokenizer_gpu_entry_connect
+from bindings.tokenizer_gpu_connect_unpack import tokenizer_gpu_entry_connect, tokenizer_gpu_connection, TOKENIZER_GPU_PENDING
 
 
 struct CorpusConnection(Defaultable, Movable):
@@ -55,11 +55,25 @@ def corpus_gpu_connect(backend_fields: PythonObject, gpu: PythonObject) raises:
     var bi = native_loaded_module("builtins")
     if py_type(backend_fields) is not bi.dict:
         raise Error("TypeError: corpus connection requires the backend's fields")
-    if py_type(gpu) is not bi.tuple or len(gpu) < 1:
-        raise Error("TypeError: corpus connection requires the GPU tokenizer connection tuple")
+    if (py_type(gpu) is not bi.tuple and py_type(gpu) is not bi.list) or len(gpu) < 1:
+        raise Error("TypeError: corpus connection requires the GPU tokenizer connection")
     ref slot = CORPUS_GPU_CONNECTION.get_or_create_ptr()[]
     slot.cpu_only = py_get(backend_fields, PythonObject("_CPU_ONLY")) is not None
-    slot.refusal = tokenizer_gpu_entry_connect(gpu, slot.entry)
+    # The entry is resolved at the first device='gpu' prepare (`corpus_gpu_ready`, from the holder
+    # the corpus context keeps), never at import (lane gs-fix-2: test_lazy_family_import).
+    slot.refusal = String(TOKENIZER_GPU_PENDING)
+
+
+def corpus_gpu_ready() raises:
+    """Resolve the GPU tokenizer entry once, at the first device='gpu' `prepare`, from the
+    connection holder the corpus context keeps (`tokenizer_gpu_holder`); then raise the words
+    device='gpu' is refused with, if any."""
+    var slot = CORPUS_GPU_CONNECTION.get_or_create_ptr()
+    if slot[].refusal == TOKENIZER_GPU_PENDING:
+        var holder = py_get(corpus_context(), PythonObject("tokenizer_gpu_holder"))
+        slot[].refusal = tokenizer_gpu_entry_connect(tokenizer_gpu_connection(holder), slot[].entry)
+    if slot[].refusal.byte_length() != 0:
+        raise Error(slot[].refusal)
 
 
 def corpus_context() raises -> PythonObject:
@@ -101,6 +115,7 @@ def corpus_connect(args: PythonObject) raises -> PythonObject:
     corpus_files_initialize()
     # args[6], args[7]: the backend's fields and the GPU tokenizer connection (lane vdf2-tok).
     corpus_gpu_connect(args[6], args[7])
+    py_setitem(context, "tokenizer_gpu_holder", args[7])
     CORPUS_CONNECTION.get_or_create_ptr()[].context = context
     return PythonObject(None)
 
