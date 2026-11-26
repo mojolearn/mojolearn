@@ -67,7 +67,9 @@ index, the record table, the epoch's plan, the shard descriptors, the host buffe
 `fit(source=, steps=1)` loop costs O(batch) a step, not O(records) (re-reading the index and every offset table and
 replanning the epoch per call), and the batch read ahead after one call's last step is the next call's first. A
 position written to the handle from outside a fit (`load_state_dict`, `Session.load_training`) drops the owner; the
-next fit rebuilds it once at that position.
+next fit rebuilds it once at that position. The streamed Sequential and recurrent-estimator fits keep theirs the
+same way (lane w3i11-source-keep; the note "the streamed fits" below): each door image has its own owner type, and
+the training image uses that owner's source in place through its address.
 
 THE WAIT (device executor). An upload's host words are staged until the next sync (sequence/exec_device.mojo), so a
 streamed fit that never waited would hold one staged batch per queued step if the disk is faster than the device.
@@ -454,8 +456,17 @@ struct BatchSource(Movable):
     var held_batch: Int
     var held_rows: Int
     var held_len: Int
+    #: the `pad` the read-ahead batch was read with (a source kept across fits of models of other sequence lengths
+    #: rereads a batch read at another length; lane w3i11-source-keep)
+    var held_pad: Int
     var epoch: Int
     var consumed: Int
+    #: the class admission of this opened source, done once an open, not once a fit call (lane w3i11-source-keep):
+    #: 1 + the largest target of a passed scan (-1: none yet), and the per-class counts of the last counting pass
+    #: with its key (classes * 2 + valid_steps; -1: none)
+    var class_top: Int
+    var class_counts: List[Int]
+    var class_key: Int
 
     def __init__(out self, var spec: BatchSourceSpec):
         self.spec = spec^
@@ -487,8 +498,12 @@ struct BatchSource(Movable):
         self.held_batch = -1
         self.held_rows = 0
         self.held_len = 0
+        self.held_pad = 0
         self.epoch = 0
         self.consumed = 0
+        self.class_top = -1
+        self.class_counts = List[Int]()
+        self.class_key = -1
 
     def close(mut self):
         """Close every shard descriptor (idempotent)."""
@@ -521,6 +536,22 @@ struct BatchSource(Movable):
         if self.consumed >= self.n_batches:
             return (self.epoch + 1, 0)
         return (self.epoch, self.consumed)
+
+    def holds(self, epoch: Int, batch: Int, pad: Int) -> Bool:
+        """Whether the host buffers hold batch `batch` of `epoch` read with `pad` (the read-ahead a loop skips
+        rereading)."""
+        return self.held_epoch == epoch and self.held_batch == batch and self.held_pad == pad
+
+    def seek(mut self, epoch: Int, consumed: Int) raises:
+        """Move a kept source to the consumed position (epoch, consumed) in place: the resume position a training
+        state carries (lane w3i11-source-keep; the open refused the same positions). The plan and the read-ahead
+        are keyed by their epoch and batch, so nothing else changes."""
+        if epoch < 0 or consumed < 0 or consumed > self.n_batches:
+            raise Error("ValueError: BatchSource: the position (epoch " + String(epoch) + ", batch "
+                        + String(consumed) + ") is outside the stream of "
+                        + String(self.n_batches) + " batches an epoch")
+        self.epoch = epoch
+        self.consumed = consumed
 
     def plan(mut self, epoch: Int):
         """The record order and the batch bounds of `epoch` (module note THE PLAN). Kept for the epoch; a
@@ -655,6 +686,7 @@ struct BatchSource(Movable):
         self.held_batch = batch
         self.held_rows = rows
         self.held_len = length
+        self.held_pad = pad
 
 
 
@@ -946,30 +978,28 @@ def batch_source_capacity(src: BatchSource, field: Int) -> Int:
 # `Sequential.fit(source=)` (autograd/model.mojo, the streamed instance of the fit loop) and the recurrent estimators'
 # `fit(source=)` / `partial_fit(source=)` (sequence/recurrent.mojo rnn_fit_stream) read this source as
 # Program.fit(source=) does, with three differences the fixed descriptions of those models ask for:
-#   - every batch is padded to the model's sequence length (`read(..., pad)`), so the description is parsed once;
-#   - the source is opened by the training image itself from the handle's words (`batch_source_fit_words`, the path
-#     beside them): the Sequential and estimator doors run in another binding image than the computation, so no
-#     opened source crosses an image (each `fit` call opens it once; the handle's owner is Program.fit's cache);
-#   - the class targets of a classification loss are admitted once a fit (`batch_source_check_classes`).
-# WHY THE OPENED SOURCE IS NOT KEPT ACROSS THESE FITS' CALLS (lane fable-finalize, 2026-11-25; reviewed, not changed).
-# Program.fit keeps its opened source on the handle's native owner, which only the binding image that built it uses
-# (providers/python/batch_source_pyapi_door.mojo: another image's owner fails the downcast and is replaced). Here
-# the door (bindings/sequential_execution_pack.mojo, bindings/xseq_neural_native_door.mojo) and the training loop
-# (the provider image behind `xseq_neural_run_call` / the model file dispatch) are DIFFERENT images, so a kept
-# source would have to be a struct built in one image and grown, replanned and freed in another: its Lists
-# (order, bounds, the host buffers) are reallocated by `plan` and `read`. Nothing in the tree shares Mojo-owned
-# heap storage across binding images today (the one shared slot holds a Bool and a Python reference), and whether
-# two separately built images share one allocator and one layout of this struct is not established. A wrong
-# guess is silent heap corruption, so it is not done blind. What it costs: one open (index, offset tables: O(
-# records)) and, for a classifier, one scan of the targets PER fit OR partial_fit CALL, never per step: a fit of E
-# epochs opens once; only a loop of partial_fit(source=, steps=1) calls pays it every step. What would settle it: a
-# native check that builds a List in one binding image and grows and frees it in another (under the address
-# sanitizer), or Modular's word on the allocator; then the owner can hand its source's address to these doors.
-# Lane stream-fits-2 (2026-11-25) wrote that check: checks/cross_image_heap (cih_image.mojo built twice as two
-# shared libraries, cih_driver.mojo moving a holder with this struct's member kinds between them; build and run
-# commands in the driver's docstring). It has NOT run yet (the lane writes code only). Until it prints
-# CROSS_IMAGE_HEAP PASS with no sanitizer report, the source stays reopened per call; when it does, the owner hands
-# its opened source's address to the doors and the reopen above goes.
+#   - every batch is padded to the model's sequence length (`read(..., pad)`; `holds` compares the pad too, so a
+#     handle shared by models of other lengths rereads), so the description is parsed once;
+#   - the door keeps the opened source on the handle's owner and hands the training image its ADDRESS
+#     (`batch_source_fit_words`: the address and max_steps; `batch_source_fit_held` on the run side);
+#   - the class targets of a classification loss are admitted once an OPEN (`batch_source_check_classes`, cached on
+#     the source: `class_top`, `class_counts`), not once a call.
+# THE KEPT SOURCE ACROSS IMAGES (lane w3i11-source-keep, 2026-11-26; was "WHY THE OPENED SOURCE IS NOT KEPT",
+# lane fable-finalize). The door (bindings/sequential_execution_pack.mojo, bindings/xseq_neural_native_door.mojo)
+# and the training loop (the provider image behind `xseq_neural_run_call` / the model file dispatch) are different
+# binding images. Until now each fit call reopened the source in the training image (index, offset tables: O(
+# records), and for a classifier one scan of the targets, PER call), because a kept source is a struct built in one
+# image and grown, replanned and freed in another (`plan` and `read` reallocate its Lists) and that was not
+# established. It is now: checks/cross_image_heap (cih_image.mojo built twice as two shared libraries, cih_driver
+# .mojo moving a holder with this struct's member kinds between them) printed CROSS_IMAGE_HEAP PASS under the address
+# sanitizer for two separately built images in both orders (w3-integrate-11 on cpc2, f95ae7205c; evidence /root/cih).
+# So each door image keeps its own `BatchSourceOwner` type on the handle (providers/python/batch_source_pyapi_door
+# .mojo BS_DOOR_*: a downcast works only in the image that registered the type), opens the source there once, and
+# hands the training image the source's address as an integer word, never a Python object; the training image
+# moves it in place (`seek` to a resume position, `read`, `plan`) and never opens or closes it. The door holds the
+# owner object across the call. A position written from outside a fit (load_state_dict, Session.load_training, a
+# reopen) still drops the owner, and an owner that does not stand at the handle's position (a fit that failed half
+# way) is rebuilt once. The per-call reopen is gone (batch_source_fit_spec and the path bytes the doors passed).
 # The position a fit leaves is written twice: the CONSUMED position back to the handle, and the position the
 # training state saves (`batch_source_fit_saved`, the same words unless a sabotage arm moves them) with the source's
 # binding words (`ProgramTrainingSource`) into the model's state, so a fresh process resumes on the same next batch.
@@ -1134,44 +1164,26 @@ def source_part_load(src: UnsafePointer[Int64, MutUntrackedOrigin]) raises -> Pr
     return out^
 
 
-def batch_source_fit_words(spec: BatchSourceSpec, max_steps: Int) -> List[Int]:
-    """The words a streamed fit's door hands the training image (the path goes beside them as bytes): batch,
-    shuffle, seed (2 x 32 bits), bucket, fingerprint (2 x 32 bits), sealed, epoch, consumed, target, max_steps,
-    the input count and the input codes."""
-    var w: List[Int] = [
-        spec.batch, 1 if spec.shuffle else 0, Int(spec.seed & UInt64(0xFFFFFFFF)), Int(spec.seed >> 32),
-        spec.bucket, Int(spec.fingerprint & UInt64(0xFFFFFFFF)), Int(spec.fingerprint >> 32),
-        1 if spec.sealed else 0, spec.epoch, spec.consumed, spec.target, max_steps, len(spec.inputs),
-    ]
-    for k in range(len(spec.inputs)):  # small-loop(the source's input fields)
-        w.append(spec.inputs[k])
+#: a kept opened source, by address (the handle's owner holds it; providers/python/batch_source_pyapi_door.mojo)
+comptime BatchSourcePtr = UnsafePointer[BatchSource, MutUntrackedOrigin]
+
+#: the words a streamed fit's door hands the training image: the kept source's address and max_steps
+comptime BATCH_SOURCE_FIT_WORDS = 2
+
+
+def batch_source_fit_words(src: BatchSourcePtr, max_steps: Int) -> List[Int]:
+    """The words a streamed fit's door hands the training image (the note "the streamed fits"): the address of the
+    source the handle's owner keeps, and max_steps (0: no cap)."""
+    var w: List[Int] = [Int(src), max_steps]
     return w^
 
 
-comptime _FIT_WORDS_HEAD = 13
-
-
-def batch_source_fit_spec(path: String, words: List[Int]) raises -> Tuple[BatchSourceSpec, Int]:
-    """(the spec, max_steps) of `batch_source_fit_words`' words; refuses damaged words."""
-    if len(words) < _FIT_WORDS_HEAD or len(words) != _FIT_WORDS_HEAD + words[12]:
+def batch_source_fit_held(words: List[Int]) raises -> Tuple[BatchSourcePtr, Int]:
+    """(the kept source, max_steps) of `batch_source_fit_words`' words; refuses damaged words. The door keeps the
+    owner alive across the call; the training image uses the source in place and never closes it."""
+    if len(words) != BATCH_SOURCE_FIT_WORDS or words[0] == 0 or words[1] < 0:
         raise Error("ValueError: a streamed fit's source words are damaged")
-    for k in range(len(words)):  # small-loop(the source words)
-        if words[k] < 0:
-            raise Error("ValueError: a streamed fit's source words are damaged")
-    var spec = BatchSourceSpec()
-    spec.path = path
-    spec.batch = words[0]
-    spec.shuffle = words[1] != 0
-    spec.seed = (UInt64(words[3]) << 32) | UInt64(words[2])
-    spec.bucket = words[4]
-    spec.fingerprint = (UInt64(words[6]) << 32) | UInt64(words[5])
-    spec.sealed = words[7] != 0
-    spec.epoch = words[8]
-    spec.consumed = words[9]
-    spec.target = words[10]
-    for k in range(words[12]):  # small-loop(the source's input fields)
-        spec.inputs.append(words[_FIT_WORDS_HEAD + k])
-    return (spec^, words[11])
+    return (BatchSourcePtr(unsafe_from_address=words[0]), words[1])
 
 
 def batch_source_fit_saved[IS_DEVICE: Bool](src: BatchSource) -> ProgramTrainingSource:
@@ -1189,21 +1201,35 @@ def batch_source_fit_saved[IS_DEVICE: Bool](src: BatchSource) -> ProgramTraining
     return out^
 
 
-def batch_source_class_scan(src: BatchSource, classes: Int, who: String) raises -> Int:
-    """Admit the class targets of a streamed classification fit, once a fit, and return the class count they
-    imply (1 + the largest): every target word of every record must be a whole number >= 0, and below `classes`
-    when `classes` > 0. One host task a shard (one pread of its targets file); the targets are a few words a
-    record, small beside the steps. Refuses a source without targets."""
-    return _class_pass(src, classes, False, False, who)[0]
+def batch_source_class_scan(mut src: BatchSource, classes: Int, who: String) raises -> Int:
+    """Admit the class targets of a streamed classification fit, once an open of the source, and return the class
+    count they imply (1 + the largest): every target word of every record must be a whole number >= 0, and below
+    `classes` when `classes` > 0. One host task a shard (one pread of its targets file); the targets are a few words
+    a record, small beside the steps. Refuses a source without targets. A source kept across fit calls answers
+    from its first pass (`class_top`); only a refusal reads again, for the refusal's own text."""
+    if src.class_top >= 0 and (classes <= 0 or src.class_top <= classes):
+        return src.class_top
+    var found = _class_pass(src, classes, False, False, who)[0]
+    src.class_top = found
+    return found
 
 
-def batch_source_class_counts(src: BatchSource, classes: Int, valid_steps: Bool, who: String) raises -> List[Int]:
+def batch_source_class_counts(mut src: BatchSource, classes: Int, valid_steps: Bool, who: String) raises -> List[
+        Int]:
     """`batch_source_class_scan` with the class count fixed (`classes` > 0), returning how many targets of each
     class the source holds, in the SAME one read of the targets (lane stream-fits-2: class_weight='balanced' of a
     streamed fit, counted where the targets are admitted, never in a second read). `valid_steps` (output=
     "sequence": a record's target row holds one class a step, padded to the longest record) counts the first
-    `length` words of each record only, as the array fit counts the valid steps."""
-    return _class_pass(src, classes, True, valid_steps, who)[1].copy()
+    `length` words of each record only, as the array fit counts the valid steps. Kept across fit calls with the
+    source (`class_counts`, keyed by `classes` and `valid_steps`)."""
+    var key = classes * 2 + (1 if valid_steps else 0)
+    if src.class_key == key and classes > 0:
+        return src.class_counts.copy()
+    var passed = _class_pass(src, classes, True, valid_steps, who)
+    src.class_top = passed[0]
+    src.class_counts = passed[1].copy()
+    src.class_key = key
+    return passed[1].copy()
 
 
 def _class_pass(src: BatchSource, classes: Int, count: Bool, valid_steps: Bool, who: String) raises -> Tuple[
@@ -1285,6 +1311,6 @@ def _class_pass(src: BatchSource, classes: Int, count: Bool, valid_steps: Bool, 
     return (found, total^)
 
 
-def batch_source_check_classes(src: BatchSource, classes: Int, who: String) raises:
+def batch_source_check_classes(mut src: BatchSource, classes: Int, who: String) raises:
     """`batch_source_class_scan` with the class count fixed: every target word a class index in [0, classes)."""
     _ = batch_source_class_scan(src, classes, who)
