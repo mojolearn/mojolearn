@@ -12,7 +12,9 @@ THE OWNER (lane fr2-followups; autograd/batch_source.mojo THE OWNER). The opened
 plan, shard descriptors, host buffers, read-ahead batch) lives on a native `BatchSourceOwner` held in the handle's
 `_owner`, built by the first fit and reused by every later one while it stands at the handle's `_position`. A
 position written from outside a fit (`load_state_dict`, `Session.load_training`) or a reopen drops it; an owner of
-another binding image (another mode or executor) is replaced. The owner is a cache of what `_spec` and
+another binding image (another mode or executor) or of another door is replaced. The streamed Sequential and
+recurrent-estimator doors keep theirs the same way (`batch_source_hold` with their BS_DOOR_*) and hand the training
+image the source's address (autograd/batch_source.mojo "the streamed fits"). The owner is a cache of what `_spec` and
 `_position` determine, so a handle rebuilt in a fresh process from the same directory and a saved state is still
 the same source. Releasing the handle closes the descriptors (the owner's destructor, no Python `__del__`).
 
@@ -35,17 +37,28 @@ from providers.python.batch_source_class_door import (
 )
 from providers.python.autograd_program_arrays_pyapi_door import is_integer_input, uint64_input
 from autograd.batch_source import (
-    BatchSource, BatchSourceSpec, BATCH_SOURCE_FORMAT, BS_FIELD_TARGETS, batch_source_open, batch_source_field,
+    BatchSource, BatchSourceSpec, BatchSourcePtr, BATCH_SOURCE_FORMAT, BS_FIELD_TARGETS, batch_source_open,
+    batch_source_field,
     batch_source_field_name, batch_source_seal, ProgramTrainingSource, program_training_source_refuse,
     batch_source_part_of,
 )
 from autograd.session_lifetime import SESSION_MODE
 
 
-# DEVICE and MODE are part of the type on purpose, as SessionLifetime's (autograd/session_lifetime.mojo): the
+#: which door's owner (lane w3i11-source-keep): Program.fit (the x_sequence images), Sequential.fit(source=)
+#: (bindings/_mojolearn_runtime_sequential_host.mojo) and the recurrent estimators' fit(source=)
+#: (bindings/_mojolearn_runtime_xseq_host.mojo). Each image registers its own owner type and downcasts only its own.
+comptime BS_DOOR_PROGRAM = 0
+comptime BS_DOOR_SEQUENTIAL = 1
+comptime BS_DOOR_RECURRENT = 2
+
+
+# DEVICE, MODE and DOOR are part of the type on purpose, as SessionLifetime's (autograd/session_lifetime.mojo): the
 # Python type registry is one per process and `import mojolearn` loads the device and host x_sequence images in
-# both numeric modes; each registers its own owner type (bindings/_mojolearn_x_sequence(_host).mojo add_type).
-struct BatchSourceOwner[DEVICE: Bool, MODE: Int = SESSION_MODE](Movable, Writable):
+# both numeric modes, and the streamed Sequential and recurrent doors in their own images (merged builds put some of
+# them in one image); each registers its own owner type (bindings/_mojolearn_x_sequence(_host).mojo,
+# _mojolearn_runtime_sequential_host.mojo, _mojolearn_runtime_xseq_host.mojo add_type).
+struct BatchSourceOwner[DEVICE: Bool, MODE: Int = SESSION_MODE, DOOR: Int = BS_DOOR_PROGRAM](Movable, Writable):
     """A BatchSource handle's opened source, kept across fit calls (module note THE OWNER)."""
 
     var src: BatchSource
@@ -65,30 +78,46 @@ struct BatchSourceOwner[DEVICE: Bool, MODE: Int = SESSION_MODE](Movable, Writabl
         self.src.release_descriptors()
 
 
-comptime BatchSourcePtr = UnsafePointer[BatchSource, MutUntrackedOrigin]
+struct BatchSourceHold(Movable):
+    """A door's kept source for one call: the owner object (held by the door across the call, so a write to the
+    handle from another thread cannot free the source under it) and the source's address."""
+
+    var owner: PythonObject
+    var src: BatchSourcePtr
+
+    def __init__(out self, var owner: PythonObject, src: BatchSourcePtr):
+        self.owner = owner^
+        self.src = src
 
 
-def batch_source_held[DEVICE: Bool](source: PythonObject, var spec: BatchSourceSpec) raises -> BatchSourcePtr:
+def batch_source_hold[DEVICE: Bool, DOOR: Int = BS_DOOR_PROGRAM](
+    source: PythonObject, var spec: BatchSourceSpec
+) raises -> BatchSourceHold:
     """RUN's opened source for the handle `source` whose words are `spec` (module note THE OWNER): the handle's
     owner when it is this image's and stands at the handle's position, else a source opened once from `spec` and
-    kept on the handle. The source lives in the owner the handle holds; the caller keeps `source` alive while it
-    uses the pointer."""
+    kept on the handle. The source lives in the owner; the caller keeps the returned hold (its `owner`) alive while
+    it, or a training image it hands the address to, uses the source."""
     var held = source._owner
     if held is not None:
         try:
-            var owner = held.downcast_value_ptr[BatchSourceOwner[DEVICE]]()
+            var owner = held.downcast_value_ptr[BatchSourceOwner[DEVICE, SESSION_MODE, DOOR]]()
             if owner[].src.epoch == spec.epoch and owner[].src.consumed == spec.consumed:
                 var address = Int(UnsafePointer(to=owner[].src))
-                _ = held
-                return BatchSourcePtr(unsafe_from_address=address)
+                return BatchSourceHold(held, BatchSourcePtr(unsafe_from_address=address))
         except:
-            pass  # another binding image's owner (another mode or executor): replaced below
-    var made = PythonObject(alloc=BatchSourceOwner[DEVICE](batch_source_open(spec^)))
+            pass  # another binding image's or door's owner (another mode, executor or door): replaced below
+    var made = PythonObject(alloc=BatchSourceOwner[DEVICE, SESSION_MODE, DOOR](batch_source_open(spec^)))
     py_setattr(source, "_owner", made)
-    var owner = made.downcast_value_ptr[BatchSourceOwner[DEVICE]]()
+    var owner = made.downcast_value_ptr[BatchSourceOwner[DEVICE, SESSION_MODE, DOOR]]()
     var address = Int(UnsafePointer(to=owner[].src))
-    _ = made
-    return BatchSourcePtr(unsafe_from_address=address)
+    return BatchSourceHold(made^, BatchSourcePtr(unsafe_from_address=address))
+
+
+def batch_source_held[DEVICE: Bool](source: PythonObject, var spec: BatchSourceSpec) raises -> BatchSourcePtr:
+    """Program.fit's kept source (`batch_source_hold` with the Program door's owner); the caller keeps `source`
+    alive while it uses the pointer."""
+    var hold = batch_source_hold[DEVICE](source, spec^)
+    return hold.src
 
 
 def _drop_owner(source: PythonObject) raises:

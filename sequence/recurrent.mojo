@@ -939,8 +939,9 @@ def rnn_fit_stream[E: Exec, //, S: RnnStep](
     saved_out: Int, position_out: Int,
 ) raises:
     """The recurrent estimators' fit(source=) and partial_fit(source=) (lane stream-fits, 2026-11-25): at most
-    `total` optimizer steps, each on the next batch of `src` (autograd/batch_source.mojo, opened at the position to
-    train from), crossing epochs of the source as they end. Every batch is padded to T steps (the source's longest
+    `total` optimizer steps, each on the next batch of `src` (autograd/batch_source.mojo, kept by the door and set
+    at the position to train from), crossing epochs of the source as they end. Every batch is padded to T steps
+    (the source's longest
     record) and masked by its records' lengths; it is uploaded batch-first into staging buffers and laid out by the
     options loop's own gathers through an identity order (one launch each), so a step is `_rnn_options_step`'s, word
     for word, with the batch's rows where the array fit gathers its rows. The next batch is read from disk right
@@ -1061,7 +1062,7 @@ def rnn_fit_stream[E: Exec, //, S: RnnStep](
         var at = src.pending()
         src.epoch = at[0]
         src.consumed = at[1]
-        if src.held_epoch != at[0] or src.held_batch != at[1]:
+        if not src.holds(at[0], at[1], T):
             src.read(at[0], at[1], T)
         if staged >= BATCH_SOURCE_STAGE_WORDS:
             ex.sync()

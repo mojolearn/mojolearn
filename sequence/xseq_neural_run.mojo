@@ -534,25 +534,24 @@ def xseq_run_rnn_fit_options(entry: XseqNeuralEntry, req: XseqRnnFitRequest, opt
 
 def xseq_run_rnn_fit_stream(entry: XseqNeuralEntry, req: XseqRnnFitRequest, optimizer: XseqOptimizer, params: Int,
                             losses: Int, rates: Int, loop_words: Int, o: XseqRnnFitOptions, words: List[Int],
-                            path_address: Int, path_bytes: Int, saved: Int, position: Int, flags: Int) raises:
+                            saved: Int, position: Int, flags: Int) raises:
     """RNN_FIT in its STREAMED form (lane stream-fits; sequence/ops_impl.mojo rnn_fit_impl): the options form's
-    28 words, then the count and the batch source's words (autograd/batch_source.mojo batch_source_fit_words), the
-    stream flags (lane stream-fits-2: RNN_STREAM_BALANCED) and the path's byte count last; the options form's 16
-    addresses (X and y 0) and the path's bytes, the estimator's saved source part (out) and the position (out: 3
-    int64 words, the consumed (epoch, batch) and the steps run)."""
+    28 words, then the batch source's words (autograd/batch_source.mojo batch_source_fit_words: the kept source's
+    address and max_steps; lane w3i11-source-keep) and the stream flags (lane stream-fits-2: RNN_STREAM_BALANCED)
+    last; the options form's 16 addresses (X and y 0), the estimator's saved source part (out) and the position
+    (out: 3 int64 words, the consumed (epoch, batch) and the steps run). The caller holds the source's owner
+    through the call."""
     var ip: List[Int] = [req.cell, req.d, req.hidden, req.layers, req.outputs, req.task, req.n, req.steps_t,
                          req.epochs, req.batch, optimizer.kind, optimizer.flags, 1 if req.shuffle else 0,
                          Int(req.seed & 0xFFFFFFFF), Int(req.seed >> 32),
                          o.dirs, _b(o.seq_out), _b(o.no_bias), _b(o.sw != 0), _b(o.sw_steps), _b(o.cw != 0),
                          _b(o.h0 != 0), _b(o.c0 != 0), o.nv, o.patience, _b(o.restore), _b(o.vl != 0),
                          _b(o.state != 0)]
-    ip.append(len(words) + 2)
     for k in range(len(words)):  # small-loop(the source words)
         ip.append(words[k])
     ip.append(flags)
-    ip.append(path_bytes)
     var addresses: List[Int] = [0, 0, params, losses, rates, 0, loop_words, o.sw, o.cw, o.h0, o.c0,
-                                o.vx, o.vy, o.vl, o.vcurve, o.state, path_address, saved, position]
+                                o.vx, o.vy, o.vl, o.vcurve, o.state, saved, position]
     var floats = optimizer.floats.copy()
     floats.append(o.dropout)
     floats.append(o.clip)

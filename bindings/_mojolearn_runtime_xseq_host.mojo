@@ -16,6 +16,8 @@ from std.sys.compile import is_defined
 from bindings.xseq_native_pack import xseq_c
 from bindings.xcnn_native_pack import xcnn_c
 from bindings.xcnn_sage_saved_owner_pack import register_sage_saved_owner
+from providers.python.batch_source_pyapi_door import BatchSourceOwner, BS_DOOR_RECURRENT
+from autograd.session_lifetime import SESSION_MODE
 
 comptime RUNTIME_XSEQ_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -51,6 +53,9 @@ def build__mojolearn_runtime_xseq_host() -> PythonObject:
         # SAGEConv's saved host-form forward state (bindings/xcnn_sage_saved_owner_pack.mojo): this image
         # publishes the only door that allocates it, so it registers the type (once per process).
         register_sage_saved_owner(module)
+        # the recurrent estimators' fit(source=) keeps its opened source on the handle (lane w3i11-source-keep;
+        # bindings/xseq_neural_native_door.mojo _rnn_fit_source): this image's own owner type
+        _ = module.add_type[BatchSourceOwner[False, SESSION_MODE, BS_DOOR_RECURRENT]]("_BatchSourceOwner")
         module.def_function[runtime_xseq_host_numeric_mode_binding]("runtime_xseq_host_numeric_mode")
         module.def_function[runtime_xseq_host_vendor_binding]("runtime_xseq_host_vendor")
         module.def_function[runtime_xseq_host_column_binding]("runtime_xseq_host_column")

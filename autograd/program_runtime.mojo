@@ -644,7 +644,7 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
                 s.tape.reset()
                 comptime if streamed:
                     # the batch read ahead after the previous step (or, for the call's first batch, read here)
-                    if stream[].held_epoch != stream[].epoch or stream[].held_batch != bi:
+                    if not stream[].holds(stream[].epoch, bi, 0):
                         stream[].read(stream[].epoch, bi)
                     if staged >= BATCH_SOURCE_STAGE_WORDS:
                         # the uploads' host staging is released by a wait (sequence/exec_device.mojo); the loop
