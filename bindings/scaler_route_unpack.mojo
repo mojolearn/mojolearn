@@ -385,6 +385,14 @@ def scaler_route_vendor_used(model: PythonObject, context: PythonObject) raises 
         raise Error("numeric_mode must be fast, identical or None")
     var word = py_call(py_call(mode.strip).lower)
     scaler_route_refuse_fast(model, word, run)
+    # The entries of the ANSWERED word (core/mode_answer.mojo): where the identical set answers `fast` the fit
+    # ran on the identical entries, and the raw `fast` key named the CPU context's refusal text, so vendor_used()
+    # refused a model that fitted (lane gs-fix-2: test_scaler_device_boundary on the L40S GPU install). Only a
+    # `fast` word pays the answer read.
+    var asked = String(py=word)
+    if asked == "fast":
+        answer_mode_word(asked, MODE_FAMILY_SCALER)
+        word = PythonObject(asked)
     var entries = py_get(run["scaler_bindings"], word)
     if entries is None:
         raise Error("numeric_mode must be fast, identical or None")
