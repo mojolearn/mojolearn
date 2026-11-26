@@ -330,15 +330,17 @@ def check_recipe(recipe):
     if not isinstance(data, dict) or not ("generator" in data or "file" in data):
         raise Refused("the recipe's data names a built-in generator or a file with its sha256")
     outputs = recipe.get("outputs") or {}
+    # the malformed selection is named before "hashes nothing": an empty parameter list is a wrong spelling of
+    # parameters, not an omitted output
+    params = outputs.get("parameters")
+    if params not in (None, True, False) and not (
+            isinstance(params, list) and params and all(isinstance(n, str) and n for n in params)):
+        raise Refused("outputs.parameters is true (every fitted parameter) or a list of parameter names")
     if not any(outputs.get(k) for k in OUTPUT_KINDS):
         raise Refused("the recipe hashes nothing: outputs names digest, parameters, predict or score")
     unknown = sorted(set(outputs) - set(OUTPUT_KINDS))
     if unknown:
         raise Refused(f"outputs names {unknown}; a recipe compares {', '.join(OUTPUT_KINDS)}")
-    params = outputs.get("parameters")
-    if params not in (None, True, False) and not (
-            isinstance(params, list) and params and all(isinstance(n, str) and n for n in params)):
-        raise Refused("outputs.parameters is true (every fitted parameter) or a list of parameter names")
     predict = outputs.get("predict")
     if predict and isinstance(predict, dict) and predict.get("on", "train") not in ROWS:
         raise Refused(f"outputs.predict.on is 'train' or 'test', not {predict.get('on')!r}")

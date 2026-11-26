@@ -86,6 +86,9 @@ def test_scorer_retains_model_and_output_witnesses_or_fails(tmp_path, monkeypatc
                               predict=lambda X: values, save=lambda path: Path(path).write_bytes(b'fixture'))
     restored = SimpleNamespace(predict=lambda X: values + np.float32(1) if fault == 'reload' else values)
     estimator = SimpleNamespace(_learner_=learner, predict=lambda X: values, score=lambda X, y: .5)
+    # resolve the lazy export (it imports mojolearn.ensemble through the real binding) before the binding is faked;
+    # in python/mojolearn/tests another file had imported it first, alone here it raised AttributeError
+    ml.GradientBoosting
     monkeypatch.setattr(_backend, 'vendor', lambda: 'cuda')
     monkeypatch.setattr(_backend, 'binding', lambda *args: binding)
     monkeypatch.setattr(_backend, 'gpu_arch', lambda: 'simulated')

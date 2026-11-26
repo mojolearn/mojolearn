@@ -55,7 +55,7 @@ def test_extended_references_are_captured_once_per_evidence_column_all_at_once(t
 
         def wait(self):
             return 0
-    run = R.Run(args(tmp_path), popen=Proc)
+    run = R.Run(args(tmp_path, "--columns", "nvidia,ptx", "--label-device", "l40s", "--gpus", "2"), popen=Proc)
     rows = run.capture_extended(pathlib.Path(sys.executable), ["nvidia", "ptx"], [0, 1])
     assert len(launched) == 3 and all(dev == "0" for _, dev in launched)
     assert ["--vendor", "cuda"] == launched[0][0][launched[0][0].index("--vendor"):][:2]

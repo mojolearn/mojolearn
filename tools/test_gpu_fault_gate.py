@@ -133,7 +133,7 @@ def test_the_feature_proof_runs_the_verify_options_only_for_the_release():
     text = (ROOT / "tools/ops/feature_proof_job.sh").read_text()
     guard = text.index('if [ "${FP_RELEASE:-0}" = 1 ]; then')
     end = text.index("PROOF verify-options SKIP")
-    for step in ("verify-self-test", "verify-cross-check-quick", "verify-check ", "verify-fit-both", "verify-recipe-"):
+    for step in ("verify-tamper-test", "verify-cross-check-quick", "verify-check ", "verify-fit-both", "verify-recipe-"):
         assert guard < text.index(f'step {step}' if step != "verify-recipe-" else 'step "verify-recipe-') < end, step
     assert text.index("step digest-families") < guard  # the digest_ feature test stays in every round
 

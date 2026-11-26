@@ -227,7 +227,9 @@ def test_native_numpy_verifiers_are_lazy_and_have_no_product_callers():
                     references = [str(node.args[0].value)]
             if any(value.split(".")[-1] in names for value in references):
                 callers.add(relative.as_posix())
-    assert callers == {"__main__.py"}, callers
+    # the verify CLI only: __main__ (the verify-* subcommands) and _verify_extended (verify --all runs the same
+    # single-device commands as profiles, 48bf664cfa); both are NUMPY_ORACLES, never product code
+    assert callers == {"__main__.py", "_verify_extended.py"}, callers
 
 
 @pytest.mark.parametrize('content', ['import scipy\n', 'import sklearn\n', 'from requests import get\n',

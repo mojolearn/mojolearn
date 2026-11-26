@@ -286,8 +286,11 @@ class SplitLinuxTests(unittest.TestCase):
                             (edit(b'Requires-Dist: mojolearn-amd==' + v + b'\n', b''), 'core and both vendors'),
                             (edit(b'Requires-Dist: mojolearn-core==' + v + b'\n', b''), 'core and both vendors'),
                             (edit(b'mojolearn-nvidia==' + v, b'mojolearn-nvidia>=' + v), 'core and both vendors'),
+                            # the meta wheel may declare extras that forward to the core's
+                            # (tools/wheel_api_audit.py:237, packaging/linux/test_split_wheels.py:836); one that
+                            # does not forward is refused in those words
                             (edit(b'\n\nFixture only', b'\nProvides-Extra: nvidia\n\nFixture only'),
-                             'must not declare extras'),
+                             'meta extras must each forward exactly'),
                             (wrong_role, 'profile/role')):
             with self.subTest(why=why):
                 with self.assertRaisesRegex(ValueError, why):

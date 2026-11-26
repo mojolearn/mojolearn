@@ -368,7 +368,11 @@ def audit_tree(root, python_only=False):
             if binary is None:
                 raise ValueError("unreadable ELF: " + relative)
             deps = list(binary.libraries)
+            # the math check reads every undefined dynamic symbol (section index 0) too: lief 1.0 marks an
+            # unversioned undefined symbol (a library built without -lm calling sin) as not imported, so the
+            # audit read no math import there (packaging/portable_math/test_wheel.py test_rejects_native_math_import)
             imports = [s.name.split("@")[0] for s in binary.imported_symbols]
+            undefined = [s.name.split("@")[0] for s in binary.dynamic_symbols if s.name and s.shndx == 0]
         elif magic in (b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xca\xfe\xba\xbe"):
             fat = lief.MachO.parse(str(path))
             if fat is None or len(fat) != 1:
@@ -376,6 +380,7 @@ def audit_tree(root, python_only=False):
             binary = fat.at(0)
             deps = [x.name for x in binary.libraries]
             imports = [s.name.removeprefix("_") for s in binary.imported_symbols]
+            undefined = imports
         else:
             continue
         if path.name in ("libMojolearnMath.so", "libMojolearnMath.dylib"):
@@ -384,7 +389,7 @@ def audit_tree(root, python_only=False):
                         ("sqrt", "log", "log2", "log10", "log2f", "exp", "frexp", "ldexp", "modf", "lround")}
             if imports or not required <= exported:
                 errors.append(relative + ": owned helper has unresolved imports or missing exports")
-        bad_symbols = sorted(set(imports) & MATH_SYMBOLS)
+        bad_symbols = sorted((set(imports) | set(undefined)) & MATH_SYMBOLS)
         bad_deps = [dep for dep in deps if LIBM.match(Path(dep).name)]
         # FAST promises no bits across machines (per-vendor speed tier), so a
         # FAST-tier GPU set may call the platform's math; it is recorded, not
