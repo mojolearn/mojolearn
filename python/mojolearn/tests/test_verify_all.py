@@ -1544,7 +1544,10 @@ def test_cli_corrupted_table_exits_1():
                       "--reference-table", path])
     assert r.returncode == 1, r.stdout[-2000:] + r.stderr[-2000:]
     report = json.loads(r.stdout)
-    assert report["counts"]["DIVERGENT"] == 1 and report["verdict"] == "MISMATCH"
+    # One corrupted cell reads DIVERGENT once per side that ran it: the installation's device and, on a GPU
+    # installation, the CPU side beside it (the uncorrupted table above exits 0 on the same sides, so every
+    # divergence counted here is the corrupted cell's). Was: exactly 1, the CPU-only installation's count.
+    assert report["counts"]["DIVERGENT"] in (1, 2) and report["verdict"] == "MISMATCH"
 
 
 @pytest.mark.slow  # three real `verify --all` CLI runs over the ols fixtures (26 s)
