@@ -81,9 +81,46 @@ def test_slots_put_each_column_on_its_own_gpu_when_there_are_enough():
 
 def test_workers_use_every_core_bounded_by_memory():
     assert R.auto_workers(0, 4, None) == 1 and R.auto_workers(0, 16, None) == 5
-    assert R.auto_workers(1, 32, 80.0) == 6          # cores: 32 // 3 = 10, memory: 80 // 12 = 6
+    assert R.auto_workers(1, 32, 80.0) == 26         # cores: 32 // 1 = 32, GPU memory: 80 // 3 = 26
+    assert R.auto_workers(1, 13, 44.0) == 13         # the L40S of nvc-ab-20261126T214026Z-7116a8 (was 3 workers)
+    assert R.auto_workers(1, 13, 44.0, host_gib=20.0) == 5   # host memory: 20 // 4
     assert R.auto_workers(2, 16, None) == 1
+    assert R.auto_workers(0, 16, None, host_gib=8.0) == 2
+
+
+def test_chunks_pack_equal_cost_longest_lane_first():
+    # equal costs deal round robin, as before
     assert R.chunks(["a", "b", "c", "d", "e"], 2) == [["a", "c", "e"], ["b", "d"]] and R.chunks([], 3) == []
+    cost = {"trees": 180.0, "big": 100.0, "x": 40.0, "y": 40.0, "z": 30.0, "w": 10.0}
+    got = R.chunks(list(cost), 2, cost)
+    assert got[0][0] == "trees" and got[1][0] == "big"
+    loads = sorted(sum(cost[x] for x in c) for c in got)
+    assert loads == [190.0, 210.0]          # round robin would give 250 / 150
+    assert sorted(x for c in got for x in c) == sorted(cost)
+
+
+def test_lane_costs_read_the_shipped_hints_and_default_to_the_median(tmp_path):
+    hints = tmp_path / "cell_seconds.json"
+    hints.write_text(json.dumps(dict(format="x", seconds={"a": 10.0, "b": 2.0, "c": 4.0, "@models": 60.0})))
+    got = R.lane_costs(["a", "b", "c", "new"], hints)
+    assert got == {"a": 10.0 + R.LANE_OVERHEAD_S, "b": 2.0 + R.LANE_OVERHEAD_S, "c": 4.0 + R.LANE_OVERHEAD_S,
+                   "new": 4.0 + R.LANE_OVERHEAD_S}
+    assert R.lane_costs(["a"], tmp_path / "missing.json") == {"a": 1.0 + R.LANE_OVERHEAD_S}
+    shipped = R.lane_costs(["generic-pickle-trees", "pca"])
+    assert shipped["generic-pickle-trees"] > shipped["pca"]
+
+
+def test_the_record_prints_its_wall_busy_cores_and_slowest_lanes(tmp_path, fake, capsys):
+    fake.setattr(R.Run, "all_lanes", lambda self, py, column, lab: (["knn", "ols", "ridge"], 0))
+    a = args(tmp_path, "--columns", "amd", "--label-device", "mi325x", "--gpus", "1", "--workers-per-gpu", "2")
+    assert R.Run(a).main() == 0
+    w0 = tmp_path / "out" / "amd-mi325x" / "w0"
+    (w0 / "amd-mi325x.lanes-x.log").write_text("# DONE knn/base repeat=1/train 3.5s\n# DONE knn/odd repeat=1/train 1.5s\n"
+                                              "# DONE ols/base repeat=1/train 0.25s\n")
+    assert R.lane_seconds([w0 / "amd-mi325x.lanes-x.log"]) == {"knn": 5.0, "ols": 0.25}
+    doc = json.loads((tmp_path / "out" / "identity-wheels.json").read_text())
+    assert set(doc["timing"]) >= {"wall_s", "busy_cores_mean", "cores", "chunk_seconds", "slowest_lanes"}
+    assert "identity-wheels: timing: record " in capsys.readouterr().out
 
 
 def test_two_columns_on_two_gpus_record_once_in_parallel(tmp_path, fake, capsys):

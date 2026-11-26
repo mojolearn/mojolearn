@@ -28,3 +28,17 @@ def test_cost_hints_ship_and_the_last_run_overrides_them(monkeypatch, tmp_path):
     again, source = va.cell_cost_hints()
     assert source == "shipped+last run" and again["pca"] == 400.0 and again["@models"] == 7.0
     assert again["generic-pickle-trees"] == hints["generic-pickle-trees"]
+
+
+def test_a_timed_out_cell_never_raises_the_next_limit(monkeypatch, tmp_path):
+    """rel-fix-2 (2026-11-26): a killed cell's seconds are its limit, not its cost; the saved hints leave it out, so a
+    lane's limit does not grow by CELL_LIMIT_FACTOR on every run that times it out."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    hints = {"pca": 10.0}
+    va.save_cell_cost_hints(hints, {("pca", "base"): 1800.0, ("pca", "ties"): 12.0}, {},
+                            skip={("pca", "base")})
+    again, _ = va.cell_cost_hints()
+    assert again["pca"] == 12.0
+    assert va.cell_limit(again, "pca", 120.0) == 120.0
+    assert va.cell_limit({"slow": 100.0}, "slow", 120.0) == 4 * 100.0
+    assert va.cell_limit({"hang": 1e9}, "hang", 120.0) == va.CELL_LIMIT_MAX_S

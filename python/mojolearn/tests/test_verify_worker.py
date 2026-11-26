@@ -172,8 +172,10 @@ def test_controller_checkpoints_and_stops_without_false_pass(monkeypatch, tmp_pa
     """Exercise actual controller/report assembly with disposable workers mocked
     (fresh-process-per-cell mode).
 
-    The timeout case must not dispatch the second lane, while a legitimate
-    comparison mismatch must still dispatch it. Neither may return VERIFIED.
+    A timed-out cell fails alone (rel-fix-2): the second lane is still
+    dispatched, the timed-out cells are refused and named, and the run exits
+    non-zero. A legitimate comparison mismatch also dispatches every lane.
+    None of them may return VERIFIED.
     """
     reference = verifier.vref
     run_verify = controller(monkeypatch, tmp_path, divergent=("one",) if failure == "mismatch" else ())
@@ -185,7 +187,7 @@ def test_controller_checkpoints_and_stops_without_false_pass(monkeypatch, tmp_pa
         if request["action"] == "self-test":
             return dict(value=dict(passed=failure != "preflight"), bindings=[])
         if failure == "timeout":
-            raise worker.WorkerFailure("test worker exceeded limit")
+            raise worker.WorkerTimeout(f"cell/{request['lane']}/base: exceeded 1s worker limit")
         if failure == "crash" and request["lane"] == "one":
             raise worker.WorkerCrash("cell/one/base: worker exited -5; ")
         return dict(value={"cpu": {part: ["abcdef0123456789", None] for part in reference.PARTS}}, bindings=[])
@@ -197,10 +199,13 @@ def test_controller_checkpoints_and_stops_without_false_pass(monkeypatch, tmp_pa
     assert progress["exit"] == code == report["exit"]
     cells_dispatched = [r for r in calls if r["action"] == "cell"]
     if failure == "timeout":
-        assert len(cells_dispatched) == 1
+        assert len(cells_dispatched) == 2
         assert code == verifier.EXIT_CANNOT_RUN
         assert {r["lane"] for r in report["cells"]} == {"one", "two"}
         assert all(r["state"] == reference.REFUSED for r in report["cells"])
+        assert progress["execution"]["interrupted"] is None
+        assert [c["lane"] for c in progress["execution"]["timed_out_cells"]] == ["one", "two"]
+        assert "TIMED OUT" in report["detail"]
     elif failure == "crash":
         # one crashed worker refuses its own cell; the sweep goes on
         assert len(cells_dispatched) == 2
@@ -408,7 +413,7 @@ def test_cell_values_do_not_depend_on_execution_mode(monkeypatch, tmp_path):
     assert batched["exit"] == fresh["exit"] == verifier.EXIT_VERIFIED
 
 
-@pytest.mark.parametrize("kind", ["crash", "timeout", "unhealthy", "failure"])
+@pytest.mark.parametrize("kind", ["crash", "unhealthy", "failure"])
 def test_batch_stop_runs_remaining_cells_fresh(monkeypatch, tmp_path, kind):
     run_verify = controller(monkeypatch, tmp_path, lanes=LANES)
     batch, batch_calls = fake_batch(lambda r: good_value(r["lane"]),
@@ -480,24 +485,68 @@ def test_one_lane_crashing_on_every_fixture_does_not_stop_the_sweep(monkeypatch,
     assert all(r["state"] == verifier.vref.IDENTICAL for r in report["cells"] if r["lane"] != "one")
 
 
-def test_fallback_timeout_stops_sweep(monkeypatch, tmp_path):
+def test_a_batch_timeout_fails_that_cell_and_the_rest_run(monkeypatch, tmp_path):
+    """rel-fix-2 (L40S nvc-ab-20261126T214026Z-7116a8: one timed-out cell refused 907 lanes): the timed-out cell is
+    FAILED with its message and not rerun, the rest of its batch runs in a new batch, every other cell is verified,
+    and the run still exits non-zero."""
     run_verify = controller(monkeypatch, tmp_path, lanes=LANES)
     batch, batch_calls = fake_batch(lambda r: good_value(r["lane"]),
                                     stops=lambda r: "timeout" if r["lane"] == "two" else None)
-
-    def hang(request):
-        raise worker.WorkerFailure(f"cell/{request['lane']}/base: exceeded 1s worker limit")
-
-    run, fresh_calls = fresh_runs(hang)
+    run, fresh_calls = fresh_runs()
     monkeypatch.setattr(worker, "run_batch", batch)
     monkeypatch.setattr(worker, "run", run)
-    code, report, progress, journal = run_verify(batch_cells=2)
+    code, report, progress, journal = run_verify(batch_cells=3)
+    execution = progress["execution"]
     assert code == verifier.EXIT_CANNOT_RUN
-    assert batch_calls == [["one", "two"]]
-    assert fresh_calls == ["self-test", "two"]
-    assert "exceeded" in progress["execution"]["interrupted"]
+    assert batch_calls == [["one", "two", "three"], ["three"], ["four", "five"]]
+    assert fresh_calls == ["self-test"]
+    assert execution["interrupted"] is None
+    assert [(c["lane"], c["fixture"]) for c in execution["timed_out_cells"]] == [("two", "base")]
+    assert [(s["lane"], s["kind"]) for s in execution["batch_stops"]] == [("two", "timeout")]
     refused = {r["lane"] for r in report["cells"] if r["state"] == verifier.vref.REFUSED}
-    assert refused == {"two", "three", "four", "five"}
+    assert refused == {"two"}
+    assert all(r["state"] == verifier.vref.IDENTICAL for r in report["cells"] if r["lane"] != "two")
+    assert "TIMED OUT" in report["detail"]
+    assert set(execution["timing"]) >= {"sweep_s", "busy_cores_mean", "cores", "slowest"}
+    assert len(execution["timing"]["slowest"]) == 5
+
+
+def test_each_cell_limit_comes_from_its_lane_measured_cost(monkeypatch, tmp_path):
+    """The limit of a cell is CELL_LIMIT_FACTOR times its lane's measured seconds, never below --cell-timeout and at
+    most CELL_LIMIT_MAX_S; a lane with no measurement keeps --cell-timeout."""
+    run_verify = controller(monkeypatch, tmp_path, lanes=LANES)
+    monkeypatch.setattr(verifier, "cell_cost_hints", lambda: ({"one": 65.6, "two": 1e6, "three": 0.1}, "test"))
+    limits = {}
+
+    def batch(requests, timeout, log=None, on_result=None):
+        for index, (request, limit) in enumerate(zip(requests, timeout)):
+            limits[request["lane"]] = limit
+            on_result(index, dict(value=good_value(request["lane"]), bindings=[dict(_NATIVE_FIXTURE)]))
+
+    run, _ = fresh_runs()
+    monkeypatch.setattr(worker, "run_batch", batch)
+    monkeypatch.setattr(worker, "run", run)
+    code, _, _, _ = run_verify(batch_cells=24)
+    assert code == verifier.EXIT_VERIFIED
+    assert limits["one"] == pytest.approx(verifier.CELL_LIMIT_FACTOR * 65.6)
+    assert limits["two"] == verifier.CELL_LIMIT_MAX_S
+    assert limits["three"] == limits["four"] == limits["five"] == 1
+
+
+def test_batch_limits_are_per_request(monkeypatch):
+    # the first cell has 5 s and answers in 0.3 s; the second has 0.5 s and hangs
+    children = substitute_child(monkeypatch, BATCH_CHILD + '''
+time.sleep(0.3); answer(0, 0)
+time.sleep(30)
+''')
+    seen = []
+    stop = worker.run_batch(batch_requests(2), timeout=[5, 0.5], on_result=lambda i, r: seen.append(i))
+    assert (stop.kind, stop.index) == ("timeout", 1)
+    assert "exceeded 0.5s" in stop.message
+    assert seen == [0]
+    assert children[0].poll() is not None
+    with pytest.raises(ValueError):
+        worker.run_batch(batch_requests(2), timeout=[5])
 
 
 @pytest.mark.parametrize("bad", [0, -2])
