@@ -517,6 +517,12 @@ sync)
         || die "stale-file cleanup failed"
     _head=$(bx 60 "cd $BOX_DIR && git rev-parse HEAD" < /dev/null | tr -d '\r')
     [ "$_head" = "$base" ] || die "the box's HEAD ($_head) is not the worktree's merge base ($base)"
+    # The full sync records the synced commit too, as the patch sync does: without it a record left by an earlier
+    # patch sync would name the wrong commit to every job that reads it (tools/ops/tree_commit.sh).
+    _dirty=0; [ -z "$(git -C "$wt" status --porcelain 2>/dev/null | grep -vE '\.(so|dylib|metallib)$')" ] || _dirty=1
+    printf 'commit=%s\nworktree_dirty=%s\nbase=%s\npatch_sha256=none-full-sync\npatch_bytes=0\nsynced=%s\n' \
+        "$(git -C "$wt" rev-parse HEAD)" "$_dirty" "$base" "$(date -u +%FT%TZ)" | bx 60 "cat > $BOX_DIR/.git/devpod_synced" \
+        || die "provenance upload failed"
     say "synced $(cd "$wt" && git rev-parse --short HEAD)+worktree -> $POD_ID:$BOX_DIR (box HEAD = merge base $(git -C "$wt" rev-parse --short "$base"))"
     ;;
 run)

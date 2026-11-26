@@ -1,0 +1,103 @@
+"""Tool tests for tools/ops/tree_commit.sh and the box jobs that refuse a wheel of another commit (2026-11-26).
+
+tools/dev_pod.sh sync leaves a box tree's HEAD at the merge base with main and records the synced commit in
+.git/devpod_synced. The jobs must compare a staged wheel's +<sha> with that commit, not with HEAD.
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+LIB = ROOT / "tools/ops/tree_commit.sh"
+
+
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def _repo(tmp_path: Path) -> tuple[Path, str]:
+    repo = tmp_path / "tree"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    (repo / "f").write_text("x\n")
+    _git(repo, "add", "f")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "c")
+    return repo, _git(repo, "rev-parse", "HEAD")
+
+
+def _sh(script: str, cwd: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(["bash", "-c", f'. "{LIB}"\n{script}'], capture_output=True, text=True, cwd=cwd)
+
+
+def _record(repo: Path, commit: str, base: str) -> None:
+    (repo / ".git/devpod_synced").write_text(f"commit={commit}\nworktree_dirty=0\nbase={base}\npatch_sha256=x\n")
+
+
+def test_a_plain_checkout_holds_its_head(tmp_path):
+    repo, head = _repo(tmp_path)
+    assert _sh(f'tree_commit "{repo}"', tmp_path).stdout.strip() == head
+
+
+def test_a_synced_tree_holds_the_synced_commit_and_a_stale_record_is_ignored(tmp_path):
+    repo, head = _repo(tmp_path)
+    synced = "ab" * 20
+    _record(repo, synced, head)
+    assert _sh(f'tree_commit "{repo}"', tmp_path).stdout.strip() == synced
+    _record(repo, synced, "cd" * 20)  # the tree was checked out after that sync
+    assert _sh(f'tree_commit "{repo}"', tmp_path).stdout.strip() == head
+    assert _sh(f'tree_commit "{tmp_path / "nowhere"}"', tmp_path).stdout.strip() == ""
+
+
+def test_wheels_match_only_the_trees_commit(tmp_path):
+    repo, head = _repo(tmp_path)
+    synced = "ab" * 20
+    _record(repo, synced, head)
+    good = f"mojolearn_core-0.8.67.dev0+{synced[:12]}-cp312-cp312-linux_x86_64.whl"
+    other = f"mojolearn_nvidia-0.8.67.dev0+{head[:12]}-py3-none-linux_x86_64.whl"
+    plain = "mojolearn_core-0.8.67-cp312-cp312-linux_x86_64.whl"
+    ok = _sh(f'wheels_match_tree "{repo}" {good}', tmp_path)
+    assert ok.returncode == 0 and ok.stdout.startswith("MATCH ")
+    bad = _sh(f'wheels_match_tree "{repo}" {good} {other} {plain}', tmp_path)
+    assert bad.returncode == 1
+    lines = bad.stdout.splitlines()
+    assert lines[0].startswith("MATCH") and "is commit" in lines[1] and "no +<sha>" in lines[2]
+    assert _sh(f'wheels_match_tree "{repo}"', tmp_path).returncode == 1  # no wheel at all
+    assert _sh(f'wheel_commit /x/{good}', tmp_path).stdout.strip() == synced[:12]
+
+
+def test_the_proving_job_refuses_a_wheel_of_another_commit_before_installing(tmp_path):
+    wheels = tmp_path / "wheels"
+    wheels.mkdir()
+    (wheels / "mojolearn_core-0.8.67.dev0+0123456789ab-cp312-cp312-linux_x86_64.whl").write_bytes(b"")
+    env = dict(os.environ, MOJOLEARN_RESULTS_DIR=str(tmp_path / "res"), PV_WHEEL_DIR=str(wheels))
+    run = subprocess.run(["bash", str(ROOT / "tools/ops/proving_job.sh")], capture_output=True, text=True, env=env,
+                         timeout=120)
+    assert run.returncode == 4, run.stdout + run.stderr
+    assert "PROVING setup FAIL the wheels are not this tree's commit" in run.stdout
+    assert not (tmp_path / "res/venv").exists()  # nothing was installed
+
+
+def test_the_gpu_smoke_preflight_compares_wheels_with_the_trees_commit(tmp_path):
+    head = _git(ROOT, "rev-parse", "HEAD")
+    for sha, want in ((head[:12], "PREFLIGHT ok wheel mojolearn_"), ("0123456789ab", "PREFLIGHT FAIL mojolearn_")):
+        wheels = tmp_path / sha
+        wheels.mkdir()
+        for name in (f"mojolearn_core-0.8.67.dev0+{sha}-cp312-cp312-linux_x86_64.whl",
+                     f"mojolearn_nvidia-0.8.67.dev0+{sha}-py3-none-linux_x86_64.whl"):
+            (wheels / name).write_bytes(b"")
+        env = dict(os.environ, GS_WHEEL_DIR=str(wheels), MOJOLEARN_RESULTS_DIR=str(tmp_path / "res"))
+        run = subprocess.run(["bash", str(ROOT / "tools/ops/gpu_smoke_job.sh"), "--preflight"], capture_output=True,
+                             text=True, env=env, timeout=120)
+        wheel_lines = [ln for ln in run.stdout.splitlines()
+                       if ln.startswith(("PREFLIGHT ok wheel mojolearn_", "PREFLIGHT FAIL mojolearn_"))]
+        assert len(wheel_lines) == 2 and all(ln.startswith(want) for ln in wheel_lines), run.stdout
+
+
+def test_the_full_pod_sync_records_the_synced_commit():
+    text = (ROOT / "tools/dev_pod.sh").read_text()
+    full = text[text.index("# FULL SYNC"):]
+    full = full[:full.index('\n    ;;\n')]
+    assert "devpod_synced" in full and "commit=%s" in full

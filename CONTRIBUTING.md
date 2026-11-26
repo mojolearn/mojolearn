@@ -171,8 +171,7 @@ Owners, members and collaborators are exempt.
 
 A green CPU report does not close `GPU_PENDING` or permit automatic merging.
 No GPU fleet or automatic merge is configured. Untrusted pull request code
-never runs on the [manual GPU workflow](.github/workflows/gpu-validation.yml)
-or the [release runner](tools/release_runner.sh). Maintainers can run the
+never runs on the [release runner](tools/release_runner.sh). Maintainers can run the
 admission negative controls locally with
 `python3 -m unittest discover -s tools -p test_external_contribution_gate.py`.
 

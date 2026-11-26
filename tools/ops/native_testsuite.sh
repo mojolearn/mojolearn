@@ -26,6 +26,9 @@
 #                                      the device column's MOJOLEARN_RESIDENT_UPLOAD_COUNT=1) and the wheel's x86-64-v3
 #                                      target (NC_TARGET, default that baseline on x86_64; set empty for none).
 #                                      Exit 0 even when a file failed (its own row is red); 2 on a setup failure.
+#                                      NC_TS_CACHE=<dir> (the box jobs set it) reuses a group program or single
+#                                      whose inputs did not change since an earlier build on the box
+#                                      (tools/ops/native_testsuite_cache.py); unset, everything compiles.
 #   one <column> [-D DEFINE ...] <name> ...
 #                                      build each named file alone (the build step's defines and target, plus the given
 #                                      defines) and run it, its output on stdout; exit 0 when every one passed (the
@@ -75,7 +78,7 @@ column_flags() {
 # One compile of the build: `group <k>` (the generated driver of group k) or `single <name>` (the file alone). A
 # single that fails writes its result row now. Run by xargs, so exported.
 compile_unit() {
-    local kind=$1 id=$2 log src dst t0 rc tm
+    local kind=$1 id=$2 log src dst t0 rc tm key
     t0=$(date +%s)
     if [ "$kind" = group ]; then
         log="$TS_OUT/logs/build-ts-group-$id.log"; dst="$TS_BIN/tsg/group_$id"; src="$TS_GEN/ts_group_$id.mojo"
@@ -84,12 +87,22 @@ compile_unit() {
         src="checks/native_tests/$id.mojo"; [ -f "$src" ] || src="checks/$id.mojo"
     fi
     tm="$log.time"
+    # a program whose inputs did not change is copied from NC_TS_CACHE (tools/ops/native_testsuite_cache.py: the key
+    # is every source file it imports, the flags and the toolchain); TS_KEYS is empty when there is no cache
+    key=""
+    [ -s "${TS_KEYS:-}" ] && key=$(awk -v k="$kind" -v i="$id" '$1 == k && $2 == i {print $3; exit}' "$TS_KEYS")
+    if [ -n "$key" ] && $TS_PY tools/ops/native_testsuite_cache.py get "$key" "$dst" > "$log" 2>&1; then
+        echo "reused from NC_TS_CACHE, key $key" >> "$log"
+        echo "testsuite build $kind $id reused ${key:0:12} $(( $(date +%s) - t0 ))s"
+        return 0
+    fi
     if [ -x /usr/bin/time ]; then
         /usr/bin/time -v -o "$tm" pixi run mojo build $TS_FLAGS -I . -I "$TS_GEN" -o "$dst" "$src" > "$log" 2>&1
     else
         pixi run mojo build $TS_FLAGS -I . -I "$TS_GEN" -o "$dst" "$src" > "$log" 2>&1
     fi
     rc=$?
+    [ $rc -eq 0 ] && [ -n "$key" ] && $TS_PY tools/ops/native_testsuite_cache.py put "$key" "$dst" >> "$log" 2>&1
     if [ $rc -ne 0 ]; then
         rm -f "$dst"
         [ "$kind" = single ] && $TS_PY tools/ops/native_checks_report.py result "$id" --log "$log" --rc "$rc" \
@@ -136,10 +149,22 @@ build)
     ng=$(grep -c '^group ' "$gen/plan.txt"); ns=$(grep -c '^single ' "$gen/plan.txt")
     echo "testsuite: building $n files on the $column column as $ng group programs and $ns single files, $jobs compiles at once ($cores cores; memory allows $bymem at $gpeak MB a group)"
     export TS_BIN="$bindir" TS_OUT="$out" TS_PY="$PY" TS_FLAGS="$TS_DEFINES $TS_TARGET" TS_GEN="$gen"
+    # NC_TS_CACHE (a directory on the box; unset = every program compiles): one key per planned unit. A failure to
+    # key is not a build failure: the units compile.
+    export TS_KEYS=""
+    if [ -n "${NC_TS_CACHE:-}" ]; then
+        if $PY tools/ops/native_testsuite_cache.py keys --column "$column" --gen "$gen" --flags "$TS_FLAGS" \
+                > "$gen/keys.txt" 2> "$out/logs/testsuite-keys-$column.log"; then
+            TS_KEYS="$gen/keys.txt"
+            echo "testsuite: reuse from $NC_TS_CACHE ($(grep -c . "$gen/keys.txt") of $(( ng + ns )) units keyed)"
+        else
+            echo "testsuite: no reuse, the keys failed (logs/testsuite-keys-$column.log): $(tail -n 1 "$out/logs/testsuite-keys-$column.log")"
+        fi
+    fi
     start=$(date +%s)
     # every group and every planned single at once, up to the worker count (independent compiles)
     { grep '^group ' "$gen/plan.txt" | awk '{print "group", $2}'; grep '^single ' "$gen/plan.txt" | awk '{print "single", $2}'; } \
-        | xargs -P "$jobs" -n 2 bash -c 'compile_unit "$0" "$1"'
+        | xargs -P "$jobs" -n 2 bash -c 'compile_unit "$0" "$1"' | tee "$out/logs/testsuite-units-$column.txt"
     # a group that did not compile: its files one at a time, so each failing file has its own red row
     : > "$out/logs/testsuite-regroup-$column.txt"
     while read -r _ k members; do
@@ -163,7 +188,7 @@ build)
     done < <(grep '^group ' "$gen/plan.txt")
     failed=$(awk '{print $1}' "$list" | while read -r x; do [ -x "$bindir/ts/$x" ] || printf '%s ' "$x"; done)
     regrouped=$(awk '{print $2}' "$out/logs/testsuite-regroup-$column.txt" | wc -l)
-    echo "testsuite: $n files built in $(( $(date +%s) - start ))s ($ng groups, $ns planned singles, $regrouped files of failed groups rebuilt alone); failed to compile: ${failed:-none}"
+    echo "testsuite: $n files built in $(( $(date +%s) - start ))s ($ng groups, $ns planned singles, $regrouped files of failed groups rebuilt alone, $(grep -c ' reused ' "$out/logs/testsuite-units-$column.txt") units reused from the cache); failed to compile: ${failed:-none}"
     exit 0 ;;
 one)
     column=${2:?one <column> [-D DEFINE ...] <name> [<name> ...]}; shift 2
@@ -205,6 +230,9 @@ run)
     fi
     limit=${IN_TIMEOUT:-900}
     start=$(date +%s)
+    # a program reused from NC_TS_CACHE was linked in another checkout and its runpath names that checkout's
+    # toolchain: this checkout's comes first (the same toolchain, it is in the key; no effect on a fresh build)
+    [ -d "$PWD/.pixi/envs/default/lib" ] && export LD_LIBRARY_PATH="$PWD/.pixi/envs/default/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     # under /usr/bin/time when the box has it: the check's peak RSS goes into its result (the GPU job's K and summary)
     if [ -x /usr/bin/time ]; then
         /usr/bin/time -v -o "$log.time" timeout -k 30 "$limit" pixi run "$bin" > "$log" 2>&1

@@ -13,6 +13,12 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/../.." &
 RES="${MOJOLEARN_RESULTS_DIR:?proving_job.sh needs MOJOLEARN_RESULTS_DIR (set by tools/box_persist_run.sh)}"
 mkdir -p "$RES/logs" && RES="$(cd "$RES" && pwd)"
 WHEELS="${PV_WHEEL_DIR:?proving_job.sh needs PV_WHEEL_DIR (the staged candidate wheels)}"
+# The tests run from this tree against the staged wheels: refuse wheels of another commit before anything runs
+# (tools/ops/tree_commit.sh: the tree's commit is the synced one, not the box HEAD).
+. "$HERE/tree_commit.sh"
+match=$(wheels_match_tree "$REPO" "$WHEELS"/*.whl); match_rc=$?
+echo "$match" | sed 's/^/PROVING wheel /'
+[ "$match_rc" = 0 ] || { echo "PROVING setup FAIL the wheels are not this tree's commit"; exit 4; }
 VENV="$RES/venv"
 # Workers follow the allocation, not the host: xdist's auto count read 128 host CPUs on a 14-core cgroup and every
 # worker's import aborted (2026-11-22, nvc1-0002).

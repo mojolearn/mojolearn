@@ -112,6 +112,20 @@ gates. Plan/build exit **0** means controller success, **1** means failure, and
 **3** means an incomplete selected build with no activation; it is not a release
 qualification result.
 
+## Native-check programs are reused when their inputs did not change (2026-11-26)
+
+`tools/ops/native_testsuite.sh build` keys each group program and single check by every source file it imports, its
+generated driver, the flags, the toolchain bytes and the build environment (`tools/ops/native_testsuite_cache.py`; no
+path and no commit in the key). With `NC_TS_CACHE=<dir>` a program whose key is in the directory is copied instead of
+compiled, and a successful compile is stored. The CPU box job keeps the directory at `$CPU_CHECKS_HOME/ts-cache` and
+the L40S job at `${PC_CACHE_ROOT:-/root/pc-cache}/ts-cache`; `NC_TS_CACHE=` (empty) compiles everything. A build
+whose flags or environment name a fault (SABOTAGE, FAULT_INJECT) never reads or fills it. Every check still runs; the
+build's last line counts the reused units. Over main's last 45 commits 98 percent (CPU column) and 99 percent (GPU
+column) of the 14 group programs had unchanged inputs from one commit to the next.
+
+The cache is per box. Sharing it between boxes through R2 needs presigned URLs minted on the Mac at submit (the R2
+credentials never leave it), as `tools/bincache.py` does for the binding groups.
+
 ## Scripts adopted from ~/mojolearn-evidence (2026-10-28)
 
 Scripts that current rules, tools or docs still reference were copied into the repo so they are versioned.
