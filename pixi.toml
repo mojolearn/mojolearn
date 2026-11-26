@@ -17,12 +17,8 @@ version = "0.1.0a1"
 # which works only on a machine that happens to have mojotrees checked out
 # beside this one with its environment already solved. That is not a build.
 #
-# It also means `.github/workflows/gpu-validation.yml` could never have run.
-# Every one of its steps calls `pixi run mojo ...`, and on a runner with no
-# pixi.toml the first such step fails before it reaches a GPU. The workflow is
-# `workflow_dispatch` only and targets self-hosted runners that do not exist
-# yet, so nothing ever reported the failure. Read its jobs as UNVALIDATED
-# rather than as passing.
+# (`.github/workflows/gpu-validation.yml`, whose every step called `pixi run mojo ...` on self-hosted runners that
+# never existed, could never have run; it was deleted on 2026-11-26.)
 #
 # One toolchain across development and release builds. Historical evidence keeps
 # its original compiler version; upgrading does not qualify earlier binaries.
