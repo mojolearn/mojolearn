@@ -93,6 +93,10 @@ mkdir -p "$BIN_DIR"
 say "building the device column ($n checks planned)"
 bsampler=$(busy_sampler "$RES/busy_cores_build.txt")
 bstart=$(date +%s)
+# NC_TS_CACHE: a group program whose inputs did not change since an earlier job on this pod is copied, not compiled
+# (tools/ops/native_testsuite_cache.py; outside the results dir, so nothing of it is persisted). NC_TS_CACHE= (empty)
+# compiles everything.
+export NC_TS_CACHE="${NC_TS_CACHE-${PC_CACHE_ROOT:-/root/pc-cache}/ts-cache}"
 IN_FILTER="$FILTER" bash tools/ops/native_testsuite.sh build gpu "$BIN_DIR" "$RES" > "$RES/logs/build-gpu.log" 2>&1
 brc=$?
 say "$(tail -n 1 "$RES/logs/build-gpu.log")"

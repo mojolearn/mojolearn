@@ -134,7 +134,10 @@ run_unit() {
     local name=$1 cmd
     case "$name" in
         build-cpu)
-            cmd=(env NC_OUT="$RES/native" NC_BIN="$WT/bin" IN_COLUMN=cpu bash "$STEPS" build) ;;
+            # NC_TS_CACHE: a group program whose inputs did not change since an earlier job on this box is copied,
+            # not compiled (tools/ops/native_testsuite_cache.py); NC_TS_CACHE= (empty) compiles everything
+            cmd=(env NC_OUT="$RES/native" NC_BIN="$WT/bin" IN_COLUMN=cpu NC_TS_CACHE="${NC_TS_CACHE-$BASE/ts-cache}"
+                 bash "$STEPS" build) ;;
         shard-*)
             cmd=(env TASKS="$(cat "$RES/plan/$name.tasks")" NC_OUT="$RES/native" NC_BIN="$WT/bin" IN_COLUMN=cpu
                  IN_TIMEOUT="${NC_TIMEOUT:-900}" bash "$STEPS" shard) ;;
