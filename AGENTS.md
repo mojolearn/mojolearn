@@ -73,6 +73,31 @@ decision is already known elsewhere, list them with their cost, and open work to
 ones. Pricing a removal and not doing it is a defect; each priced removal is implemented or
 retired with a reason within two weeks. Applies to hardware, firmware and software alike.
 
+### HARD RULE: RELEASE-ONLY WORK. WE DO NOT VERIFY ON EVERY COMMIT TO MAIN (Andrew, 2026-11-26)
+
+Agents get this wrong over and over. Read it before writing any brief, gate or box plan.
+
+**Every development round (every merge to main, every integration branch, every fix wave) runs ONLY:**
+1. the compile: the integration build and the GitHub build (`tools/release.py candidate`);
+2. the tests: pytest, the native checks, the proving suite;
+3. the GPU smoke: the built wheels installed on the box, every lane run once on the GPU. It compares nothing and
+   records nothing. Its job is to find what crashes or refuses on the GPU.
+
+**RELEASE ONLY: once, on the frozen release commit, when Andrew says it is time to release. Never in a round:**
+- `python -m mojolearn verify` comparing lanes against references, on any side, CPU column included;
+- the identity record (recording reference columns, `tools/ops/identity_record_job.sh`,
+  `tools/identity_wheel_record.py`);
+- `_identity_break` or any other same-bits, repeat or stability check of lanes. We do not check the same bits of every
+  lane per round. That includes "the lanes the change touched" and "all lanes because the change was wide";
+- the sabotage arms, host and GPU (building and running them). Checking that the patches still apply is static and
+  cheap, so a round may run it;
+- the cross-vendor comparison, and the Apple build with its column.
+
+A stale or absent reference in a round is RECORD OWED. It is never a red, never a reason to record, and never a
+reason to re-verify. A brief, a gate, a plan or a box queue that puts any release-only item in a round is wrong. The
+orchestrator removes it before launch, and a lane that finds one in its brief says so and skips it. A release-only job
+that is already queued or running is left to finish: never cancel a job without Andrew's word (2026-11-26).
+
 ## 2. The product
 
 ### The name is Mojolearn, with a capital M (Andrew, 2026-11-02)
@@ -467,32 +492,13 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 - Order: all code in, one compile, (measure, fix, measure again only when Andrew asked for it), freeze, the one
   cross-vendor verification, publish. Measuring the published wheel happens when Andrew asks.
 
-### Fix everything first, then one compile, then one measurement (Andrew, 2026-11-13: "fix fix fix")
-
-- A measurement is taken only when nothing known is left to fix. Before any box is rented or any GitHub build is
-  started for measurement, the orchestrator lists every open fix (FOLLOWUPS, lane reports, audit findings, owed
-  deletions) and either lands it in the same integration branch or writes, beside the list, why it cannot be
-  known without the measurement. A fix that lands within the hour after a measurement starts is evidence the
-  list was not read.
-- Work moves in waves: fix wave (every lane the findings call for, at once) -> one integration branch -> one
-  GitHub build -> one measurement on NVIDIA and AMD together -> read every flag -> the next fix wave. Never a
-  box run for one lane, one row or one family; never a second measurement of the same sha for rows that a later
-  sha changes. Between waves the boxes come down.
-- The only measurement that may run with known fixes outstanding is a discovery screen whose purpose is to find
-  unknown regressions (the full-board run against best-ever), and only when the outstanding fixes do not touch
-  the rows it is for; its result opens the next fix wave, not a release decision.
-- Owed A/B arms are built and timed with the wave's sha, never a sha behind it, unless the switch they decide is
-  untouched by the later sha (say so in the owed row).
-- A "measurement build" (`tools/release.py candidate`) is wheels built from a commit to measure them. It is NOT a
-  release candidate: it never touches main, tags or PyPI, and no release happens until everything is fixed and
-  measured clean (Andrew, 2026-11-09).
-
 ### Verify once, before the release, at the very end (Andrew, 2026-11-05)
 
 - Verification happens once, before the release: freeze the source, run one global verify of every lane on every
   device from the built wheels, see the columns match, publish. Nothing is verified after a release.
-- No same-bits checks during development: no identity (ID) run per lane, per fix or per merge. A plan that would run
-  identity twice for one release is wrong: say so up front and fix the order or the tool.
+- No same-bits checks during development: see the hard rule "RELEASE-ONLY WORK" in part 1, which lists what a
+  round runs and what only the release runs. A plan that would run identity twice for one release is wrong: say so
+  up front and fix the order or the tool.
 - A cross-vendor mismatch found by the verify is a bug to fix in code; then the affected lanes run again.
 - Identity runs once (`REPEATS=1`); a mismatch is never a reason to rerun unchanged code. One identity check per
   release: the table admit. No release step re-fits or re-diffs identity after it (Andrew, 2026-10-10).
@@ -589,6 +595,8 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   laptop per round. The Mac compiles once, at the release, for the Apple wheel and the Apple column of the one
   verification. Per integration the checks are: the GitHub build, the box's start-up smoke, the measurement.
   No identity verify before the release's one verification.
+- A "measurement build" (`tools/release.py candidate`) is wheels built from a commit. It is NOT a release
+  candidate: it never touches main, tags or PyPI (Andrew, 2026-11-09).
 - Mac compiles (the release's Apple build) go through the slot semaphore: `bash tools/compile_slot.sh <command>`.
   The slot count and the laptop's one-compiler-worker rule live in that script and only there.
 - For a development repair, build the smallest affected groups (`tools/development_build.py`,
@@ -786,29 +794,9 @@ them for you.
 Each entry says what it overrides and is removed whole when it ends. The standing rules in parts 1 to 7 are not edited
 to match a temporary direction, and no agent treats one as permanent or extends it to other work.
 
-### TEMPORARY: measure on NVIDIA only, small board first (Andrew, 2026-11-14; restated 2026-11-15)
-
-Ends when Andrew says. It is not the product direction: AMD and Apple remain in the contract and return to measurement.
-
-- Until Andrew says otherwise, measurement builds are timed on the NVIDIA L40S only: no MI300X leg, no AMD rent, no
-  Apple timing, no verify at the end of a measurement. The cross-vendor verification happens once, at the release.
-- While this campaign runs it overrides every "NVIDIA and AMD" in the measurement and release rules (restated
-  2026-11-15: "forget about AMD for now"): a switch is decided, a measured winner is replaced, a fix wave is measured
-  and an owed A/B arm is timed on the NVIDIA L40S alone. No AMD box is rented and no AMD build is waited on. The
-  two-vendor average, the AMD and Apple timing columns and the vendor-split flag return when Andrew reopens them.
-  Bits across vendors are unaffected: the release's one verification still covers every vendor.
-- ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
-  lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
-  it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
-  tooling fix merges to main on its own. Fix as we go: a defect found while a build or a measurement runs gets its
-  lane at once on the integration branch, and no measurement is repeated for it alone.
-- Carefully, never narrowly: quality is never traded for speed (both arms' quality beside every time; a quality drop
-  is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
-  "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
-
 ### TEMPORARY: we time ourselves against ourselves, on the same pod (Andrew, 2026-11-19; trimmed 2026-11-23)
 
-Ends when Andrew says. It narrows the NVIDIA-only direction above while it runs. Every measurement it describes
+Ends when Andrew says. Every measurement it describes
 happens only when Andrew asks for it ("Measurement is ad hoc").
 
 - A speed verdict (REGRESSION, FASTER, an A/B win or loss) comes ONLY from two of our own wheels timed on the SAME pod
