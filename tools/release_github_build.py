@@ -602,12 +602,12 @@ def estimate(include, merged, sets, host, host_donor=False, shares=None, compile
     for arch in sets:
         vendor = ARCHS[arch]
         rows = [r for r in include if r["arch"] == arch]
-        # merged units of one row run side by side (pack_units): the row takes its longest unit's seconds
+        # merged units of one row run side by side (pack_units): the row takes its longest unit's seconds. A shard
+        # builds no adapters (tools/gha_release_box.sh, 2026-11-26): only the assemble job does
         shard_s = [JOB_OVERHEAD_SECONDS + (max(unit_seconds(e, vendor, merged, shares.get(e, 1.0))
                                                for e in r["only"].split()) if merged else
                                            sum(unit_seconds(e, vendor, merged, shares.get(e, 1.0))
-                                               for e in r["only"].split()) // 2)
-                   + (adapters(vendor) if merged and arch != "sm_80" else 0) for r in rows]
+                                               for e in r["only"].split()) // 2) for r in rows]
         asm = 0 if compile_only else JOB_OVERHEAD_SECONDS + ASSEMBLE_ROUTE_SECONDS + (adapters(vendor) if arch != "sm_80" else 0)
         out[arch] = dict(jobs=len(rows) + (0 if compile_only else 1), wall_s=max(shard_s or [0]) + asm, runner_s=sum(shard_s) + asm,
                          swap_gib=max([r["swap_gib"] for r in rows] or [0]))
@@ -1462,6 +1462,8 @@ def cmd_run(a):
         raise SystemExit("--defines builds a candidate set; it takes no --compile-groups")
     if a.skip_units and (not defines or not a.arch or a.host):
         raise SystemExit("--skip-units is a B arm's (--defines) on one --arch with no host producer")
+    if a.host_groups_from and (not a.predict_skips or a.arch == HOST_GROUPS_OWNER):
+        raise SystemExit(f"--host-groups-from is a non-owner leg's (not {HOST_GROUPS_OWNER}) with --predict-skips")
     if a.predict_skips and (defines or a.skip_units or not a.arch or a.host or a.compile_groups or a.no_bincache
                             or not a.source_tree):
         raise SystemExit("--predict-skips is a measurement build's A set (no --defines, --skip-units, --host or "
@@ -1500,9 +1502,19 @@ def cmd_run(a):
         tag = f"gha-{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{os.urandom(3).hex()}"
         map_url = donor_url = donor_sha = ""
         jobs_per_set = max(a.shards + 1, MERGED_JOBS_PER_SET)
-        want, listing = (), None
+        want, listing, host_run = (), None, ""
         if a.predict_skips and creds:
-            skip, want, listing = predicted_skips(a, creds, modes)
+            skip, keys, listing, entries = predicted_skips(a, creds, modes)
+            if a.host_groups_from and entries:
+                # THE HOST GROUPS ONCE PER BUILD: the owner leg compiles them; this leg's assemble job takes its
+                # archives (the workflow's host_groups_run). Without the owner's run every host group stays here.
+                owner = owner_run(a.host_groups_from, a.commit)
+                if owner:
+                    hosts = [e for e in entries if unit_tier(e) == "host"]
+                    skip = sorted(set(skip) | set(hosts))
+                    host_run = f"{owner}:{HOST_GROUPS_OWNER}"
+                    say(f"group cache plan: {len(hosts)} host groups from the {HOST_GROUPS_OWNER} leg's run {owner}")
+            want = [keys[e] for e in skip if e in keys]
             if skip:
                 a.skip_units = " ".join(skip)
         if creds and not a.no_bincache and a.arch:
@@ -1529,7 +1541,8 @@ def cmd_run(a):
            "-f", f"reuse_host_groups={'true' if a.reuse_host_groups else 'false'}",
            # only when set: a workflow ref without the `defines` input still takes every release dispatch
            *(["-f", f"defines={defines}"] if defines else []),
-           *(["-f", f"skip_units={a.skip_units}"] if a.skip_units else []))
+           *(["-f", f"skip_units={a.skip_units}"] if a.skip_units else []),
+           *(["-f", f"host_groups_run={host_run}"] if host_run else []))
         (gha / "dispatch.json").write_text(json.dumps(dict(
             tag=tag, branch=branch, tooling_commit=head, recorded_tooling=a.tooling_sha or None, source_commit=a.commit, arch=a.arch, host=a.host,
             modes=list(modes), shards=a.shards, jobs=a.jobs, bincache=bool(map_url), host_donor=a.host_donor or None,
@@ -1633,28 +1646,48 @@ def cmd_run(a):
 
 
 def predicted_skips(a, creds, modes):
-    """(skip entries, predicted keys, partition listing) of an A set's leg (tools/group_reuse.py): every merged group
-    of --source-tree's plan (plan_set, as the plan job computes it) whose key, predicted from the newest earlier leg
-    of --arch under --records-root, is in the R2 partition. A failure to predict is printed and plans no skip: the
-    leg then runs as before, every group in its shard job."""
+    """(skip entries, {entry: predicted key}, partition listing, merged entries) of an A set's leg
+    (tools/group_reuse.py): every merged group of --source-tree's plan (plan_set, as the plan job computes it) whose
+    key, predicted from the newest earlier leg of --arch under --records-root, is in the R2 partition. A failure to
+    predict is printed and plans no skip: the leg then runs as before, every group in its shard job."""
     import bincache
     import group_reuse
     try:
         ps = plan_set(a.source_tree, modes)
         if not ps["merged"]:
             say("group cache plan: per-binding layout, no prediction")
-            return [], (), None
+            return [], {}, None, []
         entries = [e for e, _ in ps["builds"] if is_merged(e)]
         listing = bincache.list_objects(creds, f"{bincache.OBJECT_PREFIX}/{partition()}/")
         plan = group_reuse.skip_plan(a.source_tree, a.arch, entries,
                                      group_reuse.stored_keys(listing, partition()), a.records_root or [])
     except (Exception, SystemExit) as exc:
         say(f"group cache plan: no prediction ({type(exc).__name__}: {str(exc)[:200]}); every group gets a shard job")
-        return [], (), None
+        return [], {}, None, []
     say(group_reuse.plan_line(plan))
     for entry in plan["skip"]:
         say(f"  no shard job (key {plan['keys'][entry][:16]} in R2): {entry}")
-    return plan["skip"], [plan["keys"][e] for e in plan["skip"]], listing
+    return plan["skip"], plan["keys"], listing, entries
+
+
+#: how long a non-owner leg waits for the owner leg's run to be dispatched (both legs start together)
+OWNER_WAIT_SECONDS = 900
+
+
+def owner_run(owner_out, commit, wait=OWNER_WAIT_SECONDS, pause=10):
+    """The run id of the owner leg of this build (its GHA/run-id.json under OWNER_OUT, written once its dispatch is
+    found), for the same source commit and no defines; None after WAIT seconds (this leg then compiles its own host
+    groups, as before)."""
+    path = Path(owner_out) / "GHA" / "run-id.json"
+    deadline = time.time() + wait
+    while True:
+        doc = read_doc(path)
+        if doc.get("databaseId") and doc.get("source_commit") == commit and not doc.get("defines"):
+            return int(doc["databaseId"])
+        if time.time() > deadline:
+            say(f"group cache plan: no owner run at {path} after {wait} s; this leg compiles its host groups")
+            return None
+        time.sleep(pause)
 
 
 def group_cache_line(out, gha, name):
@@ -1754,6 +1787,9 @@ def main(argv=None):
                    "build's source worktree)")
     p.add_argument("--records-root", action="append", default=[], help="--predict-skips: a measurement-build work "
                    "root whose earlier legs' GHA/bincache/keys give the leg half of the keys (repeatable)")
+    p.add_argument("--host-groups-from", default="", help="--predict-skips, a leg that does not own the host groups: "
+                   f"the owner ({HOST_GROUPS_OWNER}) leg's --out of this build; its run compiles the host groups and "
+                   "this leg's assemble job takes their archives")
     p.add_argument("--run-id", type=int, default=0, help="attach to this run instead of dispatching")
     p.add_argument("--tooling-sha", default="", help="the tooling sha a measurement build recorded at its first "
                    "launch: a moved --ref is accepted while it holds this sha with the same route files")

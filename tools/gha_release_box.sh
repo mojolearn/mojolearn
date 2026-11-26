@@ -283,6 +283,13 @@ if [[ -n "${GHA_REUSE_SHARDS_RUN:-}" ]]; then
     echo "reuse_shards_run=$GHA_REUSE_SHARDS_RUN" > "$G/reuse-shards.txt"
 fi
 [[ "$MODE" = shard ]] && export MOJOLEARN_BINCACHE_SHARD_ONLY="$GHA_SHARD_ONLY"
+# NO FRAMEWORK ADAPTERS IN A SHARD (lane build-reuse-1, 2026-11-26). build_sets.sh builds the adapters in every
+# non-PTX set, and a shard runs the whole route, so each of the 15 sm_89 shards of 0.8.67.dev0+acdf0ad30312 compiled
+# them for about 4 min (c_api.mojo -j 2, the MAX package, the Torch registration) beside its own group on the same
+# 4 vCPU, then threw them away: a shard's tree is never a set, only its archives leave it. The assemble job builds
+# the set's adapters, once per build (the PTX slot sm_80 ships none). MOJOLEARN_RELEASE_ is never a key field
+# (tools/bincache.py NON_BUILD_PREFIXES), so no group key moves.
+[[ "$MODE" = shard ]] && export MOJOLEARN_RELEASE_ADAPTERS=0
 [[ -f /root/.mojolearn_bincache/urls.tsv ]] || { say "no URL map at /root/.mojolearn_bincache/urls.tsv"; exit 3; }
 say "release_linux_cpu_box.sh, $JOBS jobs, map $(grep -c '^get' /root/.mojolearn_bincache/urls.tsv) gets / $(grep -c '^put' /root/.mojolearn_bincache/urls.tsv) slots, hot $(ls /root/.mojolearn_bincache/hot 2>/dev/null | wc -l)"
 rc=0

@@ -251,6 +251,41 @@ class Wiring(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("--source-tree") + 1], "/w/v/source/c")
         for ctx in (self.ctx(version=""), self.ctx(pack="here")):
             self.assertTrue(all("--predict-skips" not in l.command for l in release.github_legs(ctx)))
+        # the host groups once per build: the other cuda leg takes the sm_89 leg's; the owner and hip legs do not
+        by = {l.name: l.command for l in legs}
+        self.assertEqual(by["cuda-sm_80"][by["cuda-sm_80"].index("--host-groups-from") + 1], "/w/v/c/legs/cuda-sm_89")
+        self.assertTrue(all("--host-groups-from" not in c for n, c in by.items() if n != "cuda-sm_80"))
+
+    def test_the_workflow_shares_host_groups_and_overlaps_its_setup(self):
+        import yaml
+        wf = yaml.safe_load((ROOT / ".github/workflows/release-linux-build.yml").read_text())
+        self.assertIn("host_groups_run", wf[True]["workflow_dispatch"]["inputs"])
+        for job in ("shard", "assemble"):
+            names = [st.get("name", "") for st in wf["jobs"][job]["steps"]]
+            self.assertIn("Free disk and pull the image (background)", names)
+            self.assertLess(names.index("Wait for the disk cleanup"), names.index(next(n for n in names if n.startswith("Swap"))))
+        names = [st.get("name", "") for st in wf["jobs"]["assemble"]["steps"]]
+        self.assertLess(names.index("Host groups from the owner leg's run"), names.index("Assemble the set"))
+        self.assertEqual(wf["jobs"]["assemble"]["permissions"], {"contents": "read", "actions": "read"})
+        box = (ROOT / "tools/gha_release_box.sh").read_text()
+        self.assertIn('[[ "$MODE" = shard ]] && export MOJOLEARN_RELEASE_ADAPTERS=0', box)
+        self.assertIn("MOJOLEARN_RELEASE_", bincache.NON_BUILD_PREFIXES)     # so no group key moves
+
+    def test_run_refuses_host_sharing_on_the_owner_or_without_prediction(self):
+        import release_github_build as G
+        with tempfile.TemporaryDirectory() as td:
+            for extra in (["--arch", "sm_89", "--predict-skips", "--source-tree", td, "--host-groups-from", td],
+                          ["--arch", "sm_80", "--host-groups-from", td]):
+                with self.assertRaises(SystemExit):
+                    G.main(["run", "--commit", "0" * 40, "--out", str(Path(td) / "o"), *extra])
+
+    def test_owner_run_reads_the_owner_legs_run_of_the_same_commit(self):
+        import release_github_build as G
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "GHA").mkdir()
+            (Path(td) / "GHA" / "run-id.json").write_text(json.dumps(dict(databaseId=7, source_commit="a" * 40)))
+            self.assertEqual(G.owner_run(td, "a" * 40, wait=0), 7)
+            self.assertIsNone(G.owner_run(td, "b" * 40, wait=0, pause=0))
 
     def test_run_refuses_prediction_for_an_arm(self):
         import release_github_build as G

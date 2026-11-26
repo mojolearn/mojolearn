@@ -900,6 +900,16 @@ def github_legs(ctx):
                 and candidate_pack(ctx) != "here" and callable(getattr(ctx, "source_checkout", None))):
             predict = ["--predict-skips", "--source-tree", str(ctx.source_checkout(create=False)),
                        "--records-root", str(ctx.base.parent)]
+            # THE HOST GROUPS ONCE PER BUILD: their keys name no target, so a leg that does not own them takes the
+            # owner leg's archives (release_github_build.py --host-groups-from) when the owner leg runs in this build
+            import release_github_build
+            owner = ("cuda", release_github_build.HOST_GROUPS_OWNER)
+            launched = (ctx.plan() or {}).get("legs") if callable(getattr(ctx, "plan", None)) else None
+            # (cuda legs only: the hip leg once compiled other bytes under the same host key, 2026-11-05, so it
+            # keeps compiling its own until that is measured equal)
+            if (vendor == owner[0] and arch != owner[1] and owner in release_reuse.LINUX_SETS
+                    and (launched is None or f"{owner[0]}-{owner[1]}" in launched)):
+                predict += ["--host-groups-from", str(leg_layout(legs_dir, "github", f"{owner[0]}-{owner[1]}")[1])]
         # a measurement build packed on GitHub (candidate_pack "github"): the collector takes the records only
         remote = candidate_pack(ctx) == "github"
         leg = (RemoteLeg if remote else Leg)(

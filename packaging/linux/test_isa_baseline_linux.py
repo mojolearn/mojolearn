@@ -39,3 +39,21 @@ def test_an_approximate_reciprocal_estimate_is_refused_and_exact_ops_are_not(mon
     assert ninsn == 4
     assert list(findings) == ["approximate reciprocal estimate (CPU-model-dependent bits)"]
     assert findings["approximate reciprocal estimate (CPU-model-dependent bits)"]["count"] == 2
+
+
+def test_the_scan_is_parallel_by_cores_and_memory_and_reports_in_file_order(tmp_path, monkeypatch, capsys):
+    # lane build-reuse-1, 2026-11-26: one process per binary up to the cores and the memory a disassembly needs
+    sos = [tmp_path / f"b{i}.so" for i in range(3)]
+    for p in sos:
+        p.write_bytes(b"\0" * 10)
+    assert isa.workers_for(sos, {"ISA_BASELINE_WORKERS": "2"}) == 2
+    assert 1 <= isa.workers_for(sos, {}) <= 3
+    listing = "0000000000000000 <f>:\n  0:\tret\n"
+    monkeypatch.setattr(isa.subprocess, "run",
+                        lambda *a, **k: SimpleNamespace(returncode=0, stdout=listing, stderr=""))
+    monkeypatch.setattr(isa.shutil, "which", lambda name: "/usr/bin/objdump")
+    monkeypatch.setenv("ISA_BASELINE_WORKERS", "1")
+    monkeypatch.setattr(sys, "argv", ["isa_baseline_linux.py", str(tmp_path)])
+    assert isa.main() == 0
+    out = capsys.readouterr().out
+    assert [l.split()[1] for l in out.splitlines() if l.startswith("  ok")] == ["b0.so", "b1.so", "b2.so"]

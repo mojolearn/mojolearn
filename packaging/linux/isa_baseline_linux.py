@@ -50,7 +50,9 @@ what this exists to prevent.
 """
 
 import argparse
+import concurrent.futures
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -123,6 +125,46 @@ def scan(path):
     return findings, n, ncpuid
 
 
+def scan_one(so):
+    """(findings, ninsn, ncpuid) of one binary, or the RuntimeError text: the unit of the parallel scan."""
+    try:
+        return scan(so), None
+    except RuntimeError as exc:
+        return None, str(exc)
+
+
+def workers_for(sos, environ=None):
+    """THE PARALLEL PLAN (lane build-reuse-1, 2026-11-26; AGENTS.md: parallel by default). Every binary is an
+    independent unit: one process each, up to the cores this process may run on (affinity, so a cgroup or
+    taskset allocation is honoured) and the memory a disassembly needs. scan() holds one binary's `objdump -d`
+    text and its lines at once; MEASURED_TEXT_PER_BYTE bounds that per byte of the .so. The serial scan of the
+    23-binary sm_89 set took 364 s of an assemble job (0.8.67.dev0+acdf0ad30312, 21:08:06 to 21:14:10).
+    ISA_BASELINE_WORKERS pins the count."""
+    environ = os.environ if environ is None else environ
+    if environ.get("ISA_BASELINE_WORKERS", "").isdigit() and int(environ["ISA_BASELINE_WORKERS"]) > 0:
+        return int(environ["ISA_BASELINE_WORKERS"])
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        cores = os.cpu_count() or 1
+    avail = 0
+    try:
+        for line in pathlib.Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemAvailable:"):
+                avail = int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    biggest = max((p.stat().st_size for p in sos), default=0)
+    need = max(1, biggest * MEASURED_TEXT_PER_BYTE)
+    by_memory = max(1, int(avail * 0.8) // need) if avail else 1
+    return max(1, min(cores, len(sos), by_memory))
+
+
+#: bytes of Python-held disassembly per byte of binary (objdump text is ~10x the code; str + split lines ~3x that):
+#: an upper bound for sizing workers, not a measurement of one file
+MEASURED_TEXT_PER_BYTE = 30
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("directory")
@@ -137,14 +179,20 @@ def main():
         print(f"isa_baseline_linux: no .so under {a.directory}", file=sys.stderr)
         return 2
     report, bad = {}, 0
-    for so in sos:
-        try:
-            findings, n, ncpuid = scan(so)
-        except RuntimeError as exc:
-            print(f"  FAIL  {so.name}: {exc}")
-            report[str(so)] = {"error": str(exc)}
+    workers = workers_for(sos)
+    if workers > 1:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(scan_one, sos))
+    else:
+        results = [scan_one(so) for so in sos]
+    # reported in file order whatever finished first, so the text and the JSON are the serial scan's
+    for so, (got, error) in zip(sos, results):
+        if error is not None:
+            print(f"  FAIL  {so.name}: {error}")
+            report[str(so)] = {"error": error}
             bad += 1
             continue
+        findings, n, ncpuid = got
         rel = str(so.relative_to(a.directory))
         # A VENDORED LIBRARY THAT DISPATCHES IS NOT A DEFECT. Only our own
         # extensions are held to the baseline unconditionally; anything under
