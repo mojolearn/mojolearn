@@ -47,7 +47,8 @@ def test_all_batches_cover_every_lane_and_fixture_and_propagate_failures(monkeyp
         return SimpleNamespace(returncode=rc, stdout=json.dumps(doc))
 
     monkeypatch.setattr(va.subprocess, 'run', run)
-    result = va._cross_check_batched(lanes, fixtures, 1, lambda _: None)
+    # one worker: the fault lands on the second batch in unit order (the parallel run is the next test)
+    result = va._cross_check_batched(lanes, fixtures, 1, lambda _: None, workers=1)
     assert len(calls) == 9  # failure must not discard the remaining batches
     assert all(len(selected) <= va.CROSS_CHECK_BATCH_LANES for selected, _ in calls)
     assert [(lane, fx) for selected, fx in calls for lane in selected] == [
@@ -61,6 +62,26 @@ def test_all_batches_cover_every_lane_and_fixture_and_propagate_failures(monkeyp
         if fault != 'nonzero':
             assert result['missing']
         assert 'INCOMPLETE' in va.format_cross_check(result)
+
+
+def test_parallel_batches_assemble_exactly_the_serial_result(monkeypatch):
+    """rel-fix-1 (2026-11-26): the batches run at once; the result reads as the serial run's, in unit order."""
+    lanes = [f'lane-{i}' for i in range(53)]
+    fixtures = ['base', 'ties', 'wide']
+    monkeypatch.setattr(mojolearn, 'vendor', lambda: 'metal')
+
+    def run(command, **kwargs):
+        selected = command[command.index('--lanes') + 1].split(',')
+        fixture = command[command.index('--fixtures') + 1]
+        doc = va._cross_check_result('metal', selected, [fixture], cells(selected, [fixture]), {})
+        doc['format'] = 'mojolearn.verify-cross-check.v1'
+        return SimpleNamespace(returncode=0, stdout=json.dumps(doc))
+
+    monkeypatch.setattr(va.subprocess, 'run', run)
+    serial = va._cross_check_batched(lanes, fixtures, 1, lambda _: None, workers=1)
+    parallel = va._cross_check_batched(lanes, fixtures, 1, lambda _: None, workers=4)
+    assert parallel == serial and parallel['passed'] is True
+    assert [job['fixture'] for job in parallel['batches']] == [f for f in fixtures for _ in range(3)]
 
 
 @pytest.mark.parametrize('scope,requested,expected', [

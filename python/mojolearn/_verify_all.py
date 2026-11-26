@@ -1269,6 +1269,64 @@ VERIFY_BATCH_CELLS = 24
 VERIFY_WORKER_GIB = 4.0
 
 
+#: The public checks' worker limit (a hang guard, not a budget): they ran in the controller with no limit before.
+PUBLIC_TIMEOUT_S = 1800.0
+#: The estimate of a pool unit with no cost hint (an extended profile, the models, the public checks): long enough
+#: that an unknown unit starts early rather than becoming the tail.
+TAIL_DEFAULT_COST_S = 60.0
+CELL_COST_FORMAT = "mojolearn.verify-cell-seconds.v1"
+#: A batch closes early on its estimate only past this many seconds: a short run keeps whole batches (one worker
+#: start per VERIFY_BATCH_CELLS cells), only a long one splits its heavy lanes.
+MIN_SPLIT_BATCH_S = 60.0
+
+
+def _cell_cost_cache():
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
+    return os.path.join(base, "mojolearn", "verify-cell-seconds.json")
+
+
+def cell_cost_hints():
+    """({lane or @unit: seconds}, source): how long each lane's cell (and each tail unit: `@models`, `@public`,
+    `@cross-check` a batch, `@extended:<profile>`) took, from the last `verify --all` on this machine (the user
+    cache), over the shipped `verify_reference/cell_seconds.json` (one L40S run). They ORDER the pool and close
+    batches early; no cell value, verdict, part or comparison reads them, and a missing or unreadable file only
+    leaves the order unsorted."""
+    hints, sources = {}, []
+    for name, path in (("shipped", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                "verify_reference", "cell_seconds.json")),
+                       ("last run", _cell_cost_cache())):
+        try:
+            with open(path, encoding="utf-8") as stream:
+                doc = json.load(stream)
+            if doc.get("format") == CELL_COST_FORMAT:
+                hints.update({k: float(v) for k, v in (doc.get("seconds") or {}).items()
+                              if isinstance(v, (int, float)) and v >= 0})
+                sources.append(name)
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+    return hints, "+".join(sources) or "none"
+
+
+def save_cell_cost_hints(hints, cell_seconds, unit_seconds):
+    """This run's mean cell seconds per lane and its tail units' seconds, merged over the hints it started with,
+    into the user cache for the next run's order. Never fails the run."""
+    per_lane = {}
+    for (lane, _fixture), seconds in cell_seconds.items():
+        per_lane.setdefault(lane, []).append(seconds)
+    merged = dict(hints)
+    merged.update({lane: round(sum(v) / len(v), 3) for lane, v in per_lane.items() if v})
+    merged.update({key: round(sum(v) / len(v), 3) for key, v in unit_seconds.items() if key and v})
+    try:
+        path = _cell_cost_cache()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".%d.tmp" % os.getpid()
+        with open(tmp, "w", encoding="utf-8") as stream:
+            json.dump(dict(format=CELL_COST_FORMAT, seconds=merged), stream, sort_keys=True)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
 def verify_cell_workers(requested=None):
     """How many cell-worker processes run at once: the process's core
     allocation (affinity), bounded by the available memory at
@@ -1382,48 +1440,78 @@ def _cross_check_result(vendor, lanes, fixtures, rows, skipped, sides=None):
                 **({'sides': sides} if sides else {}))
 
 
-def _cross_check_batched(lanes, fixtures, cpu_threads, log):
-    """Run the complete selection serially; retain failures and continue."""
-    import mojolearn as ml
+def _cross_check_units(lanes, fixtures):
+    """The cross-check's independent units: (fixture, first lane index, lanes), one child process each."""
+    return [(fixture, start, lanes[start:start + CROSS_CHECK_BATCH_LANES])
+            for fixture in fixtures for start in range(0, len(lanes), CROSS_CHECK_BATCH_LANES)]
+
+
+def _cross_check_one(fixture, start, selected, total, cpu_threads, log):
+    """One cross-check batch in its own process: (job, rows, skipped, sides). Failures are retained, never raised."""
+    log(f"# cross-check batch: {fixture}, lanes {start + 1}-{start + len(selected)} of {total}")
+    command = [sys.executable, '-m', 'mojolearn', 'verify',
+               '--cross-check', 'default', '--lanes', ','.join(selected),
+               '--fixtures', fixture, '--cpu-threads', str(cpu_threads), '--json']
+    skipped = {}
+    try:
+        proc = subprocess.run(command, stdout=subprocess.PIPE, text=True)
+    except OSError as exc:
+        for lane in selected:
+            skipped[f'{lane}/{fixture}'] = f'cannot start cross-check process: {exc}'
+        return dict(lanes=selected, fixture=fixture, exit=EXIT_CANNOT_RUN), [], skipped, None
+    job = dict(lanes=selected, fixture=fixture, exit=proc.returncode)
+    rows, sides = [], None
+    try:
+        doc = json.loads(proc.stdout)
+        if not isinstance(doc, dict) or doc.get('format') != 'mojolearn.verify-cross-check.v1':
+            raise ValueError('child produced no cross-check report')
+        rows = list(doc['cells'])
+        skipped.update(doc['skipped'])
+        sides = doc.get('sides')
+        if proc.returncode not in (EXIT_VERIFIED, EXIT_MISMATCH, EXIT_CANNOT_RUN):
+            raise ValueError(f'child exited {proc.returncode}')
+        if proc.returncode and doc.get('passed'):
+            raise ValueError(f'child exited {proc.returncode} despite a passing report')
+    except (ValueError, KeyError, TypeError) as exc:
+        for lane in selected:
+            skipped[f'{lane}/{fixture}'] = f'cross-check process failed (exit {proc.returncode}): {exc}'
+    return job, rows, skipped, sides
+
+
+def _cross_check_collect(vendor, lanes, fixtures, outcomes):
+    """The one cross-check result from its batches' outcomes, taken in unit order (as a serial run wrote them)."""
     rows, skipped, jobs, sides = [], {}, [], None
-    for fixture in fixtures:
-        for start in range(0, len(lanes), CROSS_CHECK_BATCH_LANES):
-            selected = lanes[start:start + CROSS_CHECK_BATCH_LANES]
-            log(f"# cross-check batch: {fixture}, lanes {start + 1}-{start + len(selected)} of {len(lanes)}")
-            command = [sys.executable, '-m', 'mojolearn', 'verify',
-                       '--cross-check', 'default', '--lanes', ','.join(selected),
-                       '--fixtures', fixture, '--cpu-threads', str(cpu_threads), '--json']
-            try:
-                proc = subprocess.run(command, stdout=subprocess.PIPE, text=True)
-            except OSError as exc:
-                jobs.append(dict(lanes=selected, fixture=fixture, exit=EXIT_CANNOT_RUN))
-                for lane in selected:
-                    skipped[f'{lane}/{fixture}'] = f'cannot start cross-check process: {exc}'
-                continue
-            jobs.append(dict(lanes=selected, fixture=fixture, exit=proc.returncode))
-            try:
-                doc = json.loads(proc.stdout)
-                if not isinstance(doc, dict) or doc.get('format') != 'mojolearn.verify-cross-check.v1':
-                    raise ValueError('child produced no cross-check report')
-                rows.extend(doc['cells'])
-                skipped.update(doc['skipped'])
-                # every batch is this machine and this install: the first
-                # batch's two sides describe them all
-                sides = sides or doc.get('sides')
-                if proc.returncode not in (EXIT_VERIFIED, EXIT_MISMATCH, EXIT_CANNOT_RUN):
-                    raise ValueError(f'child exited {proc.returncode}')
-                if proc.returncode and doc.get('passed'):
-                    raise ValueError(f'child exited {proc.returncode} despite a passing report')
-            except (ValueError, KeyError, TypeError) as exc:
-                for lane in selected:
-                    skipped[f'{lane}/{fixture}'] = f'cross-check process failed (exit {proc.returncode}): {exc}'
-    result = _cross_check_result(ml.vendor(), lanes, fixtures, rows, skipped, sides)
+    for job, batch_rows, batch_skipped, batch_sides in outcomes:
+        jobs.append(job)
+        rows.extend(batch_rows)
+        skipped.update(batch_skipped)
+        # every batch is this machine and this install: the first
+        # batch's two sides describe them all
+        sides = sides or batch_sides
+    result = _cross_check_result(vendor, lanes, fixtures, rows, skipped, sides)
     result['batches'] = jobs
     if any(job['exit'] != EXIT_VERIFIED for job in jobs):
         result['complete'] = False
         if result['passed'] is not None:
             result['passed'] = False
     return result
+
+
+def _cross_check_batched(lanes, fixtures, cpu_threads, log, workers=None):
+    """Run the complete selection, its batches IN PARALLEL (rel-fix-1, 2026-11-26: the 45 batches of `verify --all`
+    on the L40S ran one after another, ~700 s at one busy core of 14), `workers` (default the cell-worker count:
+    the core allocation, bounded by memory) at once, each in its own process; failures are retained and the run
+    continues. The result is assembled in unit order, so it reads exactly as the serial run's."""
+    import mojolearn as ml
+    units = _cross_check_units(lanes, fixtures)
+    workers = min(verify_cell_workers(workers), len(units)) if units else 1
+    run = lambda unit: _cross_check_one(*unit, len(lanes), cpu_threads, log)  # noqa: E731
+    if workers <= 1:
+        outcomes = [run(unit) for unit in units]
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            outcomes = list(pool.map(run, units))
+    return _cross_check_collect(ml.vendor(), lanes, fixtures, outcomes)
 
 
 def _require_forest_host_binding(report):
@@ -4483,11 +4571,37 @@ def cmd_verify_all(args):
                 return
         fresh_cell(*cell)
 
+    # LONGEST FIRST (rel-fix-1, 2026-11-26). On the L40S the sweep's batches ran in lane order and the four
+    # generic-*-trees lanes (36 cells, up to 111 s a cell) sat in two batches of 615 s and 495 s that started late and
+    # ran alone at the end, and the cross-check, the models and the public checks ran one after another after the
+    # sweep (1347 s at 5.4 busy cores of 14). Now every unit of the run (cell batches, the single-device verify
+    # commands, the cross-check batches, the models and the public checks) is in ONE pool, started longest first
+    # by the cost hints (`cell_cost_hints`: the last run on this machine, else the shipped table); a batch also
+    # closes before its estimate passes half a worker's share, so no one batch is the tail. Hints order the work and
+    # nothing else: the cells, their parts, fixtures, comparisons and the report's cell order are unchanged.
+    hints, hint_source = cell_cost_hints()
+    known = sorted(v for k, v in hints.items() if not k.startswith("@") and v > 0)
+    default_cost = known[len(known) // 2] if known else 1.0
+    cell_cost = lambda cell: float(hints.get(cell[0], default_cost))  # noqa: E731
     if fresh_only:
         units, body = [(cell,) for cell in cells], run_one
+        unit_costs = [cell_cost(cell) for cell in cells]
     else:
-        units = [(cells[i:i + batch_cells],) for i in range(0, len(cells), batch_cells)]
+        cap = max(sum(cell_cost(c) for c in cells) / max(1, cell_workers * 2), MIN_SPLIT_BATCH_S)
+        units, unit_costs, chunk, spent = [], [], [], 0.0
+        for cell in cells:
+            cost = cell_cost(cell)
+            if chunk and (len(chunk) >= batch_cells or spent + cost > cap):
+                units.append((chunk,))
+                unit_costs.append(spent)
+                chunk, spent = [], 0.0
+            chunk.append(cell)
+            spent += cost
+        if chunk:
+            units.append((chunk,))
+            unit_costs.append(spent)
         body = run_chunk
+    execution["schedule"] = dict(order="longest-first", hints=hint_source, units=len(units))
     # THE SINGLE-DEVICE VERIFY COMMANDS (verify-complete, Andrew 2026-11-26): `--all` also runs
     # verify-distributed-program, -partitioned-program, -graph, -generation, -causal-lm, one bundled recipe and one
     # saved-program round trip (_verify_extended.py), each unit in its own worker process in THIS pool, ahead of the
@@ -4521,13 +4635,80 @@ def cmd_verify_all(args):
                 values[step] = value
                 log(f"  [extended] {profile} {step}: {'answered' if value.get('ok') else 'FAILED: ' + str(value.get('error'))[:300]}")
 
-    work = [(run_extended, unit) for unit in extended_units] + [(body, unit) for unit in units]
-    if cell_workers == 1 or len(work) <= 1:
-        for fn, unit in work:  # one worker: the units in order, as before
+    # THE TAIL IN THE SAME POOL (rel-fix-1): the cross-check batches, the models and the public checks are
+    # independent of the cells, so they run beside them. Their results are applied after the sweep under exactly
+    # the conditions that ran them before (not interrupted, the models' failure first), so the report is the one
+    # a serial run writes.
+    cross_selected = []
+    if (getattr(args, 'routine', False) and not models_only and profile_name != 'neural'
+            and vendor != 'cpu'):
+        cross_selected, _, _ = cross_check_lanes(harness, 'quick' if depth == 'quick' else 'all')
+        if asked:
+            cross_selected = [lane for lane in cross_selected if lane in asked]
+    cross_units = _cross_check_units(cross_selected, fixtures) if cross_selected else []
+    cross_outcomes = {}
+    tail = dict(models=None, models_error=None, public=None)
+    unit_seconds = {}
+
+    def timed(key, fn, *unit):
+        t0 = time.monotonic()
+        try:
             fn(*unit)
+        finally:
+            with lock:
+                unit_seconds.setdefault(key, []).append(time.monotonic() - t0)
+
+    def run_cross(index, fixture, start, selected):
+        with lock:
+            if execution["interrupted"]:
+                return
+        cross_outcomes[index] = _cross_check_one(fixture, start, selected, len(cross_selected),
+                                                 getattr(args, 'cpu_threads', 1), log)
+
+    def run_models():
+        with lock:
+            if execution["interrupted"]:
+                return
+        try:
+            tail["models"] = isolated("models", repeats=repeats, host_only=models_only)
+        except worker.WorkerFailure as exc:
+            tail["models_error"] = str(exc)
+
+    def run_public():
+        with lock:
+            if execution["interrupted"]:
+                return
+        scope = 'neural' if profile_name == 'neural' else 'all'
+        try:
+            result = worker.run(dict(action="public", scope=scope), max(timeout, PUBLIC_TIMEOUT_S), log)
+            with lock:
+                for binding in result.get("bindings", []):
+                    worker_bindings[(binding["module"], binding["sha256"])] = binding
+            tail["public"] = result["value"]
+        except worker.WorkerFailure as exc:
+            failed = dict(status='FAILED', errors=['public checks worker: ' + str(exc)[:2000]])
+            tail["public"] = dict(format='mojolearn.public-verification.v1', status='FAILED', tape=failed,
+                                  endpoints=failed, release_qualified=False, scope=scope)
+
+    work = [("@extended:" + unit[0], run_extended, unit) for unit in extended_units]
+    work += [("@cross-check", run_cross, (i,) + unit) for i, unit in enumerate(cross_units)]
+    if not getattr(args, "no_models", False):
+        work.append(("@models", run_models, ()))
+    if not asked and not models_only:
+        work.append(("@public", run_public, ()))
+    costs = [float(hints.get(key, TAIL_DEFAULT_COST_S)) for key, _, _ in work]
+    work += [(None, body, unit) for unit in units]
+    costs += unit_costs
+    # stable: equal estimates keep their order (the extended units, then the cells in lane order)
+    ranked = sorted(range(len(work)), key=lambda i: -costs[i])
+    if cell_workers == 1 or len(work) <= 1:
+        for key, fn, unit in work:  # one worker: the units in order, as before
+            timed(key, fn, *unit) if key else fn(*unit)
     else:
         with ThreadPoolExecutor(max_workers=min(cell_workers, len(work))) as pool:
-            for future in [pool.submit(fn, *unit) for fn, unit in work]:
+            futures = [pool.submit(timed, work[i][0], work[i][1], *work[i][2]) if work[i][0]
+                       else pool.submit(work[i][1], *work[i][2]) for i in ranked]
+            for future in futures:
                 future.result()
     # cell order, as a serial sweep writes it (rows within a cell keep theirs)
     raw.sort(key=lambda row: cell_order.get((row["lane"], row["fixture"]), len(cells)))
@@ -4550,11 +4731,15 @@ def cmd_verify_all(args):
                                for side in SIDES for part in tuple(vref.PARTS) + tuple(extra_parts))
     model_rows = []
     if not getattr(args, "no_models", False) and not execution["interrupted"]:
-        try:
-            model_rows = isolated("models", repeats=repeats, host_only=models_only)
+        # the models ran in the pool beside the cells (rel-fix-1); applied here, where they used to run
+        if tail["models_error"] is not None:
+            execution["interrupted"] = tail["models_error"]
+        elif tail["models"] is not None:
+            model_rows = tail["models"]
             progress("models", judge_rows(model_rows, table, families, device_class=vclass))
-        except worker.WorkerFailure as exc:
-            execution["interrupted"] = str(exc)
+        else:
+            execution["interrupted"] = "the models step did not run"
+    save_cell_cost_hints(hints, cell_seconds, unit_seconds)
     progress("interrupted" if execution["interrupted"] else "comparison complete")
     rows = judge_rows(raw + model_rows, table, families, unreferenced_lanes=stale, device_class=vclass,
                                 batch_revisions=getattr(harness, "BATCH_REVISIONS", {}))
@@ -4722,11 +4907,14 @@ def cmd_verify_all(args):
     if (getattr(args, 'routine', False) and not models_only
             and profile_name != 'neural'
             and vendor != 'cpu' and not execution['interrupted']):
-        selected, _, _ = cross_check_lanes(harness, 'quick' if depth == 'quick' else 'all')
-        if asked:
-            selected = [lane for lane in selected if lane in asked]
-        if selected:
-            cross = _cross_check_batched(selected, fixtures, getattr(args, 'cpu_threads', 1), log)
+        # its batches ran in the sweep's pool (rel-fix-1); assembled in unit order
+        if cross_selected:
+            missing = [i for i in range(len(cross_units)) if i not in cross_outcomes]
+            for i in missing:   # a batch the pool skipped: run it now, as the serial run would have
+                cross_outcomes[i] = _cross_check_one(*cross_units[i], len(cross_selected),
+                                                     getattr(args, 'cpu_threads', 1), log)
+            cross = _cross_check_collect(vendor, cross_selected, fixtures,
+                                         [cross_outcomes[i] for i in range(len(cross_units))])
             report['cross_check'] = cross
             if not cross['passed']:
                 code = EXIT_MISMATCH if cross['differ'] or code == EXIT_MISMATCH else EXIT_CANNOT_RUN
@@ -4740,8 +4928,12 @@ def cmd_verify_all(args):
     # Tiny endpoint and tape fixtures are part of the normal verifier. They
     # are not an opt-in light profile or a separate qualification campaign.
     if not asked and not models_only and not execution['interrupted']:
-        from ._verify_public import run as public_checks
-        report['public_api'] = public_checks(scope='neural' if profile_name == 'neural' else 'all')
+        # the public checks ran in their own worker in the sweep's pool (rel-fix-1); the same body
+        # (_verify_public.run) as when this controller ran them in its own process after the sweep
+        if tail["public"] is None:
+            from ._verify_public import run as public_checks
+            tail["public"] = public_checks(scope='neural' if profile_name == 'neural' else 'all')
+        report['public_api'] = tail["public"]
         code, headline = _public_check_verdict(report, code, headline)
     if extended_units:
         pkg = _pkg_dir()
