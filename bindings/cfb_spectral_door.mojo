@@ -104,7 +104,7 @@ from providers.python.spectral_lifecycle_pyapi_pack import spectral_admit
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi_unpack import _target, _refusal
 from bindings.py_optional import py_present
-from spectral.cfb_spectral_run import _sc_check_shape, _sc_refusal, _se_check_shape
+from spectral.cfb_spectral_run import _sc_check_shape, _sc_refusal, _se_check_shape, spectral_lanczos_fits
 from bindings.cluster_keys_unpack import cluster_keys
 from bindings.py_balanced import py_item
 
@@ -785,7 +785,7 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
             var x = _x_decomp_input(source, context)
             n = Int(py=x.shape[0])
             var d = Int(py=x.shape[1])
-            if clusters <= n and k < n:
+            if clusters <= n and spectral_lanczos_fits(k, n):
                 var public = family_array(Python.tuple(n, n), "<f4", context)
                 py_setitem(fields, nk[].k_affinity_matrix_, public)
                 py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
@@ -809,7 +809,7 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
         else:
             var admitted = _knn_admit(fields, source, True, context, True, config.fit.neighbors, False)
             n = admitted.n
-            if n > 0 and clusters <= n and k < n:
+            if n > 0 and clusters <= n and spectral_lanczos_fits(k, n):
                 var status = SpectralAffinityStatus()
                 var public = family_array(Python.tuple(n, n), "<f4", context)
                 labels = family_array(Python.tuple(n), "<i4", context)
@@ -1387,7 +1387,9 @@ def _se_device_affinity(config: SpectralEmbeddingConfig, drop_first: Bool, norm_
     was built by the x_decomp (rbf) or base (knn) image, downloaded into host
     storage and uploaded again by this image. Returns None, having published
     nothing, when the shape refusal will fire (or n is 0): the caller then
-    takes the former route, which raises in the former order."""
+    takes the former route, which raises in the former order. The decline
+    tests the solver's own rule (`spectral_lanczos_fits`), so no shape the
+    class refuses reaches the kernel."""
     var k = config.components
     var nk = cluster_keys()
     var options = SpectralEmbeddingOptions(n_lanczos, k, 0, norm_laplacian, drop_first,
@@ -1398,7 +1400,7 @@ def _se_device_affinity(config: SpectralEmbeddingConfig, drop_first: Bool, norm_
         var x = _x_decomp_input(source, context)
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
-        if n_lanczos >= n:
+        if not spectral_lanczos_fits(n_lanczos, n):
             return None
         var gamma = config.gamma_for(d)
         var public = PythonObject(None)
@@ -1422,7 +1424,7 @@ def _se_device_affinity(config: SpectralEmbeddingConfig, drop_first: Bool, norm_
         var admitted = _knn_admit(fields, source, False, context, True, config.neighbors,
                                   config.automatic_neighbors)
         var n = admitted.n
-        if n == 0 or n_lanczos >= n:
+        if n == 0 or not spectral_lanczos_fits(n_lanczos, n):
             return None
         var status = SpectralAffinityStatus()
         var public = PythonObject(None)
