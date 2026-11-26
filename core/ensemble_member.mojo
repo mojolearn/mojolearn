@@ -560,6 +560,9 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
     # labels' reprs (`meta_plan_search_labels`).
     var cluster: EntryRef
     var label_words: List[String]
+    # Lane gs-fix-3: THE SEARCH KIND's words for an X its caller found
+    # non-finite (`meta_plan_search_x_refusal`; empty: X proved finite).
+    var x_refusal: String
     # Lane mf-r9d: THE SEARCH KIND's other numeric_mode tier
     # (`meta_plan_metric_other`; core/msel_search_run.mojo `MselOtherTier`).
     var other: MselOtherTier
@@ -589,6 +592,7 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
         self.split = MselSplitSpec()
         self.cluster = entry_ref_unresolved()
         self.label_words = List[String]()
+        self.x_refusal = String("")
         self.other = MselOtherTier()
         self.rfe_run = ClsRunPlan(entry_ref_unresolved(), False, False, False, False, False)
         self.refusal = String("")
@@ -749,6 +753,24 @@ def meta_plan_search_labels(handle: Int, cluster: EntryRef, var label_words: Lis
         var entry = _PlanSlotPtr(unsafe_from_address=address)
         entry[].cluster = cluster
         entry[].label_words = label_words^
+    finally:
+        shared_slot_unlock(lock)
+
+
+def meta_plan_search_x_refusal(handle: Int, var words: String) raises:
+    """UNPACK (THE SEARCH KIND's fit caller, lane gs-fix-3): X holds a NaN
+    or an infinity; `words` are check_array's words for it, copied into every
+    state NEW makes from the plan. The RUN then fails only the units and
+    sides whose rows hold one (core/msel_search_run.mojo
+    `MselSearchPlan.x_refusal`). Written on that refusal path only: a plan
+    is one admission's (`_plan_mint` resets its slot), so it starts empty."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        var entry = _PlanSlotPtr(unsafe_from_address=address)
+        entry[].x_refusal = words^
     finally:
         shared_slot_unlock(lock)
 
@@ -1090,6 +1112,8 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     # Lane mf-cluster5: the search's cluster entry and labels' reprs.
     var cluster: EntryRef
     var label_words: List[String]
+    # Lane gs-fix-3: the search's words for a non-finite X (empty: none).
+    var x_refusal: String
     # Lane mf-r9d: the search's other numeric_mode tier (`MselOtherTier`).
     var other: MselOtherTier
     # Lane mf-msel5, THE CV TOOLS: the kept unit states (owned; 0: a failed
@@ -1191,6 +1215,7 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.out_classes = List[Int]()
         self.cluster = entry_ref_unresolved()
         self.label_words = List[String]()
+        self.x_refusal = String("")
         self.other = MselOtherTier()
         self.fold_states = List[Int]()
         self.fold_owner = List[Int]()
@@ -1594,6 +1619,7 @@ def _new(call: _CallPtr) raises:
         slot[].split = entry[].split.copy()
         slot[].cluster = entry[].cluster
         slot[].label_words = entry[].label_words.copy()
+        slot[].x_refusal = entry[].x_refusal.copy()
         slot[].other = entry[].other.copy()
         slot[].rfe_run = entry[].rfe_run
         slot[].refusal = entry[].refusal.copy()
@@ -3698,6 +3724,7 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
     plan.cap = slot[].cap
     plan.cluster = slot[].cluster
     plan.label_words = slot[].label_words.copy()
+    plan.x_refusal = slot[].x_refusal.copy()
     plan.other = slot[].other.copy()  # lane mf-r9d: the other numeric_mode tier
     # THE SPLITTER CV and a user's index list (lane mf-search4b item 6): the
     # folds of this fit's rows, as Stacking's and Calibrated's (`_split_folds`;

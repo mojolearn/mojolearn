@@ -51,9 +51,11 @@ whoever refuses it in scikit-learn 1.9 (the module's exits, one by one):
     raising, on the refusal path only (the family's or the search kind's
     words), else the missing capability's words;
   * non-finite X for a kind without `MEMBER_CAN_TEST_ROWS`: check_array's
-    words (`admitted_finite_wording`), naming the base estimator;
+    words (`admitted_finite_wording`), naming the base estimator; for a
+    search or a cv tool the words go to its RUN, which fails only the units
+    and sides whose rows hold the non-finite word (lane gs-fix-3);
   * a failing fit or pack: the member's own words, its state released.
-A refusal every fit of a search would raise (non-finite X, continuous labels,
+A refusal every fit of a search would raise (continuous labels,
 a target the regressor check refuses, a class_weight dict) is, for a search
 with a numeric error_score, scikit-learn's all-fits-failed words
 (`_fit_words`): `_warn_or_raise_about_fit_failures` over its candidates x
@@ -80,6 +82,8 @@ from bindings.member_boundary_door import (
 )
 from bindings.admitted_input_unpack import admit_f32, admit_weight_words
 from core.admitted_refusals import admitted_finite_wording
+from core.ensemble_member import meta_plan_search_x_refusal
+from core.member_families import MEMBER_FAMILY_SEARCH
 from bindings.msel_candidates_door import msel_grid_len, msel_sampler_check, msel_sampler_len
 from bindings.native_loaded_module_door import native_loaded_module
 from providers.python.member_ensemble_boundary_door import _all_fits_failed, _no_member_fit_words
@@ -831,8 +835,19 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
         _ = xv  # keep the Python object alive through the scan above
         if not finite:
             # check_array's words, as the base estimator's own fit raises them
-            raise Error(_fit_words(est, fields, admitted_finite_wording(_base_name(est, fields, context), "X"),
-                                   context, b))
+            var x_words = admitted_finite_wording(_base_name(est, fields, context), "X")
+            if owner.plan.family != MEMBER_FAMILY_SEARCH or not _is_search(est, context):
+                raise Error(_fit_words(est, fields, x_words.copy(), context, b))
+            # A SEARCH OR A CV TOOL (lane gs-fix-3): not every fit reads the
+            # non-finite row. The search kind's RUN gets the words and fails
+            # the units whose train rows hold one and the sides whose rows do
+            # (core/msel_search_run.mojo `MselSearchPlan.x_refusal`), as
+            # scikit-learn's `_fit_and_score` does fold by fold; every fit
+            # failing is still its all-fits-failed words, from the RUN.
+            # Before, the whole-X verdict raised those words here whenever X
+            # held one such row: cross_validate(error_score=<number>) failed
+            # the folds without it too (proving suite, 2026-11-26).
+            meta_plan_search_x_refusal(Int(run.plan.params[1]), x_words^)
     var labels = PythonObject(None)
     if classifier and yv is None:
         # validate_data's words (sklearn 1.9 utils/validation.py), raised by

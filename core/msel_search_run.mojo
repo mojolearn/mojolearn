@@ -285,6 +285,14 @@ struct MselSearchPlan(Movable):
     # reprs by class code (the binary scorers' refusal words).
     var cluster: EntryRef
     var label_words: List[String]
+    # WHO REFUSES A NON-FINITE FOLD (lane gs-fix-3): empty when the caller
+    # proved X finite. Else X holds a NaN or an infinity somewhere and these
+    # are check_array's words for it: a candidate whose kind has no
+    # `MEMBER_CAN_TEST_ROWS` fails the units whose train rows hold one (the
+    # fit) and the sides whose rows hold one (the score), each as a member
+    # that raised them; the other units run. The rows are scanned per fold
+    # only then (`_rows_all_finite`).
+    var x_refusal: String
     # THE CV TOOLS (lane mf-msel5, module note): keep every unit's fitted
     # state for the caller; answer each fold's rows; answer each unit's
     # test-side response `respond` (a MEMBER_OP_*; -1: score as above).
@@ -350,6 +358,7 @@ struct MselSearchPlan(Movable):
         self.y_kept_at = 0
         self.cluster = entry_ref_unresolved()
         self.label_words = List[String]()
+        self.x_refusal = String("")
         self.keep = False
         self.indices = False
         self.respond = -1
@@ -523,6 +532,21 @@ def _gather_words(src: Int, rows: Int, count: Int, width: Int, dst: Int):
         var at = Int(r[i]) * width
         for c in range(width):
             d[i * width + c] = s[at + c]
+
+
+def _rows_all_finite(x: Int, rows: Int, count: Int, width: Int) -> Bool:
+    """Whether the `count` rows of the row-major float32 X (`width` words a
+    row) at the int32 row numbers `rows` hold no NaN and no infinity (a test
+    on bits: an all-ones exponent). Read only for an X the caller found
+    non-finite (`MselSearchPlan.x_refusal`), one task per fold side."""
+    var words = _I32P(unsafe_from_address=x)
+    var r = _I32P(unsafe_from_address=rows)
+    for i in range(count):
+        var at = Int(r[i]) * width
+        for c in range(width):
+            if (Int(words[at + c]) & 0x7F800000) == 0x7F800000:
+                return False
+    return True
 
 
 @fieldwise_init
@@ -1696,6 +1720,39 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         if sides == 2:
             side_rows[f * sides + 1] = tr_at[f]
             side_count[f * sides + 1] = tr_n[f]
+    # WHO REFUSES A NON-FINITE FOLD (lane gs-fix-3; `MselSearchPlan.x_refusal`):
+    # per fold, 1 when its test rows ([2 f]) or its train rows ([2 f + 1])
+    # hold a NaN or an infinity. Scanned only for an X the caller found
+    # non-finite, one task per fold side across the cores. Before, the
+    # caller's whole-X verdict failed EVERY fit (bindings/
+    # msel_member_units_door.mojo), the folds without such a row too.
+    var x_unproven = plan.x_refusal.byte_length() > 0
+    var side_bad = List[UInt8](length=max(used * 2, 1), fill=UInt8(0))
+    var refusal_words: List[String] = [plan.x_refusal.copy()]
+    var side_bad_at = Int(side_bad.unsafe_ptr()) if x_unproven else 0
+    var refusal_at = Int(refusal_words.unsafe_ptr())
+    var cand_masks_at = Int(plan.masks.unsafe_ptr())
+    if x_unproven:
+        var scan_tr_at = Int(tr_at.unsafe_ptr())
+        var scan_tr_n = Int(tr_n.unsafe_ptr())
+        var scan_te_at = Int(te_at.unsafe_ptr())
+        var scan_te_n = Int(te_n.unsafe_ptr())
+        var scan_x = plan.x
+
+        def _scan(t: Int) {imm scan_tr_at, imm scan_tr_n, imm scan_te_at, imm scan_te_n, imm scan_x, imm d,
+                           imm side_bad_at}:
+            var f = t // 2
+            var train = t % 2 == 1
+            var rows = _IntP(unsafe_from_address=scan_tr_at if train else scan_te_at)[f]
+            var count = _IntP(unsafe_from_address=scan_tr_n if train else scan_te_n)[f]
+            if not _rows_all_finite(scan_x, rows, count, d):
+                _U8P(unsafe_from_address=side_bad_at)[t] = UInt8(1)
+
+        host_parallelize(_scan, used * 2)
+        _ = len(tr_at)  # read through their addresses by the tasks above
+        _ = len(tr_n)
+        _ = len(te_at)
+        _ = len(te_n)
     # THE CV TOOLS (module note): a given fold's test side holding the same
     # rows as an earlier one's reads that side's blocks (alias_of: -1, its own).
     var alias_of = List[Int](length=max(used * sides, 1), fill=-1)
@@ -1838,6 +1895,12 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 run.failed[v] = UInt8(1)
                 run.errors[v] = (plan.label_words[refused].copy() if refused < len(plan.label_words)
                                  else String("member ABI: a refused candidate's words are missing"))
+        if x_unproven:
+            for v in range(width):  # driver-loop: over the wave's units (a non-finite train fold fails unfitted)
+                if (run.failed[v] == UInt8(0) and side_bad[((u0 + v) % used) * 2 + 1] != UInt8(0)
+                        and (plan.masks[(u0 + v) // used] & MEMBER_CAN_TEST_ROWS) == 0):
+                    run.failed[v] = UInt8(1)
+                    run.errors[v] = plan.x_refusal.copy()
         _fit_wave(run)
         for v in range(width):  # driver-loop: over the wave's units (their fits' seconds)
             res.fit_seconds[u0 + v] = run.seconds[v]
@@ -1911,7 +1974,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                             imm base_y, imm n, imm scope, imm pin, imm secs_at, imm narrow, imm dst, imm dst_width,
                             imm dst_dtype, imm log_words, imm held_addr_at, imm held_count_at, imm k,
                             imm multi_cls, imm mheld_list, imm mlack_at, imm dst_counts_at, imm logs_at,
-                            imm y_took_at, imm y_pin}:
+                            imm y_took_at, imm y_pin, imm side_bad_at, imm refusal_at, imm cand_masks_at}:
             var v = t // sides
             var side = t % sides
             var started = perf_counter_ns()
@@ -1930,6 +1993,12 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                               y_pin if route == SEARCH_ROWS_RESIDENT else 0, y_took_at + t)
             try:
                 var mfold = (u0 + v) % used
+                if (side_bad_at != 0 and _U8P(unsafe_from_address=side_bad_at)[mfold * 2 + side] != UInt8(0)
+                        and (_IntP(unsafe_from_address=cand_masks_at)[c] & MEMBER_CAN_TEST_ROWS) == 0):
+                    # WHO REFUSES A NON-FINITE FOLD: this side's rows hold a
+                    # NaN or an infinity and the kind tests none: check_array's
+                    # words, as the estimator's own predict / score raises them
+                    raise Error(_StrPtr(unsafe_from_address=refusal_at)[0].copy())
                 var mlacks = _U8P(unsafe_from_address=mlack_at)[mfold] != UInt8(0)
                 if member_score and mlacks:
                     # a multi-output fold lacking a class (lane mf-tail5): the
@@ -1987,6 +2056,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         else:
             for t in range(tasks):  # driver-loop: over the wave's tasks (THE GIL RULE: kinds that are not GIL-free)
                 _score(t)
+        _ = len(refusal_words)  # read through `refusal_at` by the tasks above
+        _ = len(side_bad)
         for t in range(tasks):  # driver-loop: over the wave's tasks (did a cache take X's reference)
             if took[t] != UInt8(0):
                 _note_kept(plan)
@@ -2248,6 +2319,11 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             _drop_kept(plan, res)
             raise Error(plan.label_words[refused_best].copy() if refused_best < len(plan.label_words)
                         else String("member ABI: a refused candidate's words are missing"))
+        if x_unproven and (plan.masks[res.best] & MEMBER_CAN_TEST_ROWS) == 0:
+            # WHO REFUSES A NON-FINITE FOLD: the refit reads every row of an
+            # X that holds a NaN or an infinity: its fit raises the words
+            _drop_kept(plan, res)
+            raise Error(plan.x_refusal.copy())
         var best = plan.plans[res.best].copy()
         best.classes = k
         best.class_counts = plan.class_counts.copy()
