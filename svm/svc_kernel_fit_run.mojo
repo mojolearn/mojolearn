@@ -439,10 +439,31 @@ def _platt(drivers: SvcDrivers, plan: SvcFitPlan, settings: SvcOperationSettings
                         query = _f32(cross)
                         features = n_sv
                         vectors = _f32(scratch.dual)
+                    # THE FOLD X WORD (lane gs-fix-5). On a fold slot `query` is the negative word of
+                    # the held rows' device slot (`_take_word`), which only the device table's resident
+                    # entry reads (core/device_query_x.mojo `fold_x_fill`); the shared table's query
+                    # reads host words (svm/native_descriptor_dispatch.mojo `read_f32`). Before, the
+                    # word went to the shared table: every SVC(probability=True) fit under a row index
+                    # on a GPU route read a negative address (SIGSEGV in core::hostptr::read_f32 under
+                    # svc_fit_finish_run; the four StackingClassifier proving cases on the L40S,
+                    # 2103f25a6c). The fold's fresh machine is uploaded for this call (lease 0), as
+                    # the member's fold queries upload theirs.
+                    var device_query = on_device and n_sv > 0
+                    var no_rows = List[Float32]()
+                    if on_device and n_sv == 0:
+                        # No support row: the decision reads no cell of X (the host-list route of
+                        # both entries); zero words of the held rows' shape stand for the slot.
+                        no_rows = List[Float32](length=max(h * features, 1), fill=Float32(0))
+                        query = _f32(no_rows)
+                    var flags = List[Int32](length=2, fill=Int32(0))
                     _ = drivers.query(SvcQueryRequest(query, _f32(scratch.dual) if n_sv > 0 else 0,
-                        vectors if n_sv > 0 else 0, _f32(dec_perm) + 4 * begin, 0, h, features, n_sv, settings.kernel,
-                        settings.degree, False, 0, 0, -1, 0, -1, False, _round_f32(scratch.info[0]), 0.0, 1.0,
-                        settings.gamma, settings.cache_mib, settings.coef0))
+                        vectors if n_sv > 0 else 0, _f32(dec_perm) + 4 * begin, _i32(flags) if device_query else 0, h,
+                        features, n_sv, settings.kernel, settings.degree, False, 0, 0, -1, 0, -1, device_query,
+                        _round_f32(scratch.info[0]), 0.0, 1.0, settings.gamma, settings.cache_mib, settings.coef0))
+                    _ = no_rows^  # keep alive: the query above reads it through an untracked pointer
+                    if flags[0] != 0 or flags[1] != 0:
+                        # the entry's finite / range words of the held rows (the fit tested X before)
+                        raise Error("ValueError: Input X contains NaN or infinity (SVC).")
                 finally:
                     _free_taken(plan, taken)
             # libsvm's orientation (positive toward class i) and +1/-1

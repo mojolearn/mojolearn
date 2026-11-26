@@ -32,8 +32,24 @@ step install install || true
 [ -x "$VENV/bin/python" ] || { echo "PROVING setup FAIL no venv"; exit 4; }
 "$VENV/bin/python" -I -c "import mojolearn as ml; print('PROVING wheel', ml.__version__)" 2>&1 | tail -n 1
 cd "$REPO" || exit 4
-step proving "$VENV/bin/python" -m pytest tests/proving -q -n "$W" -p no:cacheprovider
-step proving_gpu "$VENV/bin/python" -m pytest tests/proving -q -m gpu -n "$W" -p no:cacheprovider
+# The model-selection case shards write their logs under the pytest base temp (tests/proving/
+# test_proving_model_selection.py, proving-arms/<device>/<arm>/shard<N>.log: the CASE lines and the faulthandler
+# frames of a case process that died). Each pytest step gets its own base temp, and every shard log is copied into
+# logs/shards/<step>/ so it leaves the box with the results (L40S 2026-11-26: four cases died and their logs stayed
+# in /tmp on a box that was deleted).
+BT="$(mktemp -d "${TMPDIR:-/tmp}/proving-bt.XXXXXX")"
+keep_shards() {
+    local n=$1 root="$BT/$1" f
+    [ -d "$root" ] || return 0
+    find "$root" -path '*/proving-arms/*' -name 'shard*.log' -print0 | while IFS= read -r -d '' f; do
+        mkdir -p "$RES/logs/shards/$n/$(dirname "${f#"$root"/}")" && cp "$f" "$RES/logs/shards/$n/${f#"$root"/}"
+    done
+    echo "PROVING $n shard logs kept: $(find "$RES/logs/shards/$n" -name 'shard*.log' 2>/dev/null | wc -l | tr -d ' ')"
+}
+step proving "$VENV/bin/python" -m pytest tests/proving -q -n "$W" -p no:cacheprovider --basetemp "$BT/proving"
+keep_shards proving
+step proving_gpu "$VENV/bin/python" -m pytest tests/proving -q -m gpu -n "$W" -p no:cacheprovider --basetemp "$BT/proving_gpu"
+keep_shards proving_gpu
 step feature_proof env FP_VENV="$VENV" MOJOLEARN_RESULTS_DIR="$RES/feature-proof" bash tools/ops/feature_proof_job.sh
 step concurrent_repro bash -c "export PATH=\$PATH:/root/.pixi/bin; pixi run -q mojo run -I . checks/device_context_concurrent_repro.mojo"
 echo "PROVING done fails=$fails"
