@@ -84,9 +84,11 @@ def test_holtwinters_resident_public_outputs_and_lifetime():
     spans = [(10, 40), (40, 56), (50, 60)]
     for start, end in spans:
         got = np.asarray(model.predict(start, end))
-        assert got.shape == (4, end - start) and got.dtype == np.float32
+        # cuML's layout, the documented one (python/mojolearn/_tsa_impl.py forecast): (h, ts_num), time-major
+        # (lane gs-fix-2: this test asserted (ts_num, h); wrong test).
+        assert got.shape == (end - start, 4) and got.dtype == np.float32
     got = np.asarray(model.forecast(7))
-    assert got.shape == (4, 7) and got.dtype == np.float32
+    assert got.shape == (7, 4) and got.dtype == np.float32
     assert count() == before + 1
     del model
     gc.collect()
