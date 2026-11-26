@@ -1880,13 +1880,14 @@ def test_the_key_holds_no_checkout_or_cache_path(repo, tmp_path):
 
 
 def test_darwin_keeps_the_checkout_and_cache_paths_until_measured(repo, tmp_path):
-    """rel-fix-1 (review item 5): the Mac's linker was never measured, so on darwin the paths stay key fields."""
+    """rel-fix-1 (review item 5): the Mac's linker was never measured, so on darwin the paths stay key fields.
+    No MOJOLEARN_GPU_ARCHS: a darwin build refuses a Linux accelerator target (development_build.py:784)."""
     import shutil
     other = tmp_path / "elsewhere" / "second-worktree"
     shutil.copytree(repo, other)
-    a = dev.make_plan(repo, tmp_path / "cache", ["identical"], ENV, facts=FACTS, plat="darwin")
-    b = dev.make_plan(other, tmp_path / "cache", ["identical"], ENV, facts=FACTS, plat="darwin")
-    c = dev.make_plan(repo, tmp_path / "another-cache", ["identical"], ENV, facts=FACTS, plat="darwin")
+    a = dev.make_plan(repo, tmp_path / "cache", ["identical"], {}, facts=FACTS, plat="darwin")
+    b = dev.make_plan(other, tmp_path / "cache", ["identical"], {}, facts=FACTS, plat="darwin")
+    c = dev.make_plan(repo, tmp_path / "another-cache", ["identical"], {}, facts=FACTS, plat="darwin")
     assert changed(a, b) == set(keys(a)) and changed(a, c) == set(keys(a))
     assert all(row["fields"]["repo"] == str(repo) for row in a["groups"])
 
