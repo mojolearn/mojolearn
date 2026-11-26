@@ -38,10 +38,11 @@
 # the inputs are refused before anything ran.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/../.." && pwd)"
+. "$HERE/tree_commit.sh"
 
 # job-preflight: `gpu_smoke_job.sh --preflight` checks the job's inputs at SUBMIT time, reading only (run on the box by
 # tools/ops/job_preflight.sh from tools/nvidia_central.sh submit): GS_WHEEL_DIR holds one core and one nvidia wheel and
-# nothing else, their local version names this tree's HEAD (the tests and the harness run from this tree), the smoke
+# nothing else, their local version names this tree's commit (the synced one, tools/ops/tree_commit.sh; the tests and the harness run from this tree), the smoke
 # script is in the tree, nvidia-smi answers, and MOJOLEARN_RESULTS_DIR is set. The job keeps the same checks at run time.
 gs_wheels() { ls "${GS_WHEEL_DIR:-/nonexistent}"/mojolearn_core-*.whl "${GS_WHEEL_DIR:-/nonexistent}"/mojolearn_nvidia-*.whl 2> /dev/null; }
 gs_preflight() {   # PREFLIGHT lines; 0 when the job would start, 4 otherwise
@@ -56,14 +57,12 @@ gs_preflight() {   # PREFLIGHT lines; 0 when the job would start, 4 otherwise
         else
             pf_fail "GS_WHEEL_DIR $GS_WHEEL_DIR holds $n of the 2 wheels (one mojolearn_core, one mojolearn_nvidia, nothing else)"
         fi
-        head=$(git -C "$REPO" rev-parse HEAD 2> /dev/null || true)
-        for w in $(gs_wheels); do
-            w12=$(basename "$w" | sed -n 's/^[^-]*-[^-]*+\([0-9a-f]\{7,40\}\)-.*/\1/p')
-            if [ -z "$head" ]; then echo "PREFLIGHT ok (no git HEAD in $REPO: commit match not checked)"; break
-            elif [ -z "$w12" ]; then pf_fail "$(basename "$w"): no +<sha> local version to match HEAD ${head:0:12}"
-            elif [ "${head:0:${#w12}}" != "$w12" ]; then pf_fail "$(basename "$w") is commit $w12, this tree's HEAD is ${head:0:12} (sync the lane tree to the build's commit)"
-            fi
-        done
+        # the tree's commit is the synced one (.git/devpod_synced), not the box HEAD, which a sync leaves at the merge
+        # base with main (tools/ops/tree_commit.sh)
+        while read -r verdict rest; do
+            if [ "$verdict" = MATCH ]; then echo "PREFLIGHT ok wheel $rest"
+            else pf_fail "$rest (sync the lane tree to the build's commit)"; fi
+        done < <(wheels_match_tree "$REPO" $(gs_wheels))
     fi
     [ -f "$REPO/tools/ops/wheel_verify_smoke.sh" ] && echo "PREFLIGHT ok smoke $REPO/tools/ops/wheel_verify_smoke.sh" \
         || pf_fail "no tools/ops/wheel_verify_smoke.sh in $REPO"

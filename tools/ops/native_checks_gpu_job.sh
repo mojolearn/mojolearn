@@ -54,13 +54,14 @@ fi
 # applies the worktree's diff on top, so `git rev-parse HEAD` names main, not the code that is built (nvc1-0004,
 # 2026-11-22, printed main's 49f2b12e24). The synced commit is in .git/devpod_synced (commit=, worktree_dirty=,
 # patch_sha256=); a tree without that record (a plain checkout) is its HEAD. NC_EXPECT_COMMIT, when given, must be it.
-SYNC_REC="$(git rev-parse --git-dir 2>/dev/null)/devpod_synced"
-if [ -f "$SYNC_REC" ]; then
-    SOURCE=$(sed -n 's/^commit=//p' "$SYNC_REC" | head -n 1)
+. "$(dirname "$SELF")/tree_commit.sh"
+SYNC_REC="$(git rev-parse --absolute-git-dir 2>/dev/null)/devpod_synced"
+SOURCE=$(tree_commit .)
+if [ -f "$SYNC_REC" ] && [ "$SOURCE" != "$(git rev-parse HEAD 2>/dev/null)" ]; then
     SOURCE_NOTE="synced commit (box HEAD $(git rev-parse --short=10 HEAD 2>/dev/null) is its merge base; worktree_dirty=$(sed -n 's/^worktree_dirty=//p' "$SYNC_REC"), patch sha256 $(sed -n 's/^patch_sha256=//p' "$SYNC_REC" | cut -c1-16))"
 else
-    SOURCE=$(git rev-parse HEAD 2>/dev/null || echo unknown)
-    SOURCE_NOTE="tree HEAD (no sync record)"
+    SOURCE=${SOURCE:-unknown}
+    SOURCE_NOTE="tree HEAD (no current sync record)"
 fi
 if [ -n "${NC_EXPECT_COMMIT:-}" ] && [ "${SOURCE#"$NC_EXPECT_COMMIT"}" = "$SOURCE" ]; then
     say "the tree holds $SOURCE, not NC_EXPECT_COMMIT=$NC_EXPECT_COMMIT: sync the commit to test first"; exit 2
