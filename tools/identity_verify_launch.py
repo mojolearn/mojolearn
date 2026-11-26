@@ -16,6 +16,11 @@ from datetime import datetime, timezone
 
 LEGACY_SCHEMA = 'mojolearn.installed-verifier-run.v1'
 SCHEMA = 'mojolearn.installed-verifier-run.v2'
+#: The verify profiles a launch selects (`verify --classic`, `--neural`, `--all`; verify-profiles, 2026-11-26).
+PROFILES = ('classic', 'neural', 'all')
+#: Profiles of receipts written before 2026-11-26, when the command was `verify --all [--neural-training]`. Only
+#: validate_run reads them, so a retained receipt keeps validating; a new launch cannot select them.
+RECORDED_PROFILES = {'routine': [], 'neural-training': ['--neural-training']}
 DEFAULT_POLICY = dict(numeric_mode='identical', sampling_kv_upload_reuse='0',
                       resident_sampling_fp32='0')
 
@@ -67,6 +72,7 @@ def locate(python, cwd, env):
 
 def execute(root, python, out, lanes, profile, cpu_threads, *, runner=subprocess.run):
     root, python, out = Path(root).resolve(), Path(python).absolute(), Path(out).resolve()
+    require(profile in PROFILES, 'invalid profile')
     require(not out.exists(), 'output already exists; preserve completed observations instead of rerunning')
     out.mkdir(parents=True)
     env = dict(os.environ)
@@ -90,17 +96,15 @@ def execute(root, python, out, lanes, profile, cpu_threads, *, runner=subprocess
     harness = columns.harness()
     require(sha(harness.__file__) == sha(root / "tools/identity_break.py"), "controller harness differs from frozen source")
     require(lanes and len(lanes) == len(set(lanes)) and set(lanes) <= set(harness.LANES), 'invalid lane selection')
-    require(profile in ('routine', 'neural-training'), 'invalid profile')
     require(set(lanes) <= set(columns.profile_lanes(harness, profile)), 'lanes outside selected profile')
     require(cpu_threads > 0, 'CPU thread request must be positive')
     options = dict(lanes=list(lanes), profile=profile, repeats=1, cpu_threads=cpu_threads,
                    fixtures=list(harness.FIXTURES), parts=list(columns.vref().PARTS + columns.vref().OPTIONAL_PARTS))
     options.update({'all': True, 'include_pending': True, 'no_models': True})
     report = out / 'verify.json'
-    command = [str(python), '-m', 'mojolearn', 'verify', '--all', '--include-pending', '--no-models', '--lanes', ','.join(lanes),
-               '--repeats', '1', '--cpu-threads', str(cpu_threads), '--json-out', str(report), '--json']
-    if profile == 'neural-training':
-        command.append('--neural-training')
+    command = [str(python), '-m', 'mojolearn', 'verify', '--' + profile, '--include-pending', '--no-models',
+               '--lanes', ','.join(lanes), '--repeats', '1', '--cpu-threads', str(cpu_threads), '--json-out', str(report),
+               '--json']
     receipt = dict(schema=SCHEMA, phase='before-execution', status='running',
                    started_at=datetime.now(timezone.utc).isoformat(), source=source,
                    install=dict(package=str(package), commit=commit, files=files, manifest_sha256=digest(files)),
@@ -157,12 +161,13 @@ def validate_run(receipt, report, report_sha):
     require(options.get('no_models') is True and report.get('models_checked') == 0,
             'column producer must defer portable models to their separate once-only smoke')
     command = receipt.get('command', [])
-    require(len(command) in (16, 17), 'missing verifier command')
-    expected = [command[0], '-m', 'mojolearn', 'verify', '--all', '--include-pending', '--no-models',
+    profile = options.get('profile')
+    require(len(command) in (16, 17) and (profile in PROFILES or profile in RECORDED_PROFILES),
+            'missing verifier command')
+    flag, tail = ('--' + profile, []) if profile in PROFILES else ('--all', RECORDED_PROFILES[profile])
+    expected = [command[0], '-m', 'mojolearn', 'verify', flag, '--include-pending', '--no-models',
                 '--lanes', ','.join(options['lanes']), '--repeats', '1', '--cpu-threads',
-                str(options.get('cpu_threads')), '--json-out', command[14], '--json']
-    if options.get('profile') == 'neural-training':
-        expected.append('--neural-training')
+                str(options.get('cpu_threads')), '--json-out', command[14], '--json'] + tail
     require(command == expected, 'verifier command differs from bound options')
     harness = files.get('_identity_break.py', {})
     require(harness.get('sha256') == report.get('harness', {}).get('sha256'), 'installed harness witness differs')
@@ -181,7 +186,7 @@ def main():
     p.add_argument('--python', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--lanes-file', type=Path, required=True)
-    p.add_argument('--profile', choices=('routine', 'neural-training'), required=True)
+    p.add_argument('--profile', choices=PROFILES, required=True)
     p.add_argument('--cpu-threads', type=int, required=True)
     a = p.parse_args()
     return execute(a.root, a.python, a.out, a.lanes_file.read_text().strip().split(','), a.profile, a.cpu_threads)

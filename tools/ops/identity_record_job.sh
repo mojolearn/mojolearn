@@ -5,10 +5,8 @@
 # staged wheels of one build, each printing `IDREC <name> PASS|FAIL rc=<n> <s>s` on one line, full output in
 # logs/<name>.log. A failed step never stops the others; the job exits 1 when any failed.
 #   (i)  verify: `python -I -m mojolearn verify --all --json-out $MOJOLEARN_RESULTS_DIR/verify-all.json`, from an empty
-#        directory, on a venv holding the GPU install (the v2 report holds the CPU and GPU side of every cell from one
-#        process);
-#   (i b) verify-neural: the same with `--neural-training` (`--json-out .../verify-neural.json`): the neural-training
-#        lanes `verify --all` leaves out by profile, so the two runs cover every lane;
+#        directory, on a venv holding the GPU install: every lane of both profiles (classic and neural) in one process
+#        and one v2 report (the CPU and GPU side of every cell, per-profile counts under `profiles`, one verdict);
 #   (ii) record: `python3 tools/identity_wheel_record.py --columns nvidia --label-device l40s --wheel ... --sha256 ...
 #        --gpus N --workers-per-gpu auto --out <scratch>/identity` (no reuse flag: every lane is recorded), copied to
 #        $MOJOLEARN_RESULTS_DIR/identity (the recorder refuses an outdir inside the tree, and the results dir is in it).
@@ -101,15 +99,9 @@ verify_all() {
 }
 step verify verify_all
 grep -m 1 '^IDREC verify wheel' "$RES/logs/verify.log" || true
-# (i b) the neural-training profile, the rest of every lane (gd-verify-view, 2026-11-25). `verify --all` is the routine
-# profile (python/mojolearn/_verification_profiles.py): it excludes the neural-training lanes (mlp, mamba*, samba*,
-# transformer*, byte-lm, embedding, sequence-*, x-cnn-*, optim-*, training-*: 85 on 0becfc8f6b), and its report reads
-# them "exposed, but this run did not select it" (83 on nvc-ab-20261125T115541Z-2b94b1). They are selected only by
-# `--neural-training`, so this second run on the same venv covers them; the two reports together cover every lane.
-verify_neural() {
-    ( cd "$EMPTY" && "$VENV/bin/python" -I -m mojolearn verify --all --neural-training --json-out "$RES/verify-neural.json" )
-}
-step verify-neural verify_neural
+# The separate `verify --all --neural-training` step (verify-neural.json) is gone (verify-profiles, 2026-11-26): `verify
+# --all` is now both profiles, so the neural training lanes' cells are in verify-all.json beside the classic ones, the
+# cell workers run both profiles' cells in one parallel sweep, and the one exit status covers both.
 
 # (ii) the NVIDIA identity record. The box each record names (as tools/ops/release_gate_job.sh): the RunPod pod id
 # (container env, or /etc/rp_environment for an ssh session); a launcher's own IDENTITY_RECORD_BOX wins.

@@ -163,9 +163,9 @@ The source commit is the one inside the wheel's `identity_columns/COMMIT`,
 not the later commit of the qualification tools. No native rebuild is
 needed to exercise retained wheel bytes.
 
-The shell qualifier uses the CLI's routine verification profile. Do not put
-neural-training lanes into that selection: the CLI requires the explicit
-`--neural-training` profile for them. Keep a separate profile receipt when
+The shell qualifier uses the CLI's classic verification profile. Do not put
+neural training lanes into that selection: the CLI selects them with the
+`--neural` profile (or `--all` for both). Keep a separate profile receipt when
 running those checks, as in the retained RTX 3090 record below.
 
 The gate requires both the existing expanded CLI smoke and the selected

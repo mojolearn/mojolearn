@@ -1,4 +1,13 @@
-"""Routine verification includes classical fits; neural training is opt-in."""
+"""The three verification profiles of `python -m mojolearn verify`.
+
+`--classic`: every lane outside the neural training set (classical training and inference, the routine tape
+steps below, loaded-weight neural inference) plus the bundled saved models. `--neural`: the neural training,
+backward and optimizer lanes. `--all`: both, in one sweep and one report. With no profile flag, verify runs
+the classic profile on the base fixture.
+"""
+
+#: The profile names, as `--classic`, `--neural` and `--all` select them and the report names them.
+PROFILES = ('classic', 'neural', 'all')
 
 NEURAL_FAMILIES = frozenset(('byte_lm', 'neural', 'training', 'mamba',
                              'transformer', 'embedding', 'x_cnn'))
@@ -100,19 +109,30 @@ def neural_training_lanes(harness, surface):
     return lanes.intersection(harness.LANES) - NEURAL_INFERENCE - ROUTINE_TAPE
 
 
-def select(harness, surface, lanes, *, neural=False, asked=()):
+def select(harness, surface, lanes, *, profile='classic', asked=()):
+    if profile not in PROFILES:
+        raise ValueError(f'unknown verification profile {profile!r}; choose one of {PROFILES}')
     training = neural_training_lanes(harness, surface)
-    allowed = training if neural else set(harness.LANES) - training
+    if profile == 'all':
+        allowed = set(harness.LANES)
+    elif profile == 'neural':
+        allowed = training
+    else:
+        allowed = set(harness.LANES) - training
     wrong = set(asked) - allowed
     if wrong:
-        hint = 'omit --neural-training for routine checks' if neural else 'use --neural-training explicitly'
-        raise ValueError(f'lanes outside this verification profile: {sorted(wrong)}; {hint}')
+        hint = 'use --neural or --all for them' if profile == 'classic' else 'use --classic or --all for them'
+        raise ValueError(f'lanes outside the {profile} verification profile: {sorted(wrong)}; {hint}')
     selected = [lane for lane in lanes if lane in allowed]
     return selected, dict(
-        name='neural-training' if neural else 'routine',
-        description=('neural training and backward/optimizer fixtures' if neural else
-                     'classical training and inference, plus bundled saved-model inference; neural training excluded'),
+        name=profile,
+        description=dict(
+            classic='classical training and inference, plus bundled saved-model inference; neural training excluded',
+            neural='neural training and backward/optimizer fixtures',
+            all='classical training and inference, bundled saved-model inference, and neural training and '
+                'backward/optimizer fixtures')[profile],
         selected_lanes=selected,
-        excluded_neural_training=[] if neural else sorted(training),
-        neural_training_command='python -m mojolearn verify --neural-training',
+        excluded_neural=sorted(training) if profile == 'classic' else [],
+        neural_command='python -m mojolearn verify --neural',
+        all_command='python -m mojolearn verify --all',
         loaded_neural_inference_command='python -m mojolearn verify-causal-lm')

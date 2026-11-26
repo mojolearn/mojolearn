@@ -48,7 +48,7 @@ def test_all_246_appendix_entries_are_preserved_and_resolve():
     assert report['lanes']['bpe-trainer']['properties']['batch']['kind'] == 'not_applicable'
     for part in vr.OPTIONAL_PARTS:
         prop = report['lanes']['transformer']['properties'][part]
-        assert prop['command'] == 'verify --neural-training --all'
+        assert prop['command'] == 'verify --neural'
         assert not prop['run_by_default']
 
 
@@ -59,12 +59,13 @@ def test_report_commands_match_actual_profile_selection():
     neural = profiles.neural_training_lanes(h, va.host_surface())
     for name, row in report['lanes'].items():
         execution = row['execution']
-        assert ('--neural-training' in execution['command']) == (name in neural)
+        assert execution['command'].startswith('verify --neural' if name in neural else 'verify --classic')
+        assert execution['profile'] == ('neural' if name in neural else 'classic')
         if name in neural or row['status'] != 'available':
             assert not execution['run_by_default'], name
         for prop in row['properties'].values():
             if 'command' in prop:
-                assert ('--neural-training' in prop['command']) == (name in neural)
+                assert prop['command'] == ('verify --neural' if name in neural else 'verify --classic')
 
 
 def test_parameter_reset_reference_is_available():
@@ -125,7 +126,7 @@ def test_local_batch_pass_without_hash_is_still_owed():
     assert va.verdict(counts)[0] != 0
 
 
-@pytest.mark.parametrize('flags', [['--all'], ['--full'], ['--batch-checks']])
+@pytest.mark.parametrize('flags', [['--all'], ['--classic'], ['--neural'], ['--batch-checks']])
 def test_extended_probes_reuse_fit_and_detect_drift(flags):
     fits, probes = [], []
     def fit(*args):

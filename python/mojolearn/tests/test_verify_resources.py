@@ -47,7 +47,7 @@ def test_budget_uses_fresh_interpreter_and_propagates_failure(monkeypatch):
         return SimpleNamespace(returncode=4)
     monkeypatch.setattr(resources.subprocess, 'run', run)
     args = SimpleNamespace(command='verify', cpu_threads=5,
-                           argv=['verify', '--inference', '--cpu-threads', '5'])
+                           argv=['verify', '--models-only', '--cpu-threads', '5'])
     assert resources.run_with_budget(args) == 4
     command, env = calls[0]
     assert command == [resources.sys.executable, '-m', 'mojolearn', *args.argv]
