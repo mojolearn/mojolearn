@@ -1491,6 +1491,17 @@ def _rp_storage(values: PythonObject, force_object: Bool, distinguish: Bool, con
             raise Error("TypeError: pandas period requires an ordinary native frequency")
         var cls_period = _pd_class("pandas._libs.tslibs.period", "Period")
         var entry = _rp_native_method(cls_period, "_from_ordinal")
+        # pandas 3 takes the PeriodDtype as `_from_ordinal`'s second argument
+        # (its Cython signature refuses an offset: "expected PeriodDtypeBase");
+        # pandas 2 takes the offset. Decided once per block by one call on
+        # ordinal 0 (w3-integrate-11: the CPU smoke's pandas 3.1 refused
+        # every period column).
+        var second = freq
+        try:
+            _ = py_call(entry, PythonObject(Int64(0)), dtype)
+            second = dtype
+        except:
+            second = freq
         var result = _rp_new(source.owner.shape, PythonObject("O"), context)
         var target = _RPArray(result, context)
         # N047: NaT resolved once for the block, not per missing cell
@@ -1500,7 +1511,7 @@ def _rp_storage(values: PythonObject, force_object: Bool, distinguish: Bool, con
         for col in range(source.layout.cols):  # driver-loop: native period metadata boxing
             for row in range(source.layout.rows):  # driver-loop: preserve stored ordinals and NaT
                 var ordinal = bitcast[DType.int64](pd_raw_at(source.layout.at(row, col), 0, 8, source.layout.native))
-                var boxed = nat if ordinal == Int64.MIN else py_call(entry, PythonObject(ordinal), freq)
+                var boxed = nat if ordinal == Int64.MIN else py_call(entry, PythonObject(ordinal), second)
                 _rp_object(target.layout.at(row, col), boxed)
         _ = values
         return result
