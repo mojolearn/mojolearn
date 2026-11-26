@@ -94,7 +94,7 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.member_abi import (
     MEMBER_GIL_DOOR,
-    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
+    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
@@ -107,7 +107,7 @@ from core.member_abi import (
 from core.device_route import DEVICE_GPU
 from core.member_fold_x import (
     MemberFoldX, member_fold_x_open, member_fold_x_close,
-    member_fold_take_into, member_fold_store_ready, member_fold_store,
+    member_fold_take_into, member_fold_store_ready, member_fold_store, member_fold_take_view,
 )
 from core.member_families import MEMBER_FAMILY_KERNEL_SVM
 from core.member_class_weight import MEMBER_CW_HEAD, MEMBER_CW_NONE, member_cw_mode, member_cw_table_f64
@@ -1166,6 +1166,79 @@ def _route_fold(call: _Call) -> Bool:
     return call[].route.device == DEVICE_GPU and call[].route.has_second and member_fold_store_ready(call)
 
 
+def _host_rows(view: MemberMatrix, index: Int, rows: Int, mut store: List[UInt64]) -> MemberMatrix:
+    """Rows `index[0 .. rows)` (int64 words) of a dense host view taken bitwise into `store` (kept alive by the
+    caller past the operation), as a view of the same dtype."""
+    store = List[UInt64](length=max((rows * view.cols * view.element_bytes() + 7) // 8, 1), fill=UInt64(0))
+    member_fold_take_view(view, index, rows, Int(store.unsafe_ptr()))
+    var part = view
+    part.data = Int(store.unsafe_ptr())
+    part.rows = rows
+    return part
+
+
+def _precomputed_rows(call: _Call, operation: Int, address: Int, estimator: String) raises:
+    """A 'precomputed' member handed a row index (`_fold_op`): the host gather the set makes for a member
+    without the row-index bit, then `_kernel_svm_member_whole` with no index. The views are restored
+    before this returns or raises; the gathered words live until then."""
+    var x = call[].x
+    var y = call[].y
+    var weights = call[].weights
+    var index = call[].row_index
+    if call[].column_index.rows > 0:
+        raise Error("TypeError: a " + estimator + " member with kernel='precomputed' takes no column index")
+    if not x.dense_host(x.dtype):
+        raise Error("TypeError: a " + estimator + " member with kernel='precomputed' reads its kernel matrix as "
+                    + "a dense host view")
+    var n = index.rows
+    var wide = List[Int64](length=max(n, 1), fill=Int64(0))
+    if index.dtype == MEMBER_I64 and index.dense_host(MEMBER_I64):
+        unsafe_memcpy(dest=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(wide.unsafe_ptr())),
+                      src=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=index.data), count=n)
+    elif index.dtype == MEMBER_I32 and index.dense_host(MEMBER_I32):
+        var narrow = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=index.data)
+        for r in range(n):  # driver-loop: over the fold's row index words (one widening each, no data)
+            wide[r] = Int64(narrow[r])
+    else:
+        raise Error("TypeError: a " + estimator + " member reads a row index as a dense host int32 or int64 view")
+    for r in range(n):  # driver-loop: over the fold's row index words (bounds only)
+        if wide[r] < 0 or Int(wide[r]) >= x.rows:
+            raise Error("ValueError: a " + estimator + " member's row index is outside X")
+    var at = Int(wide.unsafe_ptr())
+    var xs = List[UInt64]()
+    var ys = List[UInt64]()
+    var ws = List[UInt64]()
+    call[].x = _host_rows(x, at, n, xs)
+    if y.rows > 0:
+        if not y.dense_host(y.dtype) or y.rows != x.rows:
+            call[].x = x
+            raise Error("ValueError: X and y have different numbers of rows")
+        call[].y = _host_rows(y, at, n, ys)
+    if weights.rows > 0:
+        if weights.rows != x.rows or weights.cols != 1 or not weights.dense_host(weights.dtype):
+            call[].x = x
+            call[].y = y
+            raise Error("ValueError: sample_weight and X have different numbers of rows")
+        call[].weights = _host_rows(weights, at, n, ws)
+    call[].row_index = MemberMatrix()
+    var failure = String("")
+    try:
+        _ = _kernel_svm_member_whole(operation, address)
+    except error:
+        failure = String(error)
+    call[].x = x
+    call[].y = y
+    call[].weights = weights
+    call[].row_index = index
+    # read by address inside the operation above: named again so they outlive it
+    _ = xs^
+    _ = ys^
+    _ = ws^
+    _ = wide^
+    if failure.byte_length() > 0:
+        raise Error(failure)
+
+
 def _fold_op(slot: _Slot, call: _Call, operation: Int, address: Int) raises:
     """An operation over the rows `call.row_index` of the WHOLE host X
     (core/member_fold_x.mojo), every one reading THE FOLD X WORD (lane
@@ -1186,8 +1259,13 @@ def _fold_op(slot: _Slot, call: _Call, operation: Int, address: Int) raises:
     var host_w = List[UInt64]()
     var estimator = _name(slot)
     if Int(slot[].params[1]) == SVC_KERNEL_PRECOMPUTED:
-        raise Error("TypeError: a " + estimator + " member with kernel='precomputed' takes no row index (its X is "
-                    + "the kernel matrix: the caller selects its rows and columns)")
+        # DESIGN (lane gs-fix-2): a 'precomputed' member reads its row index as the set reads it for a member
+        # without MEMBER_CAN_ROW_INDEX (the CPU route): the rows of the host kernel matrix, y and the weights
+        # gathered on the host, then the whole operation, so its checks and words are the door's. The set
+        # asks the family's union (state 0 answers no kernel), which carries the row-index bit; the member
+        # used to refuse here in its own words (test_member_class_weight on the L40S).
+        _precomputed_rows(call, operation, address, estimator)
+        return
     if not _route_fold(call):
         raise Error("TypeError: a " + estimator + " member reads a row index only on a GPU route with the device "
                     + "table and the x_prep store")
