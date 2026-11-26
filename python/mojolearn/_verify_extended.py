@@ -100,10 +100,10 @@ def run_unit(profile, step, workdir, vendor):
 def _capture(profile, step, workdir, vendor):
     if profile == "verify-distributed-program":
         from . import _verify_distributed_program as m
-        return m.verify((0,))
+        return m.verify()
     if profile == "verify-partitioned-program":
         from . import _verify_partitioned_program as m
-        return m.verify((0,))
+        return m.verify()
     if profile == "verify-graph":
         from . import _verify_graph as m
         return m.run_checks(vendor)
