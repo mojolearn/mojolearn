@@ -69,7 +69,7 @@
    "product_check": "tools/identity_lanes/coverage.py:419 (the sequence-device-tensor lane): _same_bytes(resident-tensor RMSprop params, host-array RMSprop params), the lane's byte oracle: six RMSprop steps on device-resident tensors must equal the same steps on host arrays.",
    "why_fault_reaches_check": "The patch puts every value uploaded into a resident tensor, every downloaded value and the zero fill one ulp off (sequence/seq_tensor.mojo), so the resident run starts from and returns different parameters than the host-array run (256 of 1056 bytes differ on the L40S, device column, nvc1-0004 x_sequence-5); the clean build matches.",
    "error_match": "ValueError: resident-tensor RMSprop params and host-array RMSprop params differ: [0-9]+ bytes of [0-9]+",
-   "patch_sha256": "63ce1c5790f92f386a221c60ca5d6c2339e2e0227a4edc4cfaca57f46828ea78"
+   "patch_sha256": "aeac7d6ed91d0f57e4ac89472a635d11b367bba654cfd55531ff729c73d0c362"
   }
  },
  "coverage-core-native_json_impl": {

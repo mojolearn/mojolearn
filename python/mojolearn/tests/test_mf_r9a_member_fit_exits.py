@@ -73,12 +73,18 @@ def test_nonfinite_x_raise_names_the_base():
         _search(ml.LogisticRegression(), {"C": [0.5, 1.0]}, X, y)
 
 
-def test_nonfinite_x_numeric_error_score_all_fits_failed():
-    # Fail-proof: in `_fit_words` return `words` for a numeric error_score: the plain check_array words.
+def test_nonfinite_x_numeric_error_score_fails_fold_by_fold():
+    # A numeric error_score fails only the fits that read the non-finite row, as scikit-learn's
+    # `_fit_and_score` does fold by fold (lane gs-fix-3, core/msel_search_run.mojo `MselSearchPlan.x_refusal`;
+    # reached for searches since b18f08bd3c). Row 3 is in the train rows of 2 of the 3 folds (4 of 6 fits fail)
+    # and in the test rows of the third (its score fails): every score is nan, and nothing raises
+    # (scikit-learn 1.9.1 gives the same scores and the same "4 fits failed out of a total of 6" warning).
+    # Fail-proof: in `_member_fit` raise the whole-X words for a search again: "All the 6 fits failed" raises.
     X, y = _classification()
     X[3, 1] = np.inf
-    with pytest.raises(ValueError, match="All the 6 fits failed"):
-        _search(ml.LogisticRegression(), {"C": [0.5, 1.0]}, X, y, error_score=np.nan)
+    with pytest.warns(RuntimeWarning, match="4 fits failed out of a total of 6"):
+        got = _search(ml.LogisticRegression(), {"C": [0.5, 1.0]}, X, y, error_score=np.nan)
+    assert np.all(np.isnan(np.asarray(got.cv_results_["mean_test_score"])))
 
 
 def test_continuous_labels_refused_in_sklearn_words():
