@@ -88,16 +88,36 @@ def test_default_device_still_runs_on_the_gpu_beside_a_cpu_estimator(spec):
     assert cpu.vendor_used() == "cpu" and gpu.vendor_used() == mojolearn.vendor() != "cpu"
     if not cb.activity_begin(mojolearn):
         pytest.skip("this installation has no activity record")
-    build(spec).fit_transform(x)
+    third = build(spec)
+    third.fit_transform(x)
     activity = cb.activity_end(mojolearn)
-    assert activity is not None and activity["launches"] > 0
+    assert activity is not None
+    # The record counts launches at the NAMED launch sites only (core/activity_record.mojo: "a family whose
+    # device work passes none of these doors reads zero here"); the manifold kernels are not among them, so a
+    # zero is "not counted on this path". What a GPU fit beside a CPU estimator must show is the route it ran
+    # and that nothing it did was counted at a host inference entry.
+    assert third.vendor_used() == mojolearn.vendor() != "cpu"
+    assert activity["host_entries"] == 0, activity["host_names"]
+    if activity["launch_names"]:
+        assert activity["launches"] > 0
 
 
 @two_devices
 @case
 def test_cpu_device_never_runs_a_fast_binary(spec):
-    with pytest.raises(ValueError, match="identical"):
-        build(spec, device="cpu", numeric_mode="fast").fit_transform(data())
+    model = build(spec, device="cpu", numeric_mode="fast")
+    try:
+        model.fit_transform(data())
+    except ValueError as refusal:
+        # where `fast` names its own binaries (Apple): refused in words
+        assert "device='cpu' runs in identical mode only" in str(refusal)
+    except ImportError:
+        # where no fast binaries are installed, the mode's own refusal stands
+        pass
+    else:
+        # where the identical set answers `fast` (core/mode_answer.mojo; the form of
+        # test_family_device_boundary and test_scaler_device_boundary): the CPU identical set ran
+        assert model.vendor_used() == "cpu"
 
 
 @two_devices

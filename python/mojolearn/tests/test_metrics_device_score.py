@@ -69,7 +69,14 @@ def test_default_device_score_still_runs_on_the_gpu_beside_a_cpu_estimator(cls):
         pytest.skip("this installation has no activity record")
     gpu.score(x, y)
     activity = cb.activity_end(mojolearn)
-    assert activity is not None and activity["launches"] > 0
+    assert activity is not None
+    # Launches are counted at the named launch sites only (core/activity_record.mojo); the metric programs are
+    # not among them, so zero is "not counted on this path". The GPU score beside a CPU estimator shows its
+    # route and no host inference entry.
+    assert gpu.vendor_used() == mojolearn.vendor() != "cpu"
+    assert activity["host_entries"] == 0, activity["host_names"]
+    if activity["launch_names"]:
+        assert activity["launches"] > 0
 
 
 @two_devices
