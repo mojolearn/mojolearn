@@ -226,7 +226,8 @@ def test_linalg6_device_array_with_device_cpu_is_refused(name, call):
 
 LINALG6_DEVICE_ARRAY_FORMS = [
     ("eigh", lambda g: linalg.eigh(g), 2),
-    ("qr_reduced", lambda g: linalg.qr(g), 2),
+    # mode is named: mojolearn.linalg.qr defaults to mode="r" (python/mojolearn/_linalg_impl.py `qr`), one array
+    ("qr_reduced", lambda g: linalg.qr(g, mode="reduced"), 2),
     ("qr_complete", lambda g: linalg.qr(g, mode="complete"), 2),
     ("qr_raw", lambda g: linalg.qr(g, mode="raw"), 2),
     ("svd", lambda g: linalg.svd(g), 3),
