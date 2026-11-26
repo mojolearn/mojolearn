@@ -391,5 +391,13 @@
    "error_match": "ValueError:\\ gru\\-stream\\-cw\\-val\\-resume\\ early\\ stopping\\ ends\\ the\\ call\\ after\\ the\\ second\\ pass,\\ at\\ 8\\ of\\ 12\\ steps\\ \\[0\\]\\ a\\ and\\ gru\\-stream\\-cw\\-val\\-resume\\ early\\ stopping\\ ends\\ the\\ call\\ after\\ the\\ second\\ pass,\\ at\\ 8\\ of\\ 12\\ steps\\ \\[0\\]\\ b\\ differ:\\ 1\\ bytes\\ of\\ 8",
    "patch_sha256": "1a0ca253adc0c10c13780f3b228812c821dfc3b859d7c2ede9b5c9c791d59219"
   }
+ },
+ "coverage-gate-arima-kalman_mv-gpu": {
+  "check-generic-other/base": {
+   "product_check": "ARIMA.check (python/mojolearn/_check_both.py check_estimator through the public device=): the GPU side's fitted ARIMA and its CPU twin answer the same horizon in one process and the bits are compared; check-generic-other fails the cell naming every class whose check reads MISMATCH (tools/identity_lanes/checks_generic.py).",
+   "why_fault_reaches_check": "The patch scales every matrix-vector product of batched_kalman_loop_kernel (arima/impl/batched_kalman.mojo _mv) by 1 + 2^-10 on the GPU bindings only (not under MOJOLEARN_COLUMN_CPU). ARIMA is the only class of the generic other group; its GPU-side fit and forecast run that kernel and its CPU twin does not, so the forecast the check compares differs and the check names ARIMA alone; the clean build matches.",
+   "error_match": "AssertionError: check-generic-other \\(gpu side\\): ARIMA: MISMATCH: output \\d+, first differing element at index \\[\\d+(, \\d+)*\\] \\(flat \\d+\\): gpu=\\S+ cpu=\\S+",
+   "patch_sha256": "3d77f2847bbf1120320bcc76f0a9ca222bebcebccf730625cb0f99fe877758da"
+  }
  }
 }

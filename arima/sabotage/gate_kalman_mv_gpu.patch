@@ -8,9 +8,9 @@ index 3c331f16d2..7450fd80b1 100644
              acc = ftz(identical_mul_add(a[i + j * n], v[j], acc))
 -        out_v[i] = ftz(alpha * acc)
 +        var mv = ftz(alpha * acc)
-+        comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every Kalman matrix-vector product one ulp up, the GPU bindings only
++        comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a; 2^-10 relative since lane sab-triage-1: a one-ulp product was absorbed downstream (the float32 log-likelihood total and the intercept adds), so the AR(1), (0, 1, 1) and exog fits read unmoved): every Kalman matrix-vector product scaled up, the GPU bindings only
 +            if abs(mv) >= Float32(1.17549435e-38) and mv - mv == Float32(0):
-+                mv = bitcast[DType.float32](bitcast[DType.uint32](mv) + UInt32(1))
++                mv = ftz(mv * Float32(1.0009765625))
 +        out_v[i] = mv
  
  
