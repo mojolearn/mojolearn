@@ -1,4 +1,5 @@
 """Native failure injection verifies ownership rollback after real allocation."""
+import gc
 import numpy as np
 import pytest
 
@@ -72,6 +73,11 @@ def test_native_parameter_copy_failure_releases_real_allocation(binding):
     if not optimizer.params_resident_available():
         pytest.skip("this build disables resident optimizer parameters")
     optimizer.params_to_device()
+    # `first_free` names the handle the next allocation takes only while no other device array is released in
+    # between. A device array still held by an earlier test's frames (a failed test's traceback keeps its
+    # locals) is collected at an arbitrary later point and frees a LOWER handle: the L40S read 0 where 1 was
+    # expected after test_native_upload_failure had failed with its array alive. Collected here, before the read.
+    gc.collect()
     expected = first_free(binding)
     offsets = np.asarray(optimizer.offsets)
     original = offsets.copy()
