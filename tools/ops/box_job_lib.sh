@@ -235,13 +235,14 @@ arith_gate() {
 # unit). Untimed; it runs after the candidate's install and before any smoke or board, so the GPU is idle. Its line is
 # FAULTS_LINE (job.log and status.json `faults`), its file $RES/FAULTS-$V.txt, its logs $RES/faults/. Fail soft: a
 # failure is phase `faults` rc 1 in phases.tsv (the job's worst rc) and the job goes on. A resubmit into the same
-# results dir does not run it again (faults/faults.done). PC_FAULTS=0 turns it off; PC_FAULT_ARMS names other pixi
+# results dir does not run it again (faults/faults.done). RELEASE ONLY (AGENTS.md hard rule "RELEASE-ONLY WORK",
+# 2026-11-26: sabotage arms are built and run once, at the release): off unless PC_FAULTS=1; PC_FAULT_ARMS names other pixi
 # sabotage tasks. Cost: ESTIMATE ~6-9 pod minutes the first time per commit (builds cached under CACHE_ROOT).
 # Usage: fault_gate <candidate venv python>
 FAULTS_LINE=
 fault_gate() {
     local rc
-    [ "${PC_FAULTS:-1}" = 0 ] && { FAULTS_LINE="FAULTS: off (PC_FAULTS=0)"; say "$FAULTS_LINE"; return 0; }
+    [ "${PC_FAULTS:-0}" = 1 ] || { FAULTS_LINE="FAULTS: off (release only; PC_FAULTS=1 runs it)"; say "$FAULTS_LINE"; return 0; }
     if [ -s "$RES/faults/faults.done" ]; then
         FAULTS_LINE=$(head -n 1 "$RES/FAULTS-$V.txt" 2> /dev/null)
         say "fault gate: ran earlier in this results dir: ${FAULTS_LINE:-no FAULTS-$V.txt}"

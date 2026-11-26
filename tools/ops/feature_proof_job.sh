@@ -14,7 +14,8 @@
 # call-profile job installs it). FP_OUT_RECEIPTS: where the digests and their data are left for a second machine
 # (default $RES/receipts): copy that folder to another box (a CPU box, another vendor) and run
 # `FP_REPLAY=<folder> feature_proof_job.sh` there: it fits again and every digest must be the recorded one. With
-# FP_REPLAY set only the digest step runs.
+# FP_REPLAY set only the digest step runs. FP_RELEASE=1 also runs the verify options (section 3), which are release
+# only; a round leaves it unset.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/../.." && pwd)"
 RES="${MOJOLEARN_RESULTS_DIR:?feature_proof_job.sh needs MOJOLEARN_RESULTS_DIR (set by tools/box_persist_run.sh)}"
@@ -271,7 +272,10 @@ grep -E '^(DEVICE|CHECK|REFUSAL)' "$RES/logs/device-and-check-logistic.log" | cu
 step digest-families "$PY" -I "$W/digest.py" "$REC"
 grep -E '^DIGEST' "$RES/logs/digest-families.log" | cut -c1-300
 
-# 3. verify options
+# 3. verify options: RELEASE ONLY (AGENTS.md hard rule "RELEASE-ONLY WORK", 2026-11-26). The self-test compares
+#    with the shipped references, the cross-check compares the devices' bits and the recipes record columns, so a
+#    round (proving_job.sh) skips them; the release passes FP_RELEASE=1.
+if [ "${FP_RELEASE:-0}" = 1 ]; then
 step verify-self-test "$PY" -I -m mojolearn verify --self-test
 step verify-cross-check-quick "$PY" -I -m mojolearn verify --cross-check quick
 cat > "$W/save.py" <<'EOF'
@@ -292,6 +296,10 @@ for n in ridge logistic kmeans gbdt-categorical seq-transformer seq-mamba2 seq-r
     step "verify-recipe-$n" "$PY" -I -m mojolearn verify --recipe "example:$n" --self-test \
         --record-out "$REC/recipes/example-$n.record.json"
 done
+
+else
+    echo "PROOF verify-options SKIP release only (FP_RELEASE=1 runs --self-test, --cross-check, --check, --fit-both, --recipe)"
+fi
 
 echo "PROOF SUMMARY failed=$fails digests=$REC"
 [ $fails = 0 ]

@@ -106,6 +106,38 @@ def test_job_runs_the_gate_once_after_each_install_and_records_its_line():
     assert '"faults":"%s"' in job and "FAULTS_LINE" in job
 
 
+def _fault_gate(tmp_path, **env):
+    """Run box_job_lib.sh's fault_gate() alone, with `say` and `phase` stubbed and gpu_fault_gate.py not reachable."""
+    import os
+    import subprocess
+    lib = (ROOT / "tools/ops/box_job_lib.sh").read_text()
+    body = lib[lib.index("\nfault_gate() {") + 1:]
+    body = body[:body.index("\n}\n") + 3]
+    script = ('say() { echo "$*"; }; phase() { echo "PHASE $1"; }; phase_end() { :; }\n' + body
+              + 'fault_gate /nonexistent/python\necho "LINE $FAULTS_LINE"\n')
+    run_env = {k: v for k, v in os.environ.items() if k != "PC_FAULTS"}
+    run_env.update(RES=str(tmp_path), V="nvidia", PY="false", **env)
+    return subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=run_env, cwd=tmp_path).stdout
+
+
+def test_the_gate_is_release_only_off_unless_asked(tmp_path):
+    # AGENTS.md hard rule RELEASE-ONLY WORK (2026-11-26): a round builds and runs no sabotage arm
+    out = _fault_gate(tmp_path)
+    assert "LINE FAULTS: off (release only; PC_FAULTS=1 runs it)" in out and "PHASE faults" not in out
+    on = tmp_path / "on"
+    on.mkdir()
+    assert "PHASE faults" in _fault_gate(on, PC_FAULTS="1")  # asked for: the gate runs (its tool is absent here)
+
+
+def test_the_feature_proof_runs_the_verify_options_only_for_the_release():
+    text = (ROOT / "tools/ops/feature_proof_job.sh").read_text()
+    guard = text.index('if [ "${FP_RELEASE:-0}" = 1 ]; then')
+    end = text.index("PROOF verify-options SKIP")
+    for step in ("verify-self-test", "verify-cross-check-quick", "verify-check ", "verify-fit-both", "verify-recipe-"):
+        assert guard < text.index(f'step {step}' if step != "verify-recipe-" else 'step "verify-recipe-') < end, step
+    assert text.index("step digest-families") < guard  # the digest_ feature test stays in every round
+
+
 if __name__ == "__main__":
     import pytest
     sys.exit(pytest.main([__file__, "-q"]))
