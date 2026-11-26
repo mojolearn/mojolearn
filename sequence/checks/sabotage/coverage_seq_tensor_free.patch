@@ -1,6 +1,6 @@
 --- a/sequence/seq_tensor.mojo
 +++ b/sequence/seq_tensor.mojo
-@@ -96,8 +96,8 @@
+@@ -119,8 +119,8 @@
      var ctx = sequence_ctx()
      ctx.synchronize()
      var pool = _SEQ_TENSORS.get_or_create_ptr()
@@ -8,6 +8,6 @@
 -    pool[].n[h - 1] = 0
 +    # Fault: retain the live allocation and its open marker.
 +    pool[].n[h - 1] = pool[].n[h - 1]
+     pool[].computed[h - 1] = False
      return h
- 
  
