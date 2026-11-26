@@ -49,7 +49,7 @@ from providers.python.generation_metadata_pyapi_door import causal_layer_route
 from core.device_route import DEVICE_CPU, DEVICE_GPU, device_name, device_route_plan, device_cpu_absent
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_unpack, device_route_keep,
-    device_route_stale, device_owner_current, device_route_record, device_cpu_connect_late,
+    device_route_stale, device_route_owner, device_owner_current, device_route_record, device_cpu_connect_late,
 )
 from core.neural_entry_table import (
     NeuralEntryKey, neural_entry_vendor, neural_entry_call, neural_ref,
@@ -496,7 +496,12 @@ def neural_block_route_reconcile(mut mods: NativeModules, block: PythonObject, l
     # door's own record miss, at session open and at serialization; never on
     # a per-operation hit. A block a whole model built holds no owner of its
     # own: never stale here (it runs on the model's route).
-    if not device_route_stale(block):
+    # Lane gs-fix-2: a block whose derived fields were handed over from the same block on the other device
+    # (`_native_route` copied, `device` untouched: its route owner is not stale) ran the copied route;
+    # the constructor parameter is the authority (test_neural_block_device_boundary on the L40S). At a
+    # record miss of a block with its own route owner the word is resolved again and compared; a block a
+    # whole model built holds no owner and is left on the model's route.
+    if not device_route_stale(block) and device_route_owner(block) is None:
         return
     var route = _neural_block_route(mods, py_get(live, "device"),
         py_get(live, "numeric_mode"), context)
