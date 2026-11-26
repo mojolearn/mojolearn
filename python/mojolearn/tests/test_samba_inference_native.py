@@ -164,9 +164,11 @@ def test_device_stateless_forward_takes_the_resident_route():
     route = vars(model).get("_samba_forward_route")
     if route is None:
         pytest.skip("host route: no device forward route on this build")
-    if model.numeric_mode != "identical":
-        assert route == "program"
+    if model.numeric_mode != "identical" and route == "program":
+        # a `fast` image has no resident route (op 24 reports it compiled out)
         return
+    # identical, or `fast` where the identical image answers it (core/mode_answer.mojo MODE_FAMILY_NEURAL:
+    # every non-Apple GPU): the resident forward. Was: any non-identical word expected "program".
     assert route == "resident"
     assert vars(model).get("_samba_program") is None
     # The session is the one the train step uses (op 12 owner).
@@ -196,8 +198,13 @@ def test_resident_forward_uploads_unchanged_weights_once():
     saved = model.state_dict()
     model.train_step(ids, targets)
     twin.train_step(ids, targets)
+    after_step = vars(model)["_samba_resident_uploads"]
     trained = np.asarray(model.forward(ids)).copy()
-    assert vars(model)["_samba_resident_uploads"] > uploads, "train_step did not invalidate the resident registry"
+    # The resident step leaves the trained registry on the device and keeps its key
+    # (training/samba_resident.mojo `_step_registry_out`, the promoted MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT):
+    # the forward after it uploads nothing and must still return the trained weights' bits (the twin below).
+    # Was: "> uploads", the behaviour before that promotion.
+    assert vars(model)["_samba_resident_uploads"] == after_step, "the forward after a resident step uploaded the registry again"
     # the twin's fresh session holds the trained weights: the same bits
     assert trained.tobytes() == np.asarray(twin.forward(ids)).tobytes()
     assert trained.tobytes() != first.tobytes()
@@ -231,7 +238,8 @@ def test_resident_forward_two_models_alternating_upload_once_each():
     a.train_step(ids, targets)
     ua = vars(a)["_samba_resident_uploads"]
     trained = np.asarray(a.forward(ids)).copy()
-    assert vars(a)["_samba_resident_uploads"] == ua + 1, "A's write did not re-upload A exactly once"
+    # the resident step keeps A's trained registry current on the device (see the test above): no upload
+    assert vars(a)["_samba_resident_uploads"] == ua, "the forward after A's resident step uploaded A again"
     assert trained.tobytes() != first_a.tobytes()
     assert np.asarray(b.forward(ids)).tobytes() == first_b.tobytes()
     assert vars(b)["_samba_resident_uploads"] == ub, "a write to A re-uploaded B"
