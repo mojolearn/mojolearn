@@ -311,3 +311,34 @@ def test_sequential_streamed_nll_reads_class_indices(tmp_path):
     m = (mojolearn.Sequential().gru(3, output="final").flatten().linear(3).log_softmax()
          .compile(loss="nll", optimizer="adam", lr=0.05).fit(source=_source(root), epochs=2))
     assert list(m.classes_) == [0, 1, 2] and np.all(np.isfinite(m.loss_curve_))
+
+
+def test_streamed_step_loops_keep_one_opened_source_and_equal_one_call(tmp_path):
+    """lane w3i11-source-keep: Sequential.fit(source=, steps=1) and partial_fit(source=, steps=1) loops reuse the
+    handle's one opened source (its owner) instead of reopening it per call, and train the words of one call of
+    the same steps; a position loaded from outside a fit drops the owner and the next call rebuilds it."""
+    root = _shards(str(tmp_path / "s"))
+    whole = _regressor().fit(source=_source(root), epochs=1, steps=5)
+    src = _source(root)
+    assert src._owner is None
+    m = _regressor().fit(source=src, epochs=1, steps=1)
+    owner = src._owner
+    assert owner is not None
+    for _ in range(4):
+        m.fit(source=src, epochs=1, steps=1, resume=True)
+        assert src._owner is owner
+    assert np.array_equal(m.params_, whole.params_)
+    state = src.state_dict()
+    src.load_state_dict(dict(state, epoch=0, consumed=0))
+    assert src._owner is None
+    root_r = _shards(str(tmp_path / "r"), targets="steps")
+    once = _gru().partial_fit(source=_source(root_r), steps=4)
+    rsrc = _source(root_r)
+    est = _gru()
+    est.partial_fit(source=rsrc, steps=1)
+    kept = rsrc._owner
+    assert kept is not None
+    for _ in range(3):
+        est.partial_fit(source=rsrc, steps=1)
+        assert rsrc._owner is kept
+    assert np.array_equal(est.params_, once.params_)
