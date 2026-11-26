@@ -137,3 +137,61 @@ def test_the_recorder_names_the_trees_commit_not_head():
     job = (ROOT / "tools/ops/identity_record_job.sh").read_text()
     # the job's harness is its own tree, fixed at the start, and the chunk logs land in the results dir
     assert 'worktree add -q --detach "$TREE"' in job and '--out "$RES/identity"' in job
+
+
+def _wheel(path: Path, commit: str | None) -> Path:
+    import zipfile
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("mojolearn/__init__.py", "")
+        if commit is not None:
+            z.writestr("mojolearn/identity_columns/COMMIT", commit + "\n")
+    return path
+
+
+def test_every_wheel_version_form_names_its_commit(tmp_path):
+    """rel-fix-1 (review item 3): the measurement build's `+<sha12>`, the define build's `+<sha12>.d<hex>`
+    (tools/release_candidate.py candidate_version), any label, and a published wheel by its recorded commit."""
+    repo, head = _repo(tmp_path)
+    forms = [f"mojolearn_core-0.8.67.dev0+{head[:12]}-py3-none-manylinux_2_35_x86_64.whl",
+             f"mojolearn_nvidia-0.8.67.dev0+{head[:12]}.d1a2b3c4d-py3-none-manylinux_2_35_x86_64.whl",
+             f"mojolearn_core-0.8.67.dev0+{head[:12]}.fast.arm2-cp312-cp312-linux_x86_64.whl"]
+    for name in forms:
+        assert _sh(f'wheel_commit /x/{name}', tmp_path).stdout.strip() == head[:12], name
+    ok = _sh(f'wheels_match_tree "{repo}" ' + " ".join(forms), tmp_path)
+    assert ok.returncode == 0 and ok.stdout.count("MATCH ") == 3, ok.stdout
+    published = _wheel(tmp_path / "mojolearn_core-0.8.67-py3-none-manylinux_2_35_x86_64.whl", head)
+    assert _sh(f'wheel_commit "{published}"', tmp_path).stdout.strip() == head
+    assert _sh(f'wheels_match_tree "{repo}" "{published}"', tmp_path).returncode == 0
+    other = _wheel(tmp_path / "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl", "cd" * 20)
+    assert _sh(f'wheels_match_tree "{repo}" "{other}"', tmp_path).returncode == 1
+
+
+def test_a_published_wheel_without_a_record_needs_a_stated_commit(tmp_path):
+    repo, head = _repo(tmp_path)
+    bare = _wheel(tmp_path / "mojolearn_nvidia-0.8.67-py3-none-manylinux_2_35_x86_64.whl", None)
+    refused = _sh(f'wheels_match_tree "{repo}" "{bare}"', tmp_path)
+    assert refused.returncode == 1 and "BOX_WHEEL_COMMIT" in refused.stdout
+    assert _sh(f'BOX_WHEEL_COMMIT={head} wheels_match_tree "{repo}" "{bare}"', tmp_path).returncode == 0
+    assert _sh(f'BOX_WHEEL_COMMIT={"cd" * 20} wheels_match_tree "{repo}" "{bare}"', tmp_path).returncode == 1
+
+
+def test_a_dirty_or_unrecorded_full_sync_is_named_and_refused_unless_expected(tmp_path):
+    """rel-fix-1 (review item 4): worktree_dirty=1, and an older dev_pod.sh full sync (a .devpod_manifest with no
+    full-sync record), are named in the output and refused unless BOX_EXPECT_DIRTY_SYNC=1."""
+    repo, head = _repo(tmp_path)
+    synced = "ab" * 20
+    wheel = f"mojolearn_core-0.8.67.dev0+{synced[:12]}-py3-none-linux_x86_64.whl"
+    (repo / ".git/devpod_synced").write_text(f"commit={synced}\nworktree_dirty=1\nbase={head}\npatch_sha256=x\n")
+    assert _sh(f'tree_sync_state "{repo}"', tmp_path).stdout.strip() == "dirty"
+    refused = _sh(f'wheels_match_tree "{repo}" {wheel}', tmp_path)
+    assert refused.returncode == 1 and refused.stdout.startswith("SYNC dirty ")
+    accepted = _sh(f'BOX_EXPECT_DIRTY_SYNC=1 wheels_match_tree "{repo}" {wheel}', tmp_path)
+    assert accepted.returncode == 0 and accepted.stdout.startswith("MATCH sync dirty ")
+    _record(repo, synced, head)                       # a clean patch sync
+    assert _sh(f'tree_sync_state "{repo}"', tmp_path).stdout.strip() == "clean"
+    (repo / ".devpod_manifest").write_text("f\n")    # then an older full sync over it, which recorded nothing
+    assert _sh(f'tree_sync_state "{repo}"', tmp_path).stdout.strip() == "full-sync-unrecorded"
+    assert _sh(f'wheels_match_tree "{repo}" {wheel}', tmp_path).returncode == 1
+    (repo / ".git/devpod_synced").write_text(f"commit={synced}\nworktree_dirty=0\nbase={head}\n"
+                                             "patch_sha256=none-full-sync\n")  # today's full sync records itself
+    assert _sh(f'tree_sync_state "{repo}"', tmp_path).stdout.strip() == "clean"

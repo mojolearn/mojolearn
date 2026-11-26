@@ -63,6 +63,11 @@ else
     SOURCE=${SOURCE:-unknown}
     SOURCE_NOTE="tree HEAD (no current sync record)"
 fi
+# a dirty sync, or an older dev_pod.sh full sync that recorded nothing, is named, and refused unless the job states
+# it expects one (BOX_EXPECT_DIRTY_SYNC=1; rel-fix-1, review of 3423ae229e..8f0d9a9642 item 4)
+sync_line=$(sync_state_ok .); sync_rc=$?
+[ -n "$sync_line" ] && say "$sync_line"
+[ "$sync_rc" = 0 ] || exit 2
 if [ -n "${NC_EXPECT_COMMIT:-}" ] && [ "${SOURCE#"$NC_EXPECT_COMMIT"}" = "$SOURCE" ]; then
     say "the tree holds $SOURCE, not NC_EXPECT_COMMIT=$NC_EXPECT_COMMIT: sync the commit to test first"; exit 2
 fi
