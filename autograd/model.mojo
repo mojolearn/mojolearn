@@ -1941,7 +1941,7 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
             comptime if streamed:
                 # the batch read ahead after the previous step (or, for the call's first batch, read here), padded
                 # to the model's sequence length; the waits bound the host staging (autograd/batch_source.mojo)
-                if stream[].held_epoch != stream[].epoch or stream[].held_batch != bi:
+                if not stream[].holds(stream[].epoch, bi, pad):
                     stream[].read(stream[].epoch, bi, pad)
                 if staged >= BATCH_SOURCE_STAGE_WORDS:
                     ex.sync()

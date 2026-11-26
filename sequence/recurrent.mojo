@@ -1061,7 +1061,7 @@ def rnn_fit_stream[E: Exec, //, S: RnnStep](
         var at = src.pending()
         src.epoch = at[0]
         src.consumed = at[1]
-        if src.held_epoch != at[0] or src.held_batch != at[1]:
+        if not src.holds(at[0], at[1], T):
             src.read(at[0], at[1], T)
         if staged >= BATCH_SOURCE_STAGE_WORDS:
             ex.sync()
