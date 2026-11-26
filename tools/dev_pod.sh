@@ -498,9 +498,12 @@ sync)
         # patch's sha256 in .git/devpod_synced (outside the tree), which
         # tools/bench_board.py reads (repo_sync).
         _psha=$( (sha256sum 2>/dev/null || shasum -a 256) < "$TMPD/sync.patch" | cut -d' ' -f1)
-        _dirty=0; [ -z "$(git -C "$wt" status --porcelain 2>/dev/null | grep -vE '\.(so|dylib|metallib)$')" ] || _dirty=1
-        printf 'commit=%s\nworktree_dirty=%s\nbase=%s\npatch_sha256=%s\npatch_bytes=%s\nsynced=%s\n' \
-            "$(git -C "$wt" rev-parse HEAD)" "$_dirty" "$base" "$_psha" "$(wc -c < "$TMPD/sync.patch" | tr -d ' ')" \
+        # worktree_dirty: MODIFIED TRACKED files only (the code is not exactly the commit); untracked files (a box-local/
+        # script run by name) are shipped too but leave the commit's tracked bytes exact: counted apart, worktree_untracked
+        _dirty=0; [ -z "$(git -C "$wt" status --porcelain --untracked-files=no 2>/dev/null | grep -vE '\.(so|dylib|metallib)$')" ] || _dirty=1
+        _untracked=$(git -C "$wt" ls-files -o --exclude-standard 2>/dev/null | grep -cvE '\.(so|dylib|metallib)$' || true)
+        printf 'commit=%s\nworktree_dirty=%s\nworktree_untracked=%s\nbase=%s\npatch_sha256=%s\npatch_bytes=%s\nsynced=%s\n' \
+            "$(git -C "$wt" rev-parse HEAD)" "$_dirty" "$_untracked" "$base" "$_psha" "$(wc -c < "$TMPD/sync.patch" | tr -d ' ')" \
             "$(date -u +%FT%TZ)" | bx 60 "cat > $BOX_DIR/.git/devpod_synced" || die "provenance upload failed"
         say "patch-synced $(cd "$wt" && git rev-parse --short HEAD)+worktree -> $POD_ID:$BOX_DIR ($(wc -c < "$TMPD/sync.patch" | tr -d ' ') bytes over merge base $(git -C "$wt" rev-parse --short "$base"))"
         exit 0
@@ -519,9 +522,12 @@ sync)
     [ "$_head" = "$base" ] || die "the box's HEAD ($_head) is not the worktree's merge base ($base)"
     # The full sync records the synced commit too, as the patch sync does: without it a record left by an earlier
     # patch sync would name the wrong commit to every job that reads it (tools/ops/tree_commit.sh).
-    _dirty=0; [ -z "$(git -C "$wt" status --porcelain 2>/dev/null | grep -vE '\.(so|dylib|metallib)$')" ] || _dirty=1
-    printf 'commit=%s\nworktree_dirty=%s\nbase=%s\npatch_sha256=none-full-sync\npatch_bytes=0\nsynced=%s\n' \
-        "$(git -C "$wt" rev-parse HEAD)" "$_dirty" "$base" "$(date -u +%FT%TZ)" | bx 60 "cat > $BOX_DIR/.git/devpod_synced" \
+    # worktree_dirty: MODIFIED TRACKED files only (the code is not exactly the commit); untracked files (a box-local/
+    # script run by name) are shipped too but leave the commit's tracked bytes exact: counted apart, worktree_untracked
+    _dirty=0; [ -z "$(git -C "$wt" status --porcelain --untracked-files=no 2>/dev/null | grep -vE '\.(so|dylib|metallib)$')" ] || _dirty=1
+    _untracked=$(git -C "$wt" ls-files -o --exclude-standard 2>/dev/null | grep -cvE '\.(so|dylib|metallib)$' || true)
+    printf 'commit=%s\nworktree_dirty=%s\nworktree_untracked=%s\nbase=%s\npatch_sha256=none-full-sync\npatch_bytes=0\nsynced=%s\n' \
+        "$(git -C "$wt" rev-parse HEAD)" "$_dirty" "$_untracked" "$base" "$(date -u +%FT%TZ)" | bx 60 "cat > $BOX_DIR/.git/devpod_synced" \
         || die "provenance upload failed"
     say "synced $(cd "$wt" && git rev-parse --short HEAD)+worktree -> $POD_ID:$BOX_DIR (box HEAD = merge base $(git -C "$wt" rev-parse --short "$base"))"
     ;;

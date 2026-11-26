@@ -8,11 +8,14 @@
 # that record (a plain checkout), or whose record's base is no longer its HEAD, holds its HEAD.
 #
 #   tree_commit [DIR]          the commit DIR holds (default .), empty when DIR is not a git tree
-#   tree_sync_state [DIR]      clean | dirty (the sync record says worktree_dirty=1: uncommitted changes over the
-#                              commit) | full-sync-unrecorded (.devpod_manifest from a full sync, with no record of it:
+#   tree_sync_state [DIR]      clean | untracked (worktree_dirty=0 with worktree_untracked=N>0: every tracked file is
+#                              exactly the commit, plus N untracked files the sync shipped, e.g. box-local/ scripts
+#                              a job runs by name) | dirty (the sync record says worktree_dirty=1: modified tracked
+#                              files over the commit) | full-sync-unrecorded (.devpod_manifest from a full sync, with no record of it:
 #                              an older tools/dev_pod.sh wrote none, so the tree is a worktree over HEAD of no known
 #                              commit, and any record left is an earlier patch sync's)
-#   sync_state_ok [DIR]        0 when the state is clean, or BOX_EXPECT_DIRTY_SYNC=1 states the job expects it; a
+#   sync_state_ok [DIR]        0 when the state is clean or untracked (named on a MATCH line), or BOX_EXPECT_DIRTY_SYNC=1
+#                              states the job expects a dirty one; a
 #                              state that is not clean is named on one line either way (`MATCH sync <state> ...
 #                              accepted` or `SYNC <state> ... refused`)
 #   wheel_commit WHEEL         the commit a wheel was built from: the <sha> of its local version (`+<sha>`, a
@@ -66,7 +69,7 @@ PY
 }
 
 tree_sync_state() {
-    local dir=${1:-.} git_dir rec head base psha dirty
+    local dir=${1:-.} git_dir rec head base psha dirty untracked
     git_dir=$(git -C "$dir" rev-parse --absolute-git-dir 2> /dev/null) || { echo clean; return 0; }
     rec="$git_dir/devpod_synced"
     head=$(git -C "$dir" rev-parse HEAD 2> /dev/null)
@@ -74,12 +77,16 @@ tree_sync_state() {
         base=$(sed -n 's/^base=//p' "$rec" | head -n 1)
         psha=$(sed -n 's/^patch_sha256=//p' "$rec" | head -n 1)
         dirty=$(sed -n 's/^worktree_dirty=//p' "$rec" | head -n 1)
+        untracked=$(sed -n 's/^worktree_untracked=//p' "$rec" | head -n 1)
     fi
     # a full sync writes .devpod_manifest and a patch sync removes it: a manifest with no full-sync record is an older
     # dev_pod.sh's full sync (it recorded nothing; a record there is an earlier patch sync's, or none)
     if [ -f "$dir/.devpod_manifest" ] && [ "${psha:-}" != none-full-sync ]; then echo full-sync-unrecorded; return 0; fi
     if [ -f "$rec" ] && { [ -z "${base:-}" ] || [ "$base" = "$head" ]; } && [ "${dirty:-0}" = 1 ]; then
         echo dirty; return 0
+    fi
+    if [ -f "$rec" ] && { [ -z "${base:-}" ] || [ "$base" = "$head" ]; } && [ "${untracked:-0}" -gt 0 ] 2> /dev/null; then
+        echo untracked; return 0
     fi
     echo clean
 }
@@ -88,6 +95,10 @@ sync_state_ok() {
     local dir=${1:-.} state
     state=$(tree_sync_state "$dir")
     [ "$state" = clean ] && return 0
+    if [ "$state" = untracked ]; then
+        echo "MATCH sync untracked of $dir: every tracked file is commit $(tree_commit "$dir" | cut -c1-12); untracked files beside it (run by name) are not in the commit"
+        return 0
+    fi
     if [ "${BOX_EXPECT_DIRTY_SYNC:-0}" = 1 ]; then
         # MATCH first: the callers read a line's first word as its verdict (MATCH, else refused)
         echo "MATCH sync $state of $dir accepted (BOX_EXPECT_DIRTY_SYNC=1): the code is not exactly commit $(tree_commit "$dir" | cut -c1-12)"

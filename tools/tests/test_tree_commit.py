@@ -195,3 +195,43 @@ def test_a_dirty_or_unrecorded_full_sync_is_named_and_refused_unless_expected(tm
     (repo / ".git/devpod_synced").write_text(f"commit={synced}\nworktree_dirty=0\nbase={head}\n"
                                              "patch_sha256=none-full-sync\n")  # today's full sync records itself
     assert _sh(f'tree_sync_state "{repo}"', tmp_path).stdout.strip() == "clean"
+
+
+def test_an_untracked_only_sync_is_named_and_accepted_but_modified_tracked_files_are_refused(tmp_path):
+    """w3-integrate-16: the orchestrator's night-main tree carries untracked box-local/ scripts that a job runs by name.
+    Those leave every tracked file exactly the commit, so the sync records worktree_dirty=0 with worktree_untracked=N
+    and the jobs accept it on a MATCH line; a modified tracked file is still worktree_dirty=1 and refused."""
+    repo, head = _repo(tmp_path)
+    synced = "cd" * 20
+    wheel = f"mojolearn_core-0.8.67.dev0+{synced[:12]}-py3-none-linux_x86_64.whl"
+    (repo / ".git/devpod_synced").write_text(f"commit={synced}\nworktree_dirty=0\nworktree_untracked=2\nbase={head}\n"
+                                             "patch_sha256=x\n")
+    assert _sh(f'tree_sync_state "{repo}"', tmp_path).stdout.strip() == "untracked"
+    ok = _sh(f'wheels_match_tree "{repo}" {wheel}', tmp_path)
+    assert ok.returncode == 0 and ok.stdout.startswith("MATCH sync untracked "), ok.stdout
+    (repo / ".git/devpod_synced").write_text(f"commit={synced}\nworktree_dirty=1\nworktree_untracked=2\nbase={head}\n"
+                                             "patch_sha256=x\n")
+    assert _sh(f'wheels_match_tree "{repo}" {wheel}', tmp_path).returncode == 1
+
+
+def test_dev_pod_counts_untracked_files_apart_from_modified_tracked_ones(tmp_path):
+    """The two lines tools/dev_pod.sh records the sync with, run on a tree: untracked files (but not .so build outputs)
+    only raise worktree_untracked; a modified tracked file raises worktree_dirty."""
+    import re
+    text = (ROOT / "tools/dev_pod.sh").read_text()
+    dirty = re.findall(r"^\s*(_dirty=0; .*)$", text, re.M)
+    untracked = re.findall(r"^\s*(_untracked=.*)$", text, re.M)
+    assert len(dirty) == 2 and len(untracked) == 2  # the patch sync and the full sync
+    repo, _ = _repo(tmp_path)
+
+    def state():
+        out = subprocess.run(["bash", "-c", f'wt="{repo}"; {dirty[0]}; {untracked[0]}; echo "$_dirty $_untracked"'],
+                             capture_output=True, text=True, check=True).stdout.split()
+        return out[0], out[1]
+    assert state() == ("0", "0")
+    (repo / "box-local").mkdir()
+    (repo / "box-local/run.sh").write_text("echo hi\n")
+    (repo / "built.so").write_bytes(b"\x7fELF")
+    assert state() == ("0", "1")
+    (repo / "f").write_text("changed\n")
+    assert state() == ("1", "1")
