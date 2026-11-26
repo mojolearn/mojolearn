@@ -169,11 +169,21 @@ def test_cpu_with_fast_mode_is_refused_in_words(tmp_path, family):
 
 @two_devices
 @pytest.mark.parametrize("family", FAMILIES)
-def test_backward_on_the_cpu_device_is_refused_in_words_on_a_gpu_installation(tmp_path, family):
+def test_backward_on_the_cpu_device_runs_the_host_training_images_on_a_gpu_installation(tmp_path, family):
+    # c5cb91e615 (2026-11-22): a device='cpu' block beside a GPU set trains on the host images, connected at
+    # the first CPU admission (bindings/neural_block_public_door.mojo, the `cpu:identical` training table);
+    # the refusal "device='cpu' is not available for backward" is left for an installation whose host
+    # training images did not load. This test asserted that refusal for every installation.
     cls, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, device="cpu", **kwargs)
-    with pytest.raises(ValueError, match="device='cpu' is not available for backward"):
-        block.backward(x, np.ones_like(x))
+    try:
+        result = block.backward(x, np.ones_like(x))
+    except ValueError as refusal:
+        assert "device='cpu' is not available for backward" in str(refusal)
+        assert "host training images did not load" in str(refusal)
+    else:
+        assert result is not None
+        assert block.vendor_used() == "cpu"
 
 
 @pytest.mark.parametrize("family", FAMILIES)
