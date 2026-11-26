@@ -20,7 +20,7 @@ index 79f5b049b4..d0e7167c92 100644
          n_query,
          n_features,
 -        bandwidth,
-+        bandwidth * Float32(1.0000001),  # SABOTAGE e2e
++        bandwidth * Float32(1.0001),  # SABOTAGE e2e (1e-4 relative: a one-ulp bandwidth is absorbed by KernelDensity.score's float32 total; kde-score read unmoved on the L40S)
          kernel,
          metric,
          output,
