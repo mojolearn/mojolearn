@@ -416,15 +416,22 @@ def neural_descriptor_connect_factory_once(factory: PythonObject, var name: Stri
     a fresh 41-operation provider on every forward)."""
     if operation_count < 1:
         raise Error("native provider: operation_count must be positive")
+    # A HIT READS NO MODULE (lane gs-fix-4, 2026-11-26). The record holds each connected factory strongly, so an
+    # identity match IS the object whose type was tested when it connected: the hit needs neither the builtins
+    # module nor the type compare. The loaded-module read ran first on every call, so a device array's finalizer
+    # (bindings/optimizer_device_native_door.mojo device_finalize -> optimizer_provider_entries) read
+    # sys.modules['builtins'] on every release; with that entry gone the read refused, the finalizer's error went
+    # to the unraisable hook (Python frames inside a native cleanup) and the buffer was not freed
+    # (test_training_device_native_finalizer import_shutdown[explicit] on the L40S). Every optimizer and neural
+    # call through this door also drops one admitted-module stamp check per call.
+    var g = NEURAL_DESCRIPTOR_CONNECTIONS.get_or_create_ptr()
+    for i in range(len(g[].modules)):  # small-loop(connected providers): a few compiled extension modules per process, never data
+        if g[].factories[i] is factory and g[].names[i] == name and g[].counts[i] == operation_count:
+            if g[].modules[i]._obj_ptr == _neural_descriptor_function_owner(factory):
+                return g[].providers[i]
     var bi = native_loaded_module("builtins")
     if py_type(factory) is not py_type(bi.len):
         raise Error("TypeError: neural native ABI factory must be a compiled extension entry")
-    var owner = _neural_descriptor_function_owner(factory)
-    var g = NEURAL_DESCRIPTOR_CONNECTIONS.get_or_create_ptr()
-    for i in range(len(g[].modules)):  # small-loop(connected providers): a few compiled extension modules per process, never data
-        if (g[].factories[i] is factory and g[].modules[i]._obj_ptr == owner and g[].names[i] == name
-                and g[].counts[i] == operation_count):
-            return g[].providers[i]
     var provider = neural_descriptor_connect(factory, name, operation_count)
     var module = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module
     _neural_descriptor_connection_store(module, factory, name, operation_count, provider)
