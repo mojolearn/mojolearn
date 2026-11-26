@@ -82,8 +82,8 @@ from bindings.member_boundary_door import (
 )
 from bindings.admitted_input_unpack import admit_f32, admit_weight_words
 from core.admitted_refusals import admitted_finite_wording
-from core.ensemble_member import meta_plan_search_x_refusal
-from core.member_families import MEMBER_FAMILY_SEARCH
+from core.ensemble_member import meta_plan_search_x_refusal, META_SEARCH_CLASSIFIER, META_SEARCH_REGRESSOR
+from core.member_families import MEMBER_FAMILY_ENSEMBLE
 from bindings.msel_candidates_door import msel_grid_len, msel_sampler_check, msel_sampler_len
 from bindings.native_loaded_module_door import native_loaded_module
 from providers.python.member_ensemble_boundary_door import _all_fits_failed, _no_member_fit_words
@@ -836,7 +836,21 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
         if not finite:
             # check_array's words, as the base estimator's own fit raises them
             var x_words = admitted_finite_wording(_base_name(est, fields, context), "X")
-            if owner.plan.family != MEMBER_FAMILY_SEARCH or not _is_search(est, context):
+            # THE SEARCH KIND is a META kind of the ENSEMBLE family (core/
+            # ensemble_member.mojo META_SEARCH_*; python/mojolearn/
+            # model_selection.py marks the searches (39, 10)): its plan's
+            # params are (kind, meta plan handle, ...). Lane gs-fix-5: lane
+            # gs-fix-3 tested MEMBER_FAMILY_SEARCH here, a family no class
+            # carries (providers/python/member_search_boundary_door.mojo "NOT
+            # PUBLISHED YET"), so this raise still ran for every search and
+            # cv tool and one NaN row failed all the fits (proving suite on
+            # the L40S, 2103f25a6c: test_proving_resident, both error_score
+            # tests).
+            var search_kind = False
+            if owner.plan.family == MEMBER_FAMILY_ENSEMBLE and len(owner.plan.params) >= 2:
+                var meta_kind = Int(owner.plan.params[0])
+                search_kind = meta_kind == META_SEARCH_CLASSIFIER or meta_kind == META_SEARCH_REGRESSOR
+            if not search_kind or not _is_search(est, context):
                 raise Error(_fit_words(est, fields, x_words.copy(), context, b))
             # A SEARCH OR A CV TOOL (lane gs-fix-3): not every fit reads the
             # non-finite row. The search kind's RUN gets the words and fails
