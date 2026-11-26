@@ -5373,25 +5373,6 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(min=_h(lo.predict(Xn)), max=_h(hi.predict(Xn))),
                 lo, lambda e: (e.predict(_with_nan(Xh)),))
 
-@lane("gbdt-nan-modes")
-@floor(rows=(1500, "the nan_mode arm is LIVE at 1500 as of 2026-09-16 (lane/dead-arms): Min and Max hash "
-                   "da54f1f980861f61 against d8e2a3e5305a859b here, and they are DISTINCT on all nine "
-                   "fixtures including `ties`. Until that day they hashed the SAME bytes at 1500, 6000 "
-                   "and 20000, because _with_nan wrote NaN into columns 5, 6 and 7 while the fit splits "
-                   "only on 3 and 4, so no row count meant anything. The floor stays at 1500 because that "
-                   "is the size the live arm was measured at."))
-def _(ml, X, yc, yr, Xh=None):
-    """nan_mode Min and Max on a fixture that actually carries NaN
-    (_with_nan); on a NaN-free column the quantizer collapses both to
-    Forbidden, which is why no lane above could reach them."""
-    rows = 1500                                  # FLOORED, see @floor above
-    X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # rows are a fixture size, not a claim (2026-09-16)
-    Xn = _with_nan(X)
-    lo = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Min").fit(Xn, yc)
-    hi = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Max").fit(Xn, yc)
-    return _fit(dict(min=_h(lo.predict(Xn)), max=_h(hi.predict(Xn))),
-                lo, lambda e: (e.predict(_with_nan(Xh)),))
-
 
 @lane("gbdt-adapter-clf")
 def _(ml, X, yc, yr, Xh=None):
