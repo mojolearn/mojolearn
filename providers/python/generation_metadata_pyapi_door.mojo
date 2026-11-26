@@ -239,7 +239,10 @@ struct GenerationLayerSnapshot(Copyable, Movable):
         self.planes = planes and self.fixed15
         if self.planes:
             # Per part: only a projection with planes leaves its float32 slot 0.
-            var values = Python.list(block["_w"])
+            # A COPY of the weight list (`list(block["_w"])`): `Python.list(x)` is the one-item list [x], whose
+            # item j + 2 does not exist ("list assignment index out of range" on every GPU fixed15 layer with
+            # planes; lane gs-fix-2, numeric-profile-parts / numeric-profile-parallel-default).
+            var values = py_call(native_loaded_module("builtins").list, block["_w"])
             var triples = block["_int15"]
             model_sequence(triples)
             for j in range(len(triples)):  # driver-loop: over the seven projection slots
