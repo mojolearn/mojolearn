@@ -25,7 +25,13 @@ REGISTRAR = re.compile(r"^def (\w+)\(mut module: PythonModuleBuilder\)[^\n]*:\n(
 
 
 def registered_types(member):
-    """(names the entry registers, names it attaches through a lookup-guarded shared registrar).
+    """(names the entry registers, names it attaches through a lookup-guarded shared registrar)."""
+    own, shared = registrations(member)
+    return {name for _, name in own}, {name for _, name in shared}
+
+
+def registrations(member):
+    """(own, shared) as {(Mojo type expression, Python name)}: what registered_types names, with the type.
 
     One process loads every binding, and a Mojo type registered by two modules aborts the import, so a
     type has one owner. Registrations are what the entry itself calls: its own module.add_type lines and
@@ -38,7 +44,7 @@ def registered_types(member):
     closure = graph.closure([member])
     assert closure['scope'] == 'closure', closure['unresolved']
     source = (ROOT/entry).read_text()
-    own = {name for _, name in ADD_TYPE.findall(source)}
+    own = set(ADD_TYPE.findall(source))
     shared = set()
     for path in closure['files']:
         if path == entry:
@@ -46,8 +52,8 @@ def registered_types(member):
         for match in REGISTRAR.finditer((ROOT/path).read_text()):
             body = match.group(2)
             if ".add_type[" in body and re.search(rf"\b{match.group(1)}\(module\)", source):
-                names = {name for _, name in ADD_TYPE.findall(body)}
-                (shared if "lookup_py_type_object" in body else own).update(names)
+                found = set(ADD_TYPE.findall(body))
+                (shared if "lookup_py_type_object" in body else own).update(found)
     return own, shared
 
 
@@ -59,13 +65,68 @@ def test_shared_host_allocator_has_no_archive_or_tree_training_dependency():
     assert not any(path.startswith('gbdt/') for path in closure['files'])
 
 
+#: MEMBER ABI v2 (0703b61b94, 2026-11-21; the generated leaf dispatch 0d296f2c81, 2026-11-23): a META estimator
+#: (model selection's searches and splitters, prep's IterativeImputer / SelectFromModel / RFE, the trees host's
+#: meta-ensembles) admits a nested member of ANY family through one family door each,
+#: providers/python/member_<family>_boundary_door.mojo. Those doors import their family's own binding doors, so a
+#: META host's closure holds every family it can nest. These are the development units that host META families.
+META_UNITS = {('host', 'runtime_model_selection'), ('host', 'runtime_prep'), ('host', 'runtime_trees')}
+
+
+def member_family_doors():
+    """The per-family member doors (the edge from a META host to every family)."""
+    return {path.resolve() for path in (ROOT/'providers/python').glob('member_*_boundary_door.mojo')}
+
+
+def closure_without(member, cut):
+    """The import closure of bindings/<member>.mojo that never enters a file of CUT."""
+    graph = shared_graph()
+    seen, todo = set(), [(ROOT/'bindings'/(member + '.mojo')).resolve()]
+    while todo:
+        path = todo.pop()
+        if path in seen or path in cut:
+            continue
+        seen.add(path)
+        dependencies, unknown = graph.node(path)
+        assert not unknown, (member, graph.relative(path), unknown)
+        todo.extend(dep.resolve() for dep in dependencies)
+    return {graph.relative(path) for path in seen}
+
+
+def group_owners(paths):
+    """{path: {(mode, development unit) whose closure holds it}} over bindings/development_groups.json."""
+    groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
+    graph = shared_graph()
+    owners = {path: set() for path in paths}
+    for mode, partitions in groups.items():
+        for name, members in partitions.items():
+            closure = graph.closure(members)
+            assert closure['scope'] == 'closure', closure['unresolved']
+            for path in paths:
+                if path in closure['files']:
+                    owners[path].add((mode, name))
+    return owners
+
+
 def test_model_selection_does_not_pull_archive_readers_through_sparse_allocation():
+    """Model selection's own code (its sparse and array allocation included) reads no archive and no GBDT
+    source. Since MEMBER ABI v2 its whole closure does, through the member doors of the families it can nest
+    (msel_member_units_door -> member_xneighbors_boundary_door -> neighbors_knn_native_door -> the archive door;
+    -> member_ensemble_boundary_door -> trees_public_forest_door -> gbdt/), so the check is on the closure with
+    those doors cut, and on the sparse allocator's own closure."""
     closure = shared_graph().closure(['model_selection_native_door'])
     assert closure['scope'] == 'closure', closure['unresolved']
     assert 'bindings/host_sparse_native_door.mojo' in closure['files']
     assert 'bindings/host_array_native_pack.mojo' in closure['files']
-    assert 'bindings/host_archive_native_door.mojo' not in closure['files']
-    assert not any(path.startswith('gbdt/') for path in closure['files'])
+    own = closure_without('model_selection_native_door', member_family_doors())
+    assert 'bindings/host_sparse_native_door.mojo' in own
+    assert 'bindings/host_array_native_pack.mojo' in own
+    assert 'bindings/host_archive_native_door.mojo' not in own
+    assert not any(path.startswith('gbdt/') for path in own)
+    sparse = shared_graph().closure(['host_sparse_native_door'])
+    assert sparse['scope'] == 'closure', sparse['unresolved']
+    assert 'bindings/host_archive_native_door.mojo' not in sparse['files']
+    assert not any(path.startswith('gbdt/') for path in sparse['files'])
 
 
 def test_storage_only_imports_use_the_leaf_instead_of_the_archive_facade():
@@ -77,17 +138,12 @@ def test_storage_only_imports_use_the_leaf_instead_of_the_archive_facade():
     assert not obsolete, obsolete
 
 
-def test_model_selection_edits_invalidate_only_the_independent_development_owner():
-    groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
-    graph = shared_graph()
-    owners = set()
-    for mode, partitions in groups.items():
-        for name, members in partitions.items():
-            closure = graph.closure(members)
-            assert closure['scope'] == 'closure', closure['unresolved']
-            if 'bindings/msel_split_door.mojo' in closure['files']:
-                owners.add((mode, name))
-    assert owners == {('host', 'runtime_model_selection')}
+def test_model_selection_edits_invalidate_only_the_meta_development_owners():
+    """A splitter edit rebuilds model selection and the two other META hosts, no other unit: prep reaches
+    msel_split_door through member_ensemble_boundary_door (a nested ensemble's cv), the trees host through
+    trees_public_meta_door -> msel_split_spec_unpack (its meta-ensembles' cv)."""
+    owners = group_owners(['bindings/msel_split_door.mojo'])['bindings/msel_split_door.mojo']
+    assert owners == META_UNITS, owners
 
 
 def release_host_members():
@@ -104,20 +160,17 @@ def test_release_host_groups_hold_each_member_once_and_include_the_new_logical_e
     assert 'PyInit__mojolearn_runtime_model_selection_host' in entry.read_text()
 
 
-def test_manifold_implementation_edits_invalidate_only_the_manifold_owner():
-    groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
-    graph = shared_graph()
-    paths = ('bindings/mani_kit_door.mojo', 'bindings/mani_decomp_native_door.mojo',
-             'bindings/mani_tsne_native_unpack.mojo', 'bindings/mani_umap_native_door.mojo')
-    owners = {path: set() for path in paths}
-    for mode, partitions in groups.items():
-        for name, members in partitions.items():
-            closure = graph.closure(members)
-            assert closure['scope'] == 'closure', closure['unresolved']
-            for path in paths:
-                if path in closure['files']:
-                    owners[path].add((mode, name))
-    assert all(found == {('host', 'runtime_manifold')} for found in owners.values()), owners
+def test_manifold_implementation_edits_invalidate_only_the_manifold_and_meta_owners():
+    """The manifold doors are the manifold unit's, plus the META hosts' for the members they can nest
+    (member_leaf_boundary_door -> member_manifold_boundary_door -> mani_kit_door, mani_decomp_native_door,
+    mani_umap_native_door). TSNE has no member form, so its unpack stays the manifold unit's alone."""
+    nested = ('bindings/mani_kit_door.mojo', 'bindings/mani_decomp_native_door.mojo',
+              'bindings/mani_umap_native_door.mojo')
+    alone = ('bindings/mani_tsne_native_unpack.mojo',)
+    owners = group_owners(nested + alone)
+    manifold = {('host', 'runtime_manifold')}
+    assert owners == {**{path: manifold | META_UNITS for path in nested},
+                      **{path: manifold for path in alone}}, owners
 
 
 def test_manifold_owner_has_no_tokenizer_type_registration_or_archive_dependency():
@@ -157,16 +210,24 @@ def test_sequential_adds_no_registered_type_and_existing_types_each_keep_one_own
     assert 'bindings/sequential_execution_pack.mojo' in owner['files']
     assert 'bindings/sequential_execution_pack.mojo' not in tokenizer['files']
     # The sequential owner registers only its own types and attaches the shared identity key.
+    # Besides them it registers its own door's BatchSource owner (Sequential.fit(source=), lane
+    # w3i11-source-keep): BatchSourceOwner carries its DOOR as a type parameter, so each image that keeps a
+    # source registers a distinct Mojo type under the one Python name (providers/python/batch_source_pyapi_door.mojo
+    # BS_DOOR_*).
     own, shared = registered_types('_mojolearn_runtime_sequential_host')
-    assert own and all(name.startswith('_Sequential') for name in own), own
+    assert own and all(name.startswith('_Sequential') or name == '_BatchSourceOwner' for name in own), own
     assert shared <= {'_NativeIdentityKey'}, shared
-    # Every type registered by a release host entry has exactly one owner.
-    owners = {}
+    # Every Mojo type registered by a release host entry has exactly one owner: the import abort is per Mojo
+    # type (AGENTS.md part 6), so the owners are keyed on the add_type[...] type, not the Python name.
+    owners, names = {}, {}
     for member in release_host_members():
-        for name in registered_types(member)[0]:
-            owners.setdefault(name, []).append(member)
-    assert not {name: found for name, found in owners.items() if len(found) > 1}
-    assert owners['_TreesResident'] == ['_mojolearn_runtime_classical_host']
+        for kind, name in registrations(member)[0]:
+            owners.setdefault(kind, []).append(member)
+            names.setdefault(name, []).append(member)
+    assert not {kind: found for kind, found in owners.items() if len(found) > 1}
+    # A Python name shared by several host entries is only the door-parameterised BatchSource owner.
+    assert {name for name, found in names.items() if len(found) > 1} <= {'_BatchSourceOwner'}, names
+    assert names['_TreesResident'] == ['_mojolearn_runtime_classical_host']
     source = (ROOT/'bindings/_mojolearn_tokenizer_host.mojo').read_text()
     assert 'module.add_type[TreesResident]' not in source
     assert release_host_members().count('_mojolearn_runtime_sequential_host') == 1
@@ -225,8 +286,14 @@ def test_classical_resident_allocation_and_lifetime_are_owned_by_one_development
     # runtime_classical registers the TreesResident types (the registration check below) and its saved-model load
     # of an IsolationForest validates through trees_public_iforest_door.iforest_validate (host_archive_native_door,
     # 0aa17b4c40; a24f111a94 made it write the fitted forest), which allocates the resident: the classical call
-    # reaches the allocator too. No other unit does.
-    assert reached == {('runtime_trees', 'trees_native_call'), ('runtime_classical', 'classical_native_call')}, reached
+    # reaches the allocator too. Since MEMBER ABI v2 the prep unit's IterativeImputer exports a nested member's
+    # fitted state through the generated leaf dispatch (prep_iterimp_native_door._held_marker_import ->
+    # member_boundary_door.member_state -> member_leaf_boundary_door.member_leaf_state ->
+    # member_isolation_forest_boundary_door.isolation_forest_member_state ->
+    # trees_public_iforest_door.iforest_export_forest -> trees_lifetime_door.trees_resident_new), so its call
+    # reaches the allocator as well. No other unit does.
+    assert reached == {('runtime_trees', 'trees_native_call'), ('runtime_classical', 'classical_native_call'),
+                       ('runtime_prep', 'prep_encode_native_call')}, reached
 
 
 #: owner entries added after the host split, never exported by the legacy tokenizer host module
