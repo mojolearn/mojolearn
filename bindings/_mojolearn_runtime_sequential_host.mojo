@@ -13,6 +13,8 @@ from bindings.sequential_native_pack import sequential_c
 from bindings.native_identity_type_unpack import native_identity_type
 from bindings.sequential_admission_door import SequentialAdmissions
 from bindings.sequential_description_unpack import SequentialDescription
+from providers.python.batch_source_pyapi_door import BatchSourceOwner, BS_DOOR_SEQUENTIAL
+from autograd.session_lifetime import SESSION_MODE
 
 comptime RUNTIME_SEQUENTIAL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -46,6 +48,9 @@ def build__mojolearn_runtime_sequential_host() -> PythonObject:
         native_identity_type(module)
         _ = module.add_type[SequentialAdmissions]("_SequentialAdmissions")
         _ = module.add_type[SequentialDescription]("_SequentialDescription")
+        # Sequential.fit(source=) keeps its opened source on the handle (lane w3i11-source-keep;
+        # bindings/sequential_execution_pack.mojo sequential_fit_source): this image's own owner type
+        _ = module.add_type[BatchSourceOwner[False, SESSION_MODE, BS_DOOR_SEQUENTIAL]]("_BatchSourceOwner")
         module.def_py_c_function(sequential_c, "sequential_native_call")
         module.def_function[runtime_sequential_host_numeric_mode_binding]("runtime_sequential_host_numeric_mode")
         module.def_function[runtime_sequential_host_vendor_binding]("runtime_sequential_host_vendor")
