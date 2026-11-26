@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Bounded installed/source GPU capture for forecasting, GPC and IVF.
+"""Bounded installed/source two-GPU capture for forecasting, GPC and IVF.
 
-Run with the target interpreter and package already selected (installed wheel:
-use an external cwd and do not set PYTHONPATH). No source import-path injection.
+A multi-GPU tool, NOT part of the wheel (Andrew, 2026-11-26: the wheel ships CPU
+and single-GPU only; this was mojolearn/_verify_distributed.py, the
+`verify-distributed` command): `python3 tools/multi_gpu/verify_distributed.py
+--devices 0,1 --out capture.json [--require-installed]`, run with the target
+interpreter (installed wheel: use an external cwd and do not set PYTHONPATH).
+The receipt hashes the package files it qualifies (`source_files`, each checked
+against the wheel RECORD with --require-installed) and, separately, this tool's
+own bytes (`tool_sha256`), which no wheel RECORD carries.
 One/two/reversed-device results are checkpointed after each case. Physical
 kernel traces are deliberately not inferred from subprocess PID receipts.
 """
@@ -19,10 +25,16 @@ import base64
 from contextlib import contextmanager
 
 __all__ = ["main", "compare", "validate_receipt"]
-PROTOCOL = "distributed-classical-v2"
+PROTOCOL = "distributed-classical-v3"
+#: the installed package files the capture qualifies (the verifier itself is a tool now: TOOL_FILE)
 PROFILE_FILES = frozenset(('__init__.py', 'parallel_forecasting.py', 'parallel_gaussian_process.py',
-                           'parallel_ivf.py', '_verify_distributed.py', '_native_parallel_shard.py',
-                           '_gpu_witness.py'))
+                           'parallel_ivf.py', '_native_parallel_shard.py', '_gpu_witness.py'))
+TOOL_FILE = Path(__file__).resolve()
+
+
+def tool_sha256():
+    """This tool's own bytes (it ships in no wheel, so no RECORD row checks it)."""
+    return hashlib.sha256(TOOL_FILE.read_bytes()).hexdigest()
 CASES = ("arima", "holtwinters", "gpc", "ivf", "gpc_fit")
 #: the native shard workers' numerical operations (bindings/parallel_shard_native_door.mojo,
 #: parallel_forecast_native.mojo)
@@ -62,7 +74,7 @@ def _binding_vendors(receipt, report):
 
 
 def _require_used_groups(receipt, group_ids, case):
-    from ._gpu_witness import require_distinct_workers
+    from mojolearn._gpu_witness import require_distinct_workers
     if not group_ids:
         raise ValueError('numerical cell used no inventoried workers')
     operation = {'arima': 'arima_predict_shard', 'holtwinters': 'hw_predict_shard',
@@ -82,7 +94,7 @@ def transport_fault(fault, control):
     """Perturb one actual numerical result batch of the native shard pools
     (bindings/parallel_shard_common_door.mojo `shard_map`): its last result is
     dropped or the batch is reversed, once. Never a native arithmetic fault."""
-    from ._native_parallel_shard import _native_parallel_shard
+    from mojolearn._native_parallel_shard import _native_parallel_shard
     if fault not in ('drop_result', 'reverse_results'):
         raise ValueError('unknown transport fault')
     # The native switch (bindings/parallel_shard_common_run.mojo
@@ -153,6 +165,8 @@ def validate_receipt(receipt):
     required_bindings = {'_mojolearn_arima', '_mojolearn_tsa', '_mojolearn_gp', '_mojolearn_ivf'}
     if set(receipt.get('bindings', {})) != required_bindings or set(receipt.get('source_files', {})) != PROFILE_FILES:
         raise ValueError('missing package or native binding provenance')
+    if not re.fullmatch('[0-9a-f]{64}', str(receipt.get('tool_sha256', ''))):
+        raise ValueError('missing verifier tool provenance')
     if any(not isinstance(h, str) or not re.fullmatch('[0-9a-f]{64}', h)
            for h in receipt['source_files'].values()):
         raise ValueError('invalid source profile hashes')
@@ -169,7 +183,7 @@ def compare(left, right):
     validate_receipt(right)
     if left.get('inputs') != right.get('inputs'):
         raise ValueError('distributed fixture input bytes differ')
-    if left['source_files'] != right['source_files']:
+    if left['source_files'] != right['source_files'] or left['tool_sha256'] != right['tool_sha256']:
         raise ValueError('distributed source profiles differ')
     def parts(receipt):
         return {(c['case'], c['layout'], c['repeat']): c['actual'] for c in receipt['cells']}
@@ -187,7 +201,7 @@ def verify_distribution_records(dist, package, source_files, bindings):
             # installation and version; never accept another distribution's
             # matching hash as a substitute for a corrupt owning RECORD.
             from importlib import metadata
-            from . import gpu_plugins
+            from mojolearn import gpu_plugins
             profile = gpu_plugins.member_payload(relative)
             if profile is not None:
                 name = gpu_plugins.PAYLOADS[profile]['distribution']
@@ -275,10 +289,10 @@ def main(argv=None):
                'vendor': vendor,
                'package': str(package), 'distribution': distribution,
                'devices': list(devices), 'cells': [], 'worker_calls': [],
-               'bindings': {}, 'source_files': {}, 'worker_groups': [], 'controls': []}
+               'bindings': {}, 'source_files': {}, 'tool_sha256': tool_sha256(),
+               'worker_groups': [], 'controls': []}
     from mojolearn import _native_parallel_shard as _shard_module, _gpu_witness
-    for module in (ml, pf, pg, sys.modules[DistributedIVFIndex.__module__],
-                   sys.modules[__name__], _shard_module, _gpu_witness):
+    for module in (ml, pf, pg, sys.modules[DistributedIVFIndex.__module__], _shard_module, _gpu_witness):
         p = Path(module.__file__)
         receipt['source_files'][p.name] = hashlib.sha256(p.read_bytes()).hexdigest()
     # The four native bindings, named by mojolearn.runtime_report() (path and

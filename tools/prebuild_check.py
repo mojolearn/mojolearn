@@ -235,7 +235,7 @@ def sabotage_patches_audit(tree, commit, git_root=ROOT):
 def gil_region_audit(tree, commit, git_root=ROOT):
     """The COMMIT's tools/gil_region_check.py over the commit's bindings/ and providers/ blobs (lane meta-gil,
     2026-11-23: bm-meta-3's doors read `Array._addr` as RUN arguments inside `with GILReleased`, a segfault in
-    verify --self-test): no PythonObject read, copy, attribute or Python API call inside a released region.
+    verify --tamper-test): no PythonObject read, copy, attribute or Python API call inside a released region.
     Single process. Prints its GILREGION lines; returns its exit code (0 when the commit predates the check)."""
     tool = Path(tree) / "tools/gil_region_check.py"
     if not tool.is_file():

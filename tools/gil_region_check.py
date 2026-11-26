@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """No Python inside a GIL-released region of a Mojo door (lane meta-gil, 2026-11-23).
 
-WHY. nn-integrate found verify --self-test segfaulting (CalibratedClassifierCV.score over a LogisticRegression
+WHY. nn-integrate found verify --tamper-test segfaulting (CalibratedClassifierCV.score over a LogisticRegression
 member: PyObject_GetAttrString) and Bagging OOB aborting (_PyMem_DebugMalloc called without the GIL). The members
 were clean: bm-meta-3's doors evaluated `trees_address(acc)` (`acc._addr`: an attribute read and a new int) as an
 argument of the RUN call INSIDE `with GILReleased(...)`. A static scan finds that class of defect before a build.

@@ -785,7 +785,8 @@ class IdentityOnWheels:
         table = self.identity_dir() / "admitted-table.json"
         table.write_bytes(subprocess.run(["git", "-C", str(self.src), "show", "%s:%s" % (commit, TABLE)],
                                          capture_output=True, check=True).stdout)
-        receipts = self.repack(table)
+        receipts = self.repack(table, self.extended_members())
+        self.commit_evidence()
         doc = dict(source_commit=self.commit, commit=commit, branch="ref/" + self.commit[:12], recorded=len(dirs),
                    table_sha256=sha256(table), repacked=receipts, at=dt.datetime.now(dt.timezone.utc).isoformat(),
                    soft_failures=self.soft_failures())
@@ -797,6 +798,32 @@ class IdentityOnWheels:
         os.environ[REFERENCE_ENV] = "%s:%s" % (self.commit, commit)
         return "admitted %d record dir(s) at %s (ref/%s); repacked %s" % (
             len(dirs), commit[:12], self.commit[:12], ", ".join(sorted(receipts)))
+
+    def evidence_roots(self):
+        """Every fetched results dir of this release's one run: the gates' outs, the Apple column, the CPU artifacts."""
+        roots = []
+        for vendor in ("nvidia", "amd"):
+            try:
+                roots.append(self.gate_out(vendor))
+            except Exception:   # no candidate wheels: nothing recorded there
+                pass
+        return [r for r in roots + [self.apple_identity_out(), self.cpu_out() / "artifacts"] if Path(r).is_dir()]
+
+    def commit_evidence(self):
+        """THE IN-REPO EVIDENCE (verify-complete, Andrew 2026-11-26): every staged evidence part of the fetched
+        columns written into verification/latest/<column>/ of the admission tree (each column replaced whole by a
+        new commit's parts), committed and pushed on ref/<commit12> beside the admission. A human reads it at
+        `git show ref/<commit12>:verification/latest/<column>/MANIFEST.json`. The admission commit is unchanged
+        (verification/latest/ is a record output, identity_at_freeze.RECORD_OUTPUTS)."""
+        import verification_evidence
+        tree = self.identity_dir() / "admit-tree"
+        branch = "ref/" + self.commit[:12]
+        columns = verification_evidence.install(self.evidence_roots(), tree=tree, commit=True,
+                                                say=lambda m: self.say("  " + m))
+        if columns:
+            self.must(["git", "-C", str(tree), "push", "-q", "origin", "%s:%s" % (branch, branch)],
+                      what="pushing the verification evidence on " + branch, log=self.rel / "identity-evidence-push.log")
+        return columns
 
     def admit_records(self, dirs):
         """tools/admit_identity_columns.sh --build-host over DIRS in an admission tree at the freeze; the commit."""
@@ -838,6 +865,14 @@ class IdentityOnWheels:
         paths = reference_refresh.parse_admit_next(p.stdout or "")
         if p.returncode != 0 or not paths:
             raise StepFailed("the admission refused (rc %s; %s)" % (p.returncode, log))
+        # the single-device verify commands' references, admitted in the same step and the same commit as the lane
+        # tables (verify-complete, Andrew 2026-11-26): every column's capture equal, else nothing is admitted
+        import admit_extended_references as X
+        try:
+            paths = list(paths) + X.admit(self.evidence_roots(), tree=tree, commit=self.commit,
+                                          say=lambda m: self.say("  " + m))
+        except X.AdmitError as exc:
+            raise StepFailed("the single-device verify references were refused: %s" % exc)
         self.must(["git", "-C", str(tree), "add", "--", *paths], what="staging the admission")
         self.must(["git", "-C", str(tree), "commit", "-q", "-m",
                    "Admit identity columns of release %s at %s (the one run on the built wheels)\n\n"
@@ -851,13 +886,24 @@ class IdentityOnWheels:
     def repack_dir(self):
         return self.identity_dir() / "repacked"
 
-    def repack(self, table):
+    def extended_members(self):
+        """{wheel member: admitted file} of the single-device verify references the admission wrote (the repack
+        replaces their `admitted: false` placeholders)."""
+        import admit_extended_references as X
+        out = {}
+        for profile in X.REFERENCED:
+            path = self.identity_dir() / "admit-tree" / X.REFERENCE_DIR / (profile + ".json")
+            if path.is_file() and (read_json(path) or {}).get("admitted"):
+                out["mojolearn/verify_reference/extended/%s.json" % profile] = str(path)
+        return out
+
+    def repack(self, table, extra=None):
         import wheel_table_repack as W
         receipts = {}
         for platform, wheel in (("linux", self.split_final("linux")), ("macos", self.macos_wheel())):
             if not wheel:
                 continue
-            doc = W.repack(wheel, table, self.repack_dir() / platform)
+            doc = W.repack(wheel, table, self.repack_dir() / platform, extra)
             path = self.repack_dir() / platform / (Path(wheel).name + ".repack.json")
             path.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
             receipts[platform] = str(path)

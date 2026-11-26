@@ -149,7 +149,7 @@ def test_worker_has_no_python_callback_registry_or_dynamic_estimator_call():
 
 
 def test_distributed_receipt_inventory_names_only_existing_modules():
-    path = PACKAGE / "_verify_distributed.py"
+    path = PACKAGE.parents[1] / "tools" / "multi_gpu" / "verify_distributed.py"   # a multi-GPU tool, not in the wheel
     spec = importlib.util.spec_from_file_location("isolated_distributed_verifier", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

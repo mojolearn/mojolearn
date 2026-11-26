@@ -58,7 +58,7 @@ def _fakes(tmp: Path, silent_arm: str = "") -> dict:
     py.write_text(
         "#!/bin/sh\ncase \"$*\" in\n"
         "  *vendor*) echo cuda;;\n"
-        "  *self-test*) echo '{\"passed\": true, \"format\": \"mojolearn.verify-self-test.v2\", \"sides\": "
+        "  *tamper-test*) echo '{\"passed\": true, \"format\": \"mojolearn.verify-tamper-test.v1\", \"sides\": "
         "{\"cpu\": {\"ran\": true, \"clean\": {\"state\": \"IDENTICAL\"}, \"perturbed\": {\"state\": \"DIVERGENT\"}}, "
         "\"gpu\": {\"ran\": true, \"clean\": {\"state\": \"IDENTICAL\"}, \"perturbed\": {\"state\": \"DIVERGENT\"}}}, "
         "\"problems\": []}';;\nesac\n")
@@ -83,7 +83,7 @@ def test_every_fault_detected(tmp_path):
     rc, text, report = _run(tmp_path, _fakes(tmp_path))
     assert rc == 0, text
     first = text.splitlines()[0]
-    assert first.startswith("FAULTS nvidia: self-test DETECTED on cuda; sabotage 4/4 detected") and '"' not in first
+    assert first.startswith("FAULTS nvidia: tamper-test DETECTED on cuda; sabotage 4/4 detected") and '"' not in first
     assert {a["arm"] for a in report["arms"]} == set(g.CHEAP_ARMS)
     assert len(report["not_run"]) == len(report["registered"]) - len(g.CHEAP_ARMS)
 

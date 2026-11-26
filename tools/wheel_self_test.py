@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The release gate on the verifier's own comparator: install a built wheel
-into a FRESH venv and run `python -m mojolearn verify --self-test`.
+into a FRESH venv and run `python -m mojolearn verify --tamper-test`.
 
   python3 tools/wheel_self_test.py WHEEL --out DIR [--python python3.12] [--cpu-threads 3]
 
@@ -12,7 +12,7 @@ bits fails here, which is how 0.8.35 shipped a `verify --quick` that stopped
 at the comparator self-test (ols/base 23eecb87d9e84cc7 vs table
 3d1d7c30b12d9872). tools/release.py no longer runs it (Andrew 2026-10-10: identity runs ONCE; a
 mismatch is a bug to fix, never a reason to rerun): macos-smoke's self-test
-job runs the same `verify --self-test` on the same wheel and gates publish-macos.
+job runs the same `verify --tamper-test` on the same wheel and gates publish-macos.
 The preverified flows may still run this by hand (docs/RELEASE_CHECKLIST.md).
 
 Writes DIR/results.json {status PASSED|FAILED, wheel, wheel_sha256, rc, ...}
@@ -88,13 +88,13 @@ def _run(args, wheel, out, env_dir):
     env["MOJOLEARN_NUMERIC_MODE"] = "identical"
     record = dict(format=FORMAT, wheel=wheel.name, wheel_sha256=sha256(wheel),
                   started=dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-                  command=f"python -m mojolearn verify --self-test --cpu-threads {args.cpu_threads} --json")
+                  command=f"python -m mojolearn verify --tamper-test --cpu-threads {args.cpu_threads} --json")
     with log.open("w") as fh:
         rc = subprocess.run([str(py), "-m", "pip", "install", "--no-cache-dir", str(wheel) + "[verify]"],
                             cwd=out, env=env, stdout=fh, stderr=subprocess.STDOUT).returncode
         record["install_rc"] = rc
         if rc == 0:
-            proc = subprocess.run([str(py), "-m", "mojolearn", "verify", "--self-test",
+            proc = subprocess.run([str(py), "-m", "mojolearn", "verify", "--tamper-test",
                                    "--cpu-threads", str(args.cpu_threads), "--json"],
                                   cwd=out, env=env, capture_output=True, text=True)
             fh.write(proc.stderr)

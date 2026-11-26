@@ -9,8 +9,10 @@ DIFFER: save a model on one GPU, verify it on another.
 
 ``Program.save``, ``Sequential.save_checkpoint`` and ``Sequential.export``
 write the producing install's report beside the model as
-``<file>.verify.json``, so the model file and its report are all a receiver
-needs.
+``<file>.verify.json`` in the same call, so the model file and its report are
+all a receiver needs. ``--device cpu|gpu`` runs the saved model on that device
+of this install, so one GPU machine checks its CPU against the report its GPU
+wrote (and the reverse).
 """
 # Engineering note: every number of a report comes from Mojo
 # (autograd/model_verify.mojo through the x_sequence binding): the FNV-1a64
@@ -124,7 +126,7 @@ def _model_entry(b, path):
             "bytes": int(size), "description_hash": str(desc)}
 
 
-def _report(b, path, numeric_mode, names_in, arrays, source, seed, names_out, outs):
+def _report(b, path, numeric_mode, names_in, arrays, source, seed, names_out, outs, device=None):
     inputs = []
     for k, (name, a) in enumerate(zip(names_in, arrays)):  # glue: one entry per model input
         inputs.append({"name": name, "shape": list(a.shape), "dtype": str(a.dtype),
@@ -132,7 +134,9 @@ def _report(b, path, numeric_mode, names_in, arrays, source, seed, names_out, ou
     outputs = []
     for name, y in zip(names_out, outs):  # glue: one entry per model output
         outputs.append({"name": name, "shape": list(y.shape), "digest": _digest(b, y, f"output {name!r}")})
-    rep = {"format": FORMAT, "install": _install(numeric_mode), "model": _model_entry(b, path),
+    install = _install(numeric_mode)
+    install["execution_device"] = device or "default"
+    rep = {"format": FORMAT, "install": install, "model": _model_entry(b, path),
            "input_source": source, "inputs": inputs, "outputs": outputs}
     if source == "seeded":
         rep["seed"] = int(seed)
@@ -171,12 +175,14 @@ def _load_inputs(path, want_names, n):
         return list(order), [z[k] for k in order]  # glue: one array per model input
 
 
-def verify(path, *, inputs=None, expect=None, numeric_mode=None):
+def verify(path, *, inputs=None, expect=None, numeric_mode=None, device=None):
     """The report of the saved model at ``path`` run on this install.
 
     ``inputs`` is an ``.npz`` file (one array per model input) or None for
     the seeded inputs; ``expect`` a report dict whose seed, input shapes and
-    names are reused when ``inputs`` is None."""
+    names are reused when ``inputs`` is None; ``device`` ('cpu' or 'gpu', None
+    for the install's default) the device the model runs on, through the
+    public ``device=`` of ``Session`` and ``Sequential.load``."""
     from .ops import Session
     from . import Sequential
     b = _binding(numeric_mode)
@@ -192,7 +198,7 @@ def verify(path, *, inputs=None, expect=None, numeric_mode=None):
     if inputs is None and expect is not None and expect.get("input_source") != "seeded":
         raise ValueError("the expected report ran on inputs from a file: pass the same file with --inputs")
     if kind == _PROGRAM:
-        with Session(numeric_mode=numeric_mode) as s:
+        with Session(numeric_mode=numeric_mode, device=device) as s:
             prog = s.load_program(path)
             n = len(prog.input_shapes)
             if inputs is None:
@@ -203,9 +209,9 @@ def verify(path, *, inputs=None, expect=None, numeric_mode=None):
             outs = prog.run(*arrays)
             outs = outs if isinstance(outs, tuple) else (outs,)
             names_out = _names(exp_names_out, outs, "output")
-            return _report(b, path, numeric_mode, names_in, arrays, source, seed, names_out, outs)
+            return _report(b, path, numeric_mode, names_in, arrays, source, seed, names_out, outs, device)
     if kind in _SEQUENTIAL:
-        model = Sequential.load(path, numeric_mode=numeric_mode)
+        model = Sequential.load(path, numeric_mode=numeric_mode, device=device)
         if inputs is None:
             rows = int(exp_in[0]["shape"][0]) if exp_in else SEQUENTIAL_ROWS
             id_range = _sequential_id_range(model, exp_in)
@@ -214,7 +220,7 @@ def verify(path, *, inputs=None, expect=None, numeric_mode=None):
             names_in, arrays = _load_inputs(inputs, exp_names_in, 1)
             source = "file"
         out = model._forward(arrays[0], _OUT_RAW)
-        return _report(b, path, numeric_mode, names_in, arrays, source, seed, ["output"], [out])
+        return _report(b, path, numeric_mode, names_in, arrays, source, seed, ["output"], [out], device)
     raise ValueError(f"{os.fspath(path)} is not a saved model")
 
 
@@ -260,7 +266,7 @@ def _lines(rep, result, expect, expect_from):
     out = [f"model    {m['file']}  kind={m['kind']}  sha256={m['sha256']}",
            f"         description={m['description_hash']}  bytes={m['bytes']}",
            f"install  mojolearn {inst['mojolearn_version']}  numeric_mode={inst['numeric_mode']}  "
-           f"vendor={inst['vendor']}  device={inst['device']}"]
+           f"vendor={inst['vendor']}  device={inst['device']}  ran on={inst.get('execution_device', 'default')}"]
     src = f"seeded, seed {rep['seed']}" if rep["input_source"] == "seeded" else "from file"
     for a in rep["inputs"]:  # glue: one line per model input
         out.append(f"input    {a['name']}  shape={_shape_text(a['shape'])}  dtype={a['dtype']}  "
@@ -301,7 +307,8 @@ def cmd_verify_model(args):
             print(f"verify-model: cannot read the expected report {expect_from}: {exc}", file=sys.stderr)
             return EXIT_USAGE
     try:
-        rep = verify(path, inputs=args.inputs, expect=expect, numeric_mode=args.numeric_mode)
+        rep = verify(path, inputs=args.inputs, expect=expect, numeric_mode=args.numeric_mode,
+                     device=getattr(args, "device", None))
         result = None if expect is None else compare(rep, expect)
     except (ValueError, TypeError) as exc:
         print(f"verify-model: {exc}", file=sys.stderr)
@@ -344,6 +351,9 @@ def add_parser(sub):
                    help="do not compare against <model>.verify.json")
     p.add_argument("--out", metavar="REPORT.json", default=None, help="also write this install's report here")
     p.add_argument("--json", action="store_true", help="print the report as JSON")
+    p.add_argument("--device", choices=("cpu", "gpu"), default=None,
+                   help="run the saved model on this device of the install (default: the install's own); "
+                        "on a GPU install, --device cpu checks the CPU against the report the GPU wrote")
     p.add_argument("--numeric-mode", dest="numeric_mode", choices=("identical", "fast"), default=None,
                    help="numeric mode (default: the library default, identical)")
     p.set_defaults(func=cmd_verify_model)

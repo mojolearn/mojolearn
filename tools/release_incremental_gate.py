@@ -23,7 +23,8 @@ SCHEMA = 'mojolearn.release.incremental-gate.v1'
 #: The host file the boundary qualifies: the merged file holding the tokenizer host binding, which carries the
 #: forest input-admission path (bindings/merged_groups.json; _mojolearn_native_tokenizer_host.so at 0.8.65).
 HOST = 'mojolearn/host/' + merged_bindings.member_file('host', '_mojolearn_tokenizer_host')
-VERIFIER = 'mojolearn/_verify_distributed.py'
+# (VERIFIER, the wheel member mojolearn/_verify_distributed.py, is gone: the distributed verifier is a multi-GPU tool
+# since 2026-11-26, tools/multi_gpu/verify_distributed.py, qualified by its tree bytes and never a wheel member.)
 #: The two fixture members and their sources, from the one generated-member table.
 FIXTURE_FILES = {member: generated_wheel_members.source_path(member)
                  for member in ('mojolearn/_identity_break.py', 'mojolearn/_identity_lane_neighbors.py')}
@@ -243,10 +244,10 @@ def validate(document, identity):
                     and r['completed'] == r['expected'] and r['failed'] == r['skipped'] == 0
                     for r in producer['coverage']), 'new verifier coverage incomplete')
     require(capture['status'] == 'NUMERICS_AND_PLACEMENT_PASS'
-            and capture['source']['source_sha256']['_verify_distributed.py'] == boundary['verifier_sha256'],
+            and capture['source'].get('tool_sha256', {}).get('verify_distributed.py') == boundary['verifier_sha256'],
             'new verifier bytes were not qualified')
     qualified = {name: r['after_sha256'] for name, r in retained.items()}
-    qualified.update({HOST: boundary['host_native_sha256'], VERIFIER: boundary['verifier_sha256']})
+    qualified.update({HOST: boundary['host_native_sha256']})
     require(set(document['wheels']) == set(identity['wheels']) == set(old['candidate']['wheels']),
             'candidate wheel coverage differs')
     for package, row in document['wheels'].items():
@@ -301,8 +302,7 @@ def apple_adapters(document, wheel_sha256):
         cases = list(ET.fromstring(evidence.read_bytes(reuse.checked_ref(check['junit']))).iter('testcase'))
         require(len(cases) == 4 and not any(c.find(t) is not None
                 for c in cases for t in ('failure', 'error', 'skipped')), 'incomplete Apple host boundary')
-    qualified = {'mojolearn/host/_mojolearn_dev_tokenizer_host.so': boundary['host_native_sha256'],
-                 VERIFIER: boundary['verifier_sha256']}
+    qualified = {'mojolearn/host/_mojolearn_dev_tokenizer_host.so': boundary['host_native_sha256']}
     require(delta(document['before'], document['after'], document['old_version'],
                   document['version'], qualified) == document['changed'], 'Apple wheel changes differ')
     return True

@@ -70,7 +70,7 @@ def _main(scratch):
     python = scratch / 'venv/bin/python'
     run('install', [python, '-m', 'pip', 'install', *wheels, 'numpy', 'pytest'])
     run('dependencies', [python, '-m', 'pip', 'check'])
-    run('self-test', [python, '-m', 'mojolearn', 'verify', '--self-test'])
+    run('self-test', [python, '-m', 'mojolearn', 'verify', '--tamper-test'])
     test = root / 'python/mojolearn/tests/test_parallel_forest_first_call.py'
     shutil.copy2(test, out / test.name)
     run('forest', [python, '-m', 'pytest', '--noconftest', '--rootdir', out,
@@ -86,7 +86,8 @@ def _main(scratch):
                   junit=dict(path='tests.xml', sha256=sha(out / 'tests.xml')),
                   test_sha256=sha(test),
                   host_native_sha256=sha(site / 'mojolearn/host' / host_file(site)),
-                  verifier_sha256=sha(site / 'mojolearn/_verify_distributed.py'),
+                  # the distributed verifier is a multi-GPU tool, not a wheel member (2026-11-26): its tree bytes
+                  verifier_sha256=sha(Path(__file__).resolve().parent / 'multi_gpu' / 'verify_distributed.py'),
                   scope='Final installed wheel, dependencies, comparator self-test and four public CPU forest cases. GPU arithmetic and adapter checks are reused separately.')
     (out / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(dict(passed=True, cases=len(cases))))

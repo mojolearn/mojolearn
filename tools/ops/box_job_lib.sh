@@ -230,7 +230,7 @@ arith_gate() {
     phase_end 0
 }
 # THE FAULT GATE (lane fx-coverage-smokes, 2026-11-20): once per job, on this box's GPU, that the checks can still
-# FAIL: `verify --self-test` from the candidate's installed wheel and the cheap registered sabotage checks
+# FAIL: `verify --tamper-test` from the candidate's installed wheel and the cheap registered sabotage checks
 # (tools/ops/gpu_fault_gate.py: each must report its injected fault DETECTED; one that passes silently fails the
 # unit). Untimed; it runs after the candidate's install and before any smoke or board, so the GPU is idle. Its line is
 # FAULTS_LINE (job.log and status.json `faults`), its file $RES/FAULTS-$V.txt, its logs $RES/faults/. Fail soft: a

@@ -42,7 +42,7 @@
 #      Admission reuses identity evidence; it does not re-run the GPU checks.
 #   4. tools/identity_columns.py report: routine-profile reference parts taken
 #      from the new commit vs. still resting on an older one
-#   5. `verify --self-test --cpu-threads 3` and `verify --coverage` against the
+#   5. `verify --tamper-test --cpu-threads 3` and `verify --coverage` against the
 #      new table, from source: the self-test nudges each side this checkout has
 #      (device="cpu" always; device="gpu" when its GPU set is built)
 #   6. THE PTX COLUMN (`nvidia-ptx-<gpu>-sm80` records, Andrew 2026-10-10): the
@@ -174,10 +174,10 @@ cli() {  # the verifier from source (its emit-reference needs the checkout root)
 
 checks() {  # $1 = table; self-test then coverage; sets ST_RC, COV_RC
     local t=$1
-    cli --self-test --cpu-threads 3 --reference-table "$t" > "$EVID/self-test.log" 2>&1
+    cli --tamper-test --cpu-threads 3 --reference-table "$t" > "$EVID/tamper-test.log" 2>&1
     ST_RC=$?
-    grep -E '^  (CPU|GPU) side|^RESULT' "$EVID/self-test.log" | head -5
-    echo "SELFTEST rc=$ST_RC table=$t (log $EVID/self-test.log)"
+    grep -E '^  (CPU|GPU) side|^RESULT' "$EVID/tamper-test.log" | head -5
+    echo "SELFTEST rc=$ST_RC table=$t (log $EVID/tamper-test.log)"
     cli --coverage --reference-table "$t" --json-out "$EVID/coverage.json" > "$EVID/coverage.log" 2>&1
     COV_RC=$?
     grep -m 3 -iE 'admission|legacy|reference' "$EVID/coverage.log" | cut -c1-200

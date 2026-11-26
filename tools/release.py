@@ -15,7 +15,7 @@ before merge on NVIDIA, AMD, Apple and CPU; the release only builds, checks
 artifact integrity and publishes. Linux builds where the source's binding
 layout fits (see LINUX BUILD BACKENDS below), gpu-column-* are SKIPPED, macos-build packs
 with --build-only, macos-smoke is tools/wheel_self_test.py (fresh venv,
-`verify --self-test`), every publish takes release_linux_publish.sh
+`verify --tamper-test`), every publish takes release_linux_publish.sh
 --preverified (validation_profile=preverified, qualification_reuse in the
 manifest, no receipt), and the rehearsal skips python-tests and the GPU-box
 leg dry-runs. --gpu-smoke restores the GPU route the step table below
@@ -55,7 +55,7 @@ and every wheel smoke verifies the installed wheel against that table. The
 release no longer re-fits the changed lanes on Apple (release-check), on the
 installed GPU wheels (the column pass) or diffs them again (linux-joint-diff,
 the macOS cross-check), and macos-self-test is gone: macos-smoke's self-test
-job runs the same `verify --self-test` on the same wheel. The finish line and the record
+job runs the same `verify --tamper-test` on the same wheel. The finish line and the record
 cover whichever platforms are published, and run again when another is. The
 run ends with every outcome and exits non-zero if any did not publish. A
 pipeline is PIPELINES' named builds, checks and one publish.
@@ -145,7 +145,7 @@ THE STEPS
                      MI325X (--amd-build-provider do|cpu-box or
                      MOJOLEARN_AMD_PROVIDER pins one)
   macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
-  macos-smoke        default: wheel_self_test.py (fresh venv, verify --self-test);
+  macos-smoke        default: wheel_self_test.py (fresh venv, verify --tamper-test);
                      --gpu-smoke: qualify_verifier_wheel.py --scope expanded under the Metal lock;
                      its self-test job is the bundled-table gate (0.8.35 shipped a
                      stale table): no PASSED receipt for these wheel bytes, no
@@ -1176,7 +1176,7 @@ STEP_TABLE = [
     # the Torch and MAX adapters of the built macOS wheel, installed into a fresh venv, on MPS/Metal
     ("gate-apple", "macos", ["macos-smoke"], "mac"),
     # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
-    # macos-self-test (the same `verify --self-test` macos-smoke runs on the same
+    # macos-self-test (the same `verify --tamper-test` macos-smoke runs on the same
     # wheel) and release-check (an Apple re-fit of the lanes the admitted table
     # already holds) are deleted: the table admit is the identity check.
     ("linux-wait", "core-linux", ["linux-builds", "cross-compile"], None),
@@ -1326,7 +1326,7 @@ STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "finish
                   ("identity-admit", "finish", ["linux-pack"], None))
 
 #: NO IDENTITY LANE AFTER THE FIRST PUBLISH (Andrew 2026-11-05). The steps that execute identity lanes on a device:
-#: the macOS wheel self-test / smoke (`verify --self-test` or qualify_verifier_wheel on Metal), the GPU wheel columns
+#: the macOS wheel self-test / smoke (`verify --tamper-test` or qualify_verifier_wheel on Metal), the GPU wheel columns
 #: (verify against the admitted table on the NVIDIA/AMD box) and the NVIDIA/AMD candidate gates (installed correctness
 #: records). gate-apple is not here: it runs the framework adapters and the runtime qualifier, no identity lane.
 #: Every publish waits for each of them to settle (AFTER), and each refuses to launch once any platform of this
@@ -3615,7 +3615,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             return "SKIPPED (--identity-on-wheels): the Apple column is recorded from this wheel in gate-apple"
         w = self.macos_wheel()
         if not self.gpu_smoke():
-            # docs/RELEASE_CHECKLIST.md's preverified macOS gate: a fresh venv, `verify --self-test`
+            # docs/RELEASE_CHECKLIST.md's preverified macOS gate: a fresh venv, `verify --tamper-test`
             # (the bundled reference table reproduces the wheel's own bits). Metal lock: it fits.
             out = self.macos_self_test().parent
             if self.macos_self_test_passed():
@@ -4970,7 +4970,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
                              "run gate-apple")
         # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
         # The bundled-table gate is macos-smoke's own self-test job (same wheel,
-        # same `verify --self-test`); its PASSED receipt for these bytes is
+        # same `verify --tamper-test`); its PASSED receipt for these bytes is
         # required even when publish-macos is run alone. The Apple-vs-previous
         # release cross-diff is deleted: identity is decided by the table admit.
         if self.single():
@@ -7083,7 +7083,7 @@ def release_parser():
     ap.add_argument("--gpu-smoke", action="store_true",
                     help="the old GPU route: the NVIDIA/AMD wheel smokes (lq or rented), the expanded macOS smoke, "
                          "light-smoke receipts and any --build-backend; default: no GPU (GitHub builds, the "
-                         "preverified publication route, the macOS verify --self-test gate)")
+                         "preverified publication route, the macOS verify --tamper-test gate)")
     # Inert since 2026-10-10 (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun): the
     # Apple cross-diff and release-check they steered are deleted; kept so
     # existing invocations still parse.

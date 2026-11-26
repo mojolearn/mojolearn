@@ -35,7 +35,7 @@ exact wheel bytes (tools/ops/release_gate_job.sh phase `shardcheck`; tools/relea
 `single_gate_ok` refuses a box job without a passing shardcheck.json). There is no change detection, no selector,
 no closure or identity-table planner here, by design: the list is the list.
 
-The digest is the multi-device verifier's (`mojolearn._verify_distributed.digest`: sha256 of the raw C-order bytes
+The digest is the multi-device verifier's (`tools/multi_gpu/verify_distributed.py digest`: sha256 of the raw C-order bytes
 with shape and dtype); an arm's short digest is sha256 over its parts' (name, shape, dtype, sha256) lines.
 
 WHAT THIS DOES NOT COVER (say it plainly):
@@ -450,7 +450,8 @@ def worker(name, device, out_path):
             raise RuntimeError("%s is not set: the logical arms would be refused" % LOGICAL_ENV)
         import numpy as np
         import mojolearn as ml
-        from mojolearn._verify_distributed import digest
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "multi_gpu"))
+        from verify_distributed import digest
         doc.update(mojolearn_version=getattr(ml, "__version__", None), mojolearn_file=ml.__file__)
         X, y = FIXTURES[fixture](np, np.random.default_rng(seed), rows, features)
         for count in COUNTS:

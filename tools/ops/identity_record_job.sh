@@ -11,6 +11,8 @@
 #        --gpus N --workers-per-gpu auto --out <scratch>/identity` (no reuse flag: every lane is recorded), copied to
 #        $MOJOLEARN_RESULTS_DIR/identity (the recorder refuses an outdir inside the tree, and the results dir is in it).
 #        The recorder requires the wheels' source commit to equal this tree's HEAD (it runs the harness of this tree).
+#   (iii) evidence: the verify part staged under evidence/nvidia/verify (tools/verification_evidence.py stage); the
+#        recorder staged the record part; the Mac's fetch writes both into verification/latest/nvidia/.
 #
 # PARALLEL PLAN (AGENTS.md hard rules: 100 percent of rented CPU, parallel by default). Both steps use the one GPU, so
 # they run one after the other; inside each, the work spreads over the allocation:
@@ -73,11 +75,14 @@ SCRATCH="$(mktemp -d "${TMPDIR:-/root}/idrec-XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
 fails=0
 step() { # name, command...
-    local n=$1; shift; local t0=$SECONDS sp
+    local n=$1; shift; local t0=$SECONDS sp st
+    st=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     sp=$(busy_sampler "$RES/logs/$n.busy" 15)
     "$@" > "$RES/logs/$n.log" 2>&1; local rc=$?
     kill "$sp" 2> /dev/null; wait "$sp" 2> /dev/null
     local busy; busy="busy cores $(busy_of "$RES/logs/$n.busy") of $(alloc_cores)"
+    # one row per step for the in-repo evidence MANIFEST (tools/verification_evidence.py)
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$n" "$rc" "$((SECONDS - t0))" "$st" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$busy" >> "$RES/steps.tsv"
     if [ $rc = 0 ]; then echo "IDREC $n PASS rc=0 $((SECONDS - t0))s $busy"
     else echo "IDREC $n FAIL rc=$rc $((SECONDS - t0))s $busy: $(grep -v '^\s*$' "$RES/logs/$n.log" | tail -n 2 | tr '\n' ' ' | cut -c1-240)"; fails=$((fails + 1)); fi
 }
@@ -123,5 +128,11 @@ step record bash -c 'cd "$1" && shift && exec python3 tools/identity_wheel_recor
 [ -d "$SCRATCH/identity" ] && cp -a "$SCRATCH/identity/." "$RES/identity/"
 grep -E '^identity-wheels: (busy plan|DONE|FAILED)' "$RES/logs/record.log" | head -n 6 || true
 
+# (iii) the in-repo evidence (verify-complete, Andrew 2026-11-26): the verify part here; the record part was staged by
+# the recorder under identity/evidence/nvidia/record. On the Mac, `tools/box_persist.py fetch --tag <tag> --extract
+# --evidence` (or `tools/verification_evidence.py install --from <fetched dir> --commit`) writes both into
+# verification/latest/nvidia/ and commits them.
+python3 "$REPO/tools/verification_evidence.py" stage --results "$RES" --column nvidia --part verify \
+    --out "$RES/evidence/nvidia/verify" || { echo "IDREC evidence FAIL (staging the verify part)"; fails=$((fails + 1)); }
 echo "IDREC done fails=$fails"
 [ $fails = 0 ]

@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Installed-package verification of native captured-program distribution.
+"""Installed-package verification of native captured-program distribution, on ONE device.
 
-This is a testing controller, never a product execution path or timer. It
-retains failures, independent analytic accuracy, complete-state digests,
-physical-device scope and whole-operation Python traces in a JSON report.
+The logical shards (three and four of them) all run on device 0: the single-GPU
+form of multi-GPU training. Verify is one GPU only (Andrew, 2026-11-26): no
+physical multi-GPU case, option or PENDING state ships here. This is a testing
+controller, never a product execution path or timer. It retains failures,
+independent analytic accuracy, complete-state digests and whole-operation
+Python traces in a JSON report.
 """
 from __future__ import annotations
 
@@ -26,16 +29,20 @@ def _digest(state):
     return h.hexdigest()
 
 
-def verify(devices=(0,), expected=None):
+#: the one device every case runs on
+DEVICES = (0,)
+
+
+def verify(expected=None):
     import numpy as np
     from functools import partial
     from . import ops
     from ._verify_model import _install
     from ._verify_native_runtime import audited, audited_context
 
-    report = {"format": FORMAT, "install": _install("identical"),
-              "devices_requested": list(devices), "cases": [], "runtime_audits": [],
-              "physical_multi_gpu": len(devices) > 1, "status": "FAIL"}
+    devices = DEVICES
+    report = {"format": FORMAT, "install": _install("identical"), "device": devices[0],
+              "cases": [], "runtime_audits": [], "status": "FAIL"}
     native = partial(audited, report["runtime_audits"])
     opened = partial(audited_context, report["runtime_audits"])
 
@@ -49,7 +56,7 @@ def verify(devices=(0,), expected=None):
                 w = s.tensor(np.zeros((1, 1), np.float32))
                 p = s.capture([x], [s.matmul(x, w)])
                 opt = s.optimizer("sgd", lr=0.125)
-                with opened("sgd.open", p.distribute, devices, logical_shards=max(3, len(devices)), optimizer=opt) as d:
+                with opened("sgd.open", p.distribute, devices, logical_shards=3, optimizer=opt) as d:
                     X, y = np.ones((5, 1), np.float32), np.full((5, 1), 2, np.float32)
                     losses = native("sgd.fit", d.fit, X, targets=y, epochs=1, batch_size=5, shuffle=False)
                     prediction = native("sgd.run", d.run, X)
@@ -72,7 +79,7 @@ def verify(devices=(0,), expected=None):
                 p = s.capture([x], [s.matmul(h, w2)])
                 opt = s.optimizer("adamw", lr=0.01, weight_decay=0.02,
                                   schedule="step", step_size=2, gamma=0.5)
-                logical = max(4, len(devices))
+                logical = 4
                 path = pathlib.Path(directory) / "resume.ckpt"
                 with opened("adam.open", p.distribute, devices, logical_shards=logical, optimizer=opt, seed=91) as d:
                     native("adam.fit.first", d.fit, X, targets=y, epochs=2, batch_size=7)
@@ -90,36 +97,42 @@ def verify(devices=(0,), expected=None):
                     assert _digest(native("adam.state.resumed", restored.state)) == _digest(final)
                 report["cases"].append({"name": "checkpoint_resume", "status": "PASS", "digest": _digest(final),
                     "scope": "15 optimizer steps, uneven batches, dropout, row shuffle, AdamW moments and step schedule."})
-                with opened("topology.open.single", p.distribute, (0,), logical_shards=logical, optimizer=opt, seed=91) as single:
-                    native("topology.fit.single", single.fit, X, targets=y, epochs=5, batch_size=7)
-                    assert _digest(native("topology.state.single", single.state)) == _digest(final)
-                report["cases"].append({"name": "physical_topology", "status": "PASS" if len(devices) > 1 else "PENDING",
-                    "digest": _digest(final), "scope": "Two or more real GPU IDs required" if len(devices) == 1 else "one versus requested physical GPUs"})
+                with opened("replay.open", p.distribute, devices, logical_shards=logical, optimizer=opt, seed=91) as again:
+                    native("replay.fit", again.fit, X, targets=y, epochs=5, batch_size=7)
+                    assert _digest(native("replay.state", again.state)) == _digest(final)
+                report["cases"].append({"name": "uninterrupted_replay", "status": "PASS", "digest": _digest(final),
+                    "scope": "Five epochs in one fit equal two, a checkpoint, then three; four logical shards on device 0."})
         if expected is not None:
-            if expected.get("format") != FORMAT:
-                raise ValueError("reference report has the wrong format")
-            wanted = {c["name"]: c.get("digest") for c in expected["cases"] if c["status"] == "PASS"}
-            comparisons = []
-            for case in report["cases"]:
-                if case["name"] in wanted:
-                    equal = case.get("digest") == wanted[case["name"]]
-                    comparisons.append({"name": case["name"], "status": "MATCH" if equal else "DIFFER"})
-                    if not equal:
-                        raise AssertionError("cross-install identity mismatch: " + case["name"])
-            if not comparisons:
-                raise ValueError("reference contains no comparable passing cases")
-            report["cross_install"] = comparisons
-        report["status"] = "PASS" if len(devices) > 1 else "PASS_SINGLE_DEVICE_PENDING_PHYSICAL"
+            report["cross_install"] = comparisons = compare(report, expected)
+            for row in comparisons:
+                if row["status"] != "MATCH":
+                    raise AssertionError("cross-install identity mismatch: " + row["name"])
+        report["status"] = "PASS"
     except Exception as exc:
         report["failure"] = {"type": type(exc).__name__, "message": str(exc), "traceback": traceback.format_exc()}
     return report
 
 
+def compare(report, expected):
+    """Each passing case's digest against the same case of `expected` (a report
+    from another install): `[{name, status: MATCH|DIFFER}]`. ValueError when
+    `expected` is not a comparable reference (wrong format, no passing case in
+    common): nothing was compared. One body for `verify-distributed-program
+    --compare` and `verify --all` (_verify_extended.py)."""
+    if expected.get("format") != FORMAT:
+        raise ValueError("reference report has the wrong format")
+    wanted = {c["name"]: c.get("digest") for c in expected.get("cases", []) if c.get("status") == "PASS"}
+    comparisons = [{"name": case["name"], "status": "MATCH" if case.get("digest") == wanted[case["name"]] else "DIFFER"}
+                   for case in report.get("cases", []) if case.get("status") == "PASS" and case["name"] in wanted]
+    if not comparisons:
+        raise ValueError("reference contains no comparable passing cases")
+    return comparisons
+
+
 def command(args):
     try:
-        devices = tuple(int(s) for s in args.devices.split(","))
         expected = None if args.compare is None else json.loads(pathlib.Path(args.compare).read_text())
-        report = verify(devices, expected)
+        report = verify(expected)
     except Exception as exc:
         report = {"format": FORMAT, "status": "FAIL", "failure": {"type": type(exc).__name__, "message": str(exc)}}
     if args.output:
@@ -131,8 +144,8 @@ def command(args):
 
 
 def add_parser(sub):
-    parser = sub.add_parser("verify-distributed-program", help="verify native captured-program training and checkpoints")
-    parser.add_argument("--devices", default="0", help="comma-separated physical GPU IDs; 0 alone is single-device coverage")
+    parser = sub.add_parser("verify-distributed-program",
+                            help="verify native captured-program training and checkpoints (logical shards on one device)")
     parser.add_argument("--compare", help="reference report from another installed vendor/CPU build")
     parser.add_argument("--output", required=True, help="retain the complete JSON report, including runtime traces and failures")
     parser.set_defaults(func=command)

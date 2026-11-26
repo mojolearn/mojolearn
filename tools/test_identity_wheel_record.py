@@ -38,7 +38,30 @@ def fake(tmp_path, monkeypatch):
     monkeypatch.setattr(R.Run, "install", lambda self: (pathlib.Path(sys.executable),
                                                         self.out / "installed-wheels.txt"))
     monkeypatch.setattr(R, "gpu_free_gib", lambda vendor: 40.0)
+    # the extended reference captures need an installed wheel; their own test is below
+    monkeypatch.setattr(R.Run, "capture_extended", lambda self, py, columns, devices: [])
     return monkeypatch
+
+
+def test_extended_references_are_captured_once_per_evidence_column_all_at_once(tmp_path, monkeypatch):
+    launched = []
+
+    class Proc:
+        def __init__(self, argv, **kw):
+            launched.append((argv, kw["env"].get("CUDA_VISIBLE_DEVICES")))
+            out = argv[argv.index("--out" if "--out" in argv else "--output") + 1]
+            if "verify-partitioned-program" not in argv:
+                pathlib.Path(out).write_text("{}")
+
+        def wait(self):
+            return 0
+    run = R.Run(args(tmp_path), popen=Proc)
+    rows = run.capture_extended(pathlib.Path(sys.executable), ["nvidia", "ptx"], [0, 1])
+    assert len(launched) == 3 and all(dev == "0" for _, dev in launched)
+    assert ["--vendor", "cuda"] == launched[0][0][launched[0][0].index("--vendor"):][:2]
+    by = {r["profile"]: r["rc"] for r in rows}
+    assert by == {"verify-graph": 0, "verify-distributed-program": 0, "verify-partitioned-program": 1}
+    assert (tmp_path / "out" / "extended-references" / "nvidia" / "verify-graph.json").is_file()
 
 
 def args(tmp_path, *extra):

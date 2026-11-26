@@ -110,7 +110,7 @@ class VerifierAdmissionTests(unittest.TestCase):
         side = lambda: dict(ran=True, passed=True, clean={"state": "IDENTICAL"},  # noqa: E731
                             perturbed={"state": "DIVERGENT"})
         sides = dict(cpu=side(), gpu=side() if gpu else dict(ran=False, reason="no GPU"))
-        return dict(format="mojolearn.verify-self-test.v2", passed=True, sides=sides)
+        return dict(format="mojolearn.verify-tamper-test.v1", passed=True, sides=sides)
 
     def test_self_test_requires_clean_match_and_detected_perturbation_per_side(self):
         for gpu in (True, False):

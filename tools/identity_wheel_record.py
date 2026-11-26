@@ -23,6 +23,14 @@ columns name: the NVIDIA box (nvidia, ptx), the AMD box (amd), the Mac (apple) o
 4. summary  DIR/identity-wheels.json (schema mojolearn.identity-wheels.v1): per column the selection, the
             records written (with their admissible= line) and the rc; exit 0 only when every chunk recorded
             admissibly. The records go to admission (tools/admit_identity_columns.sh) with every other column.
+5. extended the single-device verify commands' reference captures, from the installed wheel, all at once, one
+            process each on device 0: `verify-graph --vendor V --require-installed --out`, `verify-distributed-program
+            --output`, `verify-partitioned-program --output`, into DIR/extended-references/<column>/<profile>.json
+            (tools/admit_extended_references.py admits them beside the lane tables; skipped on a --shard > 0 job,
+            the shard-0 job of the CPU matrix captures them once); a failed capture fails the record;
+6. evidence DIR/evidence/<column>/record[-shard-i-of-N]/ (tools/verification_evidence.py stage): the summary, every
+            record JSON, the chunk logs (capped) and a MANIFEST (wheels, commit, chunk times, busy plan); the fetch
+            on the Mac writes it into verification/latest/<column>/ (always overwritten; git history is the history).
 
 The box: IDENTITY_RECORD_BOX=<provider>:<id> (runpod:<pod id>, digitalocean:<droplet id>, github:<run id>/<job>) is
 passed through to every recorder unchanged, so each record's run block names the machine (tools/identity_break.py
@@ -41,6 +49,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 SCHEMA = "mojolearn.identity-wheels.v1"
@@ -60,6 +69,15 @@ COLUMNS = {
 #: CPU threads per record worker: record_identity_column.sh's own default (CPU_THREADS=3), unchanged, so a
 #: parallel run records under exactly the thread pools a serial one did.
 CPU_THREADS = 3
+#: evidence column -> the graph verifier's --vendor (its loaded x_sequence binding's own vendor read-back)
+GRAPH_VENDOR = {"cpu": "cpu", "nvidia": "cuda", "amd": "hip", "apple": "metal"}
+#: the reference captures of the single-device verify commands: profile -> argv after `-m mojolearn`
+EXTENDED_COMMANDS = {
+    "verify-graph": lambda column, out: ["verify-graph", "--vendor", GRAPH_VENDOR[column], "--require-installed",
+                                         "--out", out],
+    "verify-distributed-program": lambda column, out: ["verify-distributed-program", "--output", out],
+    "verify-partitioned-program": lambda column, out: ["verify-partitioned-program", "--output", out],
+}
 #: assumed GPU memory per concurrent record worker (GiB) for --workers-per-gpu auto, until a first run measures
 #: the peak (tools/identity_wheel_record.py prints the free memory it planned with)
 GPU_GIB_PER_WORKER = 12
@@ -71,6 +89,10 @@ def sha256(path):
         for block in iter(lambda: fh.read(1 << 20), b""):
             h.update(block)
     return h.hexdigest()
+
+
+def utc():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
 def label(column, device):
@@ -285,6 +307,7 @@ class Run:
         def record(c, i, chunk, slot):
             out = self.out / labels[c] / ("w%d" % i)
             out.mkdir(parents=True, exist_ok=True)
+            t0, started = time.monotonic(), utc()
             env = self.env(py, listed, slot[0], c, dict(LANES=",".join(chunk), LANE_SELECTION=(
                 "auto-reuse-chunk" if self.a.reuse_unchanged else "full-chunk")))
             with open(out / "record.log", "w") as log:
@@ -294,7 +317,8 @@ class Run:
             m = re.findall(r"^RECORDED (\S+) rc=(\d+) admissible=(yes|NO) json=(\S+)$", text, re.M)
             results[(c, i)] = dict(worker=i, device=slot[0], lanes=len(chunk), rc=rc,
                                    records=[dict(name=n, harness_rc=int(r), admissible=adm == "yes", json=j)
-                                            for n, r, adm, j in m])
+                                            for n, r, adm, j in m],
+                                   seconds=round(time.monotonic() - t0), start=started, end=utc())
             self.say("%s w%d (device %s): %d lane(s), rc=%d" % (labels[c], i, slot[0], len(chunk), rc))
         # every slot of a device runs one chunk at a time; chunks of columns sharing a device queue on it
         by_slot = {}
@@ -318,15 +342,73 @@ class Run:
             if not good:
                 row["rc"] = r["rc"] or 1
                 ok = False
-        report["ok"] = ok
         failed = ["%s w%d (%d lane(s), rc %s)" % (labels[c], i, r["lanes"], r["rc"]) for (c, i), r in sorted(results.items())
                   if not (r["rc"] == 0 and r["records"] and all(x["admissible"] for x in r["records"]))]
+        if shard_i == 0:
+            report["extended_references"] = self.capture_extended(py, columns, devices)
+            bad = ["%s %s rc %s" % (r["column"], r["profile"], r["rc"]) for r in report["extended_references"]
+                   if r["rc"] != 0]
+            if bad:
+                ok = False
+                failed.extend("extended reference " + b for b in bad)
+        report["ok"] = ok
         report["failures"] = failed
         if failed:
             self.say("FAILURES (%d chunk(s); every other chunk ran): %s" % (len(failed), "; ".join(failed)))
         (self.out / "identity-wheels.json").write_text(json.dumps(report, indent=1, sort_keys=True) + "\n")
         self.say("%s: %s" % ("DONE" if ok else "FAILED", self.out / "identity-wheels.json"))
+        self.stage_evidence(columns, results, labels, shard_i, shard_n)
         return 0 if ok else 1
+
+    def capture_extended(self, py, columns, devices):
+        """The single-device verify commands' reference captures (tools/admit_extended_references.py), from the
+        installed wheel in an empty directory, every capture at once (one process each, device 0: they are small and
+        independent). One set per evidence column (the nvidia and ptx columns share the nvidia one)."""
+        rows, procs = [], []
+        empty = Path(tempfile.mkdtemp(prefix="identity-wheels-extended-"))
+        try:
+            for column in sorted({"nvidia" if c in ("nvidia", "ptx") else c for c in columns}):
+                base = self.out / "extended-references" / column
+                base.mkdir(parents=True, exist_ok=True)
+                env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+                env["MOJOLEARN_NUMERIC_MODE"] = "identical"
+                if devices:
+                    var = COLUMNS["nvidia" if column == "nvidia" else column][1]
+                    if var:
+                        env[var] = str(devices[0])
+                for profile, argv in EXTENDED_COMMANDS.items():
+                    out = base / (profile + ".json")
+                    if out.exists():
+                        out.unlink()
+                    log = open(base / (profile + ".log"), "w")
+                    t0, started = time.monotonic(), utc()
+                    procs.append((column, profile, out, log, t0, started, self.popen(
+                        [str(py), "-I", "-m", "mojolearn", *argv(column, str(out))], cwd=str(empty), env=env,
+                        stdout=log, stderr=subprocess.STDOUT)))
+            for column, profile, out, log, t0, started, proc in procs:
+                rc = proc.wait()
+                log.close()
+                rows.append(dict(column=column, profile=profile, rc=rc if out.is_file() else (rc or 1),
+                                 report=str(out), seconds=round(time.monotonic() - t0), start=started, end=utc()))
+                self.say("extended reference %s %s: rc=%s" % (column, profile, rows[-1]["rc"]))
+        finally:
+            shutil.rmtree(empty, ignore_errors=True)
+        return rows
+
+    def stage_evidence(self, columns, results, labels, shard_i, shard_n):
+        """The record part of the in-repo evidence (tools/verification_evidence.py): one per evidence column (the
+        nvidia and ptx columns are one nvidia part). Staging never changes the run's exit status."""
+        import verification_evidence as E
+        rows = ["%s-w%d\t%s\t%s\t%s\t%s\t" % (labels[c], i, r.get("rc"), r.get("seconds", ""), r.get("start", ""),
+                                                 r.get("end", "")) for (c, i), r in sorted(results.items())]
+        (self.out / "steps.tsv").write_text("".join(row + "\n" for row in rows))
+        part = "record" if shard_n == 1 else "record-shard-%d-of-%d" % (shard_i, shard_n)
+        for column in sorted({"nvidia" if c in ("nvidia", "ptx") else c for c in columns}):
+            try:
+                E.stage(self.out, self.out / "evidence" / column / part, column, part)
+                self.say("evidence staged: %s" % (self.out / "evidence" / column / part))
+            except (Exception, SystemExit) as exc:   # evidence never fails the record
+                self.say("evidence NOT staged for %s: %s" % (column, exc))
 
 
 def parse(argv=None):

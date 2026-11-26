@@ -196,7 +196,7 @@ verify; the variable stays in the product, where it chooses the binding set.
 The report format is `mojolearn.verify-all-report.v2` (one report carries
 both sides; v1 carried one). `--compare`, `--commitment` and `--challenge`
 read v2 rows side by side (a row's key is `lane@side`) and still read v1
-documents. `--self-test` writes `mojolearn.verify-self-test.v2`.
+documents. `--tamper-test` writes `mojolearn.verify-tamper-test.v1`.
 
 The lanes of `tools/identity_break.py`, the harness every committed record
 was written with. The wheel carries a byte copy of it
@@ -396,6 +396,81 @@ These can expose incorrect reductions or indexing that a large easy input
 misses. The planned small training profile needs independently recorded hashes;
 it is not implemented merely by lowering the old fixture size.
 
+## Different paths, same bits
+
+On a GPU install, `verify --all` prints a short sample of about five lanes, one per family: for each side, the
+device, the GPU kernel launches, the bytes copied to and from the device, the host thread splits and the output
+hash. The GPU side launches kernels and the CPU side splits host threads, and both give the same hash. The numbers
+come from what the runtime counted during the run itself (`what_ran` in the JSON, every lane), so nothing runs
+twice. The sample is the last thing the run prints.
+
+## See the two paths
+
+`verify --all` saves what each side did, lane by lane, beside its JSON (`<name>.what-ran.json`) and in your
+user cache, and ends its output with the sample above and the line
+`See what each side did: python -m mojolearn verify --show-paths [LANE]`. That command reads the saved record and
+runs nothing:
+
+```sh
+python -m mojolearn verify --show-paths                  # every lane: CPU and GPU counts side by side, both hashes
+python -m mojolearn verify --show-paths ols              # one lane: its CPU steps and GPU steps in full, both hashes
+python -m mojolearn verify --show-paths --from theirs.json   # a record or a verify --all report from another machine
+```
+
+The counts are device launches by site, bytes and calls to and from the device, host routines and host thread
+splits and tasks. A DIVERGENT lane shows the two hashes that differ. On a CPU-only install the GPU side was not
+run, and it says so.
+
+## The single-device verify commands in `--all`
+
+`verify --all` also runs these commands, in the same process and the same report. Each has its own profile
+name, counts and verdict in the JSON (`extended`) and in the text report; each standalone command still works
+on its own and is the same code:
+
+| Profile | What it checks | Compared with |
+|---|---|---|
+| `verify-distributed-program` | captured-program training split over three and four logical shards on device 0: an analytic SGD step, checkpoint and resume of AdamW with dropout and a step schedule, one uninterrupted fit equal to fit, save, load, fit | a shipped reference report, when there is one |
+| `verify-partitioned-program` | model, tensor and pipeline execution with logical stages and tensor shards on device 0: an analytic SGD step, a NumPy forward oracle, checkpoint and resume | a shipped reference report, when there is one |
+| `verify-graph` | captured graph execution: control flow, derivatives, optimization, checkpoints, saved components | a shipped reference report, when there is one |
+| `verify-generation` | native causal generation, sampling, streaming and resume | the CPU and GPU captures of this install (GPU install) |
+| `verify-causal-lm` | whole loaded-model capture (logits, prefill and decode, batch, reset, reload, greedy) of eight tiny architectures in float32 (`verify-causal-lm --formats` adds bfloat16 and int8) | the CPU and GPU captures of this install (GPU install) |
+| `verify-recipe` | one bundled composed-model recipe (a small transformer `Sequential`), fitted from scratch on every device of the install, its fitted parameters, `digest_` and predictions compared; with the recipe tamper test | the other device of this install (GPU install), or a shipped reference record |
+| `verify-model` | one composed program saved with its report in one call (`Program.save`), then `verify-model` in a fresh process on every device of the install, each output against that report | the report the save wrote (saved on the GPU, checked on the CPU and GPU of a GPU install) |
+
+The reference reports of verify-graph, verify-distributed-program and verify-partitioned-program are captured
+by every column's identity record from the installed wheel and admitted with the lane tables
+(`tools/admit_extended_references.py`: every column must equal the CPU column), so after a release record they
+read VERIFIED or DIVERGENT; before the first admission the shipped placeholder reads OWED.
+
+Verdicts: VERIFIED (compared and every value equal), DIVERGENT (a compared value differs), FAILED (the
+command's own checks failed), OWED (its own checks passed but there was nothing to compare with: a CPU-only
+install and no shipped reference). A capture with nothing to compare against reads OWED, never VERIFIED.
+DIVERGENT and FAILED fail `verify --all`; OWED does not. Every capture runs in its own worker process in the
+same pool as the identity cells. Shipped references live at `mojolearn/verify_reference/extended/<profile>.json`
+when they are admitted.
+
+## Your own composed model and program
+
+A recipe states how a model is made and which results to compare: `outputs` selects any of `digest`
+(the fitted `digest_`), `parameters` (every fitted parameter array, or a list of names), `predict` and `score`:
+
+```sh
+python -m mojolearn verify --recipe r.json                          # fits on every device here, writes r.record.json
+python -m mojolearn verify --recipe r.json --against other.record.json   # a record from another machine
+```
+
+`mojolearn.recipe(model, ..., parameters=True)` writes a recipe from a live `Sequential` or estimator. A
+difference names the output (for a parameter, `param:<name>`) and its first differing element.
+
+For inference, `Program.save(path)`, `Sequential.save_checkpoint(path)` and `Sequential.export(path)` write the
+model and, in the same call, its verification report beside it (`<path>.verify.json`: this install's outputs on
+seeded inputs, by digest). On another device:
+
+```sh
+python -m mojolearn verify-model model.program                 # each output against model.program.verify.json
+python -m mojolearn verify-model model.program --device cpu    # on a GPU install: this machine's CPU against it
+```
+
 ## Whole loaded-language-model inference
 
 The expanded 0.8.7 source includes a small, separate composition check for
@@ -416,9 +491,7 @@ bytes; a successful capture reports `CAPTURED_UNQUALIFIED`, and matching
 captures report `NUMERICAL_MATCH_UNQUALIFIED`. These are numerical evidence,
 not automatic reference admission or a release certificate. Composition faults
 are distinct from faults injected into native arithmetic. Refused architectures
-(such as Gemma) are not covered by this profile. Physical multi-GPU execution
-requires its own records; `--layer-devices 0 1` selects the experimental explicit
-two-layer GPU mapping in this tiny profile.
+(such as Gemma) are not covered by this profile. It runs on one GPU.
 
 ## What the CPU training bindings are for
 
@@ -468,7 +541,7 @@ you can CHECK and changed nothing about what the library will train for you.
 | `--no-models` | skip the portable models |
 | `--json` | one JSON report on stdout, progress on stderr |
 | `--reference-table PATH` | compare against another table |
-| `--self-test` | show that this verifier can fail (below) |
+| `--tamper-test` | tamper with one input and show verify catches it (below) |
 | `--cross-check [quick\|default\|all]` | compare your GPU against your CPU (below) |
 | `--json-out PATH` | also write the evidence document to PATH |
 
@@ -488,15 +561,15 @@ separately:
    which is auditable because the raw columns are committed under
    `bench/results/identity_break/` and the document names the exact file and
    commit each reference came from.
-3. **`--self-test`**, which shows the comparison can fail at all. Without it
+3. **`--tamper-test`**, which shows the comparison can fail at all. Without it
    the first two are checks nobody has watched fail.
 
 ## Can you watch it fail?
 
-A verifier that only ever passes proves nothing. `verify --self-test` lets you
+A verifier that only ever passes proves nothing. `verify --tamper-test` lets you
 see the comparison catch a wrong answer, on your machine, in your installation:
 
-    python -m mojolearn verify --self-test
+    python -m mojolearn verify --tamper-test
 
 It runs one lane twice per side through the ordinary comparison, the same code
 path that judges every other lane: on the CPU side (`device="cpu"`) and on the
@@ -858,6 +931,29 @@ graph reaches is attributed to the lanes declared for the bindings that compile
 it, by name, never widened to every lane. An unattributed changed path still
 stops every caller with `UNATTRIBUTED PATH: <path>`.
 
+## The evidence in the repository
+
+Every identity record run, and the proving and GPU smoke runs of the same commit, leave one evidence set per
+column in the repository at `verification/latest/<column>/` (cpu, nvidia, amd, apple), always overwritten:
+git history is the history. A column holds `MANIFEST.json` (version, commit, the wheels and their sha256, the
+device and driver, start and end, wall time and busy cores per step, the R2 location of every full log) and
+one directory per part:
+
+| Part | Holds |
+|---|---|
+| `record/` | the recorder's summary, every column record JSON it wrote (the tables admission builds from), the single-device verify reference captures (`extended-references/`), the chunk logs |
+| `verify/` | the whole `verify --all` JSON report, each single-device command's block under `extended/`, what each side did per lane (`what-ran.json`), the tamper-test summary |
+| `proving/` | pass, fail and error counts and the failed test names of each proving pytest step |
+| `smoke/` | the GPU smoke's `SUMMARY.txt` and the failed lanes and tests of each pool |
+
+Logs are capped at their last 64 KiB and saved as `*.log.txt`; the full logs stay in R2. A part of a new commit
+replaces the column's directory whole; parts of the same commit sit side by side, and one column never touches
+another. The jobs stage their part on the box (`tools/verification_evidence.py stage`); on the Mac,
+`python3 tools/box_persist.py fetch --tag <tag> --extract --evidence` (or
+`python3 tools/verification_evidence.py install --from <fetched dir> --commit`) writes and commits them, and the
+release commits every column's evidence on `ref/<commit12>` beside the admission. Read it with
+`git log -- verification/latest` or `git show ref/<commit12>:verification/latest/nvidia/MANIFEST.json`.
+
 ## The evidence document
 
 `--json` (and `--json-out PATH`) emits the run as data rather than a verdict,
@@ -870,7 +966,7 @@ for a reader who did not run it and should not have to take a word on trust:
 - **where each reference came from**: the committed column, its vendor and the
   commit it was recorded at, as a path under `bench/results/identity_break/`
   that you can open in this repository and re-run;
-- **the self-test result**, in the same document, so one artifact shows both
+- **the tamper-test result**, in the same document, so one artifact shows both
   that the comparison caught a deliberately wrong answer and that the real
   lanes matched;
 - **counts that cannot be misread**: lanes checked and skipped with the reason
@@ -1051,7 +1147,7 @@ reuse-check`). This is how reused older records are admitted beside new
 records of the changed lanes. It retains byte-identical incoming columns under
 `bench/results/identity_break/` (reusing existing copies), regenerates the table from
 repository columns for the selected lanes, reports which routine reference parts still rest on an older
-commit (`reference-report.json`), and runs `verify --self-test` and
+commit (`reference-report.json`), and runs `verify --tamper-test` and
 `verify --coverage` against the new table on the host column. `--check-only`
 does the same on a scratch table and changes nothing.
 The recorder retains columns in the repository automatically; admission also
@@ -1245,7 +1341,7 @@ includes these probes unless `--no-models` is specified. The two HostForest /
 HostGBDT appendix entries now name this installed command and asset availability
 in `--coverage`. These representative models do not replace all configurations
 in the separate host gates. `--models-only` does not run the training-based
-self-test; run `verify --self-test` separately.
+self-test; run `verify --tamper-test` separately.
 
 Normal lane verification checks repeated training outputs, held-out inference,
 save/reload, row-batch invariance and step-versus-full decoding where declared.
@@ -1254,43 +1350,10 @@ sampler/replay properties; quick and selected-lane runs add them with
 `--batch-checks`. Non-applicable properties retain their named reason;
 a missing reference is OWED, never a successful check. `--cross-check` compares
 GPU inference with CPU saved-model inference on the same machine. `--compare`
-compares independently produced evidence documents. Native fault controls and
-physical multi-GPU pairs remain historical evidence until rerun on the actual
-release artifacts; the ordinary verifier self-test is not a substitute.
-
-### Two-GPU distributed checks in the installed package
-
-The expanded 0.8.7 candidate includes a separate, opt-in command. Its fixture
-generator requires NumPy, available through the optional `mojolearn[verify]` extra:
-
-```sh
-MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify-distributed --devices 0,1 --out distributed.json --require-installed
-python -m mojolearn verify-distributed --compare first.json second.json
-```
-
-This small suite covers ARIMA prediction, Holt-Winters forecasting, Gaussian
-process classification and disjoint IVF search. It checkpoints each completed
-case, compares one-device, two-device and reversed-device results, and exercises
-actual dropped/reordered worker-result controls. Output paths must be new;
-retain partial reports if execution stops. `--require-installed` checks loaded
-Python and native bytes against the installed wheel's RECORD.
-
-The default is one CPU math thread per worker; GPU indices name whole devices,
-not GPU cores. Driver UUID/PCI identities and numerical worker activity establish
-placement. They do not replace independent GPU kernel traces, native arithmetic
-sabotage, or release qualification. Loaded-language-model checks use the separate
-`verify-causal-lm` command above.
-
-GPU cross-validation has its own installed check:
-
-```sh
-MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify-cross-validation --devices 0,1 --out cv-evidence --require-installed
-```
-
-It checks fold models, predictions and scores across device orderings and
-repetitions, retains intermediate evidence, and validates installed file bytes.
-Like the distributed suite, it requires the optional NumPy test dependency.
-Physical GPU traces and native sabotage remain separate qualification gates.
+compares independently produced evidence documents. Native fault controls
+remain historical evidence until rerun on the actual release artifacts; the
+ordinary verifier self-test is not a substitute. Everything `verify` ships runs
+on one GPU.
 
 ## Repository provenance for reference generation (2026-10-28)
 
