@@ -84,15 +84,18 @@ def test_kpca_public_methods_do_not_dispatch_legacy_python_entries(old_items, ke
 
     near = _backend.binding("_mojolearn_x_neighbors", "identical")
     decomp = _backend.binding("_mojolearn_x_decomp", "identical")
+    _, context = _native_decomp_bridge.connect(
+        {"KernelPCA": ml.KernelPCA}, neighbors=True,
+        metadata={"kpca_kernels": dict(_expansion_neighbors._KERNELS), "kpca_old_items": old_items})
+    # The connection above is import-time glue: `_backend.binding` reads the image's mode and vendor getters
+    # to check the tier. The legacy entries are replaced AFTER it, so what this test catches is a public
+    # method's dispatch (lane gs-fix-2: on the GPU install the reconnect read the replaced mode getter).
     for name in ("x_neighbors_vendor", "x_neighbors_numeric_mode", "x_neighbors_kpca_resident", "xn_kernel",
                  "xn_colsum", "xn_rowsum", "xn_scale_div", "xn_kpca_center", "xn_kpca_alpha_scale",
                  "xn_kpca_transform", "xn_matmul"):
         if hasattr(near, name):
             monkeypatch.setattr(near, name, forbidden)
     monkeypatch.setattr(decomp, "x_decomp_kpca_eig", forbidden, raising=False)
-    _, context = _native_decomp_bridge.connect(
-        {"KernelPCA": ml.KernelPCA}, neighbors=True,
-        metadata={"kpca_kernels": dict(_expansion_neighbors._KERNELS), "kpca_old_items": old_items})
     monkeypatch.setattr(_expansion_neighbors, "_KPCA_CONTEXT", context)
     x = _data()
     source = x @ x.T if kernel == "precomputed" else x
