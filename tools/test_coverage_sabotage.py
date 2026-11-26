@@ -299,3 +299,39 @@ def test_committed_reviews_name_existing_arms_lanes_and_current_patch_bytes():
         for key, entry in cells.items():
             assert key.split('/', 1)[0] in arm['lanes'], (arm_name, key)
             assert entry['patch_sha256'] == digest, (arm_name, key, 'a changed patch needs a new review')
+
+
+def _sided_records(tmp_path, lane, sab_cell):
+    """clean, sabotaged and restored CPU-side records of one lane, the sabotaged cell replaced."""
+    base = dict(complete=True, side='cpu', vendor='cpu-test', platform='test', mode='identical', repeats=1,
+                fixtures={'base': {'X': 'same'}},
+                cells={f'{lane}/base': {'verdict': 'STABLE', 'hashes': ['a' * 16]}})
+    sab = copy.deepcopy(base)
+    sab['cells'][f'{lane}/base'] = sab_cell
+    paths = []
+    for label, data in zip(('clean', 'sabotaged', 'restored'), (base, sab, copy.deepcopy(base))):
+        path = tmp_path / f'{lane}-{label}.json'
+        path.write_text(json.dumps(data))
+        paths.append(path)
+    return paths
+
+
+_MISMATCH = ('AssertionError: check-generic-other (cpu side): ARIMA: MISMATCH: output 0, first differing element at '
+             'index [0, 2] (flat 2): gpu=0.3421683609485626 cpu=0.342168390750885\nTraceback ...')
+
+
+def test_a_twin_lane_moves_with_its_faulted_side_on_the_other_side(tmp_path):
+    # lane sab-triage-1: check-generic-* compares both sides in one cell, so a GPU-only fault refuses its CPU cell too
+    arm = dict(arm='coverage-test-gpu', side='gpu', bindings=['build'], lanes=['check-generic-other'])
+    paths = _sided_records(tmp_path, 'check-generic-other', {'verdict': 'REFUSED', 'hashes': [], 'error': _MISMATCH})
+    assert gate.stays_put(arm, 'cpu', *paths) == []
+
+
+@pytest.mark.parametrize('lane, error', [
+    ('one', _MISMATCH),                                            # not a twin lane: the fault reached the CPU code
+    ('check-generic-other', 'AssertionError: check-generic-other (cpu side): ARIMA.check raised RuntimeError: x'),
+])
+def test_any_other_movement_on_the_other_side_still_fails(tmp_path, lane, error):
+    arm = dict(arm='coverage-test-gpu', side='gpu', bindings=['build'], lanes=[lane])
+    paths = _sided_records(tmp_path, lane, {'verdict': 'REFUSED', 'hashes': [], 'error': error})
+    assert any('moved' in failure for failure in gate.stays_put(arm, 'cpu', *paths))

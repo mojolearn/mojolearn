@@ -127,9 +127,6 @@
   },
   {
    "arm_lanes": {
-    "coverage-core-count-fold-hits": [
-     "x-prep-user-objects"
-    ],
     "coverage-core-msel_device_host": [
      "x-metrics-splitters"
     ],
@@ -147,12 +144,49 @@
     ]
    },
    "arms": [
-    "coverage-core-count-fold-hits",
     "coverage-core-msel_device_host",
     "coverage-gate-cluster-kmeans_label-gpu",
     "coverage-precise-core-msel_rebase_device",
     "coverage-precise-core-shard_topk_merge_device",
     "coverage-x_neighbors-metrics_device_order"
+   ],
+   "builds": [
+    "build",
+    "build_core_host"
+   ],
+   "columns": [
+    "cpu",
+    "device"
+   ],
+   "family": "core",
+   "id": "core-2",
+   "lanes": [
+    "x-metrics-splitters",
+    "m-kmeans-fit-predict",
+    "forest-shard",
+    "neighbors-reference-shard",
+    "x-neighbors-metrics"
+   ],
+   "patches": [
+    "core/sabotage/coverage_msel_device_host.patch",
+    "cluster/checks/sabotage/gate_kmeans_label_gpu.patch",
+    "core/sabotage/coverage_precise_msel_rebase_device.patch",
+    "core/sabotage/coverage_precise_shard_topk_merge_device.patch",
+    "x_neighbors/checks/sabotage/metrics_device_order.patch"
+   ],
+   "sides": [
+    "cpu",
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-core-count-fold-hits": [
+     "x-prep-user-objects"
+    ]
+   },
+   "arms": [
+    "coverage-core-count-fold-hits"
    ],
    "builds": [
     "build",
@@ -164,22 +198,12 @@
     "device"
    ],
    "family": "core",
-   "id": "core-2",
+   "id": "core-2b",
    "lanes": [
-    "x-prep-user-objects",
-    "x-metrics-splitters",
-    "m-kmeans-fit-predict",
-    "forest-shard",
-    "neighbors-reference-shard",
-    "x-neighbors-metrics"
+    "x-prep-user-objects"
    ],
    "patches": [
-    "core/sabotage/coverage_count_fold_hits.patch",
-    "core/sabotage/coverage_msel_device_host.patch",
-    "cluster/checks/sabotage/gate_kmeans_label_gpu.patch",
-    "core/sabotage/coverage_precise_msel_rebase_device.patch",
-    "core/sabotage/coverage_precise_shard_topk_merge_device.patch",
-    "x_neighbors/checks/sabotage/metrics_device_order.patch"
+    "core/sabotage/coverage_count_fold_hits.patch"
    ],
    "sides": [
     "cpu",
@@ -484,8 +508,8 @@
     "coverage-precise-core-first_seen_rank"
    ],
    "builds": [
-    "build",
-    "build_core_host"
+    "build_core_host",
+    "build_runtime_model_selection_host"
    ],
    "columns": [
     "cpu",

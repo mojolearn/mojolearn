@@ -4,6 +4,7 @@
 seconds, wheels, box and host every identity record states, the run_* provenance.txt lines written from it, and
 the retained copy that keeps it byte for byte. Fake commands and environment only: no Mojolearn import, no
 device, < 2 s."""
+import argparse
 import json
 import subprocess
 import sys
@@ -220,3 +221,13 @@ def test_retention_keeps_the_run_block_and_its_provenance_lines_byte_for_byte(cl
     assert target.read_bytes() == column.read_bytes()
     assert json.loads(target.read_text())["run"] == record["run"]
     assert target.with_name(prov.name).read_bytes() == prov.read_bytes()
+
+
+def test_output_paths_are_not_execution_options(tmp_path):
+    # lane sab-triage-1: --side both's --cpu-json differs between a sabotage batch's clean, sabotaged and restored
+    # records; kept in the options, coverage_sabotage.py check read "different execution options" for every arm
+    args = argparse.Namespace(json="clean_device.json", cpu_json="clean_cpu.json", lanes="one", fixtures="base",
+                              repeats=1, side="both", resume=False, verbose=False, provenance_lines=False)
+    sig = ib.resume_signature(args, tmp_path, ib.__file__, {})
+    assert "cpu_json" not in sig["options"] and "json" not in sig["options"]
+    assert sig["options"]["lanes"] == "one" and sig["options"]["side"] == "both"

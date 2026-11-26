@@ -18,31 +18,36 @@
 #   [--env SAB_BATCH_MIN=<minutes>]     one batch's time limit (default 12); past it the batch is stopped, restored,
 #                                       and its arms read TIMEOUT
 #   [--env SAB_DEV_CACHE=<dir>]         the development cache (default /root/.cache/mojolearn-development-sab)
+#   [--env SAB_WHEEL_DIR=<dir>]         the staged candidate wheels of this commit (core + nvidia): the clean set, no base build
+#   [--env SAB_BUILD_MIN=<minutes>]     one prebuilt binding build's limit (default 40)
 # Read: tools/box_persist.py fetch --tag <tag>; summary.txt holds one line per arm and column:
 #   SABOTAGE batch=<id> arm=<arm> column=<device|cpu|all> verdict=CAUGHT|MISSED|BUILD-FAIL|TIMEOUT
 # and proven_rows.tsv the proven-table rows. Both are written and persisted (a `hard` ring upload) after EVERY batch,
 # so a cap or a kill loses at most the batch in flight (nvc1-0003, 2026-11-23: 46 batches finished, but the job's
 # final upload of a 5.5 GB results dir never landed before the 120-minute cap, and no verdict was read).
 #
-# WHERE THE TIME GOES (nvc1-0003, 14 cores of the L40S pod, 57 batches asked):
+# WHERE THE TIME GOES (nvc-ab-20261126T153027Z-a3757d, 9bdb1a9e8c, 14 cores, all 155 batches asked: 9 ran in 100 min).
 #   setup (fixtures, pixi, generated sources)             about 1 min warm
-#   base build, cold cache: 90 groups compiled            1516 s; one group alone (_mojolearn_dev_runtime_trees_host)
-#                                                         took 1274 s, so a cold base is never under about 21 min
-#   base build, warm cache: every group a hit, activation about 1 min (the plan line says how many are cold)
-#   one batch = its slowest binding build + about 30 s (clean, sabotaged and restored runs, device and CPU at once;
-#               measured median 30 s, max 35 s over 24 batches); slowest builds measured 37 to 245 s (device) and,
-#               from the base build's records, 34 to 323 s (host). Median batch about 100 s, worst about 355 s.
-#   the 57 batches: about 6400 s of slowest builds + 57 x 30 s = about 135 min. That is more than one 120-minute
-#   cap, so the plan takes two submissions: the first (SAB_BATCHES=all) stops starting batches at SAB_BUDGET_MIN and
-#   prints `RESUME SAB_BATCHES=from:<id>`; the second runs from there on the warm cache.
-#   The first batch starts at about 3 min on a warm cache; on a cold one (the first job of a changed tree) at about
-#   26 min, the critical path of one host group, which no core count shortens.
+#   base, SAB_WHEEL_DIR: the staged wheels' natives       seconds (no compile)
+#   base, development build, cold cache                   1907 s (90 groups; runtime_trees_host 920 s stopped by its
+#                                                         memory limit, then 844 s); warm: every group a hit, ~1 min
+#   one binding build is ONE busy core (elapsed = cpu seconds in every base record), 30 to 874 s; the plan's 258
+#   builds are about 88,600 s = 1,476 core-minutes. Compiled inside each batch, one batch after another, the pod kept
+#   2 to 5 of 14 cores busy and the 155 batches needed about 1,250 min.
+#   now: tools/sabotage_prebuild.py compiles them ahead over all 14 cores (about 1,476 / 14 = 105 min of compile,
+#   memory permitting) while the batches run; a batch is then its three runs and the checks, about 100 s on the GPU
+#   (9bdb1a9e8c: clean 20 to 37 s, sabotaged and restored the same, check and review about 10 s). EXPECTED FULL RUN:
+#   max(105 min of compile, 155 x 100 s = 258 min of runs) + the first batch's wait (its slowest build, up to 15 min)
+#   = about 4.5 hours, so three 100-minute submissions (each prints `RESUME SAB_BATCHES=from:<id>`; a resume on the
+#   same pod reuses every batch already prebuilt for this commit), or one submission with --cap 300 and
+#   SAB_BUDGET_MIN=280. SAB_BATCH_MIN (12) now bounds the runs only; SAB_BUILD_MIN (40) bounds one binding build.
 #
 # PARALLEL PLAN (AGENTS.md hard rules): the base build packs development groups over the allocation's cores by their
-# recorded peak memory (development_build.py --parallel auto, cgroup-aware on Linux); inside a batch every binding
-# build starts at once with -j = the allocation's cores each, and the device and CPU columns run at once. Busy cores of
-# total are sampled for the base build (busy_cores_base.txt) and for each batch's builds. Serial by nature: the
-# batches themselves (one patched tree, one GPU), stated above.
+# recorded peak memory (development_build.py --parallel auto, cgroup-aware on Linux); the prebuild packs every batch's
+# binding builds over the allocation's cores (one compile per core, the sum of their recorded peaks under 80 percent of
+# the allocation's memory), in run order; inside a batch the device and CPU columns run at once. Busy cores of total are
+# sampled for the base build (busy_cores_base.txt), the prebuild (busy_cores_prebuild.txt) and a batch that compiles
+# in place. Serial by nature: the batches' runs (one patched tree, one GPU), stated above.
 #
 # Exit status: 0 every arm CAUGHT, 1 any MISSED / BUILD-FAIL / TIMEOUT / batch error / batch not started, 2 setup
 # failure.
@@ -122,9 +127,52 @@ pixi run -e default python tools/generated_sources.py prepare --repo "$PWD" < /d
 pixi run -e default python tools/coverage_sabotage.py list > "$RES/arms.tsv" 2> "$RES/arms.err" \
     || { say "coverage_sabotage.py list failed"; exit 2; }
 
-# 1. the clean set: every development group of identical (sm_89) and host, from the pod's content-addressed cache.
-# A group is compiled only when its source closure changed since the last job (the first job of a changed tree).
+# 1. the clean set. SAB_WHEEL_DIR (the measurement build's staged candidate wheels of THIS commit, core + nvidia, as
+# tools/ops/proving_job.sh takes them): their natives ARE the clean set, placed into python/ in the release layout
+# (the merged files and their indexes; a per-binding .so beside them wins, python/mojolearn/_merged.py, which is how
+# a batch's patched binding loads). Nothing compiles. Otherwise every development group of identical (sm_89) and host,
+# from the pod's content-addressed cache: a group compiles only when its source closure changed since the last job
+# (9bdb1a9e8c: 90 of 90 cold, 1907 s, the first attempt of runtime_trees_host stopped by its memory limit at 920 s
+# and the retry took 844 s). Either way the clean cache is written only here, before any patch is applied: no batch
+# reads or fills it (tools/sabotage_prebuild.py builds in scratch worktrees), so no fault-injected binary enters it.
 DEV_CACHE=${SAB_DEV_CACHE:-/root/.cache/mojolearn-development-sab}
+if [ -n "${SAB_WHEEL_DIR:-}" ]; then
+    . "$SELF_DIR/tree_commit.sh"
+    match=$(wheels_match_tree "$TREE" "$SAB_WHEEL_DIR"/*.whl); mrc=$?
+    echo "$match" | sed 's/^/  wheel /' >> "$RES/summary.txt"
+    [ "$mrc" = 0 ] || { say "BASE the staged wheels are not this tree's commit ($SAB_WHEEL_DIR)"; exit 2; }
+    t=$(date +%s)
+    python3 - "$TREE/python" "$SAB_WHEEL_DIR"/*.whl > "$RES/base-wheels.log" 2>&1 <<'EOF'
+import os, re, sys, zipfile
+root, wheels = sys.argv[1], sys.argv[2:]
+native = re.compile(r"(\.so(\.\d+)*|\.dylib|/_mojolearn_merged\.json)$")
+top = ("mojolearn/", "mojolearn.libs/")
+removed = 0
+for base in ("mojolearn", "mojolearn.libs"):  # driver-loop: over the two native trees
+    for d, _, files in os.walk(os.path.join(root, base)):
+        for f in files:  # driver-loop: over the tree's files (the old clean set goes, sources stay)
+            p = os.path.join(d, f)
+            if native.search(p):
+                os.remove(p); removed += 1
+placed = 0
+for w in wheels:  # driver-loop: over the staged wheels
+    with zipfile.ZipFile(w) as z:
+        for m in z.namelist():  # driver-loop: over one wheel's members (natives only: the sources are the tree's)
+            if m.startswith(top) and native.search(m):
+                z.extract(m, root); placed += 1
+                info = z.getinfo(m)
+                mode = (info.external_attr >> 16) & 0o777
+                if mode:
+                    os.chmod(os.path.join(root, m), mode)
+print(f"removed {removed} native files, placed {placed} from {len(wheels)} wheels")
+if not placed:
+    sys.exit("no native file in the staged wheels")
+EOF
+    brc=$?
+    say "BASE from the staged wheels rc=$brc secs=$(( $(date +%s) - t )): $(tail -n 1 "$RES/base-wheels.log")"
+    [ $brc -eq 0 ] || exit 2
+    git status --porcelain --untracked-files=no | grep -q . && { say "BASE the wheel natives changed tracked files"; exit 2; }
+else
 pixi run -e default python tools/development_build.py plan --sets identical,host --cache "$DEV_CACHE" \
     --json "$RES/devbuild-plan.json" > "$RES/devbuild-plan.log" 2>&1
 say "BASE plan: $(python3 - "$RES/devbuild-plan.json" <<'EOF'
@@ -148,7 +196,25 @@ if [ $brc -ne 0 ]; then
     persist_now
     exit 2
 fi
+fi
 persist_now
+
+# 1b. the batches' patched bindings, compiled AHEAD (tools/sabotage_prebuild.py): one scratch worktree per batch, the
+# builds of every batch packed over the allocation's cores and memory in run order, beside the runs of the batches
+# before them. Keyed by the source commit, so a RESUME submission on the same pod reuses the batches already built.
+PREBUILT=${SAB_SCRATCH}/prebuilt-$(git rev-parse --short=12 HEAD)
+mkdir -p "$PREBUILT"
+export SAB_PREBUILT=$PREBUILT
+psampler=$(busy_sampler "$RES/busy_cores_prebuild.txt")
+pixi run -e default python tools/sabotage_prebuild.py --plan "$PLAN" --tree "$TREE" --out "$PREBUILT" \
+    --batches "$IDS" --cores "$CORES" --mem-kb "$(alloc_mem_kb)" --cache "$DEV_CACHE" \
+    --unit-seconds "$(( ${SAB_BUILD_MIN:-40} * 60 ))" > "$RES/prebuild.log" 2>&1 &
+PREPID=$!
+trap 'kill "$PREPID" "$psampler" 2>/dev/null; git reset -q --soft "$ORIG"' EXIT
+say "PREBUILD started (pid $PREPID, $(echo "$IDS" | wc -w) batches, $CORES cores): $PREBUILT"
+# No batch touches the tree before the prebuild has its snapshot of the clean natives.
+while [ ! -f "$PREBUILT/_clean.done" ] && kill -0 "$PREPID" 2>/dev/null; do sleep 2; done  # driver-loop: one wait
+[ -f "$PREBUILT/_clean.done" ] || say "PREBUILD stopped before its clean snapshot: every batch compiles in place"
 
 # the proven-table rows of one batch (tools/identity_lanes/coverage_sabotage_proven.tsv columns: arm, builds,
 # verdict, lanes, reference, reverted, seconds), to paste after reading the checks; MISSED, BUILD-FAIL and TIMEOUT
@@ -176,6 +242,15 @@ for b in $IDS; do  # driver-loop: over batches, each owns the tree and the GPU
         [ -n "$left" ] || { left=$b; say "RESUME SAB_BATCHES=from:$b (job at ${el} min, budget $BUDGET_MIN)"; }
         say "NOT STARTED batch=$b"; rc=1; continue
     fi
+    # The batch's prebuilt natives first (a controller wait, bounded by the unit limit: the builds of the batches
+    # ahead are already running). A prebuild that died leaves no `ready`: the batch then compiles in place as before.
+    w=$(date +%s)
+    while [ ! -f "$PREBUILT/$b/ready" ] && kill -0 "$PREPID" 2>/dev/null \
+            && [ $(( $(date +%s) - w )) -lt $(( ${SAB_BUILD_MIN:-40} * 60 )) ]; do  # driver-loop: wait on one batch
+        sleep 10
+    done
+    [ -f "$PREBUILT/$b/ready" ] || say "PREBUILD not ready for $b after $(( $(date +%s) - w )) s: it compiles in the batch"
+    [ $(( $(date +%s) - w )) -gt 30 ] && say "WAITED $(( $(date +%s) - w )) s for the prebuild of $b"
     t=$(date +%s)
     OUT="$RES/$b" timeout -s TERM -k 120 "$(( BATCH_MIN * 60 ))" bash tools/coverage_sabotage_batch.sh "$PLAN" "$b" \
         > "$RES/batch_$b.log" 2>&1
@@ -191,6 +266,7 @@ for b in $IDS; do  # driver-loop: over batches, each owns the tree and the GPU
     say "BATCH $b rc=$brc secs=$(( $(date +%s) - t ))$([ $brc -eq 124 ] || [ $brc -eq 137 ] && echo " TIMEOUT (limit $BATCH_MIN min)")"
     [ $brc -eq 0 ] || rc=1
     proven_rows "$b"
+    rm -rf "${PREBUILT:?}/$b"   # placed and restored (a rerun of this batch compiles it again): the disk keeps only the batches still to run
     persist_now
     # A batch that could not put the tree back leaves every later batch unattributable: stop starting batches.
     if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
@@ -198,6 +274,9 @@ for b in $IDS; do  # driver-loop: over batches, each owns the tree and the GPU
         left=STOPPED; rc=1
     fi
 done
+kill "$PREPID" 2>/dev/null   # batches past the budget are not built for nothing; their `ready` ones stay for RESUME
+kill "$psampler" 2>/dev/null
+say "PREBUILD busy $(busy_of "$RES/busy_cores_prebuild.txt") of $CORES cores; $(grep -c '^PREBUILD ready' "$RES/prebuild.log") batches built here"
 say "VERDICTS $(grep -o 'SABOTAGE batch=.*verdict=[A-Z-]*' "$RES/summary.txt" | sed 's/.*verdict=//' | sort | uniq -c | tr -s ' ' | tr '\n' ' ')"
 say "DONE rc=$rc ($(grep -c . "$RES/proven_rows.tsv") arm-column rows in proven_rows.tsv)"
 exit $rc

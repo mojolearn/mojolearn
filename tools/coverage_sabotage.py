@@ -496,6 +496,23 @@ def _one_sided_absent(cells, lane):
                               for c in mine)
 
 
+#: Lanes whose every cell compares BOTH sides in one process (tools/identity_lanes/checks_generic.py: `est.check`
+#: answers on the running side and on the other device's twin and fails the cell on a MISMATCH). A one-sided fault
+#: refuses such a lane on both sides by construction, so its other side cannot stay put (lane sab-triage-1,
+#: 2026-11-26: coverage-gate-arima-kalman_mv-gpu read MISSED on "cpu side check-generic-other/base: moved (STABLE ->
+#: REFUSED)", the CPU cell's own check naming ARIMA's GPU twin).
+TWIN_LANE_PREFIXES = ("check-generic-",)
+
+
+def _twin_moved(lane, cc, sc, rc, same):
+    """True when `lane` compares both sides in one cell and its other-side cell moved only as that comparison
+    must: the sabotaged cell REFUSED with a MISMATCH on the first line of its error, and the restored cell reads
+    the clean one. Any other movement is still the fault reaching the other side's code."""
+    head = str(sc.get("error") or "").split("\n", 1)[0]
+    return (lane.startswith(TWIN_LANE_PREFIXES) and sc.get("verdict") == "REFUSED" and ": MISMATCH: " in head
+            and same(cc, rc))
+
+
 def stays_put(arm, side, clean_path, sab_path, restored_path):
     """The other side of a one-sided arm: every lane/fixture cell of the arm's
     lanes reads on the sabotaged build what it read on the clean build (same
@@ -523,7 +540,10 @@ def stays_put(arm, side, clean_path, sab_path, restored_path):
                 cc, sc, rc = cells
                 same = lambda a, b: (a.get("verdict") == b.get("verdict") and _signature(a) == _signature(b)
                                      and str(a.get("error") or "") == str(b.get("error") or ""))
-                if not same(cc, sc):
+                if not same(cc, sc) and _twin_moved(lane, cc, sc, rc, same):
+                    print(f"{side} side {key}: moved with its faulted-side twin ({sc.get('verdict')}: the lane compares "
+                          "both sides in one cell): judged on the faulted side")
+                elif not same(cc, sc):
                     failures.append(f"{side} side {key}: moved ({cc.get('verdict')} -> {sc.get('verdict')}): "
                                     f"the fault is not in the {arm_sides(arm)[0]} side's code alone")
                 elif not same(cc, rc):
