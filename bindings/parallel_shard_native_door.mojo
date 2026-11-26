@@ -438,10 +438,15 @@ def _fit_scaler(args: PythonObject) raises -> PythonObject:
             _ = out  # keep the Python object alive through the native call above
             _ = value  # keep the Python object alive through the native call above
         py_setitem(merged, name, out)
-    # `result = type(estimator)(**params); result.__dict__.update(parts[0].__dict__)`
+    # `result = type(estimator)(**params); result.__dict__.update(parts[0].__dict__)`. The caller's `device`
+    # is a constructor parameter the workers' estimators (built from `init`, which names none) do not carry:
+    # kept (lane gs-fix-2: a device="cpu" scaler came back with device None, test_parallel_host_shards).
+    var device = py_get(fields, "device")
     _ = py_call(fields.clear)
     _ = py_call(fields.update, parts[0])
     _ = py_call(fields.update, merged)
+    if device is not None:
+        py_setitem(fields, "device", device)
     py_setitem(fields, nk[].k_n_features_in_, d)
     py_setitem(fields, nk[].k_n_samples_seen_, n)
     return estimator
