@@ -3872,6 +3872,64 @@ def _public_check_verdict(report, code, headline):
 
 #: lanes whose "what ran" line the text report prints; --json holds every lane
 WHAT_RAN_LANES_SHOWN = 40
+#: lanes in the "different paths, same bits" sample, one per family
+PATHS_SAMPLE_LANES = 5
+
+
+def paths_sample(report, n=PATHS_SAMPLE_LANES):
+    """DIFFERENT PATHS, SAME BITS (Andrew, 2026-11-26): for about N representative lanes, one per family, whose
+    `infer` part (else `train`) read IDENTICAL on both sides, what each side did, from the activity the run already
+    collected (`what_ran`, counted by the runtime around each side's fit; nothing runs again): the device, the GPU
+    kernel launches, the bytes to and from the device, the host thread splits and the output hash. Lanes whose GPU
+    side launched kernels come first, so the sample shows two real paths."""
+    what = (report.get("what_ran") or {}).get("sides") or {}
+    gpu_acts, cpu_acts = (what.get("gpu") or {}).get("lanes") or {}, (what.get("cpu") or {}).get("lanes") or {}
+    device = report.get("device") or {}
+    families, hashes = {}, {}
+    for r in report.get("cells") or ():
+        families.setdefault(r["lane"], r.get("family"))
+        if r.get("state") == vref.IDENTICAL and r.get("part") in ("infer", "train") and r.get("side") in SIDES:
+            key = (r["lane"], r["side"])
+            if key not in hashes or (r["part"] == "infer" and hashes[key][0] != "infer"):
+                hashes[key] = (r["part"], r["fixture"], r.get("value"))
+    candidates = [lane for lane in sorted(set(gpu_acts) & set(cpu_acts))
+                  if (lane, "gpu") in hashes and (lane, "cpu") in hashes
+                  and hashes[(lane, "gpu")][2] == hashes[(lane, "cpu")][2]]
+    candidates.sort(key=lambda lane: (not (gpu_acts[lane] or {}).get("launches"), lane))
+    out, seen = [], set()
+    for lane in candidates:
+        fam = families.get(lane) or lane.split("-")[0]
+        if fam in seen:
+            continue
+        seen.add(fam)
+        part, fixture, value = hashes[(lane, "gpu")]
+        row = dict(lane=lane, family=fam, part=part, fixture=fixture, hash=value, sides={})
+        for side, acts in (("gpu", gpu_acts), ("cpu", cpu_acts)):
+            a = acts.get(lane) or {}
+            row["sides"][side] = dict(
+                device=device.get("device") if side == "gpu" else device.get("cpu_model"),
+                launches=a.get("launches", 0), upload_bytes=a.get("upload_bytes", 0),
+                download_bytes=a.get("download_bytes", 0), host_splits=a.get("host_splits", 0),
+                hash=hashes[(lane, side)][2])
+        out.append(row)
+        if len(out) >= n:
+            break
+    return out
+
+
+def paths_sample_lines(sample):
+    if not sample:
+        return []
+    lines = ["Different paths, same bits (what each side did, counted by the runtime in this run; the same output "
+             "hash on both):"]
+    for row in sample:
+        lines.append(f"  {row['lane']} ({row['part']}, {row['fixture']}): hash {str(row['hash'])[:16]}")
+        for side in ("gpu", "cpu"):
+            a = row["sides"][side]
+            lines.append(f"    {side.upper()} {str(a['device'])[:40]:<40} launches {a['launches']:>7,}  "
+                         f"to device {cb._size(a['upload_bytes']):>9}  back {cb._size(a['download_bytes']):>9}  "
+                         f"thread splits {a['host_splits']:>6,}  hash {str(a['hash'])[:16]}")
+    return lines
 
 
 def format_human(report):
@@ -3968,6 +4026,7 @@ def format_human(report):
                      f"complete={cross.get('complete', False)}.")
         # what answered on each side, by the shared check module's own lines
         lines.extend(cb.sides_lines(cross.get('sides') or {}))
+    lines.extend(paths_sample_lines(report.get('paths_sample')))
     what = (report.get('what_ran') or {}).get('sides') or {}
     for side, block in what.items():
         acts = block.get('lanes') or {}
@@ -4645,6 +4704,7 @@ def cmd_verify_all(args):
     # It is built from the SAME dict `format_human` renders, so the two cannot
     # drift into describing different runs.
     report["lanes_summary"] = lane_counts(rows, lanes, stale)
+    report["paths_sample"] = paths_sample(report)
     report["reference_evidence"] = reference_evidence(rows)
     report["self_test"] = preflight
     # Native bindings actually used in workers are part of the evidence even

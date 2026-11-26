@@ -396,6 +396,14 @@ These can expose incorrect reductions or indexing that a large easy input
 misses. The planned small training profile needs independently recorded hashes;
 it is not implemented merely by lowering the old fixture size.
 
+## Different paths, same bits
+
+On a GPU install, `verify --all` prints a short sample of about five lanes, one per family: for each side, the
+device, the GPU kernel launches, the bytes copied to and from the device, the host thread splits and the output
+hash. The GPU side launches kernels and the CPU side splits host threads, and both give the same hash. The numbers
+come from what the runtime counted during the run itself (`what_ran` in the JSON, every lane), so nothing runs
+twice.
+
 ## The single-device verify commands in `--all`
 
 `verify --all` also runs these commands, in the same process and the same report. Each has its own profile
@@ -411,6 +419,11 @@ on its own and is the same code:
 | `verify-causal-lm` | whole loaded-model capture (logits, prefill and decode, batch, reset, reload, greedy) of eight tiny architectures in float32 (`verify-causal-lm --formats` adds bfloat16 and int8) | the CPU and GPU captures of this install (GPU install) |
 | `verify-recipe` | one bundled composed-model recipe (a small transformer `Sequential`), fitted from scratch on every device of the install, its fitted parameters, `digest_` and predictions compared; with the recipe self-test | the other device of this install (GPU install), or a shipped reference record |
 | `verify-model` | one composed program saved with its report in one call (`Program.save`), then `verify-model` in a fresh process on every device of the install, each output against that report | the report the save wrote (saved on the GPU, checked on the CPU and GPU of a GPU install) |
+
+The reference reports of verify-graph, verify-distributed-program and verify-partitioned-program are captured
+by every column's identity record from the installed wheel and admitted with the lane tables
+(`tools/admit_extended_references.py`: every column must equal the CPU column), so after a release record they
+read VERIFIED or DIVERGENT; before the first admission the shipped placeholder reads OWED.
 
 Verdicts: VERIFIED (compared and every value equal), DIVERGENT (a compared value differs), FAILED (the
 command's own checks failed), OWED (its own checks passed but there was nothing to compare with: a CPU-only
@@ -911,8 +924,8 @@ one directory per part:
 
 | Part | Holds |
 |---|---|
-| `record/` | the recorder's summary, every column record JSON it wrote (the tables admission builds from), the chunk logs |
-| `verify/` | the whole `verify --all` JSON report, each single-device command's block under `extended/`, the self-test summary |
+| `record/` | the recorder's summary, every column record JSON it wrote (the tables admission builds from), the single-device verify reference captures (`extended-references/`), the chunk logs |
+| `verify/` | the whole `verify --all` JSON report, each single-device command's block under `extended/`, what each side did per lane (`what-ran.json`), the self-test summary |
 | `proving/` | pass, fail and error counts and the failed test names of each proving pytest step |
 | `smoke/` | the GPU smoke's `SUMMARY.txt` and the failed lanes and tests of each pool |
 

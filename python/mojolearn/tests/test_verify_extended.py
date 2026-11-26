@@ -95,3 +95,20 @@ def test_no_multi_gpu_command_is_named_anywhere_in_verify():
     for command in ("verify-distributed", "verify-cross-validation"):
         with pytest.raises(SystemExit):
             cli.build_parser().parse_args([command])
+
+
+def test_different_paths_same_bits_sample_reads_what_ran_only():
+    from mojolearn import _verify_all as va
+    act = lambda launches, splits: dict(launches=launches, upload_bytes=4096, download_bytes=64, host_splits=splits)
+    cells = [dict(lane=lane, fixture="base", part="infer", side=side, state="IDENTICAL", value=h, family=fam)
+             for lane, fam, h in (("ols", "linear", "ab" * 8), ("ridge", "linear", "cd" * 8), ("rf-clf", "trees", "ef" * 8))
+             for side in ("cpu", "gpu")]
+    report = dict(device=dict(device="L40S", cpu_model="EPYC"), cells=cells, what_ran=dict(sides=dict(
+        gpu=dict(lanes={"ols": act(12, 0), "ridge": act(9, 0), "rf-clf": act(0, 0)}),
+        cpu=dict(lanes={"ols": act(0, 3), "ridge": act(0, 2), "rf-clf": act(0, 8)}))))
+    sample = va.paths_sample(report)
+    assert [r["lane"] for r in sample] == ["ols", "rf-clf"]          # one per family, kernel launches first
+    gpu, cpu = sample[0]["sides"]["gpu"], sample[0]["sides"]["cpu"]
+    assert (gpu["device"], gpu["launches"], cpu["host_splits"]) == ("L40S", 12, 3)
+    assert gpu["hash"] == cpu["hash"] == "ab" * 8
+    assert "Different paths, same bits" in va.paths_sample_lines(sample)[0]

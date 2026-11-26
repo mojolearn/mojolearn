@@ -11,7 +11,8 @@ column (cpu, nvidia, amd, apple) in the repo. git history is the history: no dat
                record   tools/identity_wheel_record.py: identity-wheels.json, every column record JSON the
                         recorder wrote (the reference tables admission builds from), per-chunk record logs
                verify   tools/ops/identity_record_job.sh: the whole `verify --all` JSON report, the single-device
-                        verify commands' reports split out of it (extended/<profile>.json), the self-test summary
+                        verify commands' reports split out of it (extended/<profile>.json), what each side did per
+                        lane (what-ran.json, with the "different paths, same bits" sample), the self-test summary
                proving  tools/ops/proving_job.sh: pass/fail/error counts and the failed test names per pytest step
                smoke    tools/ops/gpu_smoke_job.sh (and the CPU wheel smoke): SUMMARY.txt, the failed lanes and
                         tests from each pool's results.tsv
@@ -220,6 +221,11 @@ def stage(results, out, column, part, commit=None, root=ROOT):
             for name, block in (report.get("extended") or {}).items():
                 _write_json(out / "extended" / (name + ".json"), block)
                 files.append("extended/%s.json" % name)
+            # what each side did per lane, counted by the runtime in the run (`verify --all` what_ran), whole, with
+            # the run's "different paths, same bits" sample
+            _write_json(out / "what-ran.json", dict(what_ran=report.get("what_ran"),
+                                                    paths_sample=report.get("paths_sample")))
+            files.append("what-ran.json")
             if report.get("self_test") is not None:
                 _write_json(out / "self-test.json", report["self_test"])
                 files.append("self-test.json")
