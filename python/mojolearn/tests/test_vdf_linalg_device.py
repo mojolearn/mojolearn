@@ -111,7 +111,10 @@ def _device_array_or_skip(a):
     # TrainDeviceArray exists on an identical GPU installation only.
     if mojolearn.vendor() == "cpu":
         pytest.skip("TrainDeviceArray needs a GPU installation")
-    return training.train_to_device(a)
+    # `train_to_device` is not a public name of mojolearn.training (its `__all__`); the identity lanes and the
+    # other device tests import it from the implementation module (lane gs-fix-2: wrong test).
+    from mojolearn._training_impl import train_to_device
+    return train_to_device(a)
 
 
 # lane vdf-linalg3: TrainDeviceArray inputs (also inside list arguments) with
