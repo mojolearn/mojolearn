@@ -543,8 +543,13 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
     var addresses = List[Int](capacity=len(inputs))
     var sizes = List[Int](capacity=len(inputs))
     # Empty (no allocation) unless an input is device-resident; then one
-    # word per buffer input, -1 for a host one.
+    # word per buffer input, -1 for a host one. `any_slot` records that the
+    # list was started: a slot at input 0 starts it EMPTY (length 0), so its
+    # length cannot say so (lane gs-fix-2: `len(slots) > 0` dropped input 0's
+    # slot, the run then read host address 0, and every metric program whose
+    # first buffer input was resident segfaulted on the GPU install).
     var slots = List[Int]()
+    var any_slot = False
     var owned = List[Int]()
     var resident = xprep_resident_none()
     var resident_read = False
@@ -584,9 +589,10 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
                     var keep = metric_reads_source(src, args, i, value)
                     if keep is not None:
                         slot = resident.slot(keep, Int(py=classical_address(keep)), size_i)
-            if slot >= 0 and len(slots) == 0:
+            if slot >= 0 and not any_slot:
                 slots = List[Int](length=i, fill=-1)
-            if len(slots) > 0:
+                any_slot = True
+            if any_slot:
                 slots.append(slot)
             if size_i == 0:
                 addresses.append(0)
