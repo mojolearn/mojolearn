@@ -66,12 +66,18 @@ bash ~/mojolearn-evidence/compile_slot.sh \
   --evidence ~/mojolearn-evidence/development-builds/my-run
 ```
 
-Repeat that command in the **same worktree and cache location** after editing.
-Unchanged groups reuse their retained binaries. Repository and cache paths are
-part of the key because they can reach compiler/linker output; moving to a new
-worktree intentionally does not claim the old binaries are reusable. Keys also
+Repeat that command after editing; unchanged groups reuse their retained
+binaries. Since key schema v2 (2026-11-26) the key holds no worktree or cache
+path: the same source built in two worktrees at different paths, each with its
+own cache, gave byte-identical bindings (6 of 6 groups, host and sm_89). The one
+path that reaches a binding is the toolchain's library directory, which `mojo
+build` writes as its RUNPATH, so that resolved path is in the key: a worktree
+reuses another's binaries when both use the same toolchain location (a shared
+cache with `--cache`, a pixi environment outside the tree), and rebuilds when
+its toolchain lives elsewhere (a worktree's own `.pixi`). Keys also
 include transitive sources, generators, actual compiler/stdlib package bytes,
-locked dependencies, flags and target. An unresolved import records
+locked dependencies, flags and target. The release layout's key still holds the
+worktree path. An unresolved import records
 `tree-fallback`, widening invalidation rather than guessing it is unrelated.
 `--cache` defaults to `~/.cache/mojolearn-development` and must be outside the
 source tree. Full logs, plan and per-group receipts remain under `--evidence`.
@@ -123,8 +129,15 @@ whose flags or environment name a fault (SABOTAGE, FAULT_INJECT) never reads or 
 build's last line counts the reused units. Over main's last 45 commits 98 percent (CPU column) and 99 percent (GPU
 column) of the 14 group programs had unchanged inputs from one commit to the next.
 
-The cache is per box. Sharing it between boxes through R2 needs presigned URLs minted on the Mac at submit (the R2
-credentials never leave it), as `tools/bincache.py` does for the binding groups.
+Between boxes the programs are shared through R2, with the binding cache's machinery in its `ts` namespace
+(`tscache/v1/<column>/linux/<key>.tar.gz`). `tools/nvidia_central.sh` submit (and so `tools/cpu_central.sh check`)
+mints a URL map with this Mac's credentials for `cpu_box_checks_job.sh` and `native_checks_gpu_job.sh` and stages it
+beside the job as a 0600 file (`NC_TS_URLS`); the credentials never reach a box. On a local miss the box fetches the
+archive and places it only when its manifest's key and fields are the ones the box computed; a program it compiles is
+uploaded into the job's inbox and recorded in the results (`ts-uploads/`). `tools/box_persist.py fetch` promotes
+those uploads when it extracts the final results (`bincache.py promote --namespace ts`, which re-derives each key and
+refuses a fault build); `sh tools/bincache_leg.sh promote --namespace ts <dir>` does it by hand. `NC_TS_R2=0` at
+submit turns the R2 level off for that job.
 
 ## Scripts adopted from ~/mojolearn-evidence (2026-10-28)
 

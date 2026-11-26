@@ -106,6 +106,14 @@ DEFAULT_OUT = "/root/gemm_leg_out/bincache"
 OBJECT_PREFIX = "bincache/v1"
 SABOTAGE_PREFIX = "bincache/sabotage-v1"
 INBOX_PREFIX = "bincache/inbox"
+# NAMESPACES (2026-11-26): the same plan / inbox / promote machinery serves a second content-addressed store, the
+# native-check programs of tools/ops/native_testsuite_cache.py ("ts"). Each namespace has its own object and inbox
+# prefixes, so a map minted for one never reads or writes the other; "ts" has no negative-control prefix (a fault
+# build never reads or fills that cache).
+NAMESPACES = {
+    "bin": dict(objects=OBJECT_PREFIX, sabotage=SABOTAGE_PREFIX, inbox=INBOX_PREFIX),
+    "ts": dict(objects="tscache/v1", sabotage=None, inbox="tscache/inbox"),
+}
 KEY_ENV_PREFIXES = ("MOJOLEARN_", "MOJO_", "MODULAR_")
 # Variables that name a commit, a thread count for RUNNING, a log or this
 # cache. Nothing here reaches `mojo build`; everything else with the prefixes
@@ -2473,24 +2481,33 @@ def cmd_plan(argv):
     ap.add_argument("--expires", type=int, default=7200)
     ap.add_argument("--negative", action="store_true",
                     help="also list the sabotage namespace as sget rows (negative controls)")
+    ap.add_argument("--namespace", choices=sorted(NAMESPACES), default="bin",
+                    help="bin: the binding archives (default); ts: the native-check programs")
     a = ap.parse_args(argv)
     lines, n_get, n_sget = plan_lines(creds_from_env(), a.partition, a.image, a.leg_id, a.slots,
-                                      max_get=a.max_get, expires=a.expires, negative=a.negative)
+                                      max_get=a.max_get, expires=a.expires, negative=a.negative,
+                                      namespace=a.namespace)
     sys.stdout.write("\n".join(lines) + "\n")
     print("BINCACHE PLAN partition=%s entries=%d negative_entries=%d slots=%d"
           % (a.partition, n_get, n_sget, a.slots), file=sys.stderr)
     return 0
 
 
-def plan_lines(creds, partition, image, leg_id, slots, max_get=2000, expires=7200, negative=False):
+def plan_lines(creds, partition, image, leg_id, slots, max_get=2000, expires=7200, negative=False, namespace="bin"):
     """(map lines, gets, sgets): the URL map `plan` prints (and the GitHub
-    build route mints, tools/release_github_build.py)."""
+    build route mints, tools/release_github_build.py). NAMESPACE picks the
+    store (NAMESPACES); the map's #namespace header names it."""
     parts = partition.split("/")
     if len(parts) != 2 or not all(SEG_RE.match(p) for p in parts) or not SEG_RE.match(leg_id):
         raise SystemExit("bincache plan: bad partition or leg id")
+    ns = NAMESPACES[namespace]
+    if negative and ns["sabotage"] is None:
+        raise SystemExit("bincache plan: namespace %s has no negative-control prefix" % namespace)
     lines = ["#partition\t" + partition, "#image\t" + image, "#leg\t" + leg_id]
+    if namespace != "bin":
+        lines.append("#namespace\t" + namespace)
     n_get = n_sget = 0
-    for prefix, verb in ((OBJECT_PREFIX, "get"), (SABOTAGE_PREFIX, "sget")):
+    for prefix, verb in ((ns["objects"], "get"), (ns["sabotage"], "sget")):
         if verb == "sget" and not negative:
             continue
         objs = list_objects(creds, "%s/%s/" % (prefix, partition))
@@ -2505,23 +2522,26 @@ def plan_lines(creds, partition, image, leg_id, slots, max_get=2000, expires=720
                     n_sget += 1
     for i in range(slots):
         slot = "%03d" % i
-        lines.append("put\t%s\t%s" % (slot, presign("PUT", "%s/%s/%s.tar.gz" % (INBOX_PREFIX, leg_id, slot),
+        lines.append("put\t%s\t%s" % (slot, presign("PUT", "%s/%s/%s.tar.gz" % (ns["inbox"], leg_id, slot),
                                                     expires, creds)))
     return lines, n_get, n_sget
 
 
-def check_upload_row(row, keys_dir):
+def check_upload_row(row, keys_dir, namespace="bin"):
     """(slot, dest, key) or raise ValueError. The Mac re-derives the key
     from the fields the box recorded and refuses anything sabotaged."""
+    ns = NAMESPACES[namespace]
     parts = row.rstrip("\n").split("\t")
     if len(parts) != 5 or parts[4] not in ("sabotage=0", "sabotage=1"):
         raise ValueError("malformed row")
     leg, slot, dest, key = parts[:4]
     negative = parts[4] == "sabotage=1"
+    if negative and ns["sabotage"] is None:
+        raise ValueError("namespace %s takes no negative control" % namespace)
     if not SEG_RE.match(leg) or not SEG_RE.match(slot) or not KEY_RE.match(key):
         raise ValueError("bad leg, slot or key")
     m = re.match(r"^%s/([A-Za-z0-9._-]{1,120})/([A-Za-z0-9._-]{1,120})/([0-9a-f]{64})\.tar\.gz$"
-                 % re.escape(SABOTAGE_PREFIX if negative else OBJECT_PREFIX), dest)
+                 % re.escape(ns["sabotage"] if negative else ns["objects"]), dest)
     if not m or m.group(3) != key:
         raise ValueError("bad destination")
     fields = json.loads((Path(keys_dir) / (key + ".json")).read_text())
@@ -2562,13 +2582,13 @@ class R2Store:
         r2_request(self.creds, "DELETE", name)
 
 
-def promote_row(store, leg, slot, dest, key):
+def promote_row(store, leg, slot, dest, key, namespace="bin"):
     """Copy one inbox upload to its content address unless the address already
     holds an archive: then ("same", "") when its files equal the upload's (the
     inbox object is deleted, nothing is written) and ("conflict", line) when
     they differ (nothing is written, the inbox object stays for inspection).
     ("promoted", "") after a copy. Raises on a transport failure."""
-    src = "%s/%s/%s.tar.gz" % (INBOX_PREFIX, leg, slot)
+    src = "%s/%s/%s.tar.gz" % (NAMESPACES[namespace]["inbox"], leg, slot)
     with tempfile.TemporaryDirectory(prefix="bincache-promote-") as td:
         old, new = os.path.join(td, "old.tar.gz"), os.path.join(td, "new.tar.gz")
         if store.fetch(dest, old):
@@ -2591,8 +2611,11 @@ def promote_row(store, leg, slot, dest, key):
 
 
 def cmd_promote(argv, store=None):
-    if len(argv) != 1:
-        raise SystemExit("usage: bincache.py promote <leg out>/remote/bincache")
+    namespace = "bin"
+    if argv[:1] == ["--namespace"] and len(argv) >= 2:
+        namespace, argv = argv[1], argv[2:]
+    if len(argv) != 1 or namespace not in NAMESPACES:
+        raise SystemExit("usage: bincache.py promote [--namespace bin|ts] <leg out>/remote/bincache")
     d = Path(argv[0])
     up = d / "uploads.tsv"
     if not up.is_file():
@@ -2604,13 +2627,13 @@ def cmd_promote(argv, store=None):
         if not row.strip():
             continue
         try:
-            leg, slot, dest, key = check_upload_row(row, d / "keys")
+            leg, slot, dest, key = check_upload_row(row, d / "keys", namespace)
         except (ValueError, OSError) as exc:
             print("  refused row: %s" % exc)
             bad += 1
             continue
         try:
-            verdict, line = promote_row(store, leg, slot, dest, key)
+            verdict, line = promote_row(store, leg, slot, dest, key, namespace)
         except Exception as exc:
             print("  promote failed %s: %s" % (dest, type(exc).__name__))
             bad += 1
