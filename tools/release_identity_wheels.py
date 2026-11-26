@@ -785,7 +785,7 @@ class IdentityOnWheels:
         table = self.identity_dir() / "admitted-table.json"
         table.write_bytes(subprocess.run(["git", "-C", str(self.src), "show", "%s:%s" % (commit, TABLE)],
                                          capture_output=True, check=True).stdout)
-        receipts = self.repack(table)
+        receipts = self.repack(table, self.extended_members())
         self.commit_evidence()
         doc = dict(source_commit=self.commit, commit=commit, branch="ref/" + self.commit[:12], recorded=len(dirs),
                    table_sha256=sha256(table), repacked=receipts, at=dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -865,6 +865,14 @@ class IdentityOnWheels:
         paths = reference_refresh.parse_admit_next(p.stdout or "")
         if p.returncode != 0 or not paths:
             raise StepFailed("the admission refused (rc %s; %s)" % (p.returncode, log))
+        # the single-device verify commands' references, admitted in the same step and the same commit as the lane
+        # tables (verify-complete, Andrew 2026-11-26): every column's capture equal, else nothing is admitted
+        import admit_extended_references as X
+        try:
+            paths = list(paths) + X.admit(self.evidence_roots(), tree=tree, commit=self.commit,
+                                          say=lambda m: self.say("  " + m))
+        except X.AdmitError as exc:
+            raise StepFailed("the single-device verify references were refused: %s" % exc)
         self.must(["git", "-C", str(tree), "add", "--", *paths], what="staging the admission")
         self.must(["git", "-C", str(tree), "commit", "-q", "-m",
                    "Admit identity columns of release %s at %s (the one run on the built wheels)\n\n"
@@ -878,13 +886,24 @@ class IdentityOnWheels:
     def repack_dir(self):
         return self.identity_dir() / "repacked"
 
-    def repack(self, table):
+    def extended_members(self):
+        """{wheel member: admitted file} of the single-device verify references the admission wrote (the repack
+        replaces their `admitted: false` placeholders)."""
+        import admit_extended_references as X
+        out = {}
+        for profile in X.REFERENCED:
+            path = self.identity_dir() / "admit-tree" / X.REFERENCE_DIR / (profile + ".json")
+            if path.is_file() and (read_json(path) or {}).get("admitted"):
+                out["mojolearn/verify_reference/extended/%s.json" % profile] = str(path)
+        return out
+
+    def repack(self, table, extra=None):
         import wheel_table_repack as W
         receipts = {}
         for platform, wheel in (("linux", self.split_final("linux")), ("macos", self.macos_wheel())):
             if not wheel:
                 continue
-            doc = W.repack(wheel, table, self.repack_dir() / platform)
+            doc = W.repack(wheel, table, self.repack_dir() / platform, extra)
             path = self.repack_dir() / platform / (Path(wheel).name + ".repack.json")
             path.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
             receipts[platform] = str(path)

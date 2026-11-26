@@ -1,0 +1,6 @@
+{
+ "admitted": false,
+ "profile": "verify-graph",
+ "schema": "mojolearn.verify-extended-reference.v1",
+ "why": "no reference admitted yet: the identity record admits one (tools/admit_extended_references.py); until then verify --all reads this profile OWED"
+}

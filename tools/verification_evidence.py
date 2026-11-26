@@ -241,6 +241,12 @@ def stage(results, out, column, part, commit=None, root=ROOT):
                             keep_json(src, "tables/%s/w%s-%s" % (col.get("label"), chunk.get("worker"), src.name))
         for path in sorted(results.glob("*/w*/record.log")):
             logs.append((path, Path("logs") / path.parent.parent.name / (path.parent.name + "-record.log")))
+        # the single-device verify commands' reference captures (tools/admit_extended_references.py), whole
+        for path in sorted(results.glob("extended-references/*/*.json")):
+            keep_json(path, "extended-references/%s/%s" % (path.parent.name, path.name))
+        for path in sorted(results.glob("extended-references/*/*.log")):
+            logs.append((path, Path("logs") / "extended-references" / path.parent.name / path.name))
+        manifest["extended_references"] = (summary or {}).get("extended_references")
     if kind == "proving":
         proving = {}
         for step in PROVING_STEPS:

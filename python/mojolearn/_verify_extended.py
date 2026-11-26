@@ -152,13 +152,25 @@ def _capture(profile, step, workdir, vendor):
 # in the controller: judge one profile from its units' values
 # --------------------------------------------------------------------------
 
+#: the shipped reference file's schema (tools/admit_extended_references.py writes it; the source tree carries an
+#: `admitted: false` placeholder, so a release's data-only repack replaces a member and never adds one)
+REFERENCE_SCHEMA = "mojolearn.verify-extended-reference.v1"
+#: the profiles the identity record captures and admits a reference report for (the others compare the CPU and
+#: GPU of the install, or a saved report, in the run)
+REFERENCED = ("verify-graph", "verify-distributed-program", "verify-partitioned-program")
+
+
 def reference(profile, pkg_dir):
-    """The reference report shipped for `profile` (`verify_reference/extended/<profile>.json`), or None."""
+    """The admitted reference report shipped for `profile` (`verify_reference/extended/<profile>.json`), or None
+    (no file, or the placeholder before the first admission)."""
     path = os.path.join(pkg_dir, "verify_reference", REFERENCE_DIR, profile + ".json")
     if not os.path.isfile(path):
         return None
     with open(path, encoding="utf-8") as fh:
-        return json.load(fh)
+        doc = json.load(fh)
+    if doc.get("schema") != REFERENCE_SCHEMA or doc.get("profile") != profile or not doc.get("admitted"):
+        return None
+    return doc.get("report")
 
 
 def _block(profile, verdict, detail, counts, values, compared_with=None):
@@ -190,7 +202,7 @@ def _judge_program(profile, got, ref):
         return _block(profile, FAILED, why, counts, got)
     if ref is None:
         return _block(profile, OWED, f"{counts['passed']} case(s) passed their own oracles; no reference report "
-                      f"to compare digests with", counts, got)
+                      f"admitted yet (the release's identity record admits one)", counts, got)
     from . import _verify_distributed_program as d, _verify_partitioned_program as p
     module = d if profile == "verify-distributed-program" else p
     try:
@@ -227,8 +239,8 @@ def _judge_graph(profile, got, ref):
         bad = [f"{n}: {r.get('error')}" for n, r in rows.items() if r.get("status") != "passed"][:5]
         return _block(profile, FAILED, "; ".join(bad), counts, got)
     if ref is None:
-        return _block(profile, OWED, f"{counts['passed']} case(s) passed; no reference report to compare output "
-                      "words with", counts, got)
+        return _block(profile, OWED, f"{counts['passed']} case(s) passed; no reference report admitted "
+                      "yet (the release's identity record admits one)", counts, got)
     errors = g.compare_reports(report, ref)
     unusable = [e for e in errors if e.startswith("expected:")]
     if unusable:
