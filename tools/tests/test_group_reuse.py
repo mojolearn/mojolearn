@@ -119,7 +119,10 @@ class Prediction(unittest.TestCase):
         }
         for what, (rel, text) in edits.items():
             with self.subTest(what):
-                new_box, new_mac = make_tree(self.td / ("box-" + what)), make_tree(self.td / ("mac-" + what))
+                # the box keeps its checkout at one path from commit to commit (repo_path is a key field, and the
+                # prediction takes it from the leg's record), so the edited commit is checked out where the box was
+                shutil.rmtree(self.td / "box")
+                new_box, new_mac = make_tree(self.td / "box"), make_tree(self.td / ("mac-" + what))
                 for t in (new_box, new_mac):
                     (t / rel).write_text(text)
                 truth = bincache.key_of(box_fields(new_box, "_g_a"))
