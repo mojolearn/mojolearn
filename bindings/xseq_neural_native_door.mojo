@@ -41,11 +41,13 @@ from bindings.xseq_native_common_door import (
 from bindings.admitted_sequence_door import admit_nd_f32
 # lane stream-fits: fit(source=) / partial_fit(source=)
 from autograd.batch_source import (
-    BS_FIELD_STEPS, BS_FIELD_TARGETS, SOURCE_PART_WORDS, batch_source_open, batch_source_class_scan,
+    BS_FIELD_STEPS, BS_FIELD_TARGETS, SOURCE_PART_WORDS, batch_source_class_scan,
     RNN_STREAM_BALANCED, RNN_STREAM_MONITOR_WORDS, RNN_STREAM_POSITION_WORDS,
     batch_source_fit_words, batch_source_part_of, program_training_source_refuse, source_part_load,
 )
-from providers.python.batch_source_pyapi_door import batch_source_spec, batch_source_position_out
+from providers.python.batch_source_pyapi_door import (
+    batch_source_spec, batch_source_position_out, batch_source_hold, BS_DOOR_RECURRENT,
+)
 from providers.python.autograd_program_arrays_pyapi_door import is_integer_input
 from providers.python.xseq_public_lifecycle_pyapi_door import xseq_public_labels, xseq_private_input
 from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
@@ -1116,7 +1118,8 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     estimator's saved source part (`_source_state_`) when partial_fit continues, else the handle's. A classifier's
     classes are the source's class indices (classes_ = 0 .. K - 1, K scanned once from the targets on its first
     fit). RUN: one RNN_FIT call in its streamed form (sequence/xseq_neural_run.mojo xseq_run_rnn_fit_stream): the
-    training image opens the source and runs sequence/recurrent.mojo rnn_fit_stream. PACK: params_, the per-step
+    training image runs sequence/recurrent.mojo rnn_fit_stream in place on the source the handle's owner keeps
+    (its address; opened by the first fit, reused by the later ones). PACK: params_, the per-step
     loss_curve_, the optimizer state, `_source_state_` (the consumed position and the source's binding words, so a
     pickled estimator resumes in a fresh process on the same next batch) and the consumed position on the handle.
     fit trains max_epochs epochs of the source from its position; partial_fit the rest of the current epoch, or
@@ -1133,6 +1136,10 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     var spec = batch_source_spec(source)  # the exact connected BatchSource only (no Python iterable or callback)
     if len(spec.inputs) != 1 or spec.inputs[0] != BS_FIELD_STEPS or spec.target != BS_FIELD_TARGETS:
         raise Error("ValueError: fit(source=) reads a BatchSource opened with inputs=('steps',) and target='targets'")
+    # the source the handle's owner keeps (lane w3i11-source-keep; autograd/batch_source.mojo "the streamed fits"):
+    # opened here once, reused by every later fit and partial_fit while it stands at the handle's position; the
+    # training image uses it in place through its address. `hold` keeps the owner object alive through the call.
+    var hold = batch_source_hold[False, BS_DOOR_RECURRENT](source, spec.copy())
     var max_steps = 0
     var steps_in = _arg(args, 10)
     if steps_in is not None:
@@ -1192,13 +1199,8 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
         if fitted:
             outputs = Int(py=py_item(fields, nk[].k_n_outputs_))
         else:
-            var opened = batch_source_open(spec.copy())
-            try:
-                outputs = batch_source_class_scan(opened, 0, "fit(source=)")
-            except error:
-                opened.close()
-                raise error^
-            opened.close()
+            # the one class admission of this opened source (the training image's check answers from it)
+            outputs = batch_source_class_scan(hold.src[], 0, "fit(source=)")
             if outputs < 2:
                 raise Error("classification needs at least two classes")
             var classes = xseq_zeros_i64(Python.tuple(outputs), context)
@@ -1320,9 +1322,9 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     var provider = xseq_neural_provider(route.entries)
     var entry = _entry(provider)
     var loop_words = fit_loop_words()
-    var path = spec.path
-    var path_bytes = path.as_bytes()
-    var words = batch_source_fit_words(spec, total)
+    # the position to train from (partial_fit continuing its saved one; else the handle's, where the owner stands)
+    hold.src[].seek(spec.epoch, spec.consumed)
+    var words = batch_source_fit_words(hold.src, total)
     var saved = xseq_zeros_i64(Python.tuple(SOURCE_PART_WORDS), context)
     var position = List[Int64](length=RNN_STREAM_POSITION_WORDS, fill=Int64(0))
     var params_address = Int(py=xseq_addr(params))
@@ -1332,13 +1334,12 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     var py = Python()
     with GILReleased(py):
         xseq_run_rnn_fit_stream(entry, request, optimizer, params_address, losses_address, rates_address,
-                                Int(loop_words.unsafe_ptr()), o, words, Int(path_bytes.unsafe_ptr()), len(path_bytes),
-                                saved_address, Int(position.unsafe_ptr()), stream_flags)
-    _ = path_bytes^  # keep the path's bytes and every buffer alive through the native call above
+                                Int(loop_words.unsafe_ptr()), o, words, saved_address, Int(position.unsafe_ptr()),
+                                stream_flags)
+    _ = hold^  # keep the source's owner and every buffer alive through the native call above
     _ = sw
     _ = h0
     _ = c0
-    _ = path
     _ = provider
     _ = params
     _ = state
