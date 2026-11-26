@@ -21,7 +21,9 @@ from autograd.model import FIT_STATE_WORDS
 from autograd.nn_optim import NN_SCHED_ARGS, nn_opt_keeps_third
 # lane stream-fits: Sequential.fit(source=)
 from autograd.batch_source import BS_FIELD_STEPS, BS_FIELD_TARGETS, batch_source_fit_words
-from providers.python.batch_source_pyapi_door import batch_source_spec, batch_source_position_out
+from providers.python.batch_source_pyapi_door import (
+    batch_source_spec, batch_source_position_out, batch_source_hold, BS_DOOR_SEQUENTIAL,
+)
 from providers.python.autograd_program_arrays_pyapi_door import is_integer_input
 from bindings.admitted_sequence_door import admit_nd_f32
 from sequence.fit_loop_words import FIT_LOOP_MARK, fit_loop_words
@@ -394,9 +396,9 @@ def sequential_fit_source(mut mods: NativeModules, model: PythonObject, args: Py
     """Sequential.fit(source=) (lane stream-fits, 2026-11-25). UNPACK: the exact BatchSource handle's words
     (providers/python/batch_source_pyapi_door.mojo batch_source_spec), the model's description for the source's
     record shape ((n, max_length, n_features), or (n, n_features) for records of one step), the fit buffers.
-    RUN: one MODEL_FIT call carrying the source's words and path (FIT_SOURCE_MARK, autograd/model_descriptor.mojo):
-    the training image opens the source and runs the streamed instance of the fit loop (autograd/model.mojo
-    model_fit_state_source). PACK: the fitted fields and the consumed position on the handle; the training state
+    RUN: one MODEL_FIT call carrying the address of the source the handle's owner keeps (FIT_SOURCE_MARK,
+    autograd/model_descriptor.mojo; opened by the first fit, reused by the later ones): the training image runs the
+    streamed instance of the fit loop on it in place (autograd/model.mojo model_fit_state_source). PACK: the fitted fields and the consumed position on the handle; the training state
     (`_fit_state`) holds the position and the source's binding words, so save_checkpoint and a resume in a fresh
     process continue on the same next batch. Lane stream-fits-2: validation_data (X, y[, lengths]) and
     restore_best_weights as for arrays, evaluated at the end of every pass over the source."""
@@ -554,18 +556,16 @@ def sequential_fit_source(mut mods: NativeModules, model: PythonObject, args: Py
     if third is not None:
         native_addresses.append(Int(py=sequential_address(third)))
         native_options.append(FIT_STATE3_MARK)
-    # the source's words, its path's bytes and the position-out words (autograd/model_descriptor.mojo
-    # FIT_SOURCE_MARK)
-    var path = spec.path
-    var path_bytes = path.as_bytes()
-    var words = batch_source_fit_words(spec, max_steps)
-    words.append(len(path_bytes))
+    # the source the handle's owner keeps (opened here once, reused by every later fit while it stands at the
+    # handle's position; lane w3i11-source-keep, autograd/batch_source.mojo "the streamed fits"): its address and
+    # max_steps, then the position-out words (autograd/model_descriptor.mojo FIT_SOURCE_MARK). `hold` keeps the owner
+    # object alive through the native call.
+    var hold = batch_source_hold[False, BS_DOOR_SEQUENTIAL](source, spec.copy())
+    var words = batch_source_fit_words(hold.src, max_steps)
     for k in range(len(words)):  # small-loop(the source words)
         native_options.append(words[k])
-    native_options.append(len(words))
     native_options.append(FIT_SOURCE_MARK)
     var position = List[Int64](length=2, fill=Int64(0))
-    native_addresses.append(Int(path_bytes.unsafe_ptr()))
     native_addresses.append(Int(position.unsafe_ptr()))
     var loop_words = fit_loop_words()
     native_addresses.append(Int(loop_words.unsafe_ptr()))
@@ -575,8 +575,7 @@ def sequential_fit_source(mut mods: NativeModules, model: PythonObject, args: Py
     var n_iter = neural_descriptor_execute(provider, MODEL_FIT, native_addresses, descriptor, native_scalars)
     mods.released()
     # Raw addresses never own data: every buffer the native call read stays alive through it.
-    _ = path_bytes^
-    _ = path
+    _ = hold^  # the owner (and the source the native call trained) stays on the handle
     _ = curve
     _ = previous
     _ = state
