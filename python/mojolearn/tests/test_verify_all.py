@@ -1235,8 +1235,10 @@ def test_quick_is_one_lane_per_family_on_base():
 def test_default_sweep_keeps_all_algorithms_with_one_fixture():
     from types import SimpleNamespace
     assert va._depth(SimpleNamespace()) == "base"
-    assert va._depth(SimpleNamespace(all=True)) == "full"
-    assert va._depth(SimpleNamespace(full=True)) == "full"
+    # a profile flag (--classic, --neural, --all) selects the whole profile, every fixture
+    for profile in ("classic", "neural", "all"):
+        assert va._depth(SimpleNamespace(profile=profile)) == "full"
+    assert va._depth(SimpleNamespace(profile="all", quick=True)) == "quick"
     assert va._depth(SimpleNamespace(quick=True)) == "quick"
     for vendor in ("cpu", "apple", "nvidia", "amd"):
         lanes, fixtures = va.select_lanes(_FakeHarness, _fake_table(), vendor, "base", [])
@@ -1245,7 +1247,7 @@ def test_default_sweep_keeps_all_algorithms_with_one_fixture():
         assert fixtures == ["base"]
         assert full_fixtures == _FakeHarness.FIXTURES
     # Reducing fixture multiplicity must not silently drop batch/property checks.
-    assert va._extra_parts(SimpleNamespace(all=True)) == vref.OPTIONAL_PARTS
+    assert va._extra_parts(SimpleNamespace(profile="all")) == vref.OPTIONAL_PARTS
 
 
 def test_full_and_cpu_lane_sets():

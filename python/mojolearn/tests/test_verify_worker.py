@@ -148,7 +148,7 @@ def controller(monkeypatch, tmp_path, lanes=("one", "two"), divergent=()):
         # one cell worker unless a test asks for more: the incremental
         # journal is then in cell order, which the assertions below read
         extra.setdefault("cell_workers", 1)
-        args = SimpleNamespace(all=True, quick=False, lanes=",".join(lanes), repeats=1, no_models=True,
+        args = SimpleNamespace(profile="classic", quick=False, lanes=",".join(lanes), repeats=1, no_models=True,
                                json=True, json_out=str(output), cell_timeout=1,
                                reference_table=str(table_file), **extra)
         code = verifier.cmd_verify_all(args)
@@ -505,7 +505,7 @@ def test_batch_cells_must_be_positive(monkeypatch, tmp_path, bad):
     run_verify = controller(monkeypatch, tmp_path)
     run, _ = fresh_runs()
     monkeypatch.setattr(worker, "run", run)
-    args = SimpleNamespace(all=True, quick=False, lanes="one,two", repeats=1, no_models=True, json=True,
+    args = SimpleNamespace(profile="classic", quick=False, lanes="one,two", repeats=1, no_models=True, json=True,
                            json_out=None, cell_timeout=1, reference_table=None, batch_cells=bad)
     assert verifier.cmd_verify_all(args) == verifier.EXIT_USAGE
 
