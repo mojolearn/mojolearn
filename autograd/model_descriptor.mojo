@@ -12,6 +12,7 @@ from autograd.model_execution import (
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from sequence.fit_loop_words import FIT_LOOP_MARK
+from autograd.batch_source import BATCH_SOURCE_FIT_WORDS
 
 comptime MODEL_ABI_NAME = "mojolearn.model.execution.v1"
 comptime MODEL_FIT = 0
@@ -20,9 +21,10 @@ comptime MODEL_PREDICT = 2
 comptime MODEL_PREDICT_LABELS = 3
 # lane stream-fits (2026-11-25): two more trailing marks of a fit's options, read and taken off (as FIT_LOOP_MARK)
 # before every count and position below, so the fit ABI of before is unchanged without them.
-#   FIT_SOURCE_MARK: Sequential.fit(source=). The options end [..., source words..., path length, count, mark] (the
-#     words of autograd/batch_source.mojo batch_source_fit_words, then the path's byte count; count = their number
-#     plus one) and the addresses [..., path bytes, position out (2 int64 words)].
+#   FIT_SOURCE_MARK: Sequential.fit(source=). The options end [..., source words..., mark] (the
+#     BATCH_SOURCE_FIT_WORDS words of autograd/batch_source.mojo batch_source_fit_words: the address of the source
+#     the handle's owner keeps, and max_steps; lane w3i11-source-keep) and the addresses [..., position out (2 int64
+#     words)].
 #   FIT_STATE3_MARK: the third optimizer state buffer (centered RMSprop, `optimizer_w_`): the options end [...,
 #     mark] and the addresses [..., the buffer]. Before FIT_SOURCE_MARK's words when both are present.
 comptime FIT_SOURCE_MARK = 0x46535243
@@ -61,9 +63,8 @@ struct NativeModelRequest(Movable):
     # that wants the record ends its options with FIT_LOOP_MARK and its addresses with the words' address;
     # both are taken off here, so every other count and position reads as before.
     var loop_words: Int
-    # lane stream-fits: FIT_SOURCE_MARK's path, words and position-out address (empty / 0: a fit on arrays), and
+    # lane stream-fits: FIT_SOURCE_MARK's words and position-out address (empty / 0: a fit on arrays), and
     # FIT_STATE3_MARK's buffer (0: none)
-    var source_path: String
     var source_words: List[Int]
     var source_out: Int
     var state3: Int
@@ -83,7 +84,6 @@ struct NativeModelRequest(Movable):
             raise Error("native model: invalid scalar span")
         self.addresses = native_descriptor_words(aa, na)
         self.loop_words = 0
-        self.source_path = String("")
         self.source_words = List[Int]()
         self.source_out = 0
         self.state3 = 0
@@ -94,26 +94,16 @@ struct NativeModelRequest(Movable):
             nopt -= 1
             marks += 1
             self.loop_words = self.addresses.pop()
-        if (op <= MODEL_FIT_LABELS and nopt > 1 and len(self.addresses) > 2
+        if (op <= MODEL_FIT_LABELS and nopt > BATCH_SOURCE_FIT_WORDS and len(self.addresses) > 1
                 and words[7 + nprog + nopt - 1] == FIT_SOURCE_MARK):
-            var count = words[7 + nprog + nopt - 2]
-            if count < 2 or count + 2 > nopt:
-                raise Error("native model: damaged batch source words")
-            var first = 7 + nprog + nopt - 2 - count
-            for k in range(count - 1):  # small-loop(the source words)
+            var first = 7 + nprog + nopt - 1 - BATCH_SOURCE_FIT_WORDS
+            for k in range(BATCH_SOURCE_FIT_WORDS):  # small-loop(the source words)
                 self.source_words.append(words[first + k])
-            var path_bytes = words[first + count - 1]
-            nopt -= count + 2
-            marks += count + 2
+            nopt -= BATCH_SOURCE_FIT_WORDS + 1
+            marks += BATCH_SOURCE_FIT_WORDS + 1
             self.source_out = self.addresses.pop()
-            var path_address = self.addresses.pop()
-            if path_bytes < 1 or path_address == 0 or self.source_out == 0:
+            if self.source_words[0] == 0 or self.source_out == 0:
                 raise Error("native model: damaged batch source words")
-            var source = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=path_address)
-            var text = List[UInt8](capacity=path_bytes)
-            for i in range(path_bytes):  # driver-loop: over the bytes of the source's path
-                text.append(source[i])
-            self.source_path = String(StringSlice(unsafe_from_utf8=Span(text)))
         if (op <= MODEL_FIT_LABELS and nopt > 0 and len(self.addresses) > 0
                 and words[7 + nprog + nopt - 1] == FIT_STATE3_MARK):
             nopt -= 1
@@ -173,7 +163,7 @@ def model_request_execute[E: Exec](mut ex: E, op: Int, request: NativeModelReque
     if op == MODEL_FIT:
         if request.source_out != 0:
             return model_fit_source_native(ex, request.addresses, request.program, request.options,
-                                           request.floats, request.source_path, request.source_words,
+                                           request.floats, request.source_words,
                                            request.source_out, request.loop_words, request.state3,
                                            Optional[List[CastIn]](request.sources.copy()))
         return model_fit_native(ex, request.addresses, request.sources, request.program,
