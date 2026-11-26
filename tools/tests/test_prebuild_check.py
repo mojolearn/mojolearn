@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import io
 import subprocess
+import sys
 import tempfile
 import unittest
 import unittest.mock
@@ -71,8 +72,11 @@ class SourceAuditTest(unittest.TestCase):
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
         with tempfile.TemporaryDirectory() as tmp:
             tree = pc.export_tree(head, Path(tmp) / "tree")
+            # The child is this test's own interpreter, as prebuild_check runs its parts with sys.executable: the
+            # commit's packer (packaging/linux/pack_wheel.py) needs Python 3.11+ (tomllib) and runs in the pkg env,
+            # and a bare `python3` is the box's system 3.10 (Ubuntu 22.04), which the packer refuses.
             out = subprocess.run(
-                ["python3", "-c", "import sys; sys.path.insert(0, sys.argv[1]); import prebuild_check as pc; "
+                [sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); import prebuild_check as pc; "
                  "e = pc.wheel_entries(sys.argv[2], sys.argv[3]); "
                  "print(e['mojolearn/_identity_break.py']); print(e['mojolearn/__init__.py']); "
                  "print(e['mojolearn_diagnostics.py']); print(any(m.startswith('mojolearn/tests/') for m in e))",
