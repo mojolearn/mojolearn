@@ -101,3 +101,39 @@ def test_the_full_pod_sync_records_the_synced_commit():
     full = text[text.index("# FULL SYNC"):]
     full = full[:full.index('\n    ;;\n')]
     assert "devpod_synced" in full and "commit=%s" in full
+
+
+def test_the_identity_record_job_preflight_reads_the_synced_commit(tmp_path):
+    """rel-fix-1 (2026-11-26): the job's preflight compares the wheels with the tree's commit, so a patch-synced tree
+    whose HEAD is the merge base still admits the build's wheels and refuses another commit's."""
+    repo, head = _repo(tmp_path)
+    synced = "ab" * 20
+    _record(repo, synced, head)
+    wheels = tmp_path / "w"
+    wheels.mkdir()
+    for name in (f"mojolearn_core-0.8.67.dev0+{synced[:12]}-py3-none-manylinux_2_35_x86_64.whl",
+                 f"mojolearn_nvidia-0.8.67.dev0+{synced[:12]}-py3-none-manylinux_2_35_x86_64.whl"):
+        (wheels / name).write_text("")
+    job = tmp_path / "tree/tools/ops"
+    job.mkdir(parents=True)
+    for f in ("identity_record_job.sh", "tree_commit.sh"):
+        (job / f).write_text((ROOT / "tools/ops" / f).read_text())
+    (tmp_path / "tree/tools/identity_wheel_record.py").write_text("")
+    env = dict(os.environ, IR_WHEEL_DIR=str(wheels), MOJOLEARN_RESULTS_DIR=str(tmp_path / "res"))
+    p = subprocess.run(["bash", str(job / "identity_record_job.sh"), "--preflight"], capture_output=True, text=True,
+                       env=env)
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert p.stdout.count("PREFLIGHT ok MATCH") == 2
+    _record(repo, "cd" * 20, head)
+    p = subprocess.run(["bash", str(job / "identity_record_job.sh"), "--preflight"], capture_output=True, text=True,
+                       env=env)
+    assert p.returncode == 4 and "PREFLIGHT FAIL MISMATCH" in p.stdout
+
+
+def test_the_recorder_names_the_trees_commit_not_head():
+    text = (ROOT / "tools/record_identity_column.sh").read_text()
+    assert '. "$ROOT/tools/ops/tree_commit.sh"' in text and 'COMMIT=$(tree_commit "$ROOT")' in text
+    assert "export MOJOLEARN_COMMIT=$COMMIT" in text
+    job = (ROOT / "tools/ops/identity_record_job.sh").read_text()
+    # the job's harness is its own tree, fixed at the start, and the chunk logs land in the results dir
+    assert 'worktree add -q --detach "$TREE"' in job and '--out "$RES/identity"' in job

@@ -137,6 +137,24 @@ def auto_workers(gpus, nproc, free_gib):
     return max(1, min(by_cores, by_memory))
 
 
+def alloc_cores():
+    """The process's core allocation: affinity, capped by the cgroup's cpu.max (AGENTS.md part 1: on a rented box the
+    core count is the allocation, not the host's visible CPUs). rel-fix-1, 2026-11-26: os.cpu_count() read the
+    L40S host's 128 CPUs for a 14-core pod ("busy plan: 3 worker(s) of 3 (1 device(s), 128 core(s)...")."""
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        cores = os.cpu_count() or 1
+    try:
+        with open("/sys/fs/cgroup/cpu.max", encoding="ascii") as stream:
+            quota, period = stream.read().split()[:2]
+        if quota != "max":
+            cores = min(cores, max(1, int(quota) // int(period)))
+    except (OSError, ValueError):
+        pass
+    return max(1, cores)
+
+
 def gpu_free_gib(vendor):
     """The smallest free memory of the box's GPUs in GiB (nvidia-smi / rocm-smi), or None."""
     try:
@@ -263,7 +281,7 @@ class Run:
             raise SystemExit("identity_wheel_record: --columns is a comma list of distinct columns")
         labels = {c: label(c, self.a.label_device) for c in columns}
         py, listed = self.install()
-        nproc = os.cpu_count() or 1
+        nproc = alloc_cores()
         devices = list(range(self.a.gpus))
         vendor = "nvidia" if columns[0] in ("nvidia", "ptx") else columns[0]
         free = gpu_free_gib(vendor) if devices else None
