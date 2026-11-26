@@ -134,8 +134,9 @@ def test_scores_of_the_metrics_family_are_refused_in_words_on_a_cpu_route(spec):
         pytest.skip("this score runs on the route's own metrics entry")
     x, y = spec[3]()
     model = build(spec, device="cpu").fit(x, y)
-    with pytest.raises(ValueError, match=r"device='cpu' is not available for \w+\.score"):
-        model.score(x, y)
+    # The CPU metrics image is connected beside the GPU set (373a48c4d2; bindings/msel and the family's CPU
+    # label scope): the score runs on the CPU route, no longer refused (lane gs-fix-2: wrong test).
+    assert isinstance(model.score(x, y), float)
     assert isinstance(build(spec).fit(x, y).score(x, y), float)
 
 
@@ -145,8 +146,8 @@ def test_multi_output_r2_is_refused_in_words_on_a_cpu_route():
     both = np.stack([y, -y], axis=1)
     model = MLPRegressor(device="cpu", **MLP).fit(x, both)
     assert model.predict(x).shape == both.shape
-    with pytest.raises(ValueError, match=r"device='cpu' is not available for MLPRegressor\.score"):
-        model.score(x, both)
+    # Scored on the CPU route (the CPU metrics image beside the GPU set; lane gs-fix-2: wrong test).
+    assert isinstance(model.score(x, both), float)
 
 
 @case
@@ -190,7 +191,9 @@ def test_croston_runs_on_its_device_and_returns_the_same_bits(cls):
     assert cpu.get_params()["device"] == "cpu" and gpu.get_params()["device"] is None
     assert np.asarray(cpu.mean_).tobytes() == np.asarray(gpu.mean_).tobytes()
     for _ in range(2):                                         # interleaved calls: each keeps its own route
-        assert np.asarray(cpu.predict(3)).tobytes() == np.asarray(gpu.predict(3)).tobytes()
+        # predict returns {"mean": forecasts} (python/mojolearn/_x_sequence_croston.py predict); the test
+        # compared the dicts' object words (lane gs-fix-2: wrong test).
+        assert np.asarray(cpu.predict(3)["mean"]).tobytes() == np.asarray(gpu.predict(3)["mean"]).tobytes()
     assert kind(device="cpu").set_params(device=None).get_params()["device"] is None
 
 
