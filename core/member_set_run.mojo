@@ -38,7 +38,7 @@ from core.host_parallel import host_parallelize
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_pin_settle,
     member_y_pin_settle, member_weights_pin_settle,
-    MEMBER_OP_FIT, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX, MEMBER_SCOPE_NONE,
+    MEMBER_OP_FIT, MEMBER_OP_CAPABILITIES, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX, MEMBER_SCOPE_NONE,
 )
 
 #: Words below which a gather is not split (a task costs more than the
@@ -572,6 +572,22 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
     var call = member_new(run[].plans[u])
     call.scope = run[].scope
     call.pin = 0
+    if by_index:
+        # THE KIND'S ANSWER (lane gs-fix-4, 2026-11-26). `member.capabilities` is the FAMILY'S UNION (the probe of
+        # `member_resolve`, state 0); an index is read by a KIND. On a GPU route the x_neighbors union carries
+        # MEMBER_CAN_ROW_INDEX (core/xneighbors_member.mojo `_fold_bits`, NearestCentroid and the fitted-rows
+        # kinds), so a search's fold fit handed PolynomialCountSketch, SkewedChi2Sampler and SVGP a row index
+        # and they refused it ("reads whole host views", test_mf_nbr6_members on the L40S). The new state is asked
+        # once (core/member_abi.mojo: with a live state the entry answers for that state's kind), only for a
+        # unit the union would hand an index; a kind without the bit gets the gathered block below, as the ABI
+        # says ("without it the caller hands over a gathered host view"). One native call per such unit, no data.
+        var kind_bits = 0
+        try:
+            kind_bits = member_call(member, MEMBER_OP_CAPABILITIES, call)
+        except:
+            kind_bits = 0
+        by_index = ((row_count == 0 or (kind_bits & MEMBER_CAN_ROW_INDEX) != 0)
+            and (column_count == 0 or (kind_bits & MEMBER_CAN_COLUMN_INDEX) != 0))
     # THE PIN RULE: the member's X object is offered unless the worker
     # gathers the drawn block into its own buffer below.
     var offer = run[].pin_tokens[u]
