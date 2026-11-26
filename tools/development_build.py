@@ -107,7 +107,7 @@ import release_limits
 
 REPO = Path(__file__).resolve().parent.parent
 SCHEMA = "mojolearn.development-build.v1"
-KEY_SCHEMA = "mojolearn.development-group.v1"
+KEY_SCHEMA = "mojolearn.development-group.v2"
 MANIFEST = "bindings/development_groups.json"
 # A group's `builders` key field is its effective compile recipe, not the
 # controller's source. The two shell scripts compose every compiler flag,
@@ -126,7 +126,7 @@ BUILD_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh", "bindin
 # repository-owned host math library from a fixed path in every set; release
 # packaging builds it with packaging/portable_math/stage.py. It is a C build
 # (cc/clang), keyed on its sources, stage.py's flags and the C compiler.
-SUPPORT_SCHEMA = "mojolearn.development-support.v1"
+SUPPORT_SCHEMA = "mojolearn.development-support.v2"
 PORTABLE_MATH_INPUTS = ("packaging/portable_math/portable_math.c",
                         "packaging/portable_math/powers_of_ten.h",
                         "packaging/portable_math/stage.py")
@@ -487,7 +487,6 @@ def support_rows(repo, cache, plat, c_facts):
         raise BuildError("portable math sources missing: " + ", ".join(missing))
     darwin = plat == "darwin"
     fields = {"schema": SUPPORT_SCHEMA, "name": "portable_math", "platform": plat,
-              "repo": str(repo), "cache": str(cache),
               "inputs": {name: bincache.sha256_file(repo / name) for name in PORTABLE_MATH_INPUTS},
               "c_toolchain": c_facts}
     row = {"name": "portable_math", "stem": "libMojolearnMath",
@@ -622,7 +621,10 @@ def toolchain_facts(repo):
     packages = {p.name: value for p, value in
                 zip(listed, parallel_map(bincache.sha256_file, listed, planner_workers()))}
     config = repo / "pixi.toml"
+    # the toolchain's library directory, resolved: what `mojo build` writes as the binding's RUNPATH (KEY_SCHEMA v2)
+    library = repo / ".pixi/envs/default/lib"
     return {"available": available, "compiler": str(compiler.resolve()),
+            "library": str(library.resolve()) if library.exists() else None,
             "compiler_sha256": bincache.sha256_file(compiler) if available else None,
             "version": version_banner([str(compiler), "--version"]) if available else None,
             "locked": bincache.toolchain(repo), "installed": bincache.installed_toolchain(repo),
@@ -660,9 +662,19 @@ def build_input_scripts(repo):
             for p in BUILD_INPUTS}
 
 
+# NO CHECKOUT OR CACHE PATH IN THE KEY (schema v2, 2026-11-26). v1 keyed both absolute paths "because they can reach
+# compiler/linker output", so a second worktree, or the same one with another --cache, rebuilt every group. Measured
+# with Mojo 1.2.0 on Linux: the same source built in two checkouts at different paths, each with its own cache, gave
+# BYTE-IDENTICAL outputs for 6 of 6 groups (host: embedding, forecast, ivf_search, resample; identical sm_89:
+# resample, tsa), with no checkout path in any of them. The one path that does reach the output is the TOOLCHAIN's:
+# `mojo build` writes its own library directory as the binding's RUNPATH (and the build-id hashes it; -Xlinker can
+# only add entries, not drop it), so the same source built with a toolchain at another path differed in 110 bytes. That
+# path is in the key (toolchain_facts: the resolved compiler and its library directory), so a hit is always an
+# artifact whose RUNPATH names this checkout's own toolchain location. The release layout's key
+# (RELEASE_KEY_SCHEMA) still holds the checkout path: the Mac's linker was not measured.
 def group_fields(repo, cache, mode, plat, stem, flags_class, members, graph, scripts, facts, effective):
     """The key fields of one group; make_plan and the in-flight input check share them."""
-    return {"schema": KEY_SCHEMA, "repo": str(repo), "cache": str(cache),
+    return {"schema": KEY_SCHEMA,
             "mode": mode, "platform": plat, "stem": stem, "flags_class": flags_class,
             "members": members, "source": graph.closure(members),
             "builders": compile_recipe(scripts, mode, stem, flags_class),
@@ -775,7 +787,7 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None, c_fa
     def plan_row(item):
         (mode, effective, stem, flags_class, members), fields = item
         row = {"mode": mode, "stem": stem, "members": members, "flags_class": flags_class,
-               "key": digest(fields), "fields": fields,
+               "key": digest(fields), "fields": fields, "repo": str(repo),
                "selected": selected_group(mode, stem, selection)}
         row["auto_compile_jobs"] = auto_compile_jobs(mode, env, plat)
         row["compile_jobs"] = int(effective["MOJOLEARN_COMPILE_JOBS"])
@@ -1083,7 +1095,7 @@ def group_needs(all_rows, wanted, per_job_gib=None, floor_bytes=0):
 
 def source_bytes(row):
     """Bytes of a group's source closure (missing files count zero)."""
-    repo = row["fields"].get("repo")
+    repo = row.get("repo") or row["fields"].get("repo")  # the plan row's checkout (not a key field since v2)
     total = 0
     for name in row["fields"]["source"]["files"] if repo else ():  # driver-loop: over closure files, stat only
         try:

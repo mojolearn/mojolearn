@@ -1860,3 +1860,36 @@ def test_a_passing_build_records_the_calibration_reference(repo, tmp_path, monke
     assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence",
                      str(tmp_path / "evidence2")]) == 1
     assert json.loads((cache / dev.CALIBRATION_FILE).read_text())["seconds_per_3m_updates"] == 99.0
+
+
+def test_the_key_holds_no_checkout_or_cache_path(repo, tmp_path):
+    # KEY_SCHEMA v2 (2026-11-26): the same source in another checkout, planned with another cache, keys alike; the
+    # measured outputs of such builds were byte-identical (tools/development_build.py, the note above group_fields)
+    import shutil
+    before = dev.make_plan(repo, tmp_path / "cache", ["identical"], ENV, facts=FACTS, plat="linux")
+    other = tmp_path / "elsewhere" / "second-worktree"
+    shutil.copytree(repo, other)
+    after = dev.make_plan(other, tmp_path / "another-cache", ["identical"], ENV, facts=FACTS, plat="linux")
+    assert keys(before) == keys(after)
+    assert [r["key"] for r in before["support"]] == [r["key"] for r in after["support"]]
+    for row in before["groups"] + before["support"]:
+        text = json.dumps(row["fields"])
+        assert str(repo) not in text and str(tmp_path) not in text, row["stem"]
+    assert all(row["repo"] == str(other.resolve()) for row in after["groups"])  # kept on the row, for sizing only
+
+
+def test_the_toolchain_location_is_in_the_key(repo, tmp_path):
+    # the one path that reaches a binding: `mojo build` writes its library directory as the RUNPATH
+    a = dev.make_plan(repo, tmp_path / "cache", ["identical"], ENV, facts=dict(FACTS, library="/env/a/lib"), plat="linux")
+    b = dev.make_plan(repo, tmp_path / "cache", ["identical"], ENV, facts=dict(FACTS, library="/env/b/lib"), plat="linux")
+    assert changed(a, b) == set(keys(a))
+
+
+def test_toolchain_facts_record_the_resolved_library_directory(tmp_path):
+    root = tmp_path / "checkout"
+    real = tmp_path / "shared-env" / "lib"
+    real.mkdir(parents=True)
+    (root / ".pixi/envs/default").mkdir(parents=True)
+    (root / ".pixi/envs/default/lib").symlink_to(real)
+    assert dev.toolchain_facts(root)["library"] == str(real.resolve())
+    assert dev.toolchain_facts(tmp_path / "no-env")["library"] is None

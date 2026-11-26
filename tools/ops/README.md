@@ -66,12 +66,18 @@ bash ~/mojolearn-evidence/compile_slot.sh \
   --evidence ~/mojolearn-evidence/development-builds/my-run
 ```
 
-Repeat that command in the **same worktree and cache location** after editing.
-Unchanged groups reuse their retained binaries. Repository and cache paths are
-part of the key because they can reach compiler/linker output; moving to a new
-worktree intentionally does not claim the old binaries are reusable. Keys also
+Repeat that command after editing; unchanged groups reuse their retained
+binaries. Since key schema v2 (2026-11-26) the key holds no worktree or cache
+path: the same source built in two worktrees at different paths, each with its
+own cache, gave byte-identical bindings (6 of 6 groups, host and sm_89). The one
+path that reaches a binding is the toolchain's library directory, which `mojo
+build` writes as its RUNPATH, so that resolved path is in the key: a worktree
+reuses another's binaries when both use the same toolchain location (a shared
+cache with `--cache`, a pixi environment outside the tree), and rebuilds when
+its toolchain lives elsewhere (a worktree's own `.pixi`). Keys also
 include transitive sources, generators, actual compiler/stdlib package bytes,
-locked dependencies, flags and target. An unresolved import records
+locked dependencies, flags and target. The release layout's key still holds the
+worktree path. An unresolved import records
 `tree-fallback`, widening invalidation rather than guessing it is unrelated.
 `--cache` defaults to `~/.cache/mojolearn-development` and must be outside the
 source tree. Full logs, plan and per-group receipts remain under `--evidence`.
