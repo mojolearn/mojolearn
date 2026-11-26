@@ -51,7 +51,10 @@ def _run_arms(root, device):
                     if chunk:
                         log = open(outs[label] / f"shard{shard}.log", "w")
                         running.append((label, log, subprocess.Popen(
-                            [sys.executable, SCRIPT, str(outs[label]), *chunk], env=env, cwd=str(outs[label]),
+                            # -X faulthandler: a case process that dies on a signal writes its Python frames
+                            # to the shard log (L40S 2026-11-26: four cases died and the logs named nothing).
+                            [sys.executable, "-X", "faulthandler", SCRIPT, str(outs[label]), *chunk], env=env,
+                            cwd=str(outs[label]),
                             stdout=log, stderr=subprocess.STDOUT)))
             for label, log, process in running:
                 process.wait(timeout=3600)

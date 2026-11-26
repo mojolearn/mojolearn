@@ -340,6 +340,8 @@ def _flatten(prefix, value, into):
 def run(outdir, names):
     os.makedirs(outdir, exist_ok=True)
     for name in names:
+        # The shard log names the case a dead process was in (with -X faulthandler: its frame too).
+        print(f"CASE {name}", flush=True)
         arrays = {}
         try:
             _flatten("", CASES[name](), arrays)
