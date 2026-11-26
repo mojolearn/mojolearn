@@ -176,10 +176,20 @@ def test_sparse_preference_refuses_a_rebound_python_lookup(monkeypatch):
     from pandas._libs import sparse
     source = pd.Series(pd.arrays.SparseArray([0, 1, 2], fill_value=0))
     index_type = type(source.array.sp_index)
+    # A plain setattr, restored here: monkeypatch.setattr records the old
+    # value before the assignment, so on an immutable type its teardown undo
+    # raised the same TypeError and turned the skip into an error.
+    original = index_type.__dict__.get("lookup")
     try:
-        monkeypatch.setattr(index_type, "lookup", lambda self, i: 0)
+        setattr(index_type, "lookup", lambda self, i: 0)
     except TypeError:
         pytest.skip("this pandas build has immutable sparse index types")
-    with pytest.raises(TypeError, match="immutable native descriptors"):
-        _fit(source)
+    try:
+        with pytest.raises(TypeError, match="immutable native descriptors"):
+            _fit(source)
+    finally:
+        if original is None:
+            delattr(index_type, "lookup")
+        else:
+            setattr(index_type, "lookup", original)
     assert sparse is not None
