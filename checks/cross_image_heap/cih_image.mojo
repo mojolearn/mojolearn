@@ -60,7 +60,12 @@ def cih_grow(address: Int, n: Int) abi("C") -> Int:
     fresh.append(h[].ids.copy())
     fresh.append(List[Int](length=n, fill=7))
     h[].plans = fresh^
-    h[].path = h[].path + "/grown"
+    # Build the new path in a temporary first: assigning `h[].path + ...`
+    # straight back to h[].path read the freed old buffer (ASan
+    # heap-use-after-free with ONE image on both sides, w3-integrate-11; the
+    # AGENTS.md string rule).
+    var grown_path = String(h[].path) + "/grown"
+    h[].path = grown_path^
     return len(h[].ids)
 
 
