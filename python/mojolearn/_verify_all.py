@@ -1278,6 +1278,16 @@ CELL_COST_FORMAT = "mojolearn.verify-cell-seconds.v1"
 #: A batch closes early on its estimate only past this many seconds: a short run keeps whole batches (one worker
 #: start per VERIFY_BATCH_CELLS cells), only a long one splits its heavy lanes.
 MIN_SPLIT_BATCH_S = 60.0
+#: EACH CELL'S LIMIT FROM ITS LANE'S MEASURED COST (rel-fix-2, 2026-11-26). The limit of a cell is the larger of
+#: --cell-timeout (a floor, 120 s by default) and CELL_LIMIT_FACTOR times its lane's measured mean cell seconds
+#: (`cell_cost_hints`), at most CELL_LIMIT_MAX_S. Why: identity record nvc-ab-20261126T214026Z-7116a8 (acdf0ad303,
+#: L40S) timed out generic-pickle-trees/odd, /wide and /base at the blanket 120 s. Their lane's mean is 65.6 s
+#: measured alone; the longest-first pool now starts the four generic-*-trees lanes' batches together at the head
+#: of the run, up to 13 tree fits share the one GPU and the 14 cores, and a cell then takes about twice its alone
+#: time. Four times the measured mean covers that contention and the first cell's process start with room to
+#: spare; a cell past it is a hang or a real slowdown and FAILS. The cap keeps a hang guard for every lane.
+CELL_LIMIT_FACTOR = 4.0
+CELL_LIMIT_MAX_S = 1800.0
 
 
 def _cell_cost_cache():
@@ -1288,9 +1298,9 @@ def _cell_cost_cache():
 def cell_cost_hints():
     """({lane or @unit: seconds}, source): how long each lane's cell (and each tail unit: `@models`, `@public`,
     `@cross-check` a batch, `@extended:<profile>`) took, from the last `verify --all` on this machine (the user
-    cache), over the shipped `verify_reference/cell_seconds.json` (one L40S run). They ORDER the pool and close
-    batches early; no cell value, verdict, part or comparison reads them, and a missing or unreadable file only
-    leaves the order unsorted."""
+    cache), over the shipped `verify_reference/cell_seconds.json` (one L40S run). They ORDER the pool, close
+    batches early and set each cell's worker limit (`cell_limit`); no cell value, verdict, part or comparison reads
+    them, and a missing or unreadable file only leaves the order unsorted and every limit at --cell-timeout."""
     hints, sources = {}, []
     for name, path in (("shipped", os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                 "verify_reference", "cell_seconds.json")),
@@ -1307,11 +1317,32 @@ def cell_cost_hints():
     return hints, "+".join(sources) or "none"
 
 
-def save_cell_cost_hints(hints, cell_seconds, unit_seconds):
+def cell_limit(hints, lane, floor):
+    """One cell's worker limit in seconds: `floor` (--cell-timeout), raised to CELL_LIMIT_FACTOR times the lane's
+    measured mean cell seconds, at most CELL_LIMIT_MAX_S (and never below the floor)."""
+    measured = float(hints.get(lane, 0.0) or 0.0)
+    return max(floor, min(CELL_LIMIT_MAX_S, CELL_LIMIT_FACTOR * measured))
+
+
+def _children_cpu_seconds():
+    """User plus system CPU seconds of every reaped child process of this one (the worker processes and their own
+    children), or 0.0 where `resource` is unavailable."""
+    try:
+        import resource
+        usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+        return usage.ru_utime + usage.ru_stime
+    except (ImportError, OSError, AttributeError):
+        return 0.0
+
+
+def save_cell_cost_hints(hints, cell_seconds, unit_seconds, skip=()):
     """This run's mean cell seconds per lane and its tail units' seconds, merged over the hints it started with,
-    into the user cache for the next run's order. Never fails the run."""
+    into the user cache for the next run's order. `skip` (the timed-out cells) is left out: a killed cell's
+    seconds are its limit, not its cost, and would raise the next limit. Never fails the run."""
     per_lane = {}
     for (lane, _fixture), seconds in cell_seconds.items():
+        if (lane, _fixture) in skip:
+            continue
         per_lane.setdefault(lane, []).append(seconds)
     merged = dict(hints)
     merged.update({lane: round(sum(v) / len(v), 3) for lane, v in per_lane.items() if v})
@@ -4376,7 +4407,8 @@ def cmd_verify_all(args):
                      batch_cells=None if fresh_only else batch_cells, batches=0, batch_stops=[],
                      batched_cells=0, fresh_cells=0, fallback_cells=[],
                      timeout_s=timeout, completed_cells=0,
-                     total_cells=len(lanes) * len(fixtures), interrupted=None, crashed_cells=[])
+                     total_cells=len(lanes) * len(fixtures), interrupted=None, crashed_cells=[],
+                     timed_out_cells=[])
     # A crashed cell worker (non-zero exit or signal, no timeout and no
     # unhealthy-device signal) refuses its own cell and the sweep goes on:
     # that cell ran in a fresh process (directly, or as a batch fallback), so
@@ -4438,11 +4470,11 @@ def cmd_verify_all(args):
             if act and side in lane_activity:
                 lane_activity[side][lane] = cb.activity_merge(lane_activity[side].get(lane), act)
 
-    def isolated(action, **kwargs):
+    def isolated(action, limit=None, **kwargs):
         with lock:
             progress(action)
         result = worker.run(dict(action=action, harness=os.path.abspath(harness_file),
-                                 table=os.path.abspath(table_file), **kwargs), timeout, log)
+                                 table=os.path.abspath(table_file), **kwargs), limit or timeout, log)
         with lock:
             for binding in result.get("bindings", []):
                 worker_bindings[(binding["module"], binding["sha256"])] = binding
@@ -4493,16 +4525,34 @@ def cmd_verify_all(args):
             f"{cell_seconds[(lane, f)]:.1f}s: {detail_line(cell_counts)}")
         progress(f"{lane}/{f}", judged)
 
+    def timed_out_cell(lane, f, message, seconds):
+        # A TIMEOUT FAILS ITS OWN CELL (rel-fix-2, 2026-11-26). The L40S record nvc-ab-20261126T214026Z-7116a8 stopped
+        # the whole run on generic-pickle-trees/base ("CANNOT RUN ... 145764 refused") and refused 907 lanes that never
+        # ran. A cell past its limit (`cell_limit`) says nothing about the device or about any other cell: it is
+        # FAILED here, with its stacks, named in the report and counted REFUSED, so the run exits non-zero; every other
+        # cell still runs. An unhealthy-device signal still stops the sweep.
+        with lock:
+            execution["timed_out_cells"].append(dict(lane=lane, fixture=f, limit_s=cell_limit(hints, lane, timeout),
+                                                     error=message[:500]))
+            log(f"    TIMED OUT (cell FAILED, sweep continues): {message[:300]}")
+        record(lane, f, refused_sides("timed out: " + message), seconds)
+
     def fresh_cell(lane, f):
         nonlocal crash_streak
         c0 = time.monotonic()
         with lock:
             log(f"  [{execution['completed_cells'] + 1}/{execution['total_cells']}] {lane}/{f} (fresh process)")
         try:
-            parts = isolated("cell", **{k: v for k, v in cell_request(lane, f).items()
-                                        if k not in ("action", "harness", "table")})
+            parts = isolated("cell", limit=cell_limit(hints, lane, timeout),
+                             **{k: v for k, v in cell_request(lane, f).items()
+                                if k not in ("action", "harness", "table")})
             with lock:
                 crash_streak.clear()
+        except worker.WorkerTimeout as exc:
+            with lock:
+                execution["fresh_cells"] += 1
+            timed_out_cell(lane, f, str(exc), time.monotonic() - c0)
+            return
         except worker.WorkerCrash as exc:
             with lock:
                 crash_streak.add(lane)
@@ -4531,9 +4581,15 @@ def cmd_verify_all(args):
     log(f"# {cell_workers} cell worker(s) at once (core allocation, {VERIFY_WORKER_GIB:g} GiB a worker)")
 
     def run_chunk(chunk):
+        while chunk:
+            chunk = run_batch_once(chunk)
+
+    def run_batch_once(chunk):
+        """One batch process over `chunk`; returns the cells still owed (after a timeout: the rest of the chunk,
+        for a new batch), else []."""
         with lock:
             if execution["interrupted"]:
-                return
+                return []
             execution["batches"] += 1
             progress(f"batch {execution['batches']}: {chunk[0][0]}/{chunk[0][1]} .. {chunk[-1][0]}/{chunk[-1][1]}")
         last = [time.monotonic()]
@@ -4550,10 +4606,19 @@ def cmd_verify_all(args):
                 _record(*chunk[index], result["value"], now - last[0])
                 last[0] = now
 
-        stop = worker.run_batch([cell_request(lane, f) for lane, f in chunk], timeout, log, answered)
+        stop = worker.run_batch([cell_request(lane, f) for lane, f in chunk],
+                                [cell_limit(hints, lane, timeout) for lane, _ in chunk], log, answered)
         if stop is None:
-            return
+            return []
         lane, f = chunk[stop.index]
+        if stop.kind == "timeout":
+            # the cell had its whole limit; it FAILS, and the cells after it are not tainted by a killed process
+            with lock:
+                execution["batch_stops"].append(dict(stop.as_dict(), lane=lane, fixture=f))
+                log(f"    BATCH STOPPED at {lane}/{f} (timeout): that cell FAILED; "
+                    f"{len(chunk) - stop.index - 1} remaining cell(s) of this batch run in a new batch")
+            timed_out_cell(lane, f, stop.message, time.monotonic() - last[0])
+            return chunk[stop.index + 1:]
         with lock:
             execution["batch_stops"].append(dict(stop.as_dict(), lane=lane, fixture=f))
             log(f"    BATCH STOPPED at {lane}/{f} ({stop.kind}): {stop.message[:300]}; "
@@ -4564,6 +4629,7 @@ def cmd_verify_all(args):
                     break
                 execution["fallback_cells"].append(f"{lane}/{f}")
             fresh_cell(lane, f)
+        return []
 
     def run_one(cell):
         with lock:
@@ -4578,7 +4644,8 @@ def cmd_verify_all(args):
     # commands, the cross-check batches, the models and the public checks) is in ONE pool, started longest first
     # by the cost hints (`cell_cost_hints`: the last run on this machine, else the shipped table); a batch also
     # closes before its estimate passes half a worker's share, so no one batch is the tail. Hints order the work and
-    # nothing else: the cells, their parts, fixtures, comparisons and the report's cell order are unchanged.
+    # set each cell's worker limit (`cell_limit`, rel-fix-2), nothing else: the cells, their parts, fixtures,
+    # comparisons and the report's cell order are unchanged.
     hints, hint_source = cell_cost_hints()
     known = sorted(v for k, v in hints.items() if not k.startswith("@") and v > 0)
     default_cost = known[len(known) // 2] if known else 1.0
@@ -4701,6 +4768,9 @@ def cmd_verify_all(args):
     costs += unit_costs
     # stable: equal estimates keep their order (the extended units, then the cells in lane order)
     ranked = sorted(range(len(work)), key=lambda i: -costs[i])
+    # WHERE THE TIME GOES (rel-fix-2): the sweep's wall seconds, its busy cores (the CPU seconds of every reaped
+    # worker process over the wall) and its five slowest units are printed and kept under execution["timing"].
+    sweep_t0, sweep_cpu0 = time.monotonic(), _children_cpu_seconds()
     if cell_workers == 1 or len(work) <= 1:
         for key, fn, unit in work:  # one worker: the units in order, as before
             timed(key, fn, *unit) if key else fn(*unit)
@@ -4710,6 +4780,18 @@ def cmd_verify_all(args):
                        else pool.submit(work[i][1], *work[i][2]) for i in ranked]
             for future in futures:
                 future.result()
+    sweep_s = time.monotonic() - sweep_t0
+    busy = (_children_cpu_seconds() - sweep_cpu0) / sweep_s if sweep_s > 0 else 0.0
+    slowest = sorted([(f"{lane}/{f}", s) for (lane, f), s in cell_seconds.items()]
+                     + [(key, max(v)) for key, v in unit_seconds.items() if key and v], key=lambda kv: -kv[1])[:5]
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        cores = os.cpu_count() or 1
+    execution["timing"] = dict(sweep_s=round(sweep_s, 1), busy_cores_mean=round(busy, 1), cores=cores,
+                               workers=cell_workers, slowest=[dict(unit=u, seconds=round(s, 1)) for u, s in slowest])
+    log(f"# sweep: {sweep_s:.0f}s wall, busy cores mean {busy:.1f} of {cores} ({cell_workers} worker(s)); slowest units: "
+        + ", ".join(f"{u} {s:.0f}s" for u, s in slowest))
     # cell order, as a serial sweep writes it (rows within a cell keep theirs)
     raw.sort(key=lambda row: cell_order.get((row["lane"], row["fixture"]), len(cells)))
     for lane in lanes:
@@ -4719,6 +4801,10 @@ def cmd_verify_all(args):
     if execution["crashed_cells"]:
         log(f"# CRASHED: {len(execution['crashed_cells'])} cell worker(s), each refused: "
             + ", ".join(f"{c['lane']}/{c['fixture']}" for c in execution["crashed_cells"][:20]))
+    if execution["timed_out_cells"]:
+        log(f"# TIMED OUT: {len(execution['timed_out_cells'])} cell(s), each FAILED (refused; the run cannot pass): "
+            + ", ".join(f"{c['lane']}/{c['fixture']} ({c['limit_s']:.0f}s limit)"
+                        for c in execution["timed_out_cells"][:20]))
     # Unfinished cells are explicit refusals; they cannot disappear from a
     # subset's denominator or turn an aborted run into a successful comparison.
     if execution["interrupted"]:
@@ -4739,7 +4825,8 @@ def cmd_verify_all(args):
             progress("models", judge_rows(model_rows, table, families, device_class=vclass))
         else:
             execution["interrupted"] = "the models step did not run"
-    save_cell_cost_hints(hints, cell_seconds, unit_seconds)
+    save_cell_cost_hints(hints, cell_seconds, unit_seconds,
+                         skip={(c["lane"], c["fixture"]) for c in execution["timed_out_cells"]})
     progress("interrupted" if execution["interrupted"] else "comparison complete")
     rows = judge_rows(raw + model_rows, table, families, unreferenced_lanes=stale, device_class=vclass,
                                 batch_revisions=getattr(harness, "BATCH_REVISIONS", {}))
@@ -4887,6 +4974,10 @@ def cmd_verify_all(args):
     for binding in report.get("bindings", []):
         worker_bindings[(binding["module"], binding["sha256"])] = binding
     report["bindings"] = list(worker_bindings.values())
+    if execution["timed_out_cells"]:
+        report.update(detail=report["detail"] + f"; {len(execution['timed_out_cells'])} cell(s) TIMED OUT "
+                      "(those cells failed): " + ", ".join(
+                          f"{c['lane']}/{c['fixture']}" for c in execution["timed_out_cells"][:20]))
     if execution["crashed_cells"]:
         report.update(detail=report["detail"] + f"; {len(execution['crashed_cells'])} cell worker(s) crashed "
                       "(those cells refused): " + ", ".join(

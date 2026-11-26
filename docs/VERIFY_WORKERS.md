@@ -15,30 +15,37 @@ any lane whose result depends on what ran before it.
 Before fitting lanes, an isolated comparator self-test must demonstrate that
 an untouched input matches and the perturbed input diverges. Portable model
 checks and optional smoke checks also use bounded fresh workers. Each cell
-has a 120 second limit, including interpreter startup for the first cell of
-a batch and cleanup. Override it with `--cell-timeout SECONDS` when
-investigating a legitimately longer cell. A timeout is an incomplete
-verification, never a successful skipped check.
+has a limit, including interpreter startup for the first cell of a batch and
+cleanup: four times its lane's measured seconds per cell (from the last run
+on this machine, else the shipped `verify_reference/cell_seconds.json`), at
+least `--cell-timeout SECONDS` (default 120) and at most 1800 seconds. A cell
+past its limit FAILS: it is refused, listed under `execution.timed_out_cells`
+and named in the report, and the sweep goes on with every other cell. A
+timeout is an incomplete verification, never a successful skipped check, and
+the run exits non-zero.
 
 The parent announces each cell as its result lands, prints a heartbeat every
 ten seconds while a cell runs, and judges its parts immediately. Ordinary
 divergences remain visible while subsequent cells run. When a batch worker
 crashes, times out, reports an unhealthy device or returns a malformed result,
-the cells it already answered stand, the stop is listed under
-`execution.batch_stops`, and the batch's remaining cells (the failing one
-first) each run in a fresh process, listed under `execution.fallback_cells`;
-the next batch is batched again. A fresh cell worker that crashes (non-zero
+the cells it already answered stand and the stop is listed under
+`execution.batch_stops`. After a timeout the timed-out cell fails and the
+batch's remaining cells run in a new batch. Otherwise the batch's remaining
+cells (the failing one first) each run in a fresh process, listed under
+`execution.fallback_cells`; the next batch is batched again. A fresh cell worker that crashes (non-zero
 exit or signal, without a timeout or an unhealthy-device signal) refuses its
 own cell, is listed under `execution.crashed_cells`, and the sweep continues;
-three crashes in a row stop it. A fresh-process timeout, malformed worker
-result, explicit unhealthy-device signal or a crash outside the cell sweep
-stops the sweep. Outstanding cells become refused, and the overall report
+crashes on as many distinct lanes as there are workers, with no cell answered
+between them, stop it. A fresh-process timeout fails its own cell only. A
+malformed worker result, an explicit unhealthy-device signal or a crash
+outside the cell sweep stops the sweep. Outstanding cells become refused, and the overall report
 cannot say verified. All child processes in the worker process group are
 killed when the worker exits or exceeds its limit.
 
 `execution` also records `mode` (`batched-worker` or
-`fresh-process-per-cell`), `batch_cells`, `batches`, `batched_cells` and
-`fresh_cells`. Reports from either mode are compared and admitted alike.
+`fresh-process-per-cell`), `batch_cells`, `batches`, `batched_cells`,
+`fresh_cells` and `timing` (the sweep's wall seconds, its mean busy cores and
+its five slowest units, also printed as one `# sweep:` line). Reports from either mode are compared and admitted alike.
 
 With `--json-out evidence.json`, intermediate evidence is available as:
 

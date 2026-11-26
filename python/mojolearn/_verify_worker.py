@@ -6,9 +6,10 @@ cell requests in ONE process, one after another, and hands each result back as
 it lands, so a sweep pays interpreter, import and GPU-runtime startup once per
 batch instead of once per cell (on ROCm that startup is ~5 s per process). On a
 crash, timeout or unhealthy-device signal inside a batch, `run_batch` reports
-the first cell without an accepted result; the controller then runs that cell
-and the rest of the batch each in a fresh process, so one crash cannot taint
-another cell. Requests name the same harness and reference files and preserve
+the first cell without an accepted result. After a crash or an unhealthy or
+failed result the controller runs that cell and the rest of the batch each in
+a fresh process, so one crash cannot taint another cell; after a timeout that
+cell is FAILED and the rest of the batch runs in a new batch process. Requests name the same harness and reference files and preserve
 every fixture and probe setting. The private transport is a file per result:
 native-library stdout cannot corrupt it.
 """
@@ -29,6 +30,12 @@ _verify_families.load_all()
 
 class WorkerFailure(RuntimeError):
     pass
+
+
+class WorkerTimeout(WorkerFailure):
+    """The worker passed its limit and was killed (rel-fix-2, 2026-11-26). Its cell is FAILED (refused, named in
+    the report, the run exits non-zero) and the sweep goes on: a slow or hung cell says nothing about the device or
+    about any other cell, unlike an unhealthy-device signal."""
 
 
 class WorkerCrash(WorkerFailure):
@@ -109,7 +116,7 @@ def run(request, timeout=120, log=None):
                 while True:
                     remaining = timeout - (time.monotonic() - started)
                     if remaining <= 0:
-                        raise WorkerFailure(f"{label}: exceeded {timeout:g}s worker limit"
+                        raise WorkerTimeout(f"{label}: exceeded {timeout:g}s worker limit"
                                             + _stacks_on_timeout(process, output))
                     try:
                         process.wait(timeout=min(10, remaining))
@@ -237,14 +244,17 @@ def run_batch(requests, timeout=120, log=None, on_result=None, poll=0.02):
     """Run `requests` in order in ONE worker process.
 
     `on_result(index, result)` is called as each cell's result is accepted
-    (the same checks as `run`). `timeout` bounds each cell: the clock starts
-    at process launch for the first cell, then at the previous cell's result.
+    (the same checks as `run`). `timeout` bounds each cell: one number for
+    every cell, or one limit per request (the controller derives each cell's
+    from its lane's measured seconds); the clock starts at process launch for
+    the first cell, then at the previous cell's result.
     Returns None when every request finished, else a BatchStop naming the
     first request without a result; the worker is killed before returning.
     """
-    if not 0 < timeout < float("inf"):
-        raise ValueError("worker timeout must be finite and positive")
     requests = list(requests)
+    limits = list(timeout) if isinstance(timeout, (list, tuple)) else [timeout] * len(requests)
+    if len(limits) != len(requests) or not all(0 < t < float("inf") for t in limits):
+        raise ValueError("worker timeout must be finite and positive, one per request or one for all")
     if not requests:
         return None
     with tempfile.TemporaryDirectory(prefix="mojolearn-verify-batch-") as directory:
@@ -296,12 +306,12 @@ def run_batch(requests, timeout=120, log=None, on_result=None, poll=0.02):
                             return BatchStop(index, "crash", f"{label}: batch worker exited {code}; {tail[-2000:]}")
                         return BatchStop(index, "failure", f"{label}: batch worker exited without a result; {tail[-1000:]}")
                     now = time.monotonic()
-                    if now - started > timeout:
-                        return BatchStop(index, "timeout", f"{label}: exceeded {timeout:g}s worker limit"
+                    if now - started > limits[index]:
+                        return BatchStop(index, "timeout", f"{label}: exceeded {limits[index]:g}s worker limit"
                                          + _stacks_on_timeout(process, cell_log))
                     if log and now - heartbeat >= 10:
                         heartbeat = now
-                        log(f"  {label}: running {now - started:.0f}s / {timeout:g}s limit")
+                        log(f"  {label}: running {now - started:.0f}s / {limits[index]:g}s limit")
                     time.sleep(poll)
                 return None
             finally:
