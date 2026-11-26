@@ -56,6 +56,13 @@ def msel_cpu_scope(device: FunctionDevice, context: PythonObject, b: PythonObjec
     when the shared context grows; the copy builds its own once). A CPU image
     that is not connected is refused in words: the call never runs the GPU
     images in its place."""
+    if py_get(context, "family_msel_cpu_made") is not None:
+        # `context` already is this family's CPU scope (a device="cpu"
+        # splitter's `split` or a scorer inside a device="cpu" cv tool): run
+        # in it. Rebuilding from it would read its HOST helper key as the
+        # process key (`msel_process_key`) and copy the scope again per call
+        # (lane gs-fix-2). One dictionary read, CPU branch only.
+        return context
     var scope = function_device_scope(device, context)
     var held = py_get(scope, "family_msel_cpu_scope")
     if held is not None:
@@ -91,5 +98,7 @@ def msel_cpu_scope(device: FunctionDevice, context: PythonObject, b: PythonObjec
     var resident = py_call(b.dict, context["family_msel_resident_context"])
     py_setitem(resident, "arena_msel_input_context", made)
     py_setitem(made, "family_msel_resident_context", resident)
+    # The mark `msel_cpu_scope` reads first: a call handed this scope runs in it.
+    py_setitem(made, "family_msel_cpu_made", PythonObject(True))
     py_setitem(scope, "family_msel_cpu_scope", made)
     return made

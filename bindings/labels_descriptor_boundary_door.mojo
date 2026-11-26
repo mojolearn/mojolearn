@@ -195,6 +195,17 @@ def labels_cpu_scope(context: PythonObject) raises -> PythonObject:
     `function_device_scope`), or None when this installation has none.
     Connects the CPU images once when nothing admitted the CPU device yet."""
     var scope = py_get(context, "labels_cpu_scope")
+    if scope is None and py_get(context, "labels_cpu_source") is not None:
+        # `context` already IS a CPU label scope (or a copy derived from one:
+        # model selection's `msel_cpu_scope`), handed on by a call that runs
+        # on the host images, e.g. a device="cpu" splitter's `split` inside a
+        # device="cpu" cross_validate. A scope holds no scope of its own (it
+        # is popped when the scope is copied), so this read used to fall
+        # through to `device_cpu_connect_late`, find the images already
+        # connected and answer None: "device='cpu' needs the CPU identical
+        # images" (lane gs-fix-2; x-metrics-search, x-metrics-permutation-
+        # test-score, cpu side). CPU branch only: one dictionary read.
+        return context
     if scope is None:
         # A restored estimator (no construction ran the device admission),
         # or a public function's first device="cpu" call: admit the CPU
