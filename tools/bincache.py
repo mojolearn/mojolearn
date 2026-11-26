@@ -2493,10 +2493,16 @@ def cmd_plan(argv):
     return 0
 
 
-def plan_lines(creds, partition, image, leg_id, slots, max_get=2000, expires=7200, negative=False, namespace="bin"):
+def plan_lines(creds, partition, image, leg_id, slots, max_get=2000, expires=7200, negative=False, namespace="bin",
+               want_keys=(), listing=None):
     """(map lines, gets, sgets): the URL map `plan` prints (and the GitHub
     build route mints, tools/release_github_build.py). NAMESPACE picks the
-    store (NAMESPACES); the map's #namespace header names it."""
+    store (NAMESPACES); the map's #namespace header names it. The map holds
+    the newest MAX_GET objects plus every object whose key is in WANT_KEYS
+    (lane build-reuse-1, 2026-11-26: a group the leg gives no shard job is
+    placed by the assemble job from this map, so its archive must be in it
+    however old it is). LISTING, when given, is the production listing the
+    caller already read (list_objects of the objects prefix)."""
     parts = partition.split("/")
     if len(parts) != 2 or not all(SEG_RE.match(p) for p in parts) or not SEG_RE.match(leg_id):
         raise SystemExit("bincache plan: bad partition or leg id")
@@ -2510,9 +2516,12 @@ def plan_lines(creds, partition, image, leg_id, slots, max_get=2000, expires=720
     for prefix, verb in ((ns["objects"], "get"), (ns["sabotage"], "sget")):
         if verb == "sget" and not negative:
             continue
-        objs = list_objects(creds, "%s/%s/" % (prefix, partition))
+        objs = list(listing) if (listing is not None and verb == "get") else \
+            list_objects(creds, "%s/%s/" % (prefix, partition))
         objs.sort(key=lambda o: o[1], reverse=True)
-        for name, _, _ in objs[: max_get]:
+        want = set(want_keys) if verb == "get" else set()
+        older = [o for o in objs[max_get:] if re.sub(r"\.tar\.gz$", "", o[0].rsplit("/", 1)[-1]) in want]
+        for name, _, _ in objs[: max_get] + older:
             m = re.match(r"^%s/%s/([0-9a-f]{64})\.tar\.gz$" % (re.escape(prefix), re.escape(partition)), name)
             if m:
                 lines.append("%s\t%s\t%s" % (verb, m.group(1), presign("GET", name, expires, creds)))

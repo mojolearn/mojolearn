@@ -3,11 +3,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn
 """PRE-BUILD CHECKS: the minutes-long checks a measurement build runs before it dispatches its 45-minute GitHub build.
 
-    python3 tools/prebuild_check.py --commit <sha> [--ref <pushed tooling branch>] [--only audits,host-parse,probe]
+    python3 tools/prebuild_check.py --commit <sha> [--ref <pushed tooling branch>] [--only audits,probe]
         [--probe-wheel <mojolearn_core-*.whl>] [--work DIR]
 
 `tools/release.py candidate` runs it first and refuses to dispatch the build when it fails (`--no-prebuild-check`
-skips it). Three builds were lost on 2026-11-15 to defects these catch:
+skips it). Builds were lost on 2026-11-15 to defects these catch:
   audits      (efe971044a: every shard compiled, then the pack refused mojolearn/_verify_model.py, a NumPy import not
               in NUMPY_ORACLES) the pack's source-only refusals over the commit's Python exactly as the wheel lays it
               out: the entries pack_wheel.py takes (python_package_entries, mojolearn_diagnostics.py and
@@ -31,14 +31,15 @@ skips it). Three builds were lost on 2026-11-15 to defects these catch:
               with git apply --check, no fuzz, and is named by an arm of coverage_sabotage.tsv or a .checks line; the
               experiments/removed/ permanent record excluded; lane patch-recut).
               Seconds.
-  host-parse  (with device-parse since 2026-11-18: the identical device groups through the same parse with the
-              NVIDIA sm_89 column's flags and no GPU; it cannot see what only optimised lowering, ptxas or a GPU finds)
-              (f29f76bf57: two host units did not parse; native-checks passed 166/166 because no check imports those
-              doors) .github/workflows/native-checks.yml with suite=host-parse on a free runner: every release host
-              group the Linux CPU leg builds (tools/merged_bindings.py plan --dir host --layout release) through
-              `mojo build --emit llvm --no-optimization` (parse, type check and elaboration; no LLVM optimisation and no machine
-              code), one runner per group, all in parallel. A completed run of the same sha whose host-parse jobs all
-              passed is reused; one in progress is waited for; otherwise it is dispatched on --ref and waited for.
+  host-parse  REMOVED 2026-11-26 (lane build-reuse-1). It dispatched native-checks.yml suite=host-parse (every
+              release host group and, from 2026-11-18, every identical device group with the sm_89 flags, parsed with
+              --emit llvm --no-optimization) and the candidate WAITED for it before dispatching the build: 1341 s of
+              the 0.8.67.dev0+acdf0ad30312 build (2026-11-26), and 23 more free runners the legs then queued behind.
+              The legs compile those very groups (the same tools/merged_bindings.py plan, the same host and sm_89
+              flags, optimised), so a group that does not parse fails its shard job, which names it; a commit with no
+              earlier compile is checked by that compile. A group placed from the binding cache is one whose key (its
+              closure, toolchain, flags and target) an earlier green compile produced. `--only host-parse` is refused.
+              native-checks.yml keeps suite=host-parse for a check without a build (tools/cpu_central.sh check parse).
   probe       (26709df246: the verify smoke failed on Python-only defects) only with --probe-wheel: a COPY of an
               earlier packed core wheel with every shipped Python file and verification input replaced by the
               commit's (the same entry mapping as `audits`; the wheel's generated _version.py is kept, .py files the
@@ -73,10 +74,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 EVIDENCE = Path(os.environ.get("MOJOLEARN_EVIDENCE_ROOT", os.path.expanduser("~/mojolearn-evidence")))
-PARTS = ("audits", "host-parse", "probe")
+PARTS = ("audits", "probe")
+#: parts that no longer exist, with the reason a refusal names
+REMOVED_PARTS = {"host-parse": "removed 2026-11-26: the build's legs compile every host and device group it parsed "
+                               "(tools/prebuild_check.py docstring)"}
 #: the parts of the source tree the audits read (the whole commit is ~650 MB, mostly bench/results)
 EXPORT_PATHS = ("python", "tools", "packaging", "CITATION.cff", "pyproject.toml")
-NATIVE_WORKFLOW = "native-checks.yml"
 SMOKE_WORKFLOW = "verify-smoke.yml"
 PROBE_DIR = "probe-wheel-NOT-MEASURED"
 #: wheel members a probe keeps from the packed wheel: generated at pack time, not a source file
@@ -412,73 +415,6 @@ def utc_now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 60))
 
 
-def host_parse_jobs(view):
-    """The parse jobs of a native-checks run: host-parse (the host groups) and device-parse (the identical device
-    groups with the sm_89 column's flags; lane fx-build-tools, 2026-11-18)."""
-    return [j for j in view.get("jobs") or () if j["name"].startswith(("host-parse", "device-parse"))]
-
-
-def parse_group_jobs(jobs):
-    """The last attempt of each parse group (lane fx-trees-device-parse, 2026-11-19): native-checks retries a device
-    group once, as `device-parse retry <key> sm_89`, when its first runner was lost or its parse was killed at the
-    limit, so a group passes when its retry passed. A retry that has not finished yet is its last attempt."""
-    last = {}
-    for j in jobs:
-        retry = j["name"].startswith("device-parse retry ")
-        # no group needed a retry: GitHub shows the unexpanded matrix job (`device-parse retry ${{ matrix.key }} sm_89`)
-        # as skipped; a skipped retry is not an attempt (2026-11-19: it failed the pre-build check of 5b58d98aed)
-        if retry and j.get("conclusion") == "skipped":
-            continue
-        key = j["name"].replace("device-parse retry ", "device-parse ", 1)
-        if retry or key not in last:
-            last[key] = j
-    return list(last.values())
-
-
-def run_host_parse(commit, ref, workdir, timeout):
-    """The `host-parse` part. Reuse a passed run of COMMIT, wait for one in progress, or dispatch one on REF."""
-    title = f"native-checks {commit} "
-    chosen = None
-    for r in runs_titled(NATIVE_WORKFLOW, title):
-        if (r["displayTitle"].split() + ["", "", ""])[2] not in ("host-parse", "all"):
-            continue
-        if r["status"] != "completed":
-            chosen = chosen or r["databaseId"]
-            continue
-        jobs = parse_group_jobs(host_parse_jobs(gh_json("run", "view", str(r["databaseId"]), "--json", "jobs")))
-        # a run from before device-parse parsed no GPU unit: it is not reused
-        if (jobs and all(j["conclusion"] == "success" for j in jobs)
-                and any(j["name"].startswith("device-parse") for j in jobs)):
-            print(f"HOST-PARSE PASS reused run {r['databaseId']}: {len(jobs)} host and device groups parsed at "
-                  f"{commit[:12]}")
-            return 0
-    if chosen is None:
-        if not ref:
-            print("HOST-PARSE FAIL no --ref: the pushed tooling branch whose native-checks.yml has suite=host-parse")
-            return 1
-        since = utc_now()
-        sh("gh", "workflow", "run", NATIVE_WORKFLOW, "--ref", ref, "-f", f"ref={commit}", "-f", "suite=host-parse")
-        chosen = find_new_run(NATIVE_WORKFLOW, title + "host-parse", since)
-        print(f"HOST-PARSE dispatched run {chosen} on --ref {ref}")
-    else:
-        print(f"HOST-PARSE waiting for run {chosen} already in progress for {commit[:12]}")
-    view = wait_run(chosen, timeout, "host-parse")
-    jobs = parse_group_jobs(host_parse_jobs(view))
-    bad = [j for j in jobs if j["conclusion"] != "success"]
-    for j in jobs:
-        print(f"HOST-PARSE {j['conclusion'] or j['status']} {j['name']}")
-    if not jobs or bad:
-        log = Path(workdir) / "host-parse-failed.log"
-        log.write_text(sh("gh", "run", "view", str(chosen), "--log-failed", check=False))
-        errors = [ln for ln in log.read_text(errors="replace").splitlines() if re.search(r"\berror:", ln)][:20]
-        for ln in errors:
-            print(f"HOST-PARSE error {ln[-300:]}")
-        print(f"HOST-PARSE FAIL {len(bad)} of {len(jobs)} host groups ({view['url']}); failed log {log}")
-        return 1
-    print(f"HOST-PARSE PASS {len(jobs)} host groups parsed at {commit[:12]} ({view['url']})")
-    return 0
-
-
 def run_probe(tree, commit, wheel, ref, workdir, timeout, git_root=ROOT):
     """The `probe` part: build the probe wheel, smoke it on verify-smoke.yml, print its SUMMARY.txt lines."""
     entries = wheel_entries(tree, commit, git_root)
@@ -521,12 +457,11 @@ def parse(argv):
     ap.add_argument("--commit", required=True, help="the commit to check (any spelling git resolves)")
     ap.add_argument("--ref", default="", help="pushed tooling branch the GitHub workflows are dispatched from "
                     "(default: this checkout's branch)")
-    ap.add_argument("--only", default="", help=f"comma list of parts ({', '.join(PARTS)}); default audits,host-parse "
-                    "and probe when --probe-wheel is given")
+    ap.add_argument("--only", default="", help=f"comma list of parts ({', '.join(PARTS)}); default audits, and "
+                    "probe when --probe-wheel is given")
     ap.add_argument("--probe-wheel", default="", help="a packed mojolearn_core-*.whl of an earlier commit to probe")
     ap.add_argument("--work", default="", help="logs and staging (default "
                     "~/mojolearn-evidence/release-candidates/prebuild/<sha12>)")
-    ap.add_argument("--host-parse-timeout", type=int, default=120, help="minutes (default %(default)s)")
     ap.add_argument("--probe-timeout", type=int, default=360, help="minutes (default %(default)s)")
     ap.add_argument("--reuse-pass", action="store_true", help="skip when <work>/PASS.json records these parts for "
                     "this sha (a resumed candidate)")
@@ -540,8 +475,6 @@ def child(a):
     work = Path(a.work)
     if a.part == "audits":
         return run_audits(a.tree, a.commit, work)
-    if a.part == "host-parse":
-        return run_host_parse(a.commit, a.ref, work, a.host_parse_timeout * 60)
     if a.part == "probe":
         return run_probe(a.tree, a.commit, a.probe_wheel, a.ref, work, a.probe_timeout * 60)
     raise SystemExit(f"prebuild: unknown part {a.part}")
@@ -552,7 +485,10 @@ def main(argv=None):
     if a.part:
         return child(a)
     commit = resolve_commit(a.commit)
-    parts = [p for p in (a.only or "audits,host-parse" + (",probe" if a.probe_wheel else "")).split(",") if p]
+    parts = [p for p in (a.only or "audits" + (",probe" if a.probe_wheel else "")).split(",") if p]
+    gone = [f"{p}: {REMOVED_PARTS[p]}" for p in parts if p in REMOVED_PARTS]
+    if gone:
+        raise SystemExit("prebuild: " + "; ".join(gone))
     unknown = sorted(set(parts) - set(PARTS))
     if unknown:
         raise SystemExit(f"prebuild: unknown part(s) {unknown}; the parts are {', '.join(PARTS)}")
@@ -577,7 +513,7 @@ def main(argv=None):
     def run(part):
         argv = [sys.executable, str(Path(__file__).resolve()), "--part", part, "--commit", commit, "--ref", ref,
                 "--work", str(work), "--tree", str(tree), "--probe-wheel", a.probe_wheel,
-                "--host-parse-timeout", str(a.host_parse_timeout), "--probe-timeout", str(a.probe_timeout)]
+                "--probe-timeout", str(a.probe_timeout)]
         log = work / f"{part}.log"
         t0 = time.monotonic()
         with open(log, "w") as fh:

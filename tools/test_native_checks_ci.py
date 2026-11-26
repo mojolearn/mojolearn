@@ -230,12 +230,12 @@ def test_workflow_shape():
         assert upload["if"] == "always()" and "out/*.txt" in upload["with"]["path"]
     assert wf["jobs"]["device-parse"]["continue-on-error"] is True  # the verdict decides from the last attempt
     assert "PARSE_SPLIT" in plan and "_mojolearn_native_trees" in plan
-    assert wf["jobs"]["host-parse"]["name"].startswith("host-parse")  # tools/prebuild_check.py reads job names
+    assert wf["jobs"]["host-parse"]["name"].startswith("host-parse")
     # device-parse (lane fx-build-tools, 2026-11-18): the identical device groups with the sm_89 column's flags
     assert "merged_bindings.py plan --dir identical --platform linux --byte-lm 1 --layout release" in plan
     assert "--target-accelerator sm_89" in script
     assert "MOJOLEARN_COLUMN_NVIDIA" in script and "MOJOLEARN_NUMERIC_IDENTICAL=1" in script
-    assert wf["jobs"]["device-parse"]["name"].startswith("device-parse")  # tools/prebuild_check.py reads job names
+    assert wf["jobs"]["device-parse"]["name"].startswith("device-parse")
     assert wf["jobs"]["device-parse-retry"]["name"].startswith("device-parse retry ")
     assert not wf["jobs"]["device-parse-verdict"]["name"].startswith(("host-parse", "device-parse"))
     # apple-parse (lane fx-apple-fast-ci, 2026-11-20): the Apple sets cross-elaborated on Linux; its own suite, never `all`
@@ -295,32 +295,8 @@ def test_gpu_job_keeps_results_not_binaries():
     row = text.index('native_checks_report.py result build-gpu --log "$RES/logs/build-gpu.log"')
     assert text.index('native_testsuite.sh build gpu') < row
 
-def test_prebuild_counts_a_parse_group_by_its_last_attempt():
-    spec = importlib.util.spec_from_file_location("prebuild_check", ROOT / "tools/prebuild_check.py")
-    pc = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(pc)
-    jobs = [{"name": "host-parse _h", "conclusion": "success"},
-            {"name": "device-parse _t_p1of2 sm_89", "conclusion": "failure"},
-            {"name": "device-parse _t_p2of2 sm_89", "conclusion": "success"},
-            {"name": "device-parse retry _t_p1of2 sm_89", "conclusion": "success"},
-            {"name": "device-parse _n sm_89", "conclusion": "failure"},
-            {"name": "parse-verdict device", "conclusion": "success"}]
-    last = pc.parse_group_jobs(pc.host_parse_jobs({"jobs": jobs}))
-    assert sorted(j["name"] for j in last) == ["device-parse _n sm_89", "device-parse _t_p2of2 sm_89",
-                                               "device-parse retry _t_p1of2 sm_89", "host-parse _h"]
-    assert [j["name"] for j in last if j["conclusion"] != "success"] == ["device-parse _n sm_89"]
-
-
-def test_prebuild_ignores_the_skipped_retry_job_when_no_group_needed_one():
-    # 2026-11-19: with no retry needed GitHub lists the unexpanded matrix job as skipped; counted as a group, it failed
-    # the pre-build check of a run whose every parse job had passed
-    spec = importlib.util.spec_from_file_location("prebuild_check", ROOT / "tools/prebuild_check.py")
-    pc = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(pc)
-    jobs = [{"name": "device-parse a sm_89", "conclusion": "success"},
-            {"name": "device-parse retry ${{ matrix.key }} sm_89", "conclusion": "skipped"}]
-    last = pc.parse_group_jobs(jobs)
-    assert [j["name"] for j in last] == ["device-parse a sm_89"] and all(j["conclusion"] == "success" for j in last)
+# TOMBSTONE (lane build-reuse-1, 2026-11-26): the two tests of tools/prebuild_check.py's host-parse job reading
+# (parse_group_jobs, host_parse_jobs) went with that part; the build's legs compile every group it parsed.
 
 
 def _groups_module():

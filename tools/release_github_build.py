@@ -1040,10 +1040,12 @@ def recorded_tooling_problem(branch, tip, head, recorded):
     return None
 
 
-def mint_map(creds, jobs_per_set, nsets, leg):
+def mint_map(creds, jobs_per_set, nsets, leg, want_keys=(), listing=None):
+    """The run's URL map, stored in R2; (presigned GET of it, its key, GETs in it). WANT_KEYS (the predicted keys of
+    the groups with no shard job, group_reuse.skip_plan) are in the map however old their objects are."""
     import bincache
     lines, n_get, _ = bincache.plan_lines(creds, partition(), IMAGE_DECL, leg, jobs_per_set * nsets * SLOTS_PER_JOB,
-                                          expires=MAP_HOURS * 3600)
+                                          expires=MAP_HOURS * 3600, want_keys=want_keys, listing=listing)
     key = f"{MAP_PREFIX}/{leg}.tsv"
     status, _ = bincache.r2_request(creds, "PUT", key, data=("\n".join(lines) + "\n").encode())
     if status != 200:
@@ -1460,6 +1462,10 @@ def cmd_run(a):
         raise SystemExit("--defines builds a candidate set; it takes no --compile-groups")
     if a.skip_units and (not defines or not a.arch or a.host):
         raise SystemExit("--skip-units is a B arm's (--defines) on one --arch with no host producer")
+    if a.predict_skips and (defines or a.skip_units or not a.arch or a.host or a.compile_groups or a.no_bincache
+                            or not a.source_tree):
+        raise SystemExit("--predict-skips is a measurement build's A set (no --defines, --skip-units, --host or "
+                         "--compile-groups) on one --arch with the binding cache and its --source-tree")
     vendor = ARCHS.get(a.arch)
     name = f"{vendor}-{a.arch}" if a.arch else None
     out = Path(a.out).resolve()
@@ -1494,8 +1500,13 @@ def cmd_run(a):
         tag = f"gha-{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{os.urandom(3).hex()}"
         map_url = donor_url = donor_sha = ""
         jobs_per_set = max(a.shards + 1, MERGED_JOBS_PER_SET)
+        want, listing = (), None
+        if a.predict_skips and creds:
+            skip, want, listing = predicted_skips(a, creds, modes)
+            if skip:
+                a.skip_units = " ".join(skip)
         if creds and not a.no_bincache and a.arch:
-            map_url, map_key, n_get = mint_map(creds, jobs_per_set, 1, tag)
+            map_url, map_key, n_get = mint_map(creds, jobs_per_set, 1, tag, want_keys=want, listing=listing)
             cleanup.append(map_key)
             say(f"binding cache map: partition {partition()}, {n_get} objects, "
                 f"{jobs_per_set * SLOTS_PER_JOB} upload slots, valid {MAP_HOURS} h")
@@ -1607,6 +1618,8 @@ def cmd_run(a):
     lines[1:1] = [f"  {r[0]}: {r[1]} {r[4]}s" for r in rows]
     if failed:
         lines.append("FAILED JOBS: " + "; ".join(f"{x[0]} ({x[1]}) {x[5]}" for x in failed))
+    if a.arch:
+        lines.append(group_cache_line(out, gha, name))
     if ok and creds and a.arch and not a.no_bincache:
         lines.append("binding cache: " + promote(out, creds, a.arch))
     if ok:
@@ -1617,6 +1630,42 @@ def cmd_run(a):
     for line in lines:
         say(line)
     return 0 if ok else 1
+
+
+def predicted_skips(a, creds, modes):
+    """(skip entries, predicted keys, partition listing) of an A set's leg (tools/group_reuse.py): every merged group
+    of --source-tree's plan (plan_set, as the plan job computes it) whose key, predicted from the newest earlier leg
+    of --arch under --records-root, is in the R2 partition. A failure to predict is printed and plans no skip: the
+    leg then runs as before, every group in its shard job."""
+    import bincache
+    import group_reuse
+    try:
+        ps = plan_set(a.source_tree, modes)
+        if not ps["merged"]:
+            say("group cache plan: per-binding layout, no prediction")
+            return [], (), None
+        entries = [e for e, _ in ps["builds"] if is_merged(e)]
+        listing = bincache.list_objects(creds, f"{bincache.OBJECT_PREFIX}/{partition()}/")
+        plan = group_reuse.skip_plan(a.source_tree, a.arch, entries,
+                                     group_reuse.stored_keys(listing, partition()), a.records_root or [])
+    except (Exception, SystemExit) as exc:
+        say(f"group cache plan: no prediction ({type(exc).__name__}: {str(exc)[:200]}); every group gets a shard job")
+        return [], (), None
+    say(group_reuse.plan_line(plan))
+    for entry in plan["skip"]:
+        say(f"  no shard job (key {plan['keys'][entry][:16]} in R2): {entry}")
+    return plan["skip"], [plan["keys"][e] for e in plan["skip"]], listing
+
+
+def group_cache_line(out, gha, name):
+    """THE LEG'S CACHE LINE (tools/group_reuse.py cache_counts) from the shards' and the assemble job's bincache
+    provenance.tsv in the records (GHA/shards/*/bincache, GHA/assemble), else in a downloaded tree."""
+    import group_reuse
+    shards = sorted(Path(gha).glob("shards/*/bincache/provenance.tsv"))
+    assemble = [p for p in (Path(gha) / "assemble" / "provenance.tsv",
+                            Path(out) / (name or "") / "release-build" / "build" / "bincache" / "provenance.tsv")
+                if name and p.is_file()][:1]
+    return group_reuse.cache_line(group_reuse.cache_counts(shards, assemble))
 
 
 def next_steps(out, name, a):
@@ -1698,6 +1747,13 @@ def main(argv=None):
     p.add_argument("--records-only", action="store_true", help="a measurement build packed on GitHub "
                    "(.github/workflows/candidate-pack.yml): collect the set's GHA records (release-<set>-gha) and "
                    "promote its binding-cache uploads; the tree stays on GitHub (a failed run downloads it)")
+    p.add_argument("--predict-skips", action="store_true", help="a measurement build's A set: no shard job for a "
+                   "merged group whose key, predicted on this Mac (tools/group_reuse.py), is in R2; the assemble job "
+                   "places it from the cache by its real key, or compiles it there when the prediction was wrong")
+    p.add_argument("--source-tree", default="", help="--predict-skips: a checkout of --commit (the measurement "
+                   "build's source worktree)")
+    p.add_argument("--records-root", action="append", default=[], help="--predict-skips: a measurement-build work "
+                   "root whose earlier legs' GHA/bincache/keys give the leg half of the keys (repeatable)")
     p.add_argument("--run-id", type=int, default=0, help="attach to this run instead of dispatching")
     p.add_argument("--tooling-sha", default="", help="the tooling sha a measurement build recorded at its first "
                    "launch: a moved --ref is accepted while it holds this sha with the same route files")

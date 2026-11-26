@@ -891,13 +891,22 @@ def github_legs(ctx):
         # (release_reuse.unit_plan; the assemble job takes them from the binding cache)
         plan = ctx.plan() if defines and callable(getattr(ctx, "plan", None)) else None
         skip = release_reuse.skip_units(plan, vendor, arch) if plan else []
+        # A MEASUREMENT BUILD'S A SET (lane build-reuse-1, 2026-11-26; tools/group_reuse.py): a merged group whose
+        # key, predicted from the newest earlier leg of the arch under this work root, is in R2 gets no shard job;
+        # the assemble job places it by its real key or compiles it. A release and a B arm dispatch as before.
+        predict = []
+        # (the candidate passes --source-checkout, its detached worktree of the commit; the pack runner launches no leg)
+        if (getattr(getattr(ctx, "args", None), "candidate_version", "") and not defines
+                and candidate_pack(ctx) != "here" and callable(getattr(ctx, "source_checkout", None))):
+            predict = ["--predict-skips", "--source-tree", str(ctx.source_checkout(create=False)),
+                       "--records-root", str(ctx.base.parent)]
         # a measurement build packed on GitHub (candidate_pack "github"): the collector takes the records only
         remote = candidate_pack(ctx) == "github"
         leg = (RemoteLeg if remote else Leg)(
             name, vendor, arch,
             ["python3", "tools/release_github_build.py", "run", "--commit", ctx.commit,
              "--arch", arch, "--out", str(out)] + (["--defines", defines] if defines else [])
-            + (["--skip-units", " ".join(skip)] if skip else [])
+            + (["--skip-units", " ".join(skip)] if skip else []) + predict
             + (["--ref", ref] if ref else []) + (["--tooling-sha", tooling] if tooling else [])
             + (["--records-only"] if remote else []),
             {}, rb, legs_dir, out)

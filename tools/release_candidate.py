@@ -67,11 +67,17 @@ candidate.json records `timed_on` and `untimed_from_base`; an A/B on any other G
 Default (no --timed-on): every set is built with the define, as before.
 
 PRE-BUILD CHECKS (2026-11-15, tools/prebuild_check.py): before the Release dispatches anything, the commit's pack
-source audits (NumPy/platform math, verification inputs, source/API payload) and the host-parse suite of
-native-checks.yml (every release host group parsed and elaborated on free runners, or a passed run of the same sha
-reused) run in parallel; a failure refuses the build. --probe-wheel <core.whl> adds the probe part (an earlier core
-wheel with this commit's Python on verify-smoke.yml). Logs: <work dir>/prebuild/. A resume reuses their PASS.json.
---no-prebuild-check skips them. A dry run does not run them.
+source audits (NumPy/platform math, verification inputs, source/API payload, about 60 s) run; a failure refuses the
+build. --probe-wheel <core.whl> adds the probe part (an earlier core wheel with this commit's Python on
+verify-smoke.yml). Logs: <work dir>/prebuild/. A resume reuses their PASS.json. --no-prebuild-check skips them. A dry
+run does not run them. The host-parse part is gone (2026-11-26, lane build-reuse-1): the candidate waited 1341 s for it
+before every dispatch, and the legs compile the same groups with the same flags, so they are the check.
+
+GROUP REUSE (2026-11-26, lane build-reuse-1; tools/group_reuse.py): an A set's legs give no shard job to a merged
+group whose binding-cache key, predicted on this Mac from the newest earlier leg of the arch under the work root and
+this commit's source worktree, is in R2; the assemble job places it by its real key (a wrong prediction compiles it
+there). Each leg prints `group cache plan: ...` before the dispatch and `group cache: hits= misses= compiles= uploads=
+secs=` after the run. A B arm keeps its base-unit skips; a release dispatches every group.
 
 At the end it asserts that origin/main and the tag lists (origin and local) are what they were at the start
 (`git ls-remote`, three tries with a pause between them; refs that stay unreadable after a finished build are
@@ -713,7 +719,7 @@ def parse(argv):
     ap.add_argument("--work-root", default=str(CANDIDATE_ROOT), help="default ~/mojolearn-evidence/release-candidates")
     ap.add_argument("--dry-run", action="store_true", help="print the Release plan of the five steps; run nothing")
     ap.add_argument("--no-prebuild-check", action="store_true", help="do not run tools/prebuild_check.py (the pack "
-                    "source audits and the host-parse suite) before the build is dispatched")
+                    "source audits) before the build is dispatched")
     ap.add_argument("--probe-wheel", default="", help="tools/prebuild_check.py --probe-wheel: an earlier packed "
                     "mojolearn_core-*.whl, smoked with this commit's Python before the build")
     ap.add_argument("--keep-intermediates", action="store_true", help="keep the leg trees, host composition, "

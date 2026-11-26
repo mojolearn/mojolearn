@@ -50,9 +50,11 @@ name: Release Linux build
 # cache scopes it per build (tools/bincache.py scope_build_defines): a build
 # whose closure names no define is keyed and built without it, so it is a
 # cache hit on the A set's bytes. Empty: the variable is never set, and every
-# key is a normal release build's. `skip_units` (a B arm's only, tools/release_reuse.py
-# unit_plan): the shard entries whose closure names no define get no shard job;
-# the assemble job takes their A-set archives from the cache (a miss compiles there).
+# key is a normal release build's. `skip_units` (a B arm's, tools/release_reuse.py
+# unit_plan: the shard entries whose closure names no define; or a measurement
+# build's A set, tools/group_reuse.py: the groups whose predicted key is in R2)
+# get no shard job; the assemble job places them from the cache by their real
+# key (a miss compiles there). A release passes none.
 run-name: "release-linux-build ${{ inputs.sets }} @ ${{ inputs.commit }} [${{ inputs.tag }}]${{ inputs.defines != '' && format(' defines {0}', inputs.defines) || '' }}"
 
 on:
@@ -111,7 +113,7 @@ on:
         required: false
         default: ""
       skip_units:
-        description: "B arm only: merged shard entries with no shard job (its base build's bytes; assemble takes them from the binding cache)"
+        description: "merged shard entries with no shard job (a B arm's base units, or a measurement build's predicted cache hits; assemble takes them from the binding cache)"
         required: false
         default: ""
 
@@ -150,7 +152,7 @@ jobs:
           IN_SKIP_UNITS: ${{ inputs.skip_units }}
         run: |
           set -eu
-          [ -z "$IN_SKIP_UNITS" ] || { [ -n "$IN_DEFINES" ] && printf '%s' "$IN_SKIP_UNITS" | grep -Eq '^[A-Za-z0-9_.:-]+( [A-Za-z0-9_.:-]+)*$'; } || { echo "skip_units is a B arm's (defines set): space-separated shard entries"; exit 2; }
+          [ -z "$IN_SKIP_UNITS" ] || printf '%s' "$IN_SKIP_UNITS" | grep -Eq '^[A-Za-z0-9_.:-]+( [A-Za-z0-9_.:-]+)*$' || { echo "skip_units: space-separated shard entries"; exit 2; }
           [ -z "$IN_DEFINES" ] || printf '%s' "$IN_DEFINES" | grep -Eq '^[A-Za-z_][A-Za-z0-9_]*(=[A-Za-z0-9_.+-]*)?(,[A-Za-z_][A-Za-z0-9_]*(=[A-Za-z0-9_.+-]*)?)*$' || { echo "defines must be NAME[=VALUE],... (MOJOLEARN_BUILD_DEFINES)"; exit 2; }
           printf '%s' "$IN_COMMIT" | grep -Eq '^[0-9a-f]{40}$' || { echo "commit must be 40 hex"; exit 2; }
           printf '%s' "$IN_SHARDS" | grep -Eq '^([1-9]|1[0-6])$' || { echo "shards must be 1..16"; exit 2; }
@@ -415,6 +417,8 @@ jobs:
           B="$L/$VENDOR-$ARCH/release-build/build/bincache"
           cat "$B/uploads.tsv" >> "$L/GHA/bincache/uploads.tsv" 2>/dev/null || true
           cp "$B"/keys/*.json "$L/GHA/bincache/keys/" 2>/dev/null || true
+          # the assemble job's own cache outcomes per group, for the collector's `group cache:` line (tools/group_reuse.py)
+          cp "$B/provenance.tsv" "$L/GHA/assemble/provenance.tsv" 2>/dev/null || true
           cat "$RUNNER_TEMP/w/out/GHA/hot_sha256.tsv" >> "$L/GHA/bincache/hot_sha256.tsv" 2>/dev/null || true
           { echo "### assemble $VENDOR-$ARCH"; echo '```'; cat "$L/GHA/assemble/outcomes.txt" "$L/GHA/assemble/memory.txt" "$L/GHA/assemble/guard.jsonl" 2>/dev/null
             grep -h . "$L/$VENDOR-$ARCH/release-build/results.tsv" 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

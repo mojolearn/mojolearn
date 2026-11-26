@@ -137,32 +137,27 @@ class ProbeWheelTest(unittest.TestCase):
 
 
 
-class ParseJobsTest(unittest.TestCase):
-    """host-parse reads device-parse jobs too, and never reuses a run that parsed no device group
-    (lane fx-build-tools, 2026-11-18)."""
+class HostParseRemovedTest(unittest.TestCase):
+    """host-parse is gone (lane build-reuse-1, 2026-11-26): the build's legs compile every group it parsed, so the
+    candidate no longer waits on it (1341 s of the acdf0ad303 build) and nothing dispatches native-checks.yml."""
 
-    def view(self, *names):
-        return {"jobs": [dict(name=n, conclusion="success") for n in names]}
+    def test_the_default_parts_are_the_audits(self):
+        self.assertEqual(pc.PARTS, ("audits", "probe"))
+        self.assertFalse(hasattr(pc, "run_host_parse"))
 
-    def test_both_job_kinds_are_read(self):
-        jobs = pc.host_parse_jobs(self.view("plan", "host-parse a", "device-parse b sm_89", "build"))
-        self.assertEqual([j["name"] for j in jobs], ["host-parse a", "device-parse b sm_89"])
+    def test_asking_for_host_parse_is_refused_with_the_reason(self):
+        with unittest.mock.patch.object(pc, "resolve_commit", return_value="c" * 40):
+            with self.assertRaises(SystemExit) as cm:
+                pc.main(["--commit", "c" * 40, "--only", "audits,host-parse", "--work", tempfile.mkdtemp()])
+        self.assertIn("legs compile every host and device group", str(cm.exception))
 
-    def test_a_run_without_device_parse_is_not_reused(self):
-        calls = []
+    def test_a_pass_recorded_with_host_parse_is_reused_for_the_audits(self):
+        work = Path(tempfile.mkdtemp())
+        (work / "PASS.json").write_text('{"commit": "%s", "parts": ["audits", "host-parse"]}' % ("c" * 40))
+        with unittest.mock.patch.object(pc, "resolve_commit", return_value="c" * 40), \
+                unittest.mock.patch.object(pc.subprocess, "call", side_effect=AssertionError("ran a part")):
+            self.assertEqual(pc.main(["--commit", "c" * 40, "--work", str(work), "--reuse-pass"]), 0)
 
-        def gh_json(*args):
-            calls.append(args)
-            if args[:2] == ("run", "view"):
-                return self.view("host-parse a")
-            return []
-
-        runs = [dict(displayTitle="native-checks " + "c" * 40 + " host-parse cpu *", status="completed",
-                     databaseId=7)]
-        with unittest.mock.patch.object(pc, "runs_titled", return_value=runs), \
-                unittest.mock.patch.object(pc, "gh_json", side_effect=gh_json):
-            # no --ref: a run that cannot be reused leaves nothing to dispatch, so the part fails
-            self.assertEqual(pc.run_host_parse("c" * 40, "", tempfile.mkdtemp(), 60), 1)
 
 if __name__ == "__main__":
     unittest.main()
