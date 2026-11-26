@@ -35,7 +35,7 @@ key_of as the binding cache):
   uses; an import it cannot resolve widens the key to every source file of the tree); the compile flags (`args`:
   defines and target); the compiler binary's sha256, its version line, the precompiled standard-library packages'
   sha256 and the locked and installed toolchain; the OS, glibc, linker and C compiler; the MOJOLEARN_/MOJO_/MODULAR_
-  build environment (`build_env`); on the GPU column the device architecture the build targets (sm_89, gfx942) and
+  build environment without a job's bookkeeping (`ts_build_env`); on the GPU column the device architecture the build targets (sm_89, gfx942) and
   the ptxas version. The commit is not in the key: two commits with the same inputs build the same program.
 A build whose flags or environment name a fault (sabotage) gets no keys: it never reads or fills either level.
 
@@ -63,10 +63,31 @@ sys.path[:0] = [str(HERE.parent), str(HERE)]
 
 import bincache  # noqa: E402  (tools/ on the path above)
 
-SCHEMA = "mojolearn.native-testsuite-program.v2"
+SCHEMA = "mojolearn.native-testsuite-program.v3"  # v3: ts_build_env (rel-fix-1)
 NAMESPACE = "ts"
 key_of = bincache.key_of
 sha256_file = bincache.sha256_file
+
+
+#: NOT INPUTS OF A CHECK PROGRAM (rel-fix-1, 2026-11-26, review of 3423ae229e..8f0d9a9642). `bincache.build_env`
+#: keeps every MOJOLEARN_/MOJO_/MODULAR_ variable it does not know to be neutral, and every box job runs under
+#: tools/box_persist_run.sh, which exports MOJOLEARN_RESULTS_DIR, MOJOLEARN_PERSIST_TAG/_JSON/_RUNNER and
+#: MOJOLEARN_BOX_PERSIST with values of that job (its results dir, its tag): no key ever repeated on a box. Mojo reads
+#: no environment variable while it compiles (a value reaches the program only as a -D define, which is in `args`),
+#: and `native_testsuite.sh build` turns none of these into a flag, so they are dropped here: the job's bookkeeping,
+#: the box's controller state, the run-time switches of the program and the Python package, and one path whose tool
+#: is keyed by its version (MODULAR_NVPTX_COMPILER_PATH: `device.ptxas`). Every other variable with the prefixes stays
+#: keyed, as in the binding cache: one not shown neutral is an input.
+TS_NON_BUILD_ENV = ("MOJOLEARN_RESULTS_DIR", "MOJOLEARN_BOX_PERSIST", "MOJOLEARN_ALLOW_UNPERSISTED",
+                    "MOJOLEARN_ORCHESTRATOR", "MOJOLEARN_REPO_COMMIT", "MOJOLEARN_HOST_PROBE", "MOJOLEARN_TS_FILE",
+                    "MOJOLEARN_NUMERIC_MODE", "MODULAR_NVPTX_COMPILER_PATH")
+TS_NON_BUILD_PREFIXES = ("MOJOLEARN_PERSIST_", "MOJOLEARN_NVC_", "MOJOLEARN_CPC_", "MOJOLEARN_DEVPOD_")
+
+
+def ts_build_env(environ) -> dict:
+    """The build environment of a check program's key: bincache.build_env without TS_NON_BUILD_ENV."""
+    return {k: v for k, v in bincache.build_env(environ).items()
+            if k not in TS_NON_BUILD_ENV and not k.startswith(TS_NON_BUILD_PREFIXES)}
 
 
 def first_line(argv: list[str]) -> str:
@@ -141,9 +162,10 @@ def unit_fields(repo: Path, column: str, gen: Path, flags: list[str], environ=No
     """[(kind, id, fields)] for every unit of the plan; [] when this build must not use the cache."""
     import native_checks_report
     environ = os.environ if environ is None else environ
-    environment = bincache.build_env(environ)
-    if bincache.is_sabotage({"build_env": environment, "args": flags}):
+    # a fault named anywhere in the environment (dropped variables included) keeps the build out of the cache
+    if bincache.is_sabotage({"build_env": bincache.build_env(environ), "args": flags}):
         return []
+    environment = ts_build_env(environ)
     toolchain = toolchain_fields(repo, flags)
     if toolchain is None:
         return []

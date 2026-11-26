@@ -13,6 +13,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 _spec = importlib.util.spec_from_file_location("native_testsuite_cache", ROOT / "tools/ops/native_testsuite_cache.py")
 cache = importlib.util.module_from_spec(_spec)
@@ -97,6 +99,58 @@ def test_flags_toolchain_and_build_environment_change_every_key(tmp_path):
     changed["compiler"] = _keys(tmp_path)
     for why, keys in changed.items():
         assert all(keys[u] != base[u] for u in base), why
+
+
+def _persist_env(tag: str, res: str) -> dict:
+    """What tools/box_persist_run.sh:372-374 and the job controllers export for one job (rel-fix-1)."""
+    return dict(ENV, MOJOLEARN_RESULTS_DIR=res, MOJOLEARN_PERSIST_TAG=tag, MOJOLEARN_BOX_PERSIST="1",
+                MOJOLEARN_PERSIST_RUNNER="/root/mojolearn-ab/tools/box_persist_run.sh",
+                MOJOLEARN_PERSIST_JSON=f"/root/persist/{tag}.json", MOJOLEARN_NVC_HOME=f"/root/nvc/{tag}",
+                MOJOLEARN_DEVPOD_DISK_GB="80", MOJOLEARN_REPO_COMMIT=tag, MOJOLEARN_TS_FILE="ta",
+                MOJOLEARN_NUMERIC_MODE="identical", MODULAR_NVPTX_COMPILER_PATH=f"/root/{tag}/ptxas")
+
+
+def test_two_box_jobs_get_the_same_keys(tmp_path):
+    """review of 3423ae229e..8f0d9a9642, HIGH: the per-job variables of box_persist_run.sh made every key new."""
+    _tree(tmp_path)
+    a = _keys(tmp_path, env=_persist_env("nvc-ab-20261126T153033Z-865421", "/root/mojolearn-ab/box-out/a"))
+    b = _keys(tmp_path, env=_persist_env("nvc-gpu-smoke-20261126T172919Z-27418f", "/root/mojolearn-ab/box-out/b"))
+    assert a and a == b == _keys(tmp_path)
+
+
+
+@pytest.mark.parametrize("why,flags,env", [
+    ("a define", FLAGS + ["-D", "MOJOLEARN_OTHER=1"], {}),
+    ("the target", [f for f in FLAGS if f != "x86-64-v3"] + ["x86-64-v4"], {}),
+    ("a MOJO_ variable", FLAGS, {"MOJO_ENABLE_ASSERTIONS": "1"}),
+    ("a MODULAR_ variable", FLAGS, {"MODULAR_MOJO_MAX_IMPORT_PATH": "/x"}),
+    ("a compile job count", FLAGS, {"MOJOLEARN_COMPILE_JOBS": "4"}),
+    ("an unknown MOJOLEARN_ variable", FLAGS, {"MOJOLEARN_SOMETHING": "1"}),
+    ("the pixi environment", FLAGS, {"MOJOLEARN_BUILD_PIXI_ENV": "nvidia"}),
+])
+def test_every_byte_deciding_input_changes_the_key_under_a_box_job(tmp_path, why, flags, env):
+    _tree(tmp_path)
+    base = _persist_env("t1", "/r1")
+    before = _keys(tmp_path, env=base)
+    after = _keys(tmp_path, flags=flags, env=dict(_persist_env("t2", "/r2"), **env))
+    assert all(after[u] != before[u] for u in before), why
+
+
+def test_the_gpu_arch_and_ptxas_version_change_the_key(tmp_path, monkeypatch):
+    _tree(tmp_path)
+    ptxas = tmp_path / "ptxas"
+
+    def keys(arch, version):
+        ptxas.write_text(f"#!/bin/sh\necho 'ptxas {version}'\n")
+        ptxas.chmod(0o755)
+        monkeypatch.setattr(cache.bincache, "device_arch", lambda: arch)
+        env = dict(_persist_env("t", "/r"), MODULAR_NVPTX_COMPILER_PATH=str(ptxas))
+        return {k: v for _, k, v in cache.unit_keys(tmp_path.resolve(), "gpu", tmp_path.resolve() / "build/tsgen",
+                                                     FLAGS, env)}
+    base = keys("sm_89", "12.4")
+    assert keys("sm_89", "12.4") == base
+    assert all(keys("sm_80", "12.4")[u] != base[u] for u in base)
+    assert all(keys("sm_89", "12.6")[u] != base[u] for u in base)
 
 
 def test_a_fault_build_and_a_checkout_without_a_compiler_get_no_keys(tmp_path):
