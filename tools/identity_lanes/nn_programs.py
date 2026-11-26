@@ -282,6 +282,12 @@ def _(ml, X, yc, yr, Xh=None):
     tok = _synthetic_bpe(ml)
     raw = np.frombuffer(np.ascontiguousarray(X).tobytes()[:192], dtype=np.uint8)
     texts = ["".join(chr(32 + int(b) % 95) for b in raw[64 * k:64 * (k + 1)]) for k in range(3)]
+    # w3-integrate-11: a fourth text whose merges compete (the vocabulary's
+    # double space against its " tr"/" qu"/... pieces), so the merge ORDER
+    # decides the ids (coverage-tokenizer-bpe_merge_ties-cpu: printable bytes
+    # cut from the fixture rarely meet two merges on one byte).
+    words = ("tr", "qu", "vi", "on", "el", "or", "go", "ze", "sh", "ru", "ne", "lo", "ul")
+    texts.append("".join("  " + words[int(b) % len(words)] for b in raw[:24]))
     ids = [tok.encode(t) for t in texts]
     single = [BT.decode(tok, i) for i in ids]
     batch = BT.decode_batch(tok, ids)
