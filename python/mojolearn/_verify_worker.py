@@ -327,6 +327,15 @@ def execute(request):
         return dict(value=value, bindings=[dict(module=b["module"], sha256=b["sha256"], size=b["size"],
                                                 file=b["file"], path_source=b["path_source"])
                                            for b in _verify.binding_artifacts(require_loaded=False)])
+    if request["action"] == "public":
+        # the public endpoint and tape checks of `verify --all`, in their own worker in the sweep's pool
+        # (rel-fix-1, 2026-11-26); the same body the controller ran in its own process after the sweep
+        from ._verify_public import run as public_checks
+        from . import _verify
+        value = public_checks(scope=request["scope"])
+        return dict(value=value, bindings=[dict(module=b["module"], sha256=b["sha256"], size=b["size"],
+                                                file=b["file"], path_source=b["path_source"])
+                                           for b in _verify.binding_artifacts(require_loaded=False)])
     path = request["harness"]
     if path not in _HARNESSES:
         _HARNESSES[path] = verifier.load_harness(path)

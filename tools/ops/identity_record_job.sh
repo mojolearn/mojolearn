@@ -28,6 +28,7 @@
 # Optional: IR_GPUS (devices; default nvidia-smi's count), IDENTITY_RECORD_BOX (default: the RunPod pod id).
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/../.." && pwd)"
+. "$HERE/tree_commit.sh"
 
 # job-preflight: `identity_record_job.sh --preflight` checks the job's inputs at SUBMIT time, reading only (run on the
 # box by tools/ops/job_preflight.sh from tools/nvidia_central.sh submit): IR_WHEEL_DIR holds one core and one nvidia
@@ -46,14 +47,11 @@ ir_preflight() {   # PREFLIGHT lines; 0 when the job would start, 4 otherwise
         else
             pf_fail "IR_WHEEL_DIR $IR_WHEEL_DIR holds $n of the 2 wheels (one mojolearn_core, one mojolearn_nvidia, nothing else)"
         fi
-        head=$(git -C "$REPO" rev-parse HEAD 2> /dev/null || true)
-        for w in $(ir_wheels); do
-            w12=$(basename "$w" | sed -n 's/^[^-]*-[^-]*+\([0-9a-f]\{7,40\}\)-.*/\1/p')
-            if [ -z "$head" ]; then echo "PREFLIGHT ok (no git HEAD in $REPO: commit match left to the recorder)"; break
-            elif [ -z "$w12" ]; then pf_fail "$(basename "$w"): no +<sha> local version to match HEAD ${head:0:12}"
-            elif [ "${head:0:${#w12}}" != "$w12" ]; then pf_fail "$(basename "$w") is commit $w12, this tree's HEAD is ${head:0:12} (sync the tree to the build's commit)"
-            fi
-        done
+        # the tree's commit is the synced one (tools/ops/tree_commit.sh), not the box HEAD a patch sync leaves at the
+        # merge base with main (rel-fix-1, 2026-11-26)
+        while read -r line; do
+            case $line in MATCH*) echo "PREFLIGHT ok $line" ;; *) pf_fail "$line (sync the tree to the build's commit)" ;; esac
+        done < <(wheels_match_tree "$REPO" $(ir_wheels))
     fi
     [ -f "$REPO/tools/identity_wheel_record.py" ] && echo "PREFLIGHT ok recorder $REPO/tools/identity_wheel_record.py" \
         || pf_fail "no tools/identity_wheel_record.py in $REPO"
@@ -72,7 +70,28 @@ echo "IDREC allocation: $(alloc_cores) core(s) of $(nproc) visible, $(( $(alloc_
 
 # The venvs live outside the results dir (it is uploaded to R2) and go when the job ends.
 SCRATCH="$(mktemp -d "${TMPDIR:-/root}/idrec-XXXXXX")"
-trap 'rm -rf "$SCRATCH"' EXIT
+trap 'git -C "$REPO" worktree remove --force "$SCRATCH/tree" > /dev/null 2>&1; rm -rf "$SCRATCH"; git -C "$REPO" worktree prune > /dev/null 2>&1' EXIT
+
+# THE JOB'S OWN TREE (rel-fix-1, 2026-11-26). The box tree is shared: nvc-ab-20261126T153033Z-865421 passed its
+# preflight at 9bdb1a9e8c, the orchestrator synced the tree to main 3423ae229e while verify ran (27 min), and every
+# record chunk then refused the wheel ("installed wheel source 9bdb1a9e8c34, harness tree 3423ae229e0b", rc 2 in 15 s).
+# So the job fixes its harness at the start: a detached worktree at the wheels' commit when the box has that commit,
+# else a copy of the synced tree as it is now (tracked and new files, its HEAD and its sync record). Every later step
+# runs the harness from $TREE; a sync of $REPO during the job no longer changes what runs.
+TREE="$SCRATCH/tree"
+WSHA=$(git -C "$REPO" rev-parse -q --verify "$(wheel_commit "$(ir_wheels | head -n 1)")^{commit}" 2> /dev/null || true)
+if [ -n "$WSHA" ] && git -C "$REPO" worktree add -q --detach "$TREE" "$WSHA" > "$RES/logs/tree.log" 2>&1; then
+    echo "IDREC tree: worktree at ${WSHA:0:12} ($TREE)"
+elif git -C "$REPO" worktree add -q --detach --no-checkout "$TREE" HEAD >> "$RES/logs/tree.log" 2>&1 \
+        && git -C "$TREE" read-tree HEAD \
+        && ( cd "$REPO" && git ls-files -z -c -o --exclude-standard | tar --null -cf - -T - ) | ( cd "$TREE" && tar -xf - ) \
+        && { [ ! -f "$(git -C "$REPO" rev-parse --absolute-git-dir)/devpod_synced" ] \
+             || cp "$(git -C "$REPO" rev-parse --absolute-git-dir)/devpod_synced" "$(git -C "$TREE" rev-parse --absolute-git-dir)/devpod_synced"; }; then
+    echo "IDREC tree: copy of the synced tree, commit $(tree_commit "$TREE" | cut -c1-12) ($TREE)"
+else
+    echo "IDREC tree FAIL: could not make the job's own tree ($(tail -n 2 "$RES/logs/tree.log" | tr '\n' ' '))"; exit 4
+fi
+wheels_match_tree "$TREE" $(ir_wheels) | sed 's/^/IDREC tree /' || { echo "IDREC tree refused: it does not hold the wheels' commit"; exit 4; }
 fails=0
 step() { # name, command...
     local n=$1; shift; local t0=$SECONDS sp st
@@ -119,20 +138,20 @@ if [ -z "${IDENTITY_RECORD_BOX:-}" ]; then
 fi
 echo "IDREC record: column nvidia on $GPUS GPU(s), box ${IDENTITY_RECORD_BOX:-unnamed}"
 mkdir -p "$RES/identity"
-# The recorder's chunks run tools/record_identity_column.sh, which refuses an <outdir> inside the tree; the results dir
-# is box-out/ inside /root/mojolearn-ab (first run, nvc-ab-20261125T115541Z-2b94b1: every chunk rc 2). Record into
-# the scratch dir, outside the tree, and copy it into the results dir (uploaded to R2) whatever the step's rc.
-step record bash -c 'cd "$1" && shift && exec python3 tools/identity_wheel_record.py "$@"' _ "$REPO" \
+# The recorder's chunks run tools/record_identity_column.sh, which refuses an <outdir> inside ITS tree. The harness
+# runs from $TREE (in the scratch dir), so the results dir is outside it: the recorder writes straight into
+# $RES/identity, and every chunk's full log (identity/<label>/w<i>/record.log), the selection log and the summary are in
+# the uploaded results as they are written, whatever the step's rc, never in a scratch dir only.
+step record bash -c 'cd "$1" && shift && exec python3 tools/identity_wheel_record.py "$@"' _ "$TREE" \
     --columns nvidia --label-device l40s "${whl[@]}" "${shas[@]}" --gpus "$GPUS" --workers-per-gpu auto \
-    --out "$SCRATCH/identity" --venv "$SCRATCH/identity-venv"
-[ -d "$SCRATCH/identity" ] && cp -a "$SCRATCH/identity/." "$RES/identity/"
+    --out "$RES/identity" --venv "$SCRATCH/identity-venv"
 grep -E '^identity-wheels: (busy plan|DONE|FAILED)' "$RES/logs/record.log" | head -n 6 || true
 
 # (iii) the in-repo evidence (verify-complete, Andrew 2026-11-26): the verify part here; the record part was staged by
 # the recorder under identity/evidence/nvidia/record. On the Mac, `tools/box_persist.py fetch --tag <tag> --extract
 # --evidence` (or `tools/verification_evidence.py install --from <fetched dir> --commit`) writes both into
 # verification/latest/nvidia/ and commits them.
-python3 "$REPO/tools/verification_evidence.py" stage --results "$RES" --column nvidia --part verify \
+python3 "$TREE/tools/verification_evidence.py" stage --results "$RES" --column nvidia --part verify \
     --out "$RES/evidence/nvidia/verify" || { echo "IDREC evidence FAIL (staging the verify part)"; fails=$((fails + 1)); }
 echo "IDREC done fails=$fails"
 [ $fails = 0 ]

@@ -92,7 +92,7 @@
 #                           run against the mojolearn INSTALLED in PYTHON's environment (the exact release
 #                           wheel bytes), never against $ROOT/python: PYTHONPATH is not extended, the
 #                           preflight refuses a package under $ROOT or outside site-packages, and the
-#                           installed identity_columns/COMMIT must equal HEAD (the harness in tools/ is the
+#                           installed identity_columns/COMMIT must equal the tree commit (tree_commit.sh; the harness in tools/ is the
 #                           same source). Needs PYTHON (the venv interpreter) and INSTALLED_WHEELS (a file of
 #                           "<wheel file name> <sha256>" lines the installer verified); the digests land in the
 #                           provenance as installed_wheels=. The lane selection (every lane, or REUSE=1) is unchanged.
@@ -212,14 +212,31 @@ if [ "$PTX" = 1 ]; then export MOJOLEARN_GPU_ARCH=sm_80; elif [ "$BACKEND" = cud
 # intentional full run; a reference column is exactly that.
 if [ "$BACKEND" = metal ]; then export MOJOLEARN_APPLE_FULL_DIAGNOSTIC=1; fi
 
-COMMIT=$(git rev-parse HEAD 2>/dev/null) || die "not a git checkout; the record needs a commit witness"
-# A build may touch a lock file or a generated table; a changed SOURCE file
-# means the record would name a commit that is not what ran.
-DIRTY=$(git status --porcelain --untracked-files=no 2>/dev/null | awk '{print $NF}' | tr '\n' ' ')
-SRC_DIRTY=$(tr ' ' '\n' <<< "$DIRTY" | grep -E '^(python/|tools/|bindings/|.*\.mojo$)' \
-            | grep -v -x 'tokenizer/impl/unicode_table_generated.mojo' | tr '\n' ' ')
-if [ -n "${SRC_DIRTY// /}" ] && [ "${ALLOW_DIRTY:-0}" != 1 ]; then
-    die "source files differ from $COMMIT: $SRC_DIRTY(ALLOW_DIRTY=1 overrides)"
+HEAD_COMMIT=$(git rev-parse HEAD 2>/dev/null) || die "not a git checkout; the record needs a commit witness"
+# THE TREE'S COMMIT (rel-fix-1, 2026-11-26): a box tree patch-synced by tools/dev_pod.sh has its HEAD at the merge
+# base with main and the synced commit in .git/devpod_synced; `git rev-parse HEAD` named main, so every chunk of the
+# L40S record refused the wheel ("installed wheel source 9bdb1a9e8c34, harness tree 3423ae229e0b", rc 2). The commit
+# is tools/ops/tree_commit.sh's, the one rule every box job reads. For a synced tree the patch is the difference
+# from HEAD by design, so the source check is the sync record's own (worktree_dirty=0: the synced commit is exactly
+# what was shipped); MOJOLEARN_COMMIT carries it to the harness (tools/identity_break.py commit_witness).
+. "$ROOT/tools/ops/tree_commit.sh"
+COMMIT=$(tree_commit "$ROOT")
+[ -n "$COMMIT" ] || die "no commit witness for $ROOT"
+if [ "$COMMIT" != "$HEAD_COMMIT" ]; then
+    SYNC_DIRTY=$(sed -n 's/^worktree_dirty=//p' "$(git rev-parse --absolute-git-dir)/devpod_synced" | head -n 1)
+    if [ "$SYNC_DIRTY" != 0 ] && [ "${ALLOW_DIRTY:-0}" != 1 ]; then
+        die "the tree was synced from a worktree with uncommitted changes over $COMMIT (ALLOW_DIRTY=1 overrides)"
+    fi
+    export MOJOLEARN_COMMIT=$COMMIT
+else
+    # A build may touch a lock file or a generated table; a changed SOURCE file
+    # means the record would name a commit that is not what ran.
+    DIRTY=$(git status --porcelain --untracked-files=no 2>/dev/null | awk '{print $NF}' | tr '\n' ' ')
+    SRC_DIRTY=$(tr ' ' '\n' <<< "$DIRTY" | grep -E '^(python/|tools/|bindings/|.*\.mojo$)' \
+                | grep -v -x 'tokenizer/impl/unicode_table_generated.mojo' | tr '\n' ' ')
+    if [ -n "${SRC_DIRTY// /}" ] && [ "${ALLOW_DIRTY:-0}" != 1 ]; then
+        die "source files differ from $COMMIT: $SRC_DIRTY(ALLOW_DIRTY=1 overrides)"
+    fi
 fi
 
 # --- preflight: the loaded backend and tier, before any fit ----------------

@@ -10,6 +10,7 @@ registry states. No device store is reached: store ids are plain integers.
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
 from core.state_registry import StateHandle
+from core.host_parallel import host_parallelize
 from core.arena_state import (
     ARENA_ROWS, ARENA_CACHES, ARENA_SCOPES, ARENA_RESIDENTS, ARENA_HANDLE_NONE,
     DeviceRowsState, DeviceCacheState, ArenaScopeState, ArenaResidentState, ArenaResidentEntry, ARENA_STORE_ID_DEFERRED,
@@ -208,6 +209,35 @@ def scope_caches() raises:
     require(lease[].cache_of("x_metrics", 258) == ARENA_HANDLE_NONE, "another prefix has no cache")
     var taken = lease[].take_caches()
     require(len(taken) == 2 and taken[1].cache == 42 and lease[].cache_of("x_prep", 258) == ARENA_HANDLE_NONE, "take_caches empties the scope")
+    ARENA_SCOPES.release(arena_handle(word))
+    scope_caches_concurrent()
+
+
+def scope_caches_concurrent() raises:
+    """The folds of a wave share one scope (rel-fix-1, 2026-11-26): concurrent first calls of four families link ONE
+    cache each, every caller reads the one its family kept, and the close takes four untorn rows. Sabotage: link
+    with `add_cache` (no check under the lock) and the scope keeps 64."""
+    var word = arena_handle_word(ARENA_SCOPES.insert(ArenaScopeState(0)))
+    var won = List[Int](length=64, fill=-2)
+    var wp = won.unsafe_ptr()
+
+    def link(i: Int) {imm word, imm wp}:
+        try:
+            var at = ARENA_SCOPES.acquire(arena_handle(word))
+            wp[i] = at[].add_cache_if_absent(String("fam") + String(i % 4), 258, 1000 + i)
+        except error:
+            wp[i] = -3
+
+    host_parallelize(link, 64)
+    var lease = ARENA_SCOPES.acquire(arena_handle(word))
+    var taken = lease[].take_caches()
+    require(len(taken) == 4, "one cache per family under concurrent first calls")
+    for i in range(64):  # driver-loop: over the callers
+        require(won[i] >= 1000 and (won[i] - 1000) % 4 == i % 4 and won[i] == won[i % 4],
+                "every caller reads its family's one cache")
+    for i in range(len(taken)):  # driver-loop: over the taken rows
+        require(taken[i].route == 258 and taken[i].prefix == String("fam") + String((taken[i].cache - 1000) % 4),
+                "an untorn row")
     ARENA_SCOPES.release(arena_handle(word))
 
 
