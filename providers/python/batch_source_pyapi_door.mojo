@@ -37,7 +37,8 @@ from providers.python.batch_source_class_door import (
 )
 from providers.python.autograd_program_arrays_pyapi_door import is_integer_input, uint64_input
 from autograd.batch_source import (
-    BatchSource, BatchSourceSpec, BatchSourcePtr, BATCH_SOURCE_FORMAT, BS_FIELD_TARGETS, batch_source_open, batch_source_field,
+    BatchSource, BatchSourceSpec, BatchSourcePtr, BATCH_SOURCE_FORMAT, BS_FIELD_TARGETS, batch_source_open,
+    batch_source_field,
     batch_source_field_name, batch_source_seal, ProgramTrainingSource, program_training_source_refuse,
     batch_source_part_of,
 )

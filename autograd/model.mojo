@@ -1452,8 +1452,8 @@ def model_fit_state_source[E: Exec](
 ) raises -> Int:
     """Sequential.fit(source=) (lane stream-fits, 2026-11-25): the fit loop's STREAMED instance
     (`_model_fit_state[..., streamed=True]`), chosen once per fit like the grouped one, so a fit on arrays runs the
-    instance it ran before. The batches come from `stream` (autograd/batch_source.mojo, kept by the caller and set at the
-    position to train from): one loop iteration (one `loss_curve_` word, the mean loss of its rows) is the rest of
+    instance it ran before. The batches come from `stream` (autograd/batch_source.mojo, kept by the caller and set
+    at the position to train from): one loop iteration (one `loss_curve_` word, the mean loss of its rows) is the rest of
     the source's current epoch, at most `max_steps` batches in the whole call when > 0, and the next batch is read
     ahead after each step is queued. Every batch is padded to the model's sequence length; the lengths field masks
     the recurrent layers. The schedule's epoch is the SOURCE's epoch, so a run stopped mid-epoch and resumed rates

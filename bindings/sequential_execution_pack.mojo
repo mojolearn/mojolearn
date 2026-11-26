@@ -398,7 +398,8 @@ def sequential_fit_source(mut mods: NativeModules, model: PythonObject, args: Py
     record shape ((n, max_length, n_features), or (n, n_features) for records of one step), the fit buffers.
     RUN: one MODEL_FIT call carrying the address of the source the handle's owner keeps (FIT_SOURCE_MARK,
     autograd/model_descriptor.mojo; opened by the first fit, reused by the later ones): the training image runs the
-    streamed instance of the fit loop on it in place (autograd/model.mojo model_fit_state_source). PACK: the fitted fields and the consumed position on the handle; the training state
+    streamed instance of the fit loop on it in place (autograd/model.mojo model_fit_state_source). PACK: the fitted
+    fields and the consumed position on the handle; the training state
     (`_fit_state`) holds the position and the source's binding words, so save_checkpoint and a resume in a fresh
     process continue on the same next batch. Lane stream-fits-2: validation_data (X, y[, lengths]) and
     restore_best_weights as for arrays, evaluated at the end of every pass over the source."""
