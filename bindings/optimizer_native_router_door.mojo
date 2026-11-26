@@ -675,7 +675,8 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
         opt_owner(owner, context)
         return optimizer_construct(owner, values, mode, context)
     if owner is not None and (operation == OPTIMIZER_OPN_STEP or operation == OPTIMIZER_OPN_STATE
-                              or operation == OPTIMIZER_OPN_ZERO or operation == OPTIMIZER_OPN_LOAD):
+                              or operation == OPTIMIZER_OPN_ZERO or operation == OPTIMIZER_OPN_LOAD
+                              or operation == OPTIMIZER_OPN_IO):
         # nn-blocks-pg, one class (w3-integrate-10, Andrew's choice (b)): an optimizer built from parameter groups
         # holds them inside its owner (`_pg_members`); the public step / zero_grad / state_dict / load_state_dict
         # of that same class route here. One dictionary lookup on these four operations of a plain optimizer.
@@ -693,6 +694,8 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
                 return pg_training_operation(OPTIMIZER_OPN_PG_STATE, owner, values, context)
             if operation == OPTIMIZER_OPN_ZERO:
                 return pg_training_operation(OPTIMIZER_OPN_PG_ZERO, owner, values, context)
+            if operation == OPTIMIZER_OPN_IO:
+                return _pg_io(owner, values, context)
             return pg_training_operation(OPTIMIZER_OPN_PG_LOAD, owner, values, context)
     var selected_mode = mode
     var host_owner = False
@@ -795,35 +798,7 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
         _ = owner_state
         return PythonObject(active)
     if operation == OPTIMIZER_OPN_IO:
-        opt_scalar(values[0], context)
-        var op = Int(py=values[0])
-        var fields = py_fields(owner)
-        var owner_state = optimizer_owner_value(owner)
-        var record = owner_state.downcast_value_ptr[OptimizerOwner]()
-        var tensors = values[1]
-        if op == 1 or op == 2:
-            tensors = py_item(fields, nk[].k_params)
-        if op == 2 and not record[].control.parameters_device:
-            _ = owner_state
-            return py_item(fields, nk[].k_params)
-        opt_scalar(values[2], context)
-        opt_scalar(values[3], context)
-        var result = optimizer_io(module, provider, owner, op, tensors, String(py=values[2]), Int(py=values[3]))
-        if op == 0:
-            _ = owner_state
-            return PythonObject(result != 0)
-        if op == 1 or op == 3:
-            if op == 1:
-                record[].control.parameters_device = True
-            else:
-                record[].control.gradients_device = True
-            _ = owner_state
-            return owner
-        if op == 2 or op == 4:
-            _ = owner_state
-            return tensors
-        _ = owner_state
-        return optimizer_pack_io(provider, op, result)
+        return optimizer_owner_io(module, provider, owner, values, context)
     if operation == OPTIMIZER_OPN_CLIP:
         # lane vdf-linalg3: TrainDeviceArray gradients are clipped in place on
         # the device (bindings/training_grads_device_unpack.mojo); identity
@@ -1115,6 +1090,85 @@ def _pg_clip(member: PythonObject, provider: PythonObject, grads: PythonObject, 
     return door_clip(provider, grads, max_norm, PythonObject(2.0), PythonObject(True), Python.dict())
 
 
+def optimizer_owner_io(module: PythonObject, provider: PythonObject, owner: PythonObject, values: PythonObject,
+                       context: PythonObject) raises -> PythonObject:
+    """The io operation (`values` = (op, tensors, name, tensor)) of one optimizer owner on its entries: moved out of
+    `optimizer_native` unchanged (lane gs-fix-2) so a grouped optimizer runs it on each member (`_pg_io`) with no
+    call back into the router."""
+    var nk = optimizer_keys()
+    opt_scalar(values[0], context)
+    var op = Int(py=values[0])
+    var fields = py_fields(owner)
+    var owner_state = optimizer_owner_value(owner)
+    var record = owner_state.downcast_value_ptr[OptimizerOwner]()
+    var tensors = values[1]
+    if op == 1 or op == 2:
+        tensors = py_item(fields, nk[].k_params)
+    if op == 2 and not record[].control.parameters_device:
+        _ = owner_state
+        return py_item(fields, nk[].k_params)
+    opt_scalar(values[2], context)
+    opt_scalar(values[3], context)
+    var result = optimizer_io(module, provider, owner, op, tensors, String(py=values[2]), Int(py=values[3]))
+    if op == 0:
+        _ = owner_state
+        return PythonObject(result != 0)
+    if op == 1 or op == 3:
+        if op == 1:
+            record[].control.parameters_device = True
+        else:
+            record[].control.gradients_device = True
+        _ = owner_state
+        return owner
+    if op == 2 or op == 4:
+        _ = owner_state
+        return tensors
+    _ = owner_state
+    return optimizer_pack_io(provider, op, result)
+
+
+def _pg_io(owner: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`params_resident_available` (op 0), `params_to_device` (op 1) and `params_to_host` (op 2) of an optimizer
+    built from parameter groups (lane gs-fix-2): each member's own io operation, in group order
+    (`optimizer_owner_io` on the member's entries, `_pg_member_entries`, as `optimizer_native` selects them).
+    With its members' parameters on the device a grouped step takes TrainDeviceArray gradients, as a one-group step does after `params_to_device()` (the device
+    gradient step is the device-parameter step only, training/optimizer_public_common.mojo GRADS_DEVICE). op 2
+    answers every group's parameter arrays in group order. The gradient io (`grads_to_device`, op 3 and 4) feeds
+    `step_device`, which a grouped optimizer does not take: refused in words."""
+    opt_scalar(values[0], context)
+    var op = Int(py=values[0])
+    var fields = py_fields(owner)
+    var members = py_item(fields, PythonObject("_pg_members"))
+    if op != 0 and op != 1 and op != 2:
+        raise Error("ValueError: an optimizer with parameter groups moves its parameters only (params_to_device, "
+                    + "params_to_host); it takes step(grads, max_norm), not grads_to_device or step_device")
+    if op == 0:
+        var e0 = _pg_member_entries(members[0], context)
+        return optimizer_owner_io(e0[0], e0[1], members[0], values, context)
+    var out = Python.list()
+    for gi in range(len(members)):  # driver-loop: over parameter groups (each member's own io call)
+        var e = _pg_member_entries(members[gi], context)
+        var got = optimizer_owner_io(e[0], e[1], members[gi], values, context)
+        if op == 2:
+            for k in range(len(got)):  # driver-loop: over one group's parameter arrays (references, no data)
+                _ = py_call(out.append, got[k])
+    if op == 1:
+        return owner
+    return out
+
+
+def _pg_members_on_device(members: PythonObject) raises -> Bool:
+    """Whether every member keeps its parameters on the device (`params_to_device`): the only optimizers whose
+    step reads TrainDeviceArray gradients."""
+    for gi in range(len(members)):  # driver-loop: over parameter groups (one owner flag each)
+        var state = optimizer_owner_value(members[gi])
+        var on = state.downcast_value_ptr[OptimizerOwner]()[].control.parameters_device
+        _ = state
+        if not on:
+            return False
+    return True
+
+
 def pg_training_operation(operation: Int, owner: PythonObject, values: PythonObject,
                           context: PythonObject) raises -> PythonObject:
     """step, zero_grad, state_dict and load_state_dict of an optimizer built from parameter groups."""
@@ -1132,6 +1186,11 @@ def pg_training_operation(operation: Int, owner: PythonObject, values: PythonObj
         var on_device = grads_device_input(grads, False, context)
         if py_get(py_fields(members[0]), optimizer_keys()[].k__host_device) is PythonObject(True):
             optimizer_refuse_device_grads(grads, context)
+        if on_device and operation == OPTIMIZER_OPN_PG_STEP and not _pg_members_on_device(members):
+            # Refused BEFORE the device clip, which scales the caller's gradients in place: a refusal leaves
+            # nothing behind (lane gs-fix-2: each member's step refused the device arrays only after the clip).
+            raise Error("RuntimeError: mojolearn." + where + ".step: TrainDeviceArray gradients need the "
+                        + "parameters on the device (call params_to_device() first)")
         var parts = _pg_slices(members, grads, where + (".step" if operation == OPTIMIZER_OPN_PG_STEP else ".zero_grad"))
         if operation == OPTIMIZER_OPN_PG_ZERO:
             for gi in range(len(members)):  # driver-loop: over parameter groups

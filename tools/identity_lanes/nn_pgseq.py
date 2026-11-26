@@ -104,12 +104,17 @@ def _(ml, X, yc, yr, Xh=None):
         w = _nn_pgseq_arrays(X)
         r = [a.copy() for a in w]
         on_device = cls([dict(params=[w[0]], **opts[0]), dict(params=[w[1], w[2]], **opts[1])], **base)
+        # TrainDeviceArray gradients are the device-parameter step's (training/optimizer_public_common.mojo
+        # GRADS_DEVICE; a one-group step refuses them before params_to_device()): the groups' parameters go to
+        # the device first and come back before the compare (lane gs-fix-2: the lane stepped host parameters).
+        on_device.params_to_device()
         on_host = cls([dict(params=[r[0]], **opts[0]), dict(params=[r[1], r[2]], **opts[1])], **base)
         dn, hn = [], []
         for step in range(3):
             g = _nn_pgseq_grads(X, step)
             dn.append(on_device.step([train_to_device(a.copy()) for a in g], max_norm=0.5))
             hn.append(on_host.step([a.copy() for a in g], max_norm=0.5))
+        on_device.params_to_host()
         for k in range(3):
             _same_bytes(f"{name} groups, device gradients", w[k], f"{name} groups, host gradients", r[k])
         _same_bytes(f"{name} norms, device gradients", np.asarray(dn, np.float64), f"{name} norms, host gradients",
