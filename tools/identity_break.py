@@ -762,7 +762,12 @@ def resume_signature(args, package_dir, harness, provenance):
         with path.open("rb") as stream:
             for block in iter(lambda: stream.read(1024 * 1024), b""):
                 h.update(block)
-    options = {k: v for k, v in vars(args).items() if k not in ("json", "resume", "verbose", "provenance_lines")}
+    # HARNESS FIX (lane sab-triage-1, 2026-11-26): `cpu_json` is the CPU column's output path under `--side both`,
+    # an output like `json`, never an execution setting. Kept in the options, it differed between a sabotage batch's
+    # clean_cpu.json, sab_cpu.json and restored_cpu.json, so coverage_sabotage.py check read "different execution
+    # options" and all 9 MISSED arms of the GPU sabotage run of 9bdb1a9e8c were refused before any lane was judged.
+    options = {k: v for k, v in vars(args).items()
+               if k not in ("json", "cpu_json", "resume", "verbose", "provenance_lines")}
     env = {k: hashlib.sha256(v.encode()).hexdigest() for k, v in os.environ.items()
            if k != RESUME_LEASE_ENV and k.startswith(("MOJO", "MODULAR", "OMP_", "MKL_", "OPENBLAS_",
                                                      "VECLIB_", "NUMEXPR_", "BLIS_"))}
