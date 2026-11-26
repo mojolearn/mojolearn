@@ -11,7 +11,7 @@ from autograd.model import (
     model_fit_state, model_fit_state_source, model_predict, parse_model,
 )
 from autograd.batch_source import (
-    batch_source_open, batch_source_fit_spec, source_part_load, program_training_source_refuse, batch_source_part_of,
+    batch_source_fit_held, source_part_load, program_training_source_refuse, batch_source_part_of,
 )
 from autograd.model_checkpoint import model_layout
 from autograd.nn_optim import NN_OPT_LAMB, NN_SCHED_ARGS
@@ -104,14 +104,15 @@ def model_fit_setup(prog: List[Int], ip: List[Int], fp: List[Float64]) raises ->
 
 
 def model_fit_source_native[E: Exec](
-    mut ex: E, addrs: List[Int], prog: List[Int], ip: List[Int], fp: List[Float64], path: String,
+    mut ex: E, addrs: List[Int], prog: List[Int], ip: List[Int], fp: List[Float64],
     words: List[Int], source_out: Int, loop_words: Int = 0, state3: Int = 0,
     sources: Optional[List[CastIn]] = None,
 ) raises -> Int:
     """Sequential.fit(source=) (lane stream-fits, 2026-11-25): the stateful fit's 8 addresses and 15 integer words
     (N, X and y unused: the source holds the rows) with the batch source's words (autograd/batch_source.mojo
-    batch_source_fit_words) and path. The source is opened HERE, in the training image, once per call, at the
-    position the words carry; a resume refuses a source that is not the one its state was trained on
+    batch_source_fit_words: the address of the source the handle's owner keeps, in the door's image, and
+    max_steps; lane w3i11-source-keep). The source is used HERE in place, never opened or closed: it stands at the
+    handle's position; a resume refuses a source that is not the one its state was trained on
     (program_training_source_refuse against the state's FS_SOURCE words) and starts at the state's consumed
     position, whatever the handle's (so a fresh process resumes with a new handle at (0, 0)). Returns the
     iterations run in all (the state's FS_EPOCH).
@@ -140,9 +141,9 @@ def model_fit_source_native[E: Exec](
             IP64(unsafe_from_address=addrs[12]), val_lengths,
         ))
     var setup = model_fit_setup(prog, ip, fp)
-    var opened = batch_source_fit_spec(path, words)
-    var spec_words = opened[0].copy()
-    var max_steps = opened[1]
+    var held = batch_source_fit_held(words)
+    var src = held[0]
+    var max_steps = held[1]
     var sa = addrs[6]
     if sa == 0:
         raise Error("model_fit: null training-state buffer")
@@ -152,27 +153,20 @@ def model_fit_source_native[E: Exec](
         var saved = source_part_load(state + FS_SOURCE)
         if saved.present:
             # the same sealed data, plan and fields; then the state's consumed position, whatever the handle's
-            if not spec_words.sealed:
-                raise Error("ValueError: Sequential.fit(resume=True): the shard index under " + path + " records no "
-                            + "content digest, so a resume could not tell these shards from other data of the same "
-                            + "shape; call BatchSource.seal(path) once after writing the shards, then open the "
-                            + "source again")
-            program_training_source_refuse(batch_source_part_of(spec_words), saved, "Sequential.fit(resume=True)")
-            spec_words.epoch = saved.epoch
-            spec_words.consumed = saved.consumed
-    var src = batch_source_open(spec_words^)
+            if not src[].spec.sealed:
+                raise Error("ValueError: Sequential.fit(resume=True): the shard index under " + src[].spec.path
+                            + " records no content digest, so a resume could not tell these shards from other data "
+                            + "of the same shape; call BatchSource.seal(path) once after writing the shards, then "
+                            + "open the source again")
+            program_training_source_refuse(batch_source_part_of(src[].spec), saved, "Sequential.fit(resume=True)")
+            src[].seek(saved.epoch, saved.consumed)
     var prev = model_fptr(addrs[3], "loss_curve")
     if resume and Int(state[FS_EPOCH]) > 0:
         prev = model_fptr(addrs[7], "earlier loss_curve")
-    try:
-        _ = model_fit_state_source(ex, setup.spec, setup.cfg, src, max_steps, model_fptr(addrs[2], "params"),
-                                   model_fptr(addrs[3], "loss_curve"), model_fptr(addrs[4], "m"),
-                                   model_fptr(addrs[5], "v"), state, prev, resume, loop_words, state3, source_out,
-                                   validation)
-    except error:
-        src.close()
-        raise error^
-    src.close()
+    _ = model_fit_state_source(ex, setup.spec, setup.cfg, src[], max_steps, model_fptr(addrs[2], "params"),
+                               model_fptr(addrs[3], "loss_curve"), model_fptr(addrs[4], "m"),
+                               model_fptr(addrs[5], "v"), state, prev, resume, loop_words, state3, source_out,
+                               validation)
     return Int(state[FS_EPOCH])
 
 
