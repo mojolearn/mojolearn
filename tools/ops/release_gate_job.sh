@@ -278,7 +278,7 @@ if [ -n "${GATE_IDENTITY_COLUMNS:-}" ]; then
     python3 tools/identity_wheel_record.py --columns "$GATE_IDENTITY_COLUMNS" ${reuse[@]+"${reuse[@]}"} \
         --label-device "$GATE_IDENTITY_LABEL_DEVICE" "${whl[@]}" "${shas[@]}" --gpus "$ngpu" \
         --out "$GATE_WORK/out/identity" --venv "$GATE_WORK/identity-venv" > "$J/identity.log" 2>&1 || irc=$?
-    grep -E '^identity-wheels: (busy plan|.*REUSED|DONE|FAILED)' "$J/identity.log" | head -n 12 || true
+    grep -E '^identity-wheels: (busy plan|timing|gpu memory|.*REUSED|DONE|FAILED)' "$J/identity.log" | head -n 12 || true
     say "identity record exited $irc"
 fi
 

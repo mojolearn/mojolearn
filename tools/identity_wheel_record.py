@@ -19,7 +19,11 @@ columns name: the NVIDIA box (nvidia, ptx), the AMD box (amd), the Mac (apple) o
             each chunk `RECORD_FROM_INSTALLED=1 LANES=<chunk> LANE_SELECTION=auto-reuse-chunk
             record_identity_column.sh <label> DIR/<label>/w<i>` pinned to its device (CUDA_VISIBLE_DEVICES /
             HIP_VISIBLE_DEVICES). With more devices than columns each column gets its own device(s); with fewer,
-            columns share them. It prints "busy plan: W worker(s) of T" before it starts.
+            columns share them. Workers per device (--workers-per-gpu auto): one per core of the allocation,
+            bounded by the GPU's free memory at GPU_GIB_PER_WORKER and the host's at HOST_GIB_PER_WORKER; the
+            lanes are packed into chunks of equal estimated cost, longest lane first (`chunks`). It prints
+            "busy plan: W worker(s) of T" before it starts and "timing: record <s>s wall, busy cores mean B of N;
+            chunks <min>-<max>s; slowest lanes: ..." and "gpu memory: peak ..." after.
 4. summary  DIR/identity-wheels.json (schema mojolearn.identity-wheels.v1): per column the selection, the
             records written (with their admissible= line) and the rc; exit 0 only when every chunk recorded
             admissibly. The records go to admission (tools/admit_identity_columns.sh) with every other column.
@@ -78,9 +82,25 @@ EXTENDED_COMMANDS = {
     "verify-distributed-program": lambda column, out: ["verify-distributed-program", "--output", out],
     "verify-partitioned-program": lambda column, out: ["verify-partitioned-program", "--output", out],
 }
-#: assumed GPU memory per concurrent record worker (GiB) for --workers-per-gpu auto, until a first run measures
-#: the peak (tools/identity_wheel_record.py prints the free memory it planned with)
-GPU_GIB_PER_WORKER = 12
+#: GPU memory per concurrent record worker (GiB) for --workers-per-gpu auto (rel-fix-2, 2026-11-26). Was a 12 GiB
+#: guess, which held the L40S record of nvc-ab-20261126T214026Z-7116a8 (acdf0ad303) to 3 workers on 44 GiB free:
+#: 1030 s at busy cores mean 2.5 of 14. In the same job `verify --all` ran 13 cell workers at once on that GPU (the
+#: same harness lanes and fixtures, both sides of every cell) with no out-of-memory, so a worker takes at most
+#: 44 / 13 = 3.4 GiB there. The record now samples the GPU's used memory while it runs and prints the measured peak
+#: per worker ("gpu memory:" line), the number to put here after the next run.
+GPU_GIB_PER_WORKER = 3
+#: Cores one GPU record worker keeps busy. The same job's record.busy: 3 workers of CPU_THREADS=3 at mean 2.5 and
+#: max 3.6 busy cores, so a worker averages 0.83 of a core (the GPU and the lane's serial host glue bound it, not its
+#: thread pool). One worker per core of the allocation, CPU_THREADS unchanged.
+GPU_WORKER_CORES = 1
+#: Host memory per record worker (GiB): the verify cell workers' bound (mojolearn._verify_all.VERIFY_WORKER_GIB).
+HOST_GIB_PER_WORKER = 4
+#: The per-lane cost hints that pack the chunks: the verify sweep's measured mean seconds per cell of each lane
+#: (the same harness lanes), shipped in the tree; a lane's record runs its fixtures one after another.
+COST_HINTS = ROOT / "python" / "mojolearn" / "verify_reference" / "cell_seconds.json"
+#: seconds a lane costs the recorder beyond its fits (start, hashing, the record write): the L40S chunk w1 spent
+#: 1013 s wall on 330 lanes whose fits summed 724 s
+LANE_OVERHEAD_S = 1.0
 
 
 def sha256(path):
@@ -104,10 +124,34 @@ def label(column, device):
     return pattern.format(device=device)
 
 
-def chunks(lanes, n):
-    """N chunks of LANES, round robin (neighbouring lanes, often of one family, spread over the workers)."""
+def lane_costs(lanes, path=None):
+    """{lane: estimated record seconds}: the shipped verify cost hint (mean seconds of one cell) plus
+    LANE_OVERHEAD_S; a lane with no hint gets the median. Only packs the chunks; nothing recorded reads it."""
+    try:
+        doc = json.loads(Path(path or COST_HINTS).read_text())
+        hints = {k: float(v) for k, v in (doc.get("seconds") or {}).items()
+                 if not k.startswith("@") and isinstance(v, (int, float)) and v >= 0}
+    except (OSError, ValueError, AttributeError):
+        hints = {}
+    known = sorted(hints[x] for x in lanes if x in hints)
+    median = known[len(known) // 2] if known else 1.0
+    return {x: hints.get(x, median) + LANE_OVERHEAD_S for x in lanes}
+
+
+def chunks(lanes, n, cost=None):
+    """N chunks of LANES of about equal estimated cost (rel-fix-2): longest lane first, each to the chunk with the
+    least cost so far, so every worker ends at about the same time and the heaviest lanes start first. Equal costs
+    deal the lanes round robin. The L40S record of acdf0ad303 dealt round robin: one chunk ran 1013 s, two 780 s."""
     n = max(1, min(n, len(lanes)))
-    return [lanes[i::n] for i in range(n)] if lanes else []
+    if not lanes:
+        return []
+    cost = cost or {}
+    out, load = [[] for _ in range(n)], [0.0] * n
+    for lane in sorted(lanes, key=lambda x: -cost.get(x, 1.0)):   # sorted is stable: equal costs keep lane order
+        i = min(range(n), key=lambda k: (load[k], k))
+        out[i].append(lane)
+        load[i] += cost.get(lane, 1.0)
+    return [c for c in out if c]
 
 
 def plan_slots(columns, devices, workers_per_device):
@@ -128,13 +172,62 @@ def plan_slots(columns, devices, workers_per_device):
     return out
 
 
-def auto_workers(gpus, nproc, free_gib):
-    """Record workers per device: every core busy (CPU_THREADS each), bounded by the measured free memory."""
+def auto_workers(gpus, nproc, free_gib, host_gib=None):
+    """Record workers per device: every core busy, bounded by the GPU's free memory and the host's available memory.
+    A GPU worker keeps GPU_WORKER_CORES busy (measured); a CPU-column worker runs its CPU_THREADS pool."""
+    by_host = max(1, int(host_gib // HOST_GIB_PER_WORKER)) if host_gib else None
     if gpus <= 0:
-        return max(1, nproc // CPU_THREADS)
-    by_cores = max(1, nproc // (CPU_THREADS * gpus))
+        n = max(1, nproc // CPU_THREADS)
+        return max(1, min(n, by_host)) if by_host else n
+    by_cores = max(1, nproc // (GPU_WORKER_CORES * gpus))
     by_memory = max(1, int(free_gib // GPU_GIB_PER_WORKER)) if free_gib else 1
-    return max(1, min(by_cores, by_memory))
+    n = min(by_cores, by_memory)
+    if by_host:
+        n = min(n, max(1, by_host // gpus))
+    return max(1, n)
+
+
+def host_available_gib():
+    """MemAvailable, capped by the cgroup's memory.max less its use (GiB), or None where unreadable."""
+    try:
+        with open("/proc/meminfo", encoding="ascii") as stream:
+            avail = next(int(line.split()[1]) for line in stream if line.startswith("MemAvailable:")) / 2 ** 20
+    except (OSError, StopIteration, ValueError, IndexError):
+        return None
+    try:
+        limit = Path("/sys/fs/cgroup/memory.max").read_text().strip()
+        if limit != "max":
+            used = int(Path("/sys/fs/cgroup/memory.current").read_text().strip())
+            avail = min(avail, (int(limit) - used) / 2 ** 30)
+    except (OSError, ValueError):
+        pass
+    return avail
+
+
+def children_cpu_seconds():
+    """CPU seconds of every reaped child of this process and their descendants (the recorder chunks)."""
+    try:
+        import resource
+        u = resource.getrusage(resource.RUSAGE_CHILDREN)
+        return u.ru_utime + u.ru_stime
+    except (ImportError, OSError, AttributeError):
+        return 0.0
+
+
+DONE_LINE = re.compile(r"^# DONE (\S+?)/\S+ \S+ ([0-9.]+)s$", re.M)
+
+
+def lane_seconds(paths):
+    """{lane: seconds} summed over the harness's `# DONE <lane>/<fixture> repeat=../<part> <s>s` lines."""
+    out = {}
+    for path in paths:
+        try:
+            text = Path(path).read_text(errors="replace")
+        except OSError:
+            continue
+        for lane, sec in DONE_LINE.findall(text):
+            out[lane] = out.get(lane, 0.0) + float(sec)
+    return out
 
 
 def alloc_cores():
@@ -153,6 +246,23 @@ def alloc_cores():
     except (OSError, ValueError):
         pass
     return max(1, cores)
+
+
+def gpu_used_gib(vendor):
+    """The largest used memory of the box's GPUs in GiB, or None."""
+    try:
+        if vendor == "nvidia":
+            out = subprocess.run(["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+                                 capture_output=True, text=True, timeout=60).stdout
+            vals = [float(x) / 1024 for x in out.split()]
+        else:
+            out = subprocess.run(["rocm-smi", "--showmeminfo", "vram", "--json"], capture_output=True, text=True,
+                                 timeout=60).stdout
+            doc = json.loads(out or "{}")
+            vals = [float(v.get("VRAM Total Used Memory (B)", 0)) / 2 ** 30 for v in doc.values() if isinstance(v, dict)]
+        return max(vals) if vals else None
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
 
 
 def gpu_free_gib(vendor):
@@ -285,7 +395,8 @@ class Run:
         devices = list(range(self.a.gpus))
         vendor = "nvidia" if columns[0] in ("nvidia", "ptx") else columns[0]
         free = gpu_free_gib(vendor) if devices else None
-        workers = (auto_workers(len(devices), nproc, free) if self.a.workers_per_gpu == "auto"
+        host = host_available_gib()
+        workers = (auto_workers(len(devices), nproc, free, host) if self.a.workers_per_gpu == "auto"
                    else int(self.a.workers_per_gpu))
         slots = plan_slots(columns, devices, workers)
         selected, report = {}, dict(schema=SCHEMA, columns={}, nproc=nproc, gpus=len(devices), shard=self.a.shard,
@@ -304,14 +415,29 @@ class Run:
                                                  len(lanes) if self.a.reuse_unchanged else "all (%d)" % len(lanes)))
         tasks = []
         for c in columns:
-            for i, (chunk, slot) in enumerate(zip(chunks(selected[c], len(slots[c])), slots[c])):
+            cost = lane_costs(selected[c])
+            for i, (chunk, slot) in enumerate(zip(chunks(selected[c], len(slots[c]), cost), slots[c])):
                 tasks.append((c, i, chunk, slot))
         total = sum(len(s) for s in slots.values()) if devices else len(next(iter(slots.values())))
         busy = len(tasks)
-        self.say("busy plan: %d worker(s) of %d (%d device(s), %d core(s), %d CPU thread(s) per worker%s)" % (
+        self.say("busy plan: %d worker(s) of %d (%d device(s), %d core(s), %d CPU thread(s) per worker%s%s)" % (
             busy, total, len(devices), nproc, CPU_THREADS,
-            "" if free is None else ", %.0f GiB free per device" % free))
+            "" if free is None else ", %.0f GiB free per device" % free,
+            "" if host is None else ", %.0f GiB host memory available" % host))
         threads, results = [], {}
+        # WHERE THE TIME GOES (rel-fix-2): the record's wall, busy cores (CPU seconds of the reaped chunks over the
+        # wall), the chunks' spread, the 5 slowest lanes, and the GPU's peak used memory per worker.
+        t_rec, cpu0 = time.monotonic(), children_cpu_seconds()
+        peak, sampling = [None, gpu_used_gib(vendor) if devices else None], threading.Event()
+
+        def sample():
+            while not sampling.wait(5):
+                used = gpu_used_gib(vendor)
+                if used is not None and (peak[0] is None or used > peak[0]):
+                    peak[0] = used
+        sampler = threading.Thread(target=sample, daemon=True) if devices else None
+        if sampler:
+            sampler.start()
 
         def work(c, i, chunk, slot):
             # A FAILURE NEVER STOPS THE OTHERS: every chunk runs; failures are collected and reported once below
@@ -352,6 +478,11 @@ class Run:
             threads.append(th)
         for th in threads:
             th.join()
+        if sampler:
+            sampling.set()
+            sampler.join()
+        report["timing"] = self.timing(time.monotonic() - t_rec, children_cpu_seconds() - cpu0, nproc, results,
+                                       labels, peak, workers)
         ok = True
         for (c, i), r in sorted(results.items()):
             row = report["columns"][c]
@@ -377,6 +508,29 @@ class Run:
         self.say("%s: %s" % ("DONE" if ok else "FAILED", self.out / "identity-wheels.json"))
         self.stage_evidence(columns, results, labels, shard_i, shard_n)
         return 0 if ok else 1
+
+    def timing(self, wall, cpu, nproc, results, labels, peak, per_device):
+        """Print and return the record step's wall seconds, busy cores, chunk spread, 5 slowest lanes and the GPU's
+        measured peak memory per worker."""
+        secs = [r.get("seconds") for r in results.values() if r.get("seconds") is not None]
+        logs = [p for c, i in results for p in (self.out / labels[c] / ("w%d" % i)).glob("*.log")
+                if p.name != "record.log"]
+        slow = sorted(lane_seconds(logs).items(), key=lambda kv: -kv[1])[:5]
+        busy = cpu / wall if wall > 0 else 0.0
+        self.say("timing: record %.0fs wall, busy cores mean %.1f of %d; chunks %s; slowest lanes: %s" % (
+            wall, busy, nproc, "%d-%ds" % (min(secs), max(secs)) if secs else "none",
+            ", ".join("%s %.0fs" % kv for kv in slow) or "none"))
+        gpu = None
+        if peak[0] is not None:
+            base = peak[1] or 0.0
+            gpu = dict(peak_used_gib=round(peak[0], 2), before_gib=round(base, 2), workers_per_device=per_device,
+                       per_worker_gib=round(max(0.0, peak[0] - base) / per_device, 2))
+            self.say("gpu memory: peak %.1f GiB used (%.1f before) with %d worker(s) on a device: %.2f GiB a worker "
+                     "(GPU_GIB_PER_WORKER plans %d)" % (peak[0], base, per_device, gpu["per_worker_gib"],
+                                                        GPU_GIB_PER_WORKER))
+        return dict(wall_s=round(wall), busy_cores_mean=round(busy, 1), cores=nproc,
+                    chunk_seconds=sorted(secs), slowest_lanes=[dict(lane=k, seconds=round(v, 1)) for k, v in slow],
+                    gpu_memory=gpu)
 
     def capture_extended(self, py, columns, devices):
         """The single-device verify commands' reference captures (tools/admit_extended_references.py), from the

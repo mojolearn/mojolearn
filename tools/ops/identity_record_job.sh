@@ -18,9 +18,13 @@
 # they run one after the other; inside each, the work spreads over the allocation:
 #   verify: its cell workers default to the process's core allocation (affinity and cgroup cpu.max), bounded by
 #           available memory at 4 GiB a worker (mojolearn._verify_all.verify_cell_workers); no --cell-workers pin.
-#   record: --workers-per-gpu auto: cores / 3 CPU threads per worker, bounded by the GPU's free memory at 12 GiB a
-#           worker; it prints "busy plan: W worker(s) of T" (grepped into this job's output).
-# This job prints the allocation (cores, memory) first and the busy cores (mean, max of a 15 s sampler) per step.
+#   record: --workers-per-gpu auto: one worker per core (a GPU record worker keeps 0.83 of a core busy, measured),
+#           bounded by the GPU's free memory at 3 GiB a worker and the host's at 4 GiB; lanes packed into chunks of
+#           equal estimated cost, longest first. It prints "busy plan: W worker(s) of T" (grepped into this job's
+#           output). On the 14-core L40S: 13 workers, expected about 250-350 s (was 3 workers, 1030 s).
+# This job prints the allocation (cores, memory) first and, per step, the wall seconds and busy cores (mean, max of a
+# 15 s sampler), then each step's own timing line: verify's "# sweep: ... slowest units: ..." and the record's
+# "timing: ... slowest lanes: ..." and "gpu memory: ..." (rel-fix-2).
 #
 #   tools/nvidia_central.sh submit <lane> --cap 240 --results box-out/idrec-<sha12> \
 #       --env IR_WHEEL_DIR=/root/pc-in/<sha12>/nvidia tools/ops/identity_record_job.sh
@@ -123,6 +127,8 @@ verify_all() {
 }
 step verify verify_all
 grep -m 1 '^IDREC verify wheel' "$RES/logs/verify.log" || true
+grep -m 1 -E '^# sweep: ' "$RES/logs/verify.log" | sed 's/^# /IDREC verify /' | cut -c1-400 || true
+grep -m 1 -E '^# TIMED OUT: ' "$RES/logs/verify.log" | sed 's/^# /IDREC verify /' | cut -c1-400 || true
 # The separate `verify --all --neural-training` step (verify-neural.json) is gone (verify-profiles, 2026-11-26): `verify
 # --all` is now both profiles, so the neural training lanes' cells are in verify-all.json beside the classic ones, the
 # cell workers run both profiles' cells in one parallel sweep, and the one exit status covers both.
@@ -145,7 +151,7 @@ mkdir -p "$RES/identity"
 step record bash -c 'cd "$1" && shift && exec python3 tools/identity_wheel_record.py "$@"' _ "$TREE" \
     --columns nvidia --label-device l40s "${whl[@]}" "${shas[@]}" --gpus "$GPUS" --workers-per-gpu auto \
     --out "$RES/identity" --venv "$SCRATCH/identity-venv"
-grep -E '^identity-wheels: (busy plan|DONE|FAILED)' "$RES/logs/record.log" | head -n 6 || true
+grep -E '^identity-wheels: (busy plan|timing|gpu memory|DONE|FAILED)' "$RES/logs/record.log" | head -n 8 | cut -c1-400 || true
 
 # (iii) the in-repo evidence (verify-complete, Andrew 2026-11-26): the verify part here; the record part was staged by
 # the recorder under identity/evidence/nvidia/record. On the Mac, `tools/box_persist.py fetch --tag <tag> --extract
