@@ -3172,22 +3172,29 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
     var p: List[Int] = [b, v, d, len(blocks), len(s.eos), s.pad, 1 if s.greedy else 0, s.top_k,
                         Int(s.seed & UInt64(0xFFFFFFFF)), Int(s.seed >> 32), length, max(0, n), s.produced]
     var fields = _standalone_record_fields(mods, s.model)
-    # The decode program is kept only while the model is not exposed: the
-    # live lease word, once per read.
-    var lease_held = causal_model_lease(mods, s.model)
-    var persist = (causal_lease_load(lease_held.downcast_value_ptr[CausalLease]()[].live) & CAUSAL_LEASE_EXPOSED) == 0
-    _ = lease_held
     # The model's decode program is a native registry handle in its block
     # image (core/causal_lm_entry_table_sessions.mojo PROGRAM_READ); the
     # model keeps its thin owner (core/causal_session_handles.mojo).
     var entries = s.model._native_entries
     var family = mw.program_read
-    var owner = py_get(fields, "_decode_program") if persist else PythonObject(None)
-    var held = 0 if owner is None else owner.downcast_value_ptr[CausalSessionHandles]()[].primary
     var reply_words = 5 + 2 * len(blocks)
     var reply = List[Int](length=reply_words, fill=0)
     var ret = List[Int]()
+    # The kept decode program is ONE device session (its KV cache, its
+    # tensors) and the call below releases the GIL, so only the holder of
+    # the model's lease may run on it (lane gs-fix-3: the read tested the
+    # exposure bit only, so two streams of one model ran the same program
+    # at once: "the cache would grow past its capacity", "not a live tensor
+    # of this session", Illegal instruction). The take is one
+    # compare-and-set, the last step before the `try`; a read that loses
+    # (another holder, or an exposed model) holds no lease: handle 0 builds
+    # a private program, which is released when this read returns.
+    var lease_held = causal_model_lease(mods, s.model)
+    var lease = lease_held.downcast_value_ptr[CausalLease]()
+    var persist = causal_lease_take(lease[].live) == CAUSAL_LEASE_TAKEN
     try:
+        var owner = py_get(fields, "_decode_program") if persist else PythonObject(None)
+        var held = 0 if owner is None else owner.downcast_value_ptr[CausalSessionHandles]()[].primary
         var read_words: List[Int] = [held, Int(reply.unsafe_ptr()), reply_words]
         for i in range(len(p)):  # driver-loop: over descriptor words (argument packing)
             read_words.append(p[i])
@@ -3212,6 +3219,7 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
         for i in range(reply[0]):  # driver-loop: over result words (no data)
             ret.append(reply[1 + i])
         _ = reply^
+        _ = owner
     except error:
         mods.released()
         s.usable = False
@@ -3221,7 +3229,15 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
                 causal_model_cache_set(mods, s.model, fields, "_decode_program", PythonObject(None))
         except publication:
             _ = publication
+        if persist:
+            _ = causal_lease_release(lease[].live)
+        _ = lease_held
         raise error
+    # The program call is over and its kept owner is published: the holder
+    # gives the lease back before the host-side publication below.
+    if persist:
+        _ = causal_lease_release(lease[].live)
+    _ = lease_held
     admission.recheck(generation_array_context())
     var wrote = ret[0]
     var forwards = ret[1]
