@@ -308,10 +308,22 @@ def resample_rows_run(rows: List[ResampleRows], arrays: PythonObject, binding: P
             ints.append(-1)
             continue
         var output = rows[i].output(count, context)
-        output_pins.append(AdmittedBorrowedBuffer(output, True))
+        var output_address = 0
+        var kind = String(rows[i].dtype.kind)
+        if kind != "M" and kind != "m":
+            output_pins.append(AdmittedBorrowedBuffer(output, True))
+            output_address = output_pins[len(output_pins) - 1].layout.value().address
+        else:
+            # A source admitted without PEP3118 (native datetime/timedelta:
+            # NumPy exports no buffer for 'M'/'m'): its output is the
+            # operation's own new ndarray of the same dtype, held in
+            # `outputs` for the run; read its data address from the same
+            # immutable C metadata the source used (w3-integrate-11: the op 8
+            # path pinned every output and refused every datetime column).
+            output_address = Int(py=py_item(output.__array_interface__, resample_keys()[].k_data)[0])
         py_call(outputs.append, output)
         addresses.append(rows[i].layout.address)
-        addresses.append(output_pins[len(output_pins) - 1].layout.value().address)
+        addresses.append(output_address)
         ints.append(w)
         ints.append(_rows_slot(rs, arrays[i], rows[i], n * w))
     if here:

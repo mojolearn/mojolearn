@@ -111,3 +111,16 @@ def test_resample_tz_period_interval_cells(ne2r_pd):
         assert len(got) == n
         for g, e in zip(got, expect):
             assert (pd.isna(g) and pd.isna(e)) or g == e
+
+
+@pytest.mark.parametrize("dtype", ["datetime64[s]", "timedelta64[ns]"])
+def test_resample_datetime_and_timedelta_arrays_without_pandas(dtype):
+    # NumPy exports no PEP3118 buffer for 'M'/'m'; the rows operation reads
+    # the output's address from its array interface (w3-integrate-11).
+    n = 12
+    x = np.arange(n).astype(dtype)
+    marker = np.arange(n, dtype=np.int64)
+    out, idx = rs.resample(x, marker, n_samples=n, random_state=8, replace=False)
+    rows = _ne2r_rows_of(idx)
+    assert np.asarray(out).dtype == x.dtype
+    assert np.asarray(out).tobytes() == x[rows].tobytes()
