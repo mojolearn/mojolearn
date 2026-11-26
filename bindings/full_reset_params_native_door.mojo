@@ -245,6 +245,27 @@ def _reset(model: PythonObject, params: PythonObject, context: PythonObject, dep
     return model
 
 
+def _device_move(model: PythonObject, params: PythonObject, context: PythonObject) raises -> Bool:
+    """`set_params(device=...)` ALONE moves a fitted estimator to the other device and keeps its fitted state
+    (DESIGN, lane gs-fix-2: as the declared-parameter families already do, bindings/declared_params_native_door.mojo
+    `_assign`; the full reset made a GPU-fitted PCA, TruncatedSVD, KernelPCA, PolynomialCountSketch or
+    KernelRidge unfitted on the CPU, test_decomp_device_boundary / test_kernel_methods_device_boundary on the
+    L40S). The new device is refused in the shared words before anything changes; the estimator's next
+    operation resolves its route again. Every other parameter change keeps the full reset. False when the
+    estimator has no `device` parameter (the caller's own path then refuses the key in its words)."""
+    var b = native_loaded_module("builtins")
+    var values = _read(model, False, context["parameter_metadata"], Python.list())
+    if not py_contains(values, PythonObject("device")):
+        return False
+    var value = params["device"]
+    device_admit_class(model, value, py_get(context["backend_fields"], "_CPU_ONLY") is not None,
+                       py_get(context, "device_cpu"), b, py_get(context, "device_cpu_connect"))
+    _ = bump_model_generation(model)
+    py_setitem(_fields(model), "device", value)
+    device_route_clear(model)
+    return True
+
+
 def _dispatch(model: PythonObject, params: PythonObject, context: PythonObject, depth: Int) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     if py_type(params) is not b.dict:
@@ -257,7 +278,13 @@ def _dispatch(model: PythonObject, params: PythonObject, context: PythonObject, 
     if py_type(cls) is not b.type:
         raise Error("TypeError: native parameter reset cannot invoke Python metaclass hooks")
     var generic = py_get(context, "generic_setter")
-    if generic is not None and _resolved(cls, "set_params", context["missing"]) is generic:
+    var is_generic = generic is not None and _resolved(cls, "set_params", context["missing"]) is generic
+    if len(params) == 1 and py_contains(params, PythonObject("device")) and (
+            is_generic or _connected_plan(cls, context) is not None):
+        var moved = _device_move(model, params, context)
+        if moved:
+            return model
+    if is_generic:
         # The generic setter is explicitly kept for classes without a native
         # schema; an inherited base plan must not stand in for their own
         # constructor contract.

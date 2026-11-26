@@ -8,7 +8,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
-from bindings.native_loaded_module_door import NativeModules, native_namespace_string_keys, native_mapping_string_keys
+from bindings.native_loaded_module_door import NativeModules, native_namespace_string_keys, native_mapping_string_keys, native_loaded_module
 from bindings.native_class_admission_door import class_record, class_admit, class_watch_ready, dict_keys_admitted, dict_keys_admit
 from bindings.py_cpython_table import cpython_table
 from bindings.native_resident_capsule_unpack import resident_capsule_owned
@@ -359,4 +359,7 @@ def native_release_admit(value: PythonObject, context: PythonObject, depth: Int 
     var capsule_class = py_get(context, nk[].k_owner_capsule_class)
     if capsule_class is not None and cls is capsule_class and resident_capsule_owned(value):
         return
-    raise Error("TypeError: native owner reinitialization cannot release Python-owned metadata; retain the same owner or release it in application code first")
+    # The refused value's class leads the words (lane gs-fix-2: GaussianProcessClassifier.set_params on the GPU
+    # install was refused with no hint of which fitted field held it). Refusal path only.
+    raise Error("TypeError: native owner reinitialization cannot release Python-owned metadata ("
+                + String(py=py_call(native_loaded_module("builtins").repr, cls)) + "); retain the same owner or release it in application code first")
