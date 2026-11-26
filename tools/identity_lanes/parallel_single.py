@@ -561,7 +561,8 @@ def _(ml, X, yc, yr, Xh=None):
     ordered fold (`ordered_sum_gradients`), `apply_gradient`, held to `train_step` of the same two shards; and
     the device fold (`fold_reset`, `shard_gradient_fold`, `fold_add`, `fold_export`) held to the same total when
     the binding has one (`has_device_fold`)."""
-    from mojolearn.parallel_training import ParallelByteLanguageModelTrainer as P, ordered_sum_gradients
+    from mojolearn.parallel_training import ParallelByteLanguageModelTrainer as P
+    from mojolearn.cross_vendor import ordered_fold
     dev = _PARALLEL_SINGLE_DEVICES
     shape = ml.ByteLanguageModelConfig()
     state0 = _parallel_single_byte_state(ml, shape)
@@ -576,7 +577,10 @@ def _(ml, X, yc, yr, Xh=None):
         step = np.asarray(tr.train_step(shards)["losses"], dtype=np.float32)
         l0, g0 = w.shard_gradient(shards[0])
         l1, g1 = w.shard_gradient(shards[1])
-        summed = ordered_sum_gradients([g0, g1])
+        # The byte-LM worker fold is `cross_vendor.ordered_fold` over the flat float32[n_total] shard gradients
+        # (python/mojolearn/parallel_training.py `apply_gradient`); `ordered_sum_gradients` takes one LIST of
+        # tensors per shard (the MLP/Samba form) and refused the flat arrays (lane gs-fix-2: wrong test).
+        summed = ordered_fold([g0, g1])
         total = np.asarray(summed, dtype=np.float32)
         fold = bool(w.has_device_fold)
         if fold:
@@ -591,7 +595,7 @@ def _(ml, X, yc, yr, Xh=None):
         pairs += _parallel_single_same_state("apply_gradient worker", w.state_dict(), "train_step trainer",
                                              tr.state_dict())
         if fold:
-            pairs += [("fold_export", folded, "ordered_sum_gradients total", total),
+            pairs += [("fold_export", folded, "ordered_fold total", total),
                       ("shard_gradient_fold loss", np.asarray([f0], dtype=np.float32), "shard_gradient loss",
                        np.asarray([l0], dtype=np.float32))]
         params = np.asarray(w.state_dict()["parameters"])
