@@ -222,7 +222,11 @@ def test_mamba3_session_info_counts_weight_uploads():
         # prefill without a session, so there is no weight upload to count.
         pytest.skip("Mamba3 prefill-session upload counters need a GPU binding; the CPU host forward holds no session")
     block, x = _mamba3()
-    assert block.session_info() is None
+    # A GPU identical block opens its prefill session handle when it is built or restored
+    # (bindings/mamba_public_native_door.mojo `mamba3_prefill_session_open`); the weights go up at the first
+    # forward. Before it: no session, or a session that has uploaded nothing (was: `is None` only).
+    before = block.session_info()
+    assert before is None or (before["weight_uploads"] == 0 and before["weight_reuses"] == 0)
     block.forward(x)
     info = block.session_info()
     assert set(info) == {"weight_uploads", "weight_recopies", "weight_reuses",
