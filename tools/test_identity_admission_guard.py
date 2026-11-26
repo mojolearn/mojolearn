@@ -313,7 +313,7 @@ if a[:3] == ["-m", "mojolearn", "verify"]:
             log.write(json.dumps([str(p) for p in inputs]) + "\\n")
         pathlib.Path(a[a.index("--emit-reference")+1]).write_bytes(pathlib.Path(os.environ["STUB_CANDIDATE"]).read_bytes())
         print("{}")
-    if "--self-test" in a and os.environ.get("FAIL_SELFTEST") == "1":
+    if "--tamper-test" in a and os.environ.get("FAIL_SELFTEST") == "1":
         raise SystemExit(7)
     raise SystemExit(0)
 os.execv(sys.executable, [sys.executable] + a)

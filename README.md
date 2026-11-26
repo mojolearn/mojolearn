@@ -163,6 +163,13 @@ and partitioned execution on one device, captured graphs, generation, loaded
 language models, one composed-model recipe and one saved program checked with
 `verify-model`. Everything `verify` runs uses one GPU.
 
+The run ends with a short sample of lanes where the CPU and the GPU took
+different paths (kernel launches and copies on one side, host thread splits on
+the other) to the same bits. `python -m mojolearn verify --show-paths [LANE]`
+shows what each side did for every lane, or one lane in full, from the saved
+record, running nothing. `python -m mojolearn verify --tamper-test` moves one
+input by one ULP and shows that verify catches it.
+
 Your own composed model: `verify --recipe r.json` fits it from scratch on the
 CPU and the GPU and compares the results the recipe selects (fitted
 parameters, `digest_`, predictions, score); `--against other.record.json`

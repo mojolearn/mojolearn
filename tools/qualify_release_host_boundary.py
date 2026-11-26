@@ -70,7 +70,7 @@ def _main(scratch):
     python = scratch / 'venv/bin/python'
     run('install', [python, '-m', 'pip', 'install', *wheels, 'numpy', 'pytest'])
     run('dependencies', [python, '-m', 'pip', 'check'])
-    run('self-test', [python, '-m', 'mojolearn', 'verify', '--self-test'])
+    run('self-test', [python, '-m', 'mojolearn', 'verify', '--tamper-test'])
     test = root / 'python/mojolearn/tests/test_parallel_forest_first_call.py'
     shutil.copy2(test, out / test.name)
     run('forest', [python, '-m', 'pytest', '--noconftest', '--rootdir', out,

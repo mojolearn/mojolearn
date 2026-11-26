@@ -243,7 +243,7 @@ def record_from_verify(report, h, report_sha256, side=None):
     # installation; its GPU side is the installation's vendor class.
     column_class = "cpu" if side == "cpu" else device["device_class"]
     require(side != "gpu" or column_class != "cpu", "a CPU-only report has no GPU column")
-    require(report.get("self_test", {}).get("passed") is True, "verifier self-test did not pass")
+    require(report.get("tamper_test", {}).get("passed") is True, "verifier tamper test did not pass")
     contract = report.get("verification_contract", {})
     source_sha = hashlib.sha256(Path(h.__file__).read_bytes()).hexdigest()
     require(contract.get("harness_sha256") == source_sha == report.get("harness", {}).get("sha256"),

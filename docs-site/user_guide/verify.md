@@ -105,7 +105,7 @@ Recorded hashes belong to one release. Verify against the hashes shipped with th
 ## Show that the verifier can fail
 
 ```sh
-python -m mojolearn verify --self-test
+python -m mojolearn verify --tamper-test
 ```
 
 This runs one lane twice through the ordinary comparison: once unchanged, and once with every value of

@@ -1058,7 +1058,7 @@ def verdict(counts, scope_gaps=(), lanes_checked=None):
     return EXIT_NO_REFERENCE, "NO REFERENCE"
 
 
-#: `verify --self-test`: the lane it perturbs, and the fixture it uses. `ols`
+#: `verify --tamper-test`: the lane it perturbs, and the fixture it uses. `ols`
 #: is chosen because it is cheap (well under a second), it is a public
 #: reference lane on every install, and the shipped table carries a real train
 #: reference for it on `base`.
@@ -1114,10 +1114,10 @@ def self_test(harness, ml, table, log=None):
     log = log or (lambda s: None)
     lane, fixture = SELF_TEST_LANE, SELF_TEST_FIXTURE
     if lane not in harness.LANES:
-        raise CannotRun(f"self-test: this harness does not define the {lane!r} lane")
+        raise CannotRun(f"tamper test: this harness does not define the {lane!r} lane")
     ent = vref.entry(table, lane, fixture, "train")
     if ent is None or not isinstance(ent.get("ref"), str) or ent["ref"].startswith("n/a"):
-        raise CannotRun(f"self-test: the shipped table has no train reference for {lane}/{fixture}, "
+        raise CannotRun(f"tamper test: the shipped table has no train reference for {lane}/{fixture}, "
                         "so there is nothing for the comparison to disagree with")
 
     X, yc, yr = harness.fixture(fixture)
@@ -1131,7 +1131,7 @@ def self_test(harness, ml, table, log=None):
     Xp[:, 0] = np.nextafter(Xp[:, 0], np.asarray(np.inf, dtype=Xp.dtype))
     after = float(Xp[0, 0])
     if after == before or not (Xp != X).any():
-        raise CannotRun("self-test: the one-ULP perturbation did not change the input at all, so "
+        raise CannotRun("tamper test: the one-ULP perturbation did not change the input at all, so "
                         "the perturbed arm would be identical to the clean one and prove nothing")
 
     # EACH SIDE CAN FAIL ON ITS OWN (2026-11-24). Both sides run in this
@@ -1151,7 +1151,7 @@ def self_test(harness, ml, table, log=None):
             parts = run_cell(harness, ml, lane, fixture, data, held, 1, side=side)
             value, error = parts["train"]
             if unhealthy(parts):
-                raise CannotRun(f"self-test unhealthy device ({side} side): {error or parts}")
+                raise CannotRun(f"tamper test unhealthy device ({side} side): {error or parts}")
             rows.append(dict(lane=lane, fixture=fixture, part="train", value=value, error=error,
                              side=side, arm=arm))
             log(f"  {side:<4} {arm:<10} {lane}/{fixture} train -> {value}")
@@ -1174,7 +1174,7 @@ def self_test(harness, ml, table, log=None):
                                           reference=dirty["reference"]))
     ran = [side for side in SIDES if sides[side]["ran"]]
     if not ran:
-        problems.append("no side of the self-test lane ran on this installation")
+        problems.append("no side of the tamper-test lane ran on this installation")
     return dict(lane=lane, fixture=fixture,
                 perturbation=dict(cell="X[:, 0]", before=before, after=after,
                                   kind="one ULP up, every value of column 0, one side at a time",
@@ -1183,7 +1183,7 @@ def self_test(harness, ml, table, log=None):
 
 
 def format_self_test(r):
-    lines = ["# python -m mojolearn verify --self-test", ""]
+    lines = ["# python -m mojolearn verify --tamper-test", ""]
     lines.append(f"Ran the {r['lane']}/{r['fixture']} lane twice per side (device=\"cpu\", device=\"gpu\") "
                  "through the ordinary comparison, once untouched and")
     p = r["perturbation"]
@@ -1249,7 +1249,7 @@ def _cmd_self_test(args, ml):
             result['problems'].append(f"public API checks read {public['status']}")
     result['passed'] = result['passed'] and public['status'] in ('MATCH', 'UNTESTED')
     if json_out:
-        _emit(json.dumps(dict(format="mojolearn.verify-self-test.v2", **result), indent=1, sort_keys=True))
+        _emit(json.dumps(dict(format="mojolearn.verify-tamper-test.v1", **result), indent=1, sort_keys=True))
     else:
         _emit(format_self_test(result))
     return EXIT_VERIFIED if result["passed"] else EXIT_MISMATCH
@@ -1486,7 +1486,7 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                     reason=("no GPU in this installation, so there is no second piece of hardware "
                             "to compare against. This is not a pass and not a failure: the "
                             "cross-check did not run. `verify --all` still checks this machine "
-                            "against the recorded columns, and `--self-test` still shows the "
+                            "against the recorded columns, and `--tamper-test` still shows the "
                             "comparison can fail."))
     rows, skipped = [], {}
     ran = dict(gpu=None, cpu=None)      # the activity record of each side, summed over the cells
@@ -3870,8 +3870,6 @@ def _public_check_verdict(report, code, headline):
     return code,headline
 
 
-#: lanes whose "what ran" line the text report prints; --json holds every lane
-WHAT_RAN_LANES_SHOWN = 40
 #: lanes in the "different paths, same bits" sample, one per family
 PATHS_SAMPLE_LANES = 5
 
@@ -4026,23 +4024,13 @@ def format_human(report):
                      f"complete={cross.get('complete', False)}.")
         # what answered on each side, by the shared check module's own lines
         lines.extend(cb.sides_lines(cross.get('sides') or {}))
-    lines.extend(paths_sample_lines(report.get('paths_sample')))
-    what = (report.get('what_ran') or {}).get('sides') or {}
-    for side, block in what.items():
-        acts = block.get('lanes') or {}
-        if not acts:
-            continue
-        # what the runtime itself counted while each lane's cells ran, by the
-        # shared check module's own lines (the same `verify --check` prints)
-        lines.append(f"What ran on the {side.upper()} side, per lane (counted by the runtime; "
-                     "every lane is in --json):")
-        shown = sorted(acts)[:WHAT_RAN_LANES_SHOWN]
-        for lane in shown:
-            lines.append(f"  {lane:<26} {cb.activity_line(side, acts[lane])}")
-        if len(acts) > len(shown):
-            lines.append(f"  ... and {len(acts) - len(shown)} more lanes")
     lines.append("Scope: selected fixtures and properties only; use verify --coverage for omissions.")
     lines.append(f"RESULT: {report['verdict']} ({report['detail']}). {report['elapsed_s']:.1f}s. exit {report['exit']}")
+    # LAST: two paths, the same bits (the per-lane what-ran block this replaces is `verify --show-paths`, which
+    # reads the record this run saved and runs nothing)
+    lines.extend(paths_sample_lines(report.get('paths_sample')))
+    if report.get('what_ran_saved'):
+        lines.append("See what each side did: python -m mojolearn verify --show-paths [LANE]")
     return "\n".join(lines)
 
 
@@ -4146,7 +4134,7 @@ def cmd_verify_all(args):
         return _cmd_emit_models(args, ml)
     if getattr(args, "challenge", None):
         return _cmd_challenge(args, ml)
-    if getattr(args, "self_test", False):
+    if getattr(args, "tamper_test", False):
         return _cmd_self_test(args, ml)
     if getattr(args, "cross_check", None):
         return _cmd_cross_check(args, ml)
@@ -4375,13 +4363,13 @@ def cmd_verify_all(args):
         return result["value"]
 
     preflight = dict(passed=None, ran=False,
-                     reason="models-only does not train; run verify --self-test separately")
+                     reason="models-only does not train; run verify --tamper-test separately")
     if not models_only:
-        log("# comparator self-test preflight (fresh process)")
+        log("# comparator tamper-test preflight (fresh process)")
         try:
             preflight = isolated("self-test")
             if preflight.get("passed") is not True:
-                execution["interrupted"] = "comparator self-test did not pass"
+                execution["interrupted"] = "comparator tamper test did not pass"
         except worker.WorkerFailure as exc:
             preflight = dict(passed=None, error=str(exc))
             execution["interrupted"] = str(exc)
@@ -4705,8 +4693,10 @@ def cmd_verify_all(args):
     # drift into describing different runs.
     report["lanes_summary"] = lane_counts(rows, lanes, stale)
     report["paths_sample"] = paths_sample(report)
+    from . import _verify_paths
+    report["what_ran_saved"] = _verify_paths.save(report, getattr(args, "json_out", None))
     report["reference_evidence"] = reference_evidence(rows)
-    report["self_test"] = preflight
+    report["tamper_test"] = preflight
     # Native bindings actually used in workers are part of the evidence even
     # though the controller deliberately did not load those bindings itself.
     for binding in report.get("bindings", []):
@@ -4723,7 +4713,7 @@ def cmd_verify_all(args):
     if preflight.get("passed") is False:
         code, headline = EXIT_MISMATCH, "MISMATCH"
         report.update(exit=code, verdict=headline,
-                      detail=report["detail"] + "; comparator self-test failed")
+                      detail=report["detail"] + "; comparator tamper test failed")
 
     # The classic part (default, --classic, --all) bundles the GPU/CPU
     # inference cross-check; the neural profile alone does not run it.

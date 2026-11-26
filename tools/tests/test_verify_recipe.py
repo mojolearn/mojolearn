@@ -148,7 +148,7 @@ def toy_recipe(**outputs):
 
 
 def run_cli(vr, monkeypatch, capsys, recipe_arg, **flags):
-    args = types.SimpleNamespace(recipe=recipe_arg, against=None, record_out=None, self_test=False, json=False)
+    args = types.SimpleNamespace(recipe=recipe_arg, against=None, record_out=None, tamper_test=False, json=False)
     vars(args).update(flags)
     code = vr.cmd_recipe(args)
     return code, capsys.readouterr().out
@@ -359,9 +359,9 @@ def test_self_test_controls_all_pass_on_one_and_two_devices(vr, monkeypatch, cap
     path.write_text(json.dumps(toy_recipe()))
     for vendor in ("cuda", "cpu"):
         vr._parent.vendor = lambda v=vendor: v
-        code, out = run_cli(vr, monkeypatch, capsys, str(path), self_test=True,
+        code, out = run_cli(vr, monkeypatch, capsys, str(path), tamper_test=True,
                             record_out=str(tmp_path / f"{vendor}.record.json"))
-        assert code == vr.EXIT_IDENTICAL and "SELF-TEST PASS: 4 of 4 controls" in out, out
+        assert code == vr.EXIT_IDENTICAL and "TAMPER-TEST PASS: 4 of 4 controls" in out, out
         assert out.count("  PASS  ") == 4
 
 
@@ -370,9 +370,9 @@ def test_self_test_fails_when_the_comparison_cannot_see_a_difference(vr, monkeyp
                                                                      compared=len(entries), outputs=1))
     path = tmp_path / "toy.json"
     path.write_text(json.dumps(toy_recipe()))
-    code, out = run_cli(vr, monkeypatch, capsys, str(path), self_test=True,
+    code, out = run_cli(vr, monkeypatch, capsys, str(path), tamper_test=True,
                         record_out=str(tmp_path / "x.record.json"))
-    assert code == vr.EXIT_DIVERGENT and "FAIL  one-ulp change is DIVERGENT" in out and "SELF-TEST FAIL" in out
+    assert code == vr.EXIT_DIVERGENT and "FAIL  one-ulp change is DIVERGENT" in out and "TAMPER-TEST FAIL" in out
 
 
 def test_a_device_that_cannot_fit_is_not_run_never_identical(vr, monkeypatch, capsys, tmp_path):
@@ -457,9 +457,9 @@ def test_the_self_test_still_passes_its_controls_on_a_nan_answer(vr, monkeypatch
     monkeypatch.setattr(Toy, "predict", lambda self, X: np.full(len(X), np.nan, dtype=np.float32))
     path = tmp_path / "toy.json"
     path.write_text(json.dumps(toy_recipe(predict={"method": "predict", "on": "test"})))
-    code, out = run_cli(vr, monkeypatch, capsys, str(path), self_test=True)
+    code, out = run_cli(vr, monkeypatch, capsys, str(path), tamper_test=True)
     assert code == vr.EXIT_NOT_FINITE, out
-    assert "SELF-TEST PASS: 4 of 4 controls" in out, out
+    assert "TAMPER-TEST PASS: 4 of 4 controls" in out, out
 
 
 def test_a_record_without_counts_is_counted_from_its_values(vr):

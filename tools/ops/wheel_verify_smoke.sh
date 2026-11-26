@@ -16,7 +16,7 @@
 #   install    fresh venv, the core wheel + numpy
 #   imports    (a) `import mojolearn` and every public module tools/public_api_surface.py lists in the installed
 #              package, one process per module
-#   selftest   (b) `python -m mojolearn verify --self-test` on the CPU column
+#   selftest   (b) `python -m mojolearn verify --tamper-test` on the CPU column
 #   lanes      (c) every CPU lane of verify's own harness (mojolearn._identity_break, which `verify --all` calls per
 #              cell), base fixture, one fit, one process per lane. No `verify` flag runs every lane without
 #              comparing against the shipped reference table (--all/--quick/--lanes compare with it, --coverage fits
@@ -143,7 +143,7 @@ if want install && [ -e "$WHEEL" ]; then
 fi
 # shellcheck disable=SC2046,SC2086
 want imports && $HELPER imports --python "$VPY" --out "$OUT" $GPU_FLAG $(mem imports)
-want selftest && $HELPER step --out "$OUT" --name selftest --timeout 900 -- "$VPY" -I -m mojolearn verify --self-test
+want selftest && $HELPER step --out "$OUT" --name selftest --timeout 900 -- "$VPY" -I -m mojolearn verify --tamper-test
 # shellcheck disable=SC2046,SC2086
 want lanes && $HELPER lanes --python "$VPY" --out "$OUT" --commit "${SOURCE_COMMIT:-}" $GPU_FLAG $(mem lanes)
 # CENSUS_STANDS (tools/ops/verify_smoke_dispatch.py's skip rule): nothing the census reads changed since the last

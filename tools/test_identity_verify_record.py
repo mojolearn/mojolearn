@@ -22,7 +22,7 @@ def example(tmp_path):
     parts = columns.vref().PARTS + columns.vref().OPTIONAL_PARTS
     report = dict(format="mojolearn.verify-all-report.v1", repeats=2, verdict="MISMATCH",
                   device=dict(numeric_mode="identical", device_class="nvidia", commit="a" * 40),
-                  self_test=dict(passed=True), lanes=["lane"], fixtures=["base"],
+                  tamper_test=dict(passed=True), lanes=["lane"], fixtures=["base"],
                   execution=dict(completed_cells=1, total_cells=1, interrupted=None),
                   bindings=[dict(module="native", size=16, sha256="b" * 64)],
                   harness=dict(sha256=sha), verification_contract=dict(harness_sha256=sha,
@@ -54,7 +54,7 @@ def test_unwitnessed_or_incomplete_report_is_refused(tmp_path, damage):
     if damage == "harness": report["harness"]["sha256"] = "0" * 64
     if damage == "input": report["verification_contract"]["fixtures"]["base"]["X"] = "other"
     if damage == "binding": report["bindings"][0]["sha256"] = "missing"
-    if damage == "selftest": report["self_test"]["passed"] = False
+    if damage == "selftest": report["tamper_test"]["passed"] = False
     with pytest.raises(ValueError): columns.record_from_verify(report, h, "d" * 64)
 
 

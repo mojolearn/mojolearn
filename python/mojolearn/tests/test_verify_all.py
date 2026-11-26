@@ -258,7 +258,7 @@ def test_the_summary_says_how_much_of_the_run_was_actually_checked():
 
 
 def test_the_self_test_cannot_pass_with_a_broken_comparator(monkeypatch):
-    """`verify --self-test` exists so a user can WATCH the comparison fail, and
+    """`verify --tamper-test` exists so a user can WATCH the comparison fail, and
     it is worth nothing unless it would notice a comparator that cannot fail.
 
     It is two-sided on purpose: the untouched arm must read IDENTICAL and the

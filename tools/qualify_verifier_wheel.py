@@ -26,7 +26,7 @@ PLUGIN_DISTRIBUTIONS = {name.replace("-", "_"): name for name in (
 def _self_test_sides(doc):
     """{side: row} of the sides a v2 self-test ran (2026-11-24: each side is
     nudged on its own; a side this installation lacks reads ran=False)."""
-    assert doc.get("format") == "mojolearn.verify-self-test.v2", doc.get("format")
+    assert doc.get("format") == "mojolearn.verify-tamper-test.v1", doc.get("format")
     return {side: row for side, row in doc["sides"].items() if row.get("ran")}
 
 
@@ -284,7 +284,7 @@ def qualify_jobs(run, save, manifest, python, work, output, models, scope, devic
         "coverage": ["--coverage"],
         "models": ["--models-only", "--repeats", "1"],
         "extended": ["--lanes", "knn", "--fixtures", "base", "--repeats", "1", "--batch-checks", "--no-models"],
-        "self-test": ["--self-test"],
+        "self-test": ["--tamper-test"],   # the job key is the release receipts'; the flag is --tamper-test
     }
     if manifest.get("identity_lanes") == IDENTITY_RECORDED_ONCE:
         # ONE EXECUTION OF THE IDENTITY LANES PER DEVICE CLASS (Andrew 2026-11-05, release.py

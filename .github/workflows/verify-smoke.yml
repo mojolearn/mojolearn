@@ -1,5 +1,5 @@
 # Verify smoke: does `python -m mojolearn verify` still run, and do the Python boundaries still work, from the
-# BUILT Linux CPU wheel of one measurement build (tools/ops/wheel_verify_smoke.sh: imports, verify --self-test,
+# BUILT Linux CPU wheel of one measurement build (tools/ops/wheel_verify_smoke.sh: imports, verify --tamper-test,
 # every CPU lane of verify's harness, the Python tests; each step's rc in SUMMARY.txt).
 #
 # NOT the identity verification: it compares nothing across vendors, records nothing and never replaces the

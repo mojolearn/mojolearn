@@ -22,7 +22,7 @@ def verify_results(tmp_path):
     res = job(tmp_path, "idrec")
     report = dict(verdict="VERIFIED", exit=0, detail="d", device=dict(mojolearn_version="0.8.67", commit=COMMIT),
                   extended={"verify-graph": dict(verdict="OWED")}, extended_summary=dict(OWED=1),
-                  self_test=dict(passed=True), what_ran=dict(sides={}), paths_sample=[dict(lane="ols")])
+                  tamper_test=dict(passed=True), what_ran=dict(sides={}), paths_sample=[dict(lane="ols")])
     (res / "verify-all.json").write_text(json.dumps(report))
     (res / "logs" / "verify.log").write_text("x" * (E.LOG_CAP_BYTES + 100))
     (res / "logs" / "verify.busy").write_text("10\n12\n")

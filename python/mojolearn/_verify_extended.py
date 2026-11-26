@@ -124,7 +124,7 @@ def _capture(profile, step, workdir, vendor):
         record = r.make_record(recipe, results, verdict, getattr(ml, "__version__", None), ml.vendor())
         if all(res.get("ran") for res in results.values()):
             controls = r.self_test(ml, recipe, None, results, arrays, record["version"], record["vendor"])
-            record["self_test"] = [dict(control=n, passed=ok, words=w) for n, ok, w in controls]
+            record["tamper_test"] = [dict(control=n, passed=ok, words=w) for n, ok, w in controls]
         return record
     if profile == "verify-model":
         from . import _verify_model as vm
@@ -318,11 +318,11 @@ def _judge_recipe(profile, got, ref):
     ran = [d for d, res in (record.get("results") or {}).items() if res.get("ran")]
     counts = dict(devices=len(record.get("results") or {}), ran=len(ran),
                   outputs=verdict.get("outputs"), self_test_failed=sum(not c["passed"] for c in
-                                                                       record.get("self_test", [])))
+                                                                       record.get("tamper_test", [])))
     if verdict.get("verdict") == "NOT RUN" or len(ran) != counts["devices"]:
         return _block(profile, FAILED, r.verdict_line(verdict) if verdict else "not run", counts, got)
     if counts["self_test_failed"]:
-        return _block(profile, FAILED, "the recipe self-test failed a control", counts, got)
+        return _block(profile, FAILED, "the recipe tamper test failed a control", counts, got)
     if verdict.get("verdict") == "DIVERGENT":
         return _block(profile, DIVERGENT, r.verdict_line(verdict), counts, got,
                       dict(source="this install", sides=ran))

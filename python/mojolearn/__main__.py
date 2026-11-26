@@ -81,7 +81,7 @@ def _wants_suite(args):
     return bool(getattr(args, "profile", None) or getattr(args, "quick", False)
                 or getattr(args, "lanes", "")
                 or getattr(args, "emit_models", None)
-                or getattr(args, "self_test", False)
+                or getattr(args, "tamper_test", False)
                 or getattr(args, "cross_check", None)
                 or getattr(args, "compare", None)
                 # sealing a document is a pure function over one JSON file, the
@@ -122,6 +122,10 @@ QUICK_FALLBACK_NOTE = ("# no reference card ships with this install; running "
 
 
 def _verify_dispatch(args):
+    if getattr(args, "show_paths", None) is not None:
+        # reads a saved activity record and runs nothing (_verify_paths.py)
+        from . import _verify_paths
+        return _verify_paths.cmd_show_paths(args)
     if getattr(args, "recipe", None):
         # a user's algorithm, fitted from scratch on every device (`--self-test`
         # with it is the recipe's own self-test, not the suite's)
@@ -247,6 +251,15 @@ def build_parser():
     scope.add_argument("--models-only", dest="models_only", action="store_true",
                        help="check bundled GPU-trained models through the saved-model loader, including "
                             "HostForest and HostGBDT, without training")
+    v.add_argument("--show-paths", dest="show_paths", nargs="?", const="", default=None, metavar="LANE",
+                   help="SEE THE TWO PATHS: read the activity record the last `verify --all` saved (or --from) and "
+                        "show what each side did, running nothing. No LANE: every lane, CPU and GPU counts side by "
+                        "side (device launches, bytes and calls to and from the device, host thread splits and "
+                        "tasks) with each side's output hash. With LANE: that lane's CPU steps and GPU steps in "
+                        "full, then both hashes (a DIVERGENT lane shows the two that differ)")
+    v.add_argument("--from", dest="paths_from", metavar="PATH", default=None,
+                   help="with --show-paths: a saved what-ran record or a verify --all JSON report, for example "
+                        "one made on another machine")
     v.add_argument("--cpu-threads", type=int, default=1, metavar="N",
                    help="thread setting for supported CPU libraries (default: 1); capped below the available logical CPU count where possible; not a hard CPU or memory limit")
     v.add_argument("--quick", action="store_true",
@@ -271,16 +284,14 @@ def build_parser():
                    help="run every cell in its own process (slower; for diagnosis)")
     v.add_argument("--no-models", dest="no_models", action="store_true",
                    help="skip the portable models")
-    v.add_argument("--self-test", dest="self_test", action="store_true",
-                   help="SHOW THAT THIS VERIFIER CAN FAIL. Runs one lane twice "
-                        "through the ordinary comparison, once untouched and "
-                        "once with every value of the input's first column "
-                        "moved up by one ULP, and requires the first to read "
-                        "IDENTICAL and the second DIVERGENT. The perturbation "
-                        "is real arithmetic at run time, not a printed verdict, "
-                        "and it needs no sabotage build. Exit 0 only if the "
-                        "comparison both reproduced the reference and caught "
-                        "the wrong answer")
+    # `--self-test` was renamed `--tamper-test` (Andrew, 2026-11-26), no alias.
+    v.add_argument("--tamper-test", dest="tamper_test", action="store_true",
+                   help="TAMPER WITH ONE INPUT AND SHOW VERIFY CATCHES IT: runs one lane twice, once untouched "
+                        "and once with the first input column moved up by one ULP; passes only if the first "
+                        "reads IDENTICAL and the second DIVERGENT. The perturbation is real arithmetic at run "
+                        "time, not a printed verdict, and it needs no sabotage build. With --recipe: the "
+                        "recipe's own tamper controls (one ULP moved on each device, a fast recipe, a data file "
+                        "with another hash and a record of another version must each be caught)")
     v.add_argument("--cross-check", dest="cross_check", nargs="?", const="default",
                    choices=("quick", "default", "all"), default=None,
                    help="COMPARE YOUR GPU AGAINST YOUR CPU, on this machine. Fits "

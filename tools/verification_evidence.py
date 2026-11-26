@@ -12,7 +12,7 @@ column (cpu, nvidia, amd, apple) in the repo. git history is the history: no dat
                         recorder wrote (the reference tables admission builds from), per-chunk record logs
                verify   tools/ops/identity_record_job.sh: the whole `verify --all` JSON report, the single-device
                         verify commands' reports split out of it (extended/<profile>.json), what each side did per
-                        lane (what-ran.json, with the "different paths, same bits" sample), the self-test summary
+                        lane (what-ran.json, with the "different paths, same bits" sample), the tamper-test summary
                proving  tools/ops/proving_job.sh: pass/fail/error counts and the failed test names per pytest step
                smoke    tools/ops/gpu_smoke_job.sh (and the CPU wheel smoke): SUMMARY.txt, the failed lanes and
                         tests from each pool's results.tsv
@@ -223,12 +223,16 @@ def stage(results, out, column, part, commit=None, root=ROOT):
                 files.append("extended/%s.json" % name)
             # what each side did per lane, counted by the runtime in the run (`verify --all` what_ran), whole, with
             # the run's "different paths, same bits" sample
-            _write_json(out / "what-ran.json", dict(what_ran=report.get("what_ran"),
-                                                    paths_sample=report.get("paths_sample")))
-            files.append("what-ran.json")
-            if report.get("self_test") is not None:
-                _write_json(out / "self-test.json", report["self_test"])
-                files.append("self-test.json")
+            saved = results / "verify-all.what-ran.json"   # `verify --all` saves it beside its JSON (_verify_paths)
+            if saved.is_file():
+                keep_json(saved, "what-ran.json")
+            else:
+                _write_json(out / "what-ran.json", dict(what_ran=report.get("what_ran"),
+                                                        paths_sample=report.get("paths_sample")))
+                files.append("what-ran.json")
+            if report.get("tamper_test") is not None:
+                _write_json(out / "tamper-test.json", report["tamper_test"])
+                files.append("tamper-test.json")
     if kind == "record":
         summary = _read_json(results / "identity-wheels.json")
         if summary is not None:

@@ -17,7 +17,7 @@ cross-vendor claim for the user's own algorithm, within one version.
 
     python -m mojolearn verify --recipe r.json                 # writes r.record.json
     python -m mojolearn verify --recipe r.json --against other.record.json
-    python -m mojolearn verify --recipe r.json --self-test     # it can fail
+    python -m mojolearn verify --recipe r.json --tamper-test   # it can fail
     python -m mojolearn verify --recipe example:ridge          # a shipped recipe
 
 THE RECIPE (one JSON object, `FORMAT`):
@@ -1196,7 +1196,7 @@ def _result_lines(results):
 
 
 def cmd_recipe(args):
-    """`verify --recipe R [--against RECORD] [--record-out PATH] [--self-test] [--json]`."""
+    """`verify --recipe R [--against RECORD] [--record-out PATH] [--tamper-test] [--json]`."""
     json_out = getattr(args, "json", False)
     report = dict(format=RECORD_FORMAT + "-report", recipe=args.recipe)
     lines = [f"# mojolearn verify --recipe {args.recipe}", ""]
@@ -1272,14 +1272,14 @@ def cmd_recipe(args):
         report["against"] = cross
         if not cross["identical"] and code == EXIT_IDENTICAL:
             code = EXIT_NOT_FINITE if cross["verdict"] == "NOT FINITE" else EXIT_DIVERGENT
-    if getattr(args, "self_test", False):
+    if getattr(args, "tamper_test", False):
         controls = self_test(ml, recipe, base, results, arrays, version, vendor)
-        lines += ["", "self-test (each control must come out as stated):"]
+        lines += ["", "tamper test (each control must come out as stated):"]
         lines += [f"  {'PASS' if ok else 'FAIL'}  {name}: {words}" for name, ok, words in controls]
         passed = all(ok for _, ok, _ in controls)
-        lines.append(f"SELF-TEST {'PASS' if passed else 'FAIL'}: {sum(ok for _, ok, _ in controls)} of "
+        lines.append(f"TAMPER-TEST {'PASS' if passed else 'FAIL'}: {sum(ok for _, ok, _ in controls)} of "
                      f"{len(controls)} controls")
-        report["self_test"] = [dict(control=n, passed=ok, words=w) for n, ok, w in controls]
+        report["tamper_test"] = [dict(control=n, passed=ok, words=w) for n, ok, w in controls]
         if not passed:
             code = EXIT_DIVERGENT
     return finish(code)

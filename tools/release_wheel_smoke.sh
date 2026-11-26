@@ -463,7 +463,7 @@ if [ -n "$LANES" ]; then
   mkdir -p $RDIR/run && cd $RDIR/run
   export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_COMMIT=$COMMIT
   $RDIR/rv/bin/python -c 'import mojolearn as m; print("version", m.__version__, "vendor", m.vendor())' >> $RDIR/column.txt 2>&1
-  $RDIR/rv/bin/python -m mojolearn verify --self-test > $RDIR/selftest.log 2>&1; echo "selftest_exit=\$?" >> $RDIR/column.txt
+  $RDIR/rv/bin/python -m mojolearn verify --tamper-test > $RDIR/selftest.log 2>&1; echo "selftest_exit=\$?" >> $RDIR/column.txt
   timeout -k 20 $SMOKE_SECONDS $RDIR/rv/bin/python -m mojolearn._identity_break --lanes "$LANES" --json $RDIR/column.json \\
       --repeats 1 --fixtures base,denormal,odd --fail-on-refused --require-backend $VENDOR --no-batch --no-rlpair > $RDIR/column.log 2>&1
   echo \$? > $RDIR/column.exit
@@ -520,7 +520,7 @@ if [ -n "$LANES" ]; then
   _pkg=\$(\$IV/bin/python -c 'import importlib.util as u; print(list(u.find_spec("mojolearn").submodule_search_locations)[0])' 2>/dev/null)
   export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_COMMIT=\$(cat "\$_pkg/identity_columns/COMMIT" 2>/dev/null)
   \$IV/bin/python -c 'import mojolearn as m; print("version", m.__version__, "vendor", m.vendor())' >> $RDIR/column.txt 2>&1
-  \$IV/bin/python -m mojolearn verify --self-test > $RDIR/selftest.log 2>&1; echo "selftest_exit=\$?" >> $RDIR/column.txt
+  \$IV/bin/python -m mojolearn verify --tamper-test > $RDIR/selftest.log 2>&1; echo "selftest_exit=\$?" >> $RDIR/column.txt
   timeout -k 20 $SMOKE_SECONDS \$IV/bin/python -m mojolearn._identity_break --lanes "$LANES" --json $RDIR/column.json \\
       --repeats 1 --fixtures base,denormal,odd --fail-on-refused --require-backend $VENDOR --no-batch --no-rlpair > $RDIR/column.log 2>&1
   echo \$? > $RDIR/column.exit
