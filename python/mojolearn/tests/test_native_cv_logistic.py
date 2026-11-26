@@ -57,6 +57,12 @@ def test_explicit_host_logistic_keeps_native_constructor_and_cpu_binding():
     assert set(entries) == {'logistic_native_api_v1'}
     assert entries['logistic_native_api_v1'].__self__.estimators_vendor() == 'cpu'
     x, y = data()
+    # A GPU installation connects the CPU images an explicit host fit needs at their first use (one glue
+    # connection per family, by design not at import); a twin makes that first use, so the audited calls
+    # below are steady-state operations.
+    twin = HostLogisticRegression(max_iter=30, numeric_mode='identical').fit(x, y)
+    twin.predict(x)
+    twin.score(x, y)
     clean(model.fit, x, y)
     assert np.asarray(clean(model.predict, x)).shape == y.shape
     assert clean(model.score, x, y) >= 0

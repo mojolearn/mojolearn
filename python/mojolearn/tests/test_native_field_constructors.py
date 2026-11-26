@@ -213,6 +213,11 @@ def test_reinitialization_keeps_unrelated_fields_in_place(cls):
     model = construct(cls, **values)
     marker = array.array('f', [1.0])
     vars(model)['fitted_'] = marker
+    # On a GPU installation the first device='cpu' admission of a family connects its CPU image once (the
+    # glue connector, python/mojolearn/_native_classical_bridge.py connect_cpu_device and its family forms:
+    # by design no longer at import). That one connection is made here, on another instance, so the audited
+    # call below is a steady-state constructor.
+    cls(**replacement)
     clean(model.__init__, **replacement)
     expected = oracle(cls, **values)
     vars(expected)['fitted_'] = marker
