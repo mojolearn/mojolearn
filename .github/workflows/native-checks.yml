@@ -455,10 +455,24 @@ jobs:
           cache: true
           cache-write: true
           environments: default
+      # The column's group programs whose inputs did not change since an earlier run are copied, not compiled
+      # (tools/ops/native_testsuite_cache.py; the key is every imported source file, the flags and the toolchain, so a
+      # stale hit cannot happen). Restore the newest saved set; save this run's set under a new key.
+      - uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ${{ runner.temp }}/ts-cache
+          key: native-ts-${{ inputs.column }}-${{ github.run_id }}
+          restore-keys: native-ts-${{ inputs.column }}-
       - name: Build the column's main once
         env:
           IN_COLUMN: ${{ inputs.column }}
+          NC_TS_CACHE: ${{ runner.temp }}/ts-cache
         run: bash .wf/tools/ops/native_checks_steps.sh build
+      - uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        if: always()
+        with:
+          path: ${{ runner.temp }}/ts-cache
+          key: native-ts-${{ inputs.column }}-${{ github.run_id }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

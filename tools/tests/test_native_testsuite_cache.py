@@ -174,3 +174,16 @@ def test_the_repository_checks_resolve_every_import():
     assert not any(unresolved.values()), {n: u for n, u in unresolved.items() if u}
     files, _ = sources.closure(ROOT / picked[0][1][0])
     assert all(len(h) == 64 for h in sources.hashes(files).values())
+
+
+def test_the_github_build_restores_the_cache_before_building_and_saves_it_after():
+    import yaml
+    steps = yaml.safe_load((ROOT / ".github/workflows/native-checks.yml").read_text())["jobs"]["build"]["steps"]
+    uses = [s.get("uses", "") for s in steps]
+    restore = next(i for i, u in enumerate(uses) if u.startswith("actions/cache/restore@"))
+    save = next(i for i, u in enumerate(uses) if u.startswith("actions/cache/save@"))
+    build = next(i for i, s in enumerate(steps) if s.get("run", "").endswith("native_checks_steps.sh build"))
+    assert restore < build < save
+    path = steps[restore]["with"]["path"]
+    assert steps[build]["env"]["NC_TS_CACHE"] == path == steps[save]["with"]["path"]
+    assert steps[restore]["with"]["key"] == steps[save]["with"]["key"] and steps[restore]["with"]["restore-keys"]
