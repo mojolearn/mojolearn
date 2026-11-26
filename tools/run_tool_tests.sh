@@ -60,6 +60,12 @@ while IFS= read -r v; do
     esac
 done < <(compgen -e)
 printf 'scrubbed\t%s\n' "${SCRUBBED[*]:-none}" > "$OUT/ENV.txt"
+# A test that runs a board or verify path without naming its own summary directory would write a run summary into
+# docs/measurements/latest/auto/ of THIS tree (tools/retain_run_summary.py falls back to the repository; 2026-11-26: a
+# full run rewrote the four bench-board-*.json there). Every unit writes it under this run's output instead; the tests
+# that check the summary set their own directory.
+export MOJOLEARN_SUMMARY_REPO="$OUT/run-summary-repo"
+mkdir -p "$MOJOLEARN_SUMMARY_REPO/.git" "$MOJOLEARN_SUMMARY_REPO/tools" || exit 2  # the shape retain_run_summary.py accepts
 
 if [ $# -gt 0 ]; then FILES=("$@"); else FILES=(tools/test_*.py tools/tests/test_*.py); fi
 # kind<TAB>path per file: pytest (test functions / TestCase classes) or script (a module-style check)
