@@ -1,30 +1,89 @@
-"""Count, over consecutive commits, how many build groups keep the same key (paths and toolchain held fixed)."""
-import json, subprocess, sys, os, collections
-repo, wt, out, revs = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:]
-env = dict(os.environ, MOJOLEARN_GPU_ARCHS="sm_89")
-keys = {}
-for r in revs:
-    subprocess.run(["git", "-C", wt, "checkout", "-q", "--detach", r], check=True)
-    j = f"{out}/plan-{r}.json"
-    p = subprocess.run([sys.executable, "tools/development_build.py", "plan", "--sets", "identical,host",
-                        "--cache", f"{out}/cache", "--json", j], cwd=wt, env=env, capture_output=True, text=True)
-    if p.returncode != 0:
-        print(r, "plan rc", p.returncode, p.stderr[-200:].replace("\n", " ")); keys[r] = None; continue
-    d = json.load(open(j))
-    keys[r] = {f"{g['mode']}:{g['stem']}": (g["key"], g["fields"]["source"]["files"]) for g in d["groups"]}
-    os.remove(j)
-tot = same = 0; rows = []
-for new, old in zip(revs, revs[1:]):
-    a, b = keys[new], keys[old]
-    if not a or not b: continue
-    common = set(a) & set(b); kept = sum(a[k][0] == b[k][0] for k in common)
-    srcsame = sum(a[k][1] == b[k][1] for k in common)
-    files = subprocess.run(["git", "-C", wt, "diff", "--name-only", old, new], capture_output=True, text=True).stdout.split()
-    mojo = [f for f in files if f.endswith(".mojo")]
-    rows.append((new, len(a), kept, srcsame, len(files), len(mojo)))
-    tot += len(a); same += kept
-print("commit groups key_same source_same files_changed mojo_changed")
-for r in rows: print(*r)
-print(f"TOTAL groups {tot} reused {same} = {100*same/max(tot,1):.0f}%")
-hist = collections.Counter(min(10, round(10*r[2]/r[1])) for r in rows)
-print("pairs by reuse decile:", dict(sorted(hist.items())))
+# SPDX-License-Identifier: Apache-2.0
+"""Count, over consecutive commits, how many build groups keep the same key (2026-11-26; the study behind
+tools/ops/native_testsuite_cache.py's docstring).
+
+    python3 tools/ops/group_reuse_count.py <repo> <out dir> <rev> <rev> ...   (newest first)
+
+PARALLEL (rel-fix-1, review of 3423ae229e..8f0d9a9642: the first version checked every revision out in ONE worktree,
+one after another). Each revision is planned in its own detached worktree under <out dir>/wt/, all at once, as many as
+the core allocation (affinity and cgroup cpu.max) allows; a plan only reads, so the units are independent. The keys
+of different worktrees compare on Linux only: since KEY_SCHEMA v2 a Linux key holds no checkout path, while a darwin
+key keeps it (tools/development_build.py group_fields), so on a Mac every group would read as changed.
+"""
+import collections
+import json
+import os
+import shutil
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor
+
+
+def alloc_cores():
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        cores = os.cpu_count() or 1
+    try:
+        with open("/sys/fs/cgroup/cpu.max", encoding="ascii") as stream:
+            quota, period = stream.read().split()[:2]
+        if quota != "max":
+            cores = min(cores, max(1, int(quota) // int(period)))
+    except (OSError, ValueError):
+        pass
+    return max(1, cores)
+
+
+def plan_keys(repo, out, rev):
+    """{mode:stem: (key, source files)} of REV, or None when its plan fails."""
+    wt = os.path.join(out, "wt", rev)
+    subprocess.run(["git", "-C", repo, "worktree", "add", "-q", "--detach", wt, rev], check=True)
+    try:
+        j = os.path.join(out, f"plan-{rev}.json")
+        env = dict(os.environ, MOJOLEARN_GPU_ARCHS="sm_89")
+        p = subprocess.run([sys.executable, "tools/development_build.py", "plan", "--sets", "identical,host",
+                            "--cache", os.path.join(out, "cache"), "--json", j], cwd=wt, env=env,
+                           capture_output=True, text=True)
+        if p.returncode != 0:
+            print(rev, "plan rc", p.returncode, p.stderr[-200:].replace("\n", " "))
+            return None
+        with open(j) as fh:
+            d = json.load(fh)
+        os.remove(j)
+        return {f"{g['mode']}:{g['stem']}": (g["key"], g["fields"]["source"]["files"]) for g in d["groups"]}
+    finally:
+        subprocess.run(["git", "-C", repo, "worktree", "remove", "--force", wt], capture_output=True)
+        shutil.rmtree(wt, ignore_errors=True)
+
+
+def main(argv):
+    repo, out, revs = argv[0], argv[1], argv[2:]
+    os.makedirs(os.path.join(out, "wt"), exist_ok=True)
+    with ThreadPoolExecutor(max_workers=min(alloc_cores(), max(1, len(revs)))) as pool:
+        keys = dict(zip(revs, pool.map(lambda r: plan_keys(repo, out, r), revs)))
+    tot = same = 0
+    rows = []
+    for new, old in zip(revs, revs[1:]):
+        a, b = keys[new], keys[old]
+        if not a or not b:
+            continue
+        common = set(a) & set(b)
+        kept = sum(a[k][0] == b[k][0] for k in common)
+        srcsame = sum(a[k][1] == b[k][1] for k in common)
+        files = subprocess.run(["git", "-C", repo, "diff", "--name-only", old, new], capture_output=True,
+                               text=True).stdout.split()
+        mojo = [f for f in files if f.endswith(".mojo")]
+        rows.append((new, len(a), kept, srcsame, len(files), len(mojo)))
+        tot += len(a)
+        same += kept
+    print("commit groups key_same source_same files_changed mojo_changed")
+    for r in rows:
+        print(*r)
+    print(f"TOTAL groups {tot} reused {same} = {100 * same / max(tot, 1):.0f}%")
+    hist = collections.Counter(min(10, round(10 * r[2] / r[1])) for r in rows if r[1])
+    print("pairs by reuse decile:", dict(sorted(hist.items())))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
