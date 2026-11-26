@@ -318,16 +318,17 @@ def test_streamed_step_loops_keep_one_opened_source_and_equal_one_call(tmp_path)
     handle's one opened source (its owner) instead of reopening it per call, and train the words of one call of
     the same steps; a position loaded from outside a fit drops the owner and the next call rebuilds it."""
     root = _shards(str(tmp_path / "s"))
-    whole = _regressor().fit(source=_source(root), epochs=1, steps=5)
+    whole = _regressor().fit(source=_source(root), epochs=2)
     src = _source(root)
     assert src._owner is None
-    m = _regressor().fit(source=src, epochs=1, steps=1)
+    m = _regressor().fit(source=src, epochs=2, steps=1)
     owner = src._owner
     assert owner is not None
-    for _ in range(4):
-        m.fit(source=src, epochs=1, steps=1, resume=True)
+    for _ in range(2 * src.n_batches - 1):
+        m.fit(source=src, epochs=2, steps=1, resume=True)
         assert src._owner is owner
-    assert np.array_equal(m.params_, whole.params_)
+    for name in ("params_", "optimizer_m_", "optimizer_v_"):
+        assert np.array_equal(getattr(m, name), getattr(whole, name)), name
     state = src.state_dict()
     src.load_state_dict(dict(state, epoch=0, consumed=0))
     assert src._owner is None
