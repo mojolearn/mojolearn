@@ -2,6 +2,7 @@
 # Native saved-model reconstruction. The format table is import-time ABI
 # metadata, never Python loaders, constructors, or callbacks. The public
 # router is switched only after every existing format has a native builder.
+from core.mode_answer import MODE_FAMILY_GBDT, answer_mode_word
 from std.python import Python, PythonObject
 from bindings.py_cpython_table import cpython_table
 from core.gp_native_api import GPKernelView
@@ -2777,7 +2778,13 @@ def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: Pyth
     var tables = py_get(context, nk[].k_host_archive_gbdt_bindings)
     if tables is None:
         raise Error("ImportError: mojolearn: the GBDT binding is not connected to the archive owner")
-    var table = py_get(tables, PythonObject(String(py_call(py_call(mode.strip).lower))))
+    # The ANSWERED word (core/mode_answer.mojo MODE_FAMILY_GBDT), as the fit and predict doors answer it
+    # (bindings/trees_public_gbdt_fit_door.mojo:1803): where the identical set answers `fast`, a fast-mode
+    # model fitted on the identical binding and its load read the absent fast tier's refusal (lane gs-fix-2:
+    # test_gbdt_mode_serialization on the L40S). The saved `numeric_mode` field stays as saved.
+    var word = String(py=py_call(py_call(mode.strip).lower))
+    answer_mode_word(word, MODE_FAMILY_GBDT)
+    var table = py_get(tables, PythonObject(word))
     if table is None:
         raise Error("numeric_mode must be fast, identical or None")
     if py_type(table) is b.str:
