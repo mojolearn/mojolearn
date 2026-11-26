@@ -360,7 +360,9 @@ def test_plan_apple_carries_fast_and_identical_arms():
     tasks = sum(len(bb.tree_task_datasets(l, bb.DATASETS)) for l in bb.TREE_TASK_LANES)
     algos = sum(len(bb.ALGOS.datasets_of(l)) for l in bb.ALGOS_LANES)
     assert len(races) == ((len(bb.TREE_LANES) + len(bb.CLASSICAL_LANES)) * len(bb.DATASETS)
-                          + len([l for l in bb.NEURAL_LANES if bb.NEURAL.DEVICE_OF.get(l) != "cpu"]) + more + tasks + algos)
+                          + len([l for l in bb.NEURAL_LANES if bb.NEURAL.DEVICE_OF.get(l) != "cpu"
+                                 and l not in bb.NEURAL.ROW_CLASS]) + more + tasks + algos)
+    # composed rows (bench_board_neural.ROW_CLASS, Andrew 2026-11-23, commit 6c66378274) plan only under --composed
     for r in races:
         if r["family"] == "neural":
             want = {"ours": "identical", "ours-fast": "fast"}
@@ -1074,7 +1076,8 @@ def test_neural_run_schema_quality_and_board(env):
     assert sorted(_calls(env)) == sorted(
         "neural %s small %s" % (l, ",".join(["ours"] + bb.gpu_opponents_first(
             bb.NEURAL_OPPONENTS["nvidia"][l])))
-        for l in bb.NEURAL_LANES if bb.NEURAL.DEVICE_OF.get(l) != "cpu")
+        for l in bb.NEURAL_LANES if bb.NEURAL.DEVICE_OF.get(l) != "cpu"
+        and l not in bb.NEURAL.ROW_CLASS)   # composed rows: --composed only (6c66378274)
     rec = res["races"]["neural/lm-train-step/bytes/shape=small"]
     assert rec["status"] == "done" and rec["shape"] == "small"
     cells = _unchecked_stub_ratios(rec)
