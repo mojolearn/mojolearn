@@ -999,6 +999,26 @@ def _rfe_pin_settle(plan: RfeFitPlan, kept: Int):
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=plan.kept_at)[] = kept
 
 
+def _rfe_run_settled(plan: RfeFitPlan, program: ClsProgram, sources: List[ClsBorrowed],
+                     mut kept: Int) raises -> ClsBorrowedDone:
+    # One program run with THE PIN RULE settled on BOTH paths (lane open-fixes, 2026-11-25).
+    # `cls_borrowed_run` writes `kept` the moment the scope's cache takes X's pin and may raise after it
+    # (a program refused after the put, e.g. "device store: id N is not live" in `upload_ranges`). The
+    # settle used to run only after a return, so on that raise the door
+    # (bindings/prep_select_native_door.mojo `_rfe_native`) read kept == 0 and unpinned the reference the
+    # cache still held; the scope's exit unpinned it a second time: X lost one reference too many and
+    # was freed while referenced (SIGSEGV in the garbage collector, importlib and str(exc) after the
+    # store errors of x-prep-rfe, x-prep-score-edges-rfe-*, generic-*-prep and the RFE tests, L40S
+    # smoke of main 3cd641b37e).
+    try:
+        var done = cls_borrowed_run(plan.run, program, sources, plan.scope, kept)
+        _rfe_pin_settle(plan, kept)
+        return done^
+    except error:
+        _rfe_pin_settle(plan, kept)
+        raise error^
+
+
 def rfe_fit_run(plan: RfeFitPlan) raises -> RfeFitResult:
     """RFE.fit over a native member (module note, THE ONE BODY): program 0 stages the first block from the
     all-ones support; each round fits a new member state on the block (`rfe_member_importances`, its
@@ -1021,8 +1041,7 @@ def rfe_fit_run(plan: RfeFitPlan) raises -> RfeFitResult:
     var first_program = ClsProgram(plan.work_on)
     var first = rfe_first_stage(first_program, x_words, n, d)
     var first_sources: List[ClsBorrowed] = [ClsBorrowed(Int(support.unsafe_ptr()), d, 0, 0, 0, 0), x_source]
-    var first_done = cls_borrowed_run(plan.run, first_program, first_sources, plan.scope, kept)
-    _rfe_pin_settle(plan, kept)
+    var first_done = _rfe_run_settled(plan, first_program, first_sources, kept)
     _ = len(support)  # read through the run above
     var feat = _rfe_take_i32(first_done, first.ids, d)
     var block = _rfe_take_f32(first_done, first.block, n * d)
@@ -1060,8 +1079,7 @@ def rfe_fit_run(plan: RfeFitPlan) raises -> RfeFitResult:
             ClsBorrowed(Int(feat.unsafe_ptr()), nsup, 0, 0, 0, 0),
             x_source,
         ]
-        var done = cls_borrowed_run(plan.run, program, sources, plan.scope, kept)
-        _rfe_pin_settle(plan, kept)
+        var done = _rfe_run_settled(plan, program, sources, kept)
         _ = len(support)  # read through the run above
         _ = len(ranking)
         _ = len(feat)
