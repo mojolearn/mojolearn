@@ -78,8 +78,8 @@ from . import _verify_all
 def _wants_suite(args):
     """`verify` runs the identity suite (`_verify_all.py`) when any of its
     flags is given, else the pinned k-means card as before."""
-    return bool(getattr(args, "all", False) or getattr(args, "quick", False)
-                or getattr(args, "full", False) or getattr(args, "lanes", "")
+    return bool(getattr(args, "profile", None) or getattr(args, "quick", False)
+                or getattr(args, "lanes", "")
                 or getattr(args, "emit_models", None)
                 or getattr(args, "self_test", False)
                 or getattr(args, "cross_check", None)
@@ -101,8 +101,6 @@ def _wants_suite(args):
                 or getattr(args, "coverage", False)
                 or getattr(args, "include_pending", False)
                 or getattr(args, "models_only", False)
-                or getattr(args, "training_only", False)
-                or getattr(args, "neural_training", False)
                 or getattr(args, "routine", False)
                 or getattr(args, "batch_checks", False))
 
@@ -120,7 +118,7 @@ def _asks_for_card(args):
 
 QUICK_FALLBACK_NOTE = ("# no reference card ships with this install; running "
                        "`verify --quick` against the reference table instead "
-                       "(`verify --all` is the full check)")
+                       "(`verify --all` is the full check: every classic and neural lane)")
 
 
 def _verify_dispatch(args):
@@ -132,7 +130,8 @@ def _verify_dispatch(args):
     if getattr(args, "check", None) or getattr(args, "fit_both", False):
         from . import _verify_check
         return _verify_check.cmd_check(args)
-    if getattr(args, "training_only", False) or getattr(args, 'neural_training', False):
+    if getattr(args, "profile", None) == "neural":
+        # the bundled saved models belong to the classic profile; --all runs them
         args.no_models = True
     if not _asks_for_card(args):
         args.routine = True
@@ -251,27 +250,20 @@ def build_parser():
 
     v = sub.add_parser(
         "verify",
-        help="verify bounded public API identity and classical training/inference",
+        help="verify bounded public API identity, classical and neural training and inference",
         description=(
-            "Default: bounded public API/TAPE checks with fault controls, plus routine lanes on the base fixture, combining "
-            "classical training and inference with bundled saved-model inference. "
-            "--quick selects representative routine checks. --all or --full runs "
-            "the complete routine scope on every fixture. Additional neural training "
-            "lanes are selected with --neural-training. Reports name "
-            "the selected scope and every excluded neural lane."),
+            "Default (no profile flag): bounded public API/TAPE checks with fault controls, the classic lanes "
+            "on the base fixture, the bundled saved models and, on a GPU install, the GPU/CPU inference "
+            "cross-check. --classic runs every classic lane (classical training and inference, the routine "
+            "tape steps, loaded-weight neural inference) on every fixture with the bundled saved models; "
+            "--neural runs the neural training, backward and optimizer lanes on every fixture; --all runs "
+            "both in one process and one report. --quick samples one lane per family of the selected "
+            "profile on the base fixture. Reports name the selected profile and every lane it leaves out."),
         formatter_class=argparse.RawDescriptionHelpFormatter)
     v.add_argument("--json", action="store_true",
                    help="emit one JSON object instead of the human report")
-    v.add_argument("--all", action="store_true",
-                   help="check every applicable routine lane on every fixture: the "
-                        "identity_break lanes (every lane on a GPU install, the "
-                        "public CPU reference lanes on a CPU-only one) plus the "
-                        "portable GPU-trained models, including applicable gradient, "
-                        "batch-size, ragged and sampler/replay probes; each cell part compared "
-                        "with the reference table shipped in the wheel "
-                        "(docs/VERIFY.md, python/mojolearn/_verify_all.py)")
     v.add_argument("--batch-checks", action="store_true",
-                   help="include gradient, batch-size, ragged and sampler/replay probes in quick or selected-lane runs (already included in --all/--full); missing references read OWED")
+                   help="include gradient, batch-size, ragged and sampler/replay probes in default, quick or selected-lane runs (already included in --classic, --neural and --all); missing references read OWED")
     v.add_argument("--coverage", action="store_true",
                    help="inspect all appendix variants, lane availability and batch contracts without fitting")
     v.add_argument("--smoke", action="store_true",
@@ -282,39 +274,51 @@ def build_parser():
                         "full fits per lane is real work")
     v.add_argument("--include-pending", action="store_true",
                    help="also execute unqualified CPU routes and supported logical-shard drivers; stale references read OWED, and missing routes remain scope gaps")
+    # THE PROFILES (Andrew, 2026-11-26): `--all` used to be the classic scope only, and the neural training lanes ran
+    # only under a separate `--neural-training`. Now `--classic` and `--neural` name the two halves and `--all` is
+    # both, in one sweep and one report. The old `--full` (alias of --all), `--neural-training`, `--training` (now
+    # `--no-models`) and `--inference` (alias of --models-only) flags were removed with no alias.
     scope = v.add_mutually_exclusive_group()
-    scope.add_argument("--models-only", "--inference", dest="models_only", action="store_true",
-                   help="check bundled GPU-trained models through the saved-model loader, including HostForest and HostGBDT, without training")
-    scope.add_argument("--training", dest="training_only", action="store_true",
-                   help="classical fit-based checks only; the default already combines these with inference")
-    scope.add_argument('--neural-training', action='store_true',
-                       help='explicitly run neural training, backward and optimizer fixtures; separate from routine verification')
+    scope.add_argument("--classic", dest="profile", action="store_const", const="classic",
+                       help="every classic lane on every fixture: the identity_break lanes outside neural "
+                            "training (every lane on a GPU install, the public CPU reference lanes on a "
+                            "CPU-only one) plus the portable GPU-trained models, including applicable "
+                            "gradient, batch-size, ragged and sampler/replay probes; each cell part compared "
+                            "with the reference table shipped in the wheel (docs/VERIFY.md)")
+    scope.add_argument("--neural", dest="profile", action="store_const", const="neural",
+                       help="every neural training, backward and optimizer lane on every fixture, with the "
+                            "same probes and the same reference table")
+    scope.add_argument("--all", dest="profile", action="store_const", const="all",
+                       help="--classic and --neural together: every lane, the portable models and every probe "
+                            "in one process, one report (one JSON, one set of counts, one verdict) and one exit "
+                            "status; the cell workers run both profiles' cells in one parallel sweep")
+    scope.add_argument("--models-only", dest="models_only", action="store_true",
+                       help="check bundled GPU-trained models through the saved-model loader, including "
+                            "HostForest and HostGBDT, without training")
     v.add_argument("--cpu-threads", type=int, default=1, metavar="N",
                    help="thread setting for supported CPU libraries (default: 1); capped below the available logical CPU count where possible; not a hard CPU or memory limit")
     v.add_argument("--quick", action="store_true",
-                   help="representative checks from the selected profile on the base fixture")
-    v.add_argument("--full", action="store_true",
-                   help="alias for --all: every applicable lane and property in the selected profile on all fixtures")
+                   help="representative checks from the selected profile (classic by default) on the base fixture")
     v.add_argument("--lanes", default="",
-                   help="only these comma separated lanes within the selected profile")
+                   help="only these comma separated lanes within the selected profile (classic by default)")
     v.add_argument("--fixtures", default="",
-                   help="with --all: only these comma separated fixtures")
+                   help="only these comma separated fixtures")
     v.add_argument("--repeats", type=int, default=1,
-                   help="with --all: fits per cell; two or more also catch a "
+                   help="fits per cell; two or more also catch a "
                         "cell that moves on this box (default %(default)s)")
     v.add_argument("--cell-timeout", type=float, default=120.0,
-                   help="with --all: seconds allowed for each cell, self-test, "
+                   help="seconds allowed for each cell, self-test, "
                         "or portable-model worker; timeout stops the sweep (default %(default)s)")
     v.add_argument("--cell-workers", dest="cell_workers", type=int, default=None, metavar="N",
-                   help="with --all: cell worker processes at once (default: the process's core "
+                   help="cell worker processes at once (default: the process's core "
                         "allocation, bounded by available memory)")
     v.add_argument("--batch-cells", dest="batch_cells", type=int, default=None, metavar="N",
-                   help="with --all: cells per worker process (default 24); a crash, timeout or "
+                   help="cells per worker process (default 24); a crash, timeout or "
                         "unhealthy-device signal runs the rest of that batch one cell per process")
     v.add_argument("--fresh-process-per-cell", dest="fresh_process_per_cell", action="store_true",
-                   help="with --all: run every cell in its own process (slower; for diagnosis)")
+                   help="run every cell in its own process (slower; for diagnosis)")
     v.add_argument("--no-models", dest="no_models", action="store_true",
-                   help="with --all: skip the portable models")
+                   help="skip the portable models")
     v.add_argument("--self-test", dest="self_test", action="store_true",
                    help="SHOW THAT THIS VERIFIER CAN FAIL. Runs one lane twice "
                         "through the ordinary comparison, once untouched and "
@@ -476,13 +480,13 @@ def build_parser():
                    default=None,
                    help="with --compare: the same, for the SECOND document")
     v.add_argument("--json-out", dest="json_out", metavar="PATH", default=None,
-                   help="with --all: also write the full evidence document "
+                   help="also write the full evidence document "
                         "(per-cell hashes computed here and expected, per-lane "
                         "timings, the sha256 of every binding loaded, and the "
                         "committed column each reference came from) to PATH")
     v.add_argument("--reference-table", dest="reference_table", metavar="PATH",
                    default=None,
-                   help="with --all: compare against this table instead of "
+                   help="compare against this table instead of "
                         "the one shipped in the wheel; with --emit-reference "
                         "and --lanes, update only those lanes in this base table")
     v.add_argument("--records", action="append", metavar="DIR", default=None,

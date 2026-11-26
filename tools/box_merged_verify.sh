@@ -376,12 +376,11 @@ job_witness() {
   local X=$O/witness; mkdir -p $X
   local L=sequence-adamax,sequence-nadam,sequence-lr-schedulers,et-clf-weighted,et-reg-weighted,gbdt-class-weights,gbdt-multiclass-offgrid
   LANES=$L REPEATS=1 run $X record 5400 bash tools/record_identity_column.sh $LABEL $X/column
-  ( cd / && MOJOLEARN_NUMERIC_MODE=identical run $X verify-neural 3600 $PY -m mojolearn verify --neural-training --all \
-      --fixtures base --lanes sequence-adamax,sequence-nadam,sequence-lr-schedulers --json )
-  ( cd / && MOJOLEARN_NUMERIC_MODE=identical run $X verify-trees 3600 $PY -m mojolearn verify --all --fixtures base \
-      --lanes et-clf-weighted,et-reg-weighted,gbdt-class-weights,gbdt-multiclass-offgrid --json )
+  # one `verify --all` (both profiles: the neural sequence lanes and the classic tree lanes) in one process
+  ( cd / && MOJOLEARN_NUMERIC_MODE=identical run $X verify 3600 $PY -m mojolearn verify --all --fixtures base \
+      --lanes $L --json )
   # One row per lane/part: the native value next to the 0.8.55 PTX value and the old reference.
-  $PY - $X/verify-neural.log $X/verify-trees.log > $X/witness.tsv 2> $X/witness.err <<'EOF'
+  $PY - $X/verify.log > $X/witness.tsv 2> $X/witness.err <<'EOF'
 import json, sys
 ptx = {("sequence-adamax", "train"): ("26cc2c2648fa8bb2", "f5d88e3cf2ab67ee"),
        ("sequence-nadam", "train"): ("c3e6f1be4f0f537f", "c84124a296495f2f"),

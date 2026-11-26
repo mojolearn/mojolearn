@@ -99,15 +99,15 @@ def inventory(harness, table, vendor_class):
         applicable = (status == "available" and name not in stale
                       and (vendor_class != "cpu" or row["comparable"]))
         default_execution = applicable and name not in neural
-        command = "verify --neural-training" if name in neural else "verify"
+        command = "verify --neural" if name in neural else "verify --classic"
         properties = {"batch": declaration(getattr(harness, "BATCH", {}).get(name))}
         for part, (specs, default, *_rest) in getattr(harness, "EXTRA_PARTS", {}).items():
             properties[part] = declaration(specs.get(name, default))
             properties[part]["run_by_default"] = default_execution
-            properties[part]["command"] = command + " --all"
+            properties[part]["command"] = command
         properties["batch"]["run_by_default"] = default_execution
         properties["rlpair"] = declaration(getattr(harness, "RLPAIR", {}).get(name, "n/a:no-sampler-trainer-pair"))
-        properties["rlpair"].update(run_by_default=default_execution, command=command + " --all")
+        properties["rlpair"].update(run_by_default=default_execution, command=command)
         refs = {}
         for part in dict.fromkeys((*vref.PARTS, *properties)):
             refs[part] = sum(bool((entry := vref.entry(table, name, fixture, part))
@@ -116,7 +116,7 @@ def inventory(harness, table, vendor_class):
         lanes[name] = dict(status=status, reason=reason, properties=properties,
                            execution=dict(
                                run_by_default=default_execution,
-                               profile="neural-training" if name in neural else "routine",
+                               profile="neural" if name in neural else "classic",
                                cpu_route_declared=name in covered,
                                cpu_logical_shards=name in parallel_cpu,
                                command=(f"{command} --include-pending --lanes {name}" if name in covered and
@@ -183,7 +183,7 @@ def inventory(harness, table, vendor_class):
                     and ENDPOINTS['supplemental_sources'] == supplemental_sources(Path(__file__).parent)
                     and ENDPOINTS['harness_sources'] == harness_sources(harness)),
                 public_endpoint_verification=dict(command='verify', expected=len(selected_endpoints('all')),
-                    neural_command='verify --neural-training', neural_expected=len(selected_endpoints('neural')),
+                    neural_command='verify --neural', neural_expected=len(selected_endpoints('neural')),
                     reference_device_validation=API_REFERENCE.get('device_validation',{}),
                     reference_untested_vendors=API_REFERENCE.get('untested_vendors',[]),
                     execution='not run', fault_controls=len(API_FAULTS), faults_in_normal_run=True,
@@ -218,7 +218,7 @@ def inventory(harness, table, vendor_class):
                     parallel_drivers_requiring_gpu=sum(name.startswith("par-") and name not in covered for name in lanes)),
                 limitations=["References describe recorded fixtures, not all possible inputs or hardware.",
                              "A single-device parallel driver run does not certify multiple GPUs.",
-                             "Gradient, batch-size, ragged and sampler/replay checks are included in --all/--full; quick and selected-lane runs opt in with --batch-checks.",
+                             "Gradient, batch-size, ragged and sampler/replay checks are included in --classic, --neural and --all; default, quick and selected-lane runs opt in with --batch-checks.",
                              "The appendix's seasonal-difference selection label means select_d with caller-supplied D."])
 
 

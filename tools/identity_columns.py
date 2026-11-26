@@ -88,14 +88,21 @@ def vref():
     return importlib.import_module("mojolearn._verify_reference")
 
 
+#: This recorder's --scope names and the verify profile each one is (`verify --classic`, `--neural`, `--all`;
+#: python/mojolearn/_verification_profiles.py). identity_verify_launch.py passes the verify names directly.
+VERIFY_PROFILE = {"routine": "classic", "neural-training": "neural", "all": "all",
+                  "classic": "classic", "neural": "neural"}
+
+
 def profile_lanes(h, scope):
-    if scope == "all":
+    profile = VERIFY_PROFILE[scope]
+    if profile == "all":
         return list(h.LANES)
     _package()
     import importlib
     surface = importlib.import_module("mojolearn.host_surface")
     profiles = importlib.import_module("mojolearn._verification_profiles")
-    lanes, _ = profiles.select(h, surface, list(h.LANES), neural=(scope == "neural-training"))
+    lanes, _ = profiles.select(h, surface, list(h.LANES), profile=profile)
     return lanes
 
 

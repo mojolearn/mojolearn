@@ -38,10 +38,11 @@ not evidence of cross-vendor agreement. Retained original reports remain availab
 Inspect the installed package's scope before running the checks:
 
 ```sh
-python -m mojolearn verify --quick  # representative checks, same combined scope
-python -m mojolearn verify  # includes bounded public API checks and fault controls
-python -m mojolearn verify --neural-training  # explicit neural training scope
-python -m mojolearn verify --neural-training --all  # neural scope, all nine fixtures
+python -m mojolearn verify --quick  # representative classic checks, base fixture
+python -m mojolearn verify  # classic lanes on the base fixture, bounded public API checks and fault controls
+python -m mojolearn verify --classic  # every classic lane, all nine fixtures
+python -m mojolearn verify --neural  # every neural training lane, all nine fixtures
+python -m mojolearn verify --all  # both profiles in one run, one report, one verdict
 python -m mojolearn verify --coverage
 python -m mojolearn verify --coverage --json-out coverage.json
 python -m mojolearn verify --all --json-out verification.json
@@ -58,7 +59,7 @@ including inherited methods the static census assigned to classes that do not
 expose them. An availability check is not numerical coverage. A missing fixture,
 failed operation or missing current-release reference cannot become a pass.
 The JSON report retains endpoint results and loaded native artifact hashes.
-`verify` and `verify --all` include all additions. `verify --neural-training`
+`verify`, `verify --classic` and `verify --all` include all additions. `verify --neural`
 selects the neural, TAPE, optimizer, training, model and associated metadata
 checks, including their fault controls. An explicit `--lanes` selection retains
 its requested lane scope; `--models-only` retains its inference-only scope.
@@ -74,16 +75,20 @@ not count as a numerical catch. These controls do not claim to mutate every
 native kernel's source. The existing native-kernel negative controls retain
 their separate recorded scope.
 
-Default and quick verification combine inference with classical training. The
-bounded endpoint fixtures include tiny neural updates; neither runs a neural
-training campaign. `--all` (or `--full`) expands this same routine scope to
-all nine fixtures; `--neural-training` selects neural training, backward and
-optimizer fixtures separately, and can be combined with `--all`. Quick selects
-one eligible referenced lane per family after excluding neural training.
-Routine runs include saved-model inference and, when a GPU is present, local
-GPU/CPU inference comparisons. Default uses all eligible cross-check lanes on
-the base fixture; quick uses family representatives. Coverage and result JSON
-name the selected profile and excluded neural lanes.
+Verification has two profiles. The classic profile combines inference with
+classical training; the neural profile is neural training, backward and
+optimizer fixtures. Default and quick verification run the classic profile on
+the base fixture (the bounded endpoint fixtures include tiny neural updates;
+neither runs a neural training campaign). `--classic` runs the classic profile
+on all nine fixtures, `--neural` the neural profile on all nine fixtures, and
+`--all` both in one process: one sweep of cell workers over both profiles'
+cells, one JSON report (with each profile's lane and part counts under
+`profiles`), one verdict and one exit status. Quick selects one eligible
+referenced lane per family of the selected profile. Classic runs include
+saved-model inference and, when a GPU is present, local GPU/CPU inference
+comparisons. Default uses all eligible cross-check lanes on the base fixture;
+quick uses family representatives. Coverage and result JSON name the selected
+profile and the neural lanes a classic run leaves out.
 
 The inventory maps **all 246 algorithms and variants of the algorithm inventory**
 to lanes or named alternative gates. It also lists every additional registered
@@ -118,7 +123,7 @@ lanes, including applicable batch and saved-model checks:
 python -m mojolearn verify --lanes spectral,metrics-fowlkes-mallows,arima-exog,arima-exog-seasonal --repeats 2
 ```
 
-`--all` and `--full` run standard whole/individual/split/prefix batch checks,
+`--classic`, `--neural` and `--all` run standard whole/individual/split/prefix batch checks,
 step-versus-full sequence checks, and applicable gradient, batch-size,
 ragged-batch and sampler/replay properties. `--quick` stays at one configuration
 per family on the base fixture without the four extended probes. Add
@@ -292,8 +297,8 @@ RESULT: VERIFIED (verified 16 of 20 cell parts (0 divergent, 0 owed, 0 refused,
 4 n/a); 2 verified, 2 not applicable, 0 owed, 0 held, of 4 lanes). exit 0
 ```
 
-Every cell (a lane on a fixture) has five standard parts. `--all`/`--full`
-also include the four extended probes below; `--batch-checks` adds them to
+Every cell (a lane on a fixture) has five standard parts. `--classic`,
+`--neural` and `--all` also include the four extended probes below; `--batch-checks` adds them to
 quick or selected-lane runs:
 
 | part | question |
@@ -344,16 +349,16 @@ for each user installation. Choose a narrower installed-package command:
 
 ```sh
 python -m mojolearn verify --coverage                    # inspect scope; no fits
-python -m mojolearn verify --inference                   # bundled saved models; no fits
-python -m mojolearn verify --training --lanes ols --fixtures base --repeats 2
-python -m mojolearn verify --training                    # all available fit-based routes
+python -m mojolearn verify --models-only                 # bundled saved models; no fits
+python -m mojolearn verify --no-models --lanes ols --fixtures base --repeats 2
+python -m mojolearn verify --classic --no-models         # every classic fit-based route
 python -m mojolearn verify --all --repeats 2              # all applicable properties
 ```
 
-`--inference` is an alias for `--models-only`. It covers the bundled models,
-not every possible inference API or input. `--training` excludes that separate
-bundled-model suite, but still checks applicable inference/reload/batch properties
-of the models it fits. These scopes are mutually exclusive. `--quick` selects
+`--models-only` covers the bundled models, not every possible inference API or
+input. `--no-models` excludes that separate bundled-model suite, but still checks
+applicable inference/reload/batch properties of the models it fits.
+`--models-only` cannot be combined with a profile flag. `--quick` selects
 one fit-based route per family; it is smaller, but it still performs training
 and is not guaranteed to finish in seconds on every CPU.
 
@@ -367,7 +372,7 @@ The installed CLI defaults to a one-thread setting for supported CPU host and
 math libraries. To request up to five threads for an inference check:
 
 ```sh
-python -m mojolearn verify --inference --cpu-threads 5
+python -m mojolearn verify --models-only --cpu-threads 5
 ```
 
 The request is clamped to at most the detected available logical CPU count
@@ -452,10 +457,12 @@ you can CHECK and changed nothing about what the library will train for you.
 
 | flag | effect |
 |---|---|
-| `--all` | every lane this install runs, on all nine fixture variants |
-| `--full` | an alias for `--all` |
-| `--quick` | one lane per family on the base fixture |
-| `--lanes a,b` | only these lanes |
+| `--classic` | every classic lane this install runs (classical training and inference, saved models), on all nine fixture variants |
+| `--neural` | every neural training, backward and optimizer lane this install runs, on all nine fixture variants |
+| `--all` | `--classic` and `--neural` in one run, one report and one exit status |
+| `--models-only` | only the bundled saved models, without training |
+| `--quick` | one lane per family of the selected profile (classic by default) on the base fixture |
+| `--lanes a,b` | only these lanes (within the selected profile) |
 | `--fixtures a,b` | only these fixtures |
 | `--repeats N` | fits per cell (default 1); two or more also catch a cell that moves on this machine |
 | `--no-models` | skip the portable models |
@@ -463,11 +470,11 @@ you can CHECK and changed nothing about what the library will train for you.
 | `--reference-table PATH` | compare against another table |
 | `--self-test` | show that this verifier can fail (below) |
 | `--cross-check [quick\|default\|all]` | compare your GPU against your CPU (below) |
-| `--json-out PATH` | with `--all`: also write the evidence document to PATH |
+| `--json-out PATH` | also write the evidence document to PATH |
 
 The default sweep does not run performance benchmarks. It uses one fixed
 fixture per applicable algorithm, one fit per cell, and isolated workers with
-a 120-second per-cell limit. `--full` adds the numerical edge-case fixtures;
+a 120-second per-cell limit. A profile flag adds the numerical edge-case fixtures;
 `--quick` samples families and does not replace full algorithm coverage. The
 reference fixture inputs retain their historical sizes, so this change reduces
 fixture multiplicity without changing any expected hashes.
@@ -600,7 +607,7 @@ Explicit `--lanes` or `--fixtures` selections override the tier and are labeled
 missing cell parts and completeness. A skipped lane, missing fixture or failed
 batch prevents a successful exit even if every completed comparison agrees.
 These checks cover GPU-fitted models' inference and batch behavior;
-Routine `verify` and `verify --all` combine bundled reference hashes with these
+Default `verify`, `verify --classic` and `verify --all` combine bundled reference hashes with these
 local GPU/CPU comparisons. Explicit `--cross-check` runs only the latter.
 
 **On a CPU-only install it says so and exits 4.** There is no second piece of
@@ -636,17 +643,17 @@ Choose verification scope on each machine and add `--json-out`:
 python -m mojolearn verify --quick --json-out quick.json
 python -m mojolearn verify --json-out default.json
 python -m mojolearn verify --all --json-out all.json
-python -m mojolearn verify --neural-training --all --json-out neural.json
 python -m mojolearn verify --compare mac.json nvidia.json --json-out comparison.json
 ```
 
 Comparison reads the scope recorded in the files; it does not execute algorithms
-or select a new quick/full/neural run. One comparison command handles all scopes:
+or select a new quick, classic, neural or all run. One comparison command handles all scopes:
 it compares shared cells with matching input and protocol fingerprints, lists
 cells present only in either file, and flags incompatible cells individually.
 Compatible matches remain visible even when other cells cannot be compared.
 Matching scope gives complete coverage; different scope can give useful partial
-coverage. Neural-training results remain separate from routine reports.
+coverage. A `--all` report holds both profiles' cells, so it compares against
+a `--classic`, a `--neural` or another `--all` report over the shared cells.
 
 `AGREE` (exit 0) means complete agreement. `INCOMPLETE` (exit 4) retains matches
 but identifies coverage gaps. `INCOMPARABLE` (exit 4) means no shared cells have
@@ -879,13 +886,13 @@ The fixtures are the harness's own sizes (20,000 rows), which the records
 were written at; they are not reduced for this command, because a smaller
 fixture would hash different bytes.
 
-| install | `--quick` | `--full` |
+| install | `--quick` | `--classic` |
 |---|---|---|
 | CPU-only, Apple M4, one core | 2 s | about 25 min, measured (122 lanes, 9 fixtures, 4 models; 1,488 s summed over 17 chunked processes at one core) |
 | CPU-only, x86 Linux (AMD EPYC, 8 vCPU) | 2 s | 6 to 12 s |
 | Metal, Apple M4 | 12 s (26 lanes, base fixture) | more than an hour (about 180 lanes x 9 fixtures) |
 
-On a GPU install `--full` holds the GPU for the whole run: spectral
+On a GPU install `--classic` (and `--all`) holds the GPU for the whole run: spectral
 clustering, HDBSCAN, the byte-level language model and the multi-class
 boosting lanes take 40 to 140 s each on the M4. On a shared GPU run it in
 pieces, `--lanes a,b,...` a group at a time, or check one area with
@@ -1016,8 +1023,8 @@ Three scripts carry the whole procedure from one pushed commit:
 `record_identity_column.sh` runs `tools/identity_break.py --json` with the
 identical tier, the backend the label names (`--require-backend`), the default
 fixture size on one device, every part and every fixture, `--repeats 1` (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun; the second witness is the other GPU vendor), and
-CPU pools at 3 threads, over the routine profile's lanes (`SCOPE=all` adds
-neural training; `SHARD=i/N` splits the lanes into records that are each
+CPU pools at 3 threads, over the classic profile's lanes (`SCOPE=routine`, the default; `SCOPE=all` adds
+the neural profile; `SHARD=i/N` splits the lanes into records that are each
 admissible alone). It refuses harness overrides, sabotage switches and a tree
 whose sources differ from its commit, and ends with the
 `tools/identity_columns.py check` verdict, which is `admit()` itself.
@@ -1066,7 +1073,7 @@ loads the GPU column's saved model (`n/a:gpu-saved-file`).
 
 ## The pinned k-means card
 
-`verify` without `--all` runs one pinned k-means fixture, captures its
+`verify` with a card flag (below) runs one pinned k-means fixture, captures its
 ordered identity-trace card, and compares it with a reference card shipped
 in the installation.
 
@@ -1074,7 +1081,7 @@ in the installation.
 MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify
 ```
 
-Bare `verify` runs the combined routine suite regardless of whether a card
+Bare `verify` runs the classic profile on the base fixture regardless of whether a card
 is installed. A request that names the legacy card path (`--all-stages`, `--keep`, `--reference-name`, `--emit-reference`,
 `--confirm-reference`) still exits 5 when no card is installed.
 
@@ -1233,7 +1240,7 @@ require GPUs; a broad full request retains the missing drivers as scope gaps.
 `python -m mojolearn verify --models-only --json` executes the four bundled
 GPU-trained saved models without training: HostForest, HostGBDT, OLS and PCA.
 It checks serialized model bytes and batch invariance of loaded-model outputs
-against independent reference-table entries. The ordinary `--all` run also
+against independent reference-table entries. The default, `--classic` and `--all` runs also
 includes these probes unless `--no-models` is specified. The two HostForest /
 HostGBDT appendix entries now name this installed command and asset availability
 in `--coverage`. These representative models do not replace all configurations
@@ -1242,7 +1249,7 @@ self-test; run `verify --self-test` separately.
 
 Normal lane verification checks repeated training outputs, held-out inference,
 save/reload, row-batch invariance and step-versus-full decoding where declared.
-`--all`/`--full` include gradient accumulation, batch-size, ragged sequence and
+`--classic`, `--neural` and `--all` include gradient accumulation, batch-size, ragged sequence and
 sampler/replay properties; quick and selected-lane runs add them with
 `--batch-checks`. Non-applicable properties retain their named reason;
 a missing reference is OWED, never a successful check. `--cross-check` compares

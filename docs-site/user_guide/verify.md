@@ -19,8 +19,8 @@ stays NumPy-free.
 
 ```sh
 python -m mojolearn verify --quick     # representative checks, seconds to minutes
-python -m mojolearn verify             # every applicable routine lane, base fixture
-python -m mojolearn verify --all       # the same scope on all nine fixtures
+python -m mojolearn verify             # the classic lanes, base fixture
+python -m mojolearn verify --all       # every classic and neural lane on all nine fixtures
 ```
 
 The verifier selects the `identical` mode itself when `MOJOLEARN_NUMERIC_MODE` is unset. A mode you
@@ -31,13 +31,15 @@ set explicitly is respected, and a process in `fast` (an Apple GPU mode) is refu
 
 | Command | What it runs |
 |---|---|
-| `verify` | Inference and classical training on every applicable lane, base fixture. Includes saved-model inference and, on a GPU install, GPU-against-CPU inference comparisons. |
-| `verify --quick` | One representative lane per family from the same scope, base fixture. |
-| `verify --all` (alias `--full`) | The routine scope on every fixture, plus batch-size, ragged-batch, gradient and sampler/replay probes where they apply. |
-| `verify --neural-training` | Neural training, backward and optimizer fixtures. Not part of the default, quick or all scopes; combine with `--all` for its full fixture set. |
+| `verify` | The classic lanes (inference and classical training) on the base fixture. Includes saved-model inference and, on a GPU install, GPU-against-CPU inference comparisons. |
+| `verify --quick` | One representative lane per family from the selected profile (classic by default), base fixture. |
+| `verify --classic` | Every classic lane on every fixture, the saved models, plus batch-size, ragged-batch, gradient and sampler/replay probes where they apply. |
+| `verify --neural` | Every neural training, backward and optimizer lane on every fixture, with the same probes. |
+| `verify --all` | `--classic` and `--neural` together, in one run with one report and one verdict. |
+| `verify --models-only` | Only the bundled saved models, through the saved-model loader; no training. |
 | `verify --coverage` | Lists lanes, CPU availability, batch contracts and reference counts without fitting anything. |
 | `verify --cross-check [quick\|default\|all]` | Only the GPU-against-CPU comparisons on your own machine (below). |
-| `verify --lanes a,b` | Only the named lanes. |
+| `verify --lanes a,b` | Only the named lanes (within the selected profile; `--all` allows any lane). |
 
 Add `--json-out PATH` to write the run as an evidence document, or `--json` to print it on stdout:
 
