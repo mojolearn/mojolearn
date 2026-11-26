@@ -4,7 +4,6 @@ from std.python import Python, PythonObject
 from bindings.gp_native_boundary_door import GPConnection
 from bindings.native_loaded_module_door import NativeModules, native_interpreter_finalizing
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
-from bindings.py_model_records import model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_owns_store_any, fitted_freeze_any
 from core.gp_native_api import GPDriver
 from core.gp_native_state import GPLeaseState
@@ -47,7 +46,15 @@ struct GPPreparedLease(Movable, Writable):
 def gp_resident_lease(model: PythonObject, slot: String, connection: GPConnection,
                       mirrors: List[PythonObject]) raises -> Int:
     var mods = NativeModules()
-    var generation = model_generation(model)
+    # THE MIRRORS' IDENTITIES DECIDE, NOT THE MODEL'S GENERATION (lane gs-fix-6, 2026-11-26). The device copies
+    # are X_train_, alpha_ and L_ (GPC: X_train_ and each member's four arrays) and nothing else: a refit, a
+    # __setstate__ or a replaced field gives new objects, the record retains the old ones (their addresses stay
+    # theirs), and a frozen array cannot be written in place. The generation word also moved with every write to
+    # the instance dictionary, and GaussianProcessRegressor.predict(return_std=True) writes clamped_ and
+    # n_clamped_ itself (bindings/gp_regressor_native_door.mojo, the public attributes): so each such predict
+    # minted a new lease and uploaded X_train_, alpha_ and the n x n factor again (L40S smoke of 9bdb1a9e8c,
+    # test_gp_svm_resident_lifecycle GPR: uploads 4 != 2). The generation read is gone from the call too.
+    var generation = 0
     var record = prepared_get(mods, slot, model)
     if record is not None:
         try:

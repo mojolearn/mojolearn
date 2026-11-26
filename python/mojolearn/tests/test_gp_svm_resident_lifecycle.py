@@ -54,6 +54,9 @@ class _ResidentLifecycle:
         import numpy as np
         self.mod = _binding(self.BINDING, self.STATS)
         X, y = self.data()
+        # The store is shared by a binding's families (GPR and GPC; SVC and SVR): a model an earlier test
+        # left in a failure's traceback dies here, before the baseline, not inside this lifecycle.
+        gc.collect()
         model = self.make().fit(X, y)
         live0, _, _, up0, _ = self.stats()
         first = np.asarray(self.predict(model, X))
@@ -76,16 +79,17 @@ class _ResidentLifecycle:
             live3 = self.stats()[0]
             self.assertEqual(live3, live2 - 1, "a replaced array drops the lease")
             np.testing.assert_array_equal(first, third)
-        # Refit: a new lease, one more upload.
+        # Refit: a new lease, one more upload. The model holds one lease again: the new one replaces its
+        # record (live3 == live2 where the copies mirror arrays the public attribute is not).
         model.fit(X, y)
         self.predict(model, X)
         live4, _, _, up4, _ = self.stats()
-        self.assertEqual(live4, live3 + 1)
+        self.assertEqual(live4, live1, "one lease for the refitted state")
         self.assertGreater(up4, up2)
         # Death releases the lease.
         del model
         gc.collect()
-        self.assertEqual(self.stats()[0], live3)
+        self.assertEqual(self.stats()[0], live0)
 
 
 class GaussianProcessRegressorResident(_ResidentLifecycle, unittest.TestCase):
