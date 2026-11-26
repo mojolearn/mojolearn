@@ -94,6 +94,7 @@ cmd_stage() {
 case "${1:-}" in
     stage)    shift; cmd_stage "$@" ;;
     promote)  shift; with_creds promote "$@" ;;
+    plan)     shift; with_creds plan "$@" ;;   # the map alone, on stdout (tools/nvidia_central.sh central_submit)
     selftest) shift; with_creds selftest-r2 ;;
     *) sed -n '2,30p' "$0"; exit 2 ;;
 esac

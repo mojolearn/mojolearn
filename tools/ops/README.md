@@ -123,8 +123,15 @@ whose flags or environment name a fault (SABOTAGE, FAULT_INJECT) never reads or 
 build's last line counts the reused units. Over main's last 45 commits 98 percent (CPU column) and 99 percent (GPU
 column) of the 14 group programs had unchanged inputs from one commit to the next.
 
-The cache is per box. Sharing it between boxes through R2 needs presigned URLs minted on the Mac at submit (the R2
-credentials never leave it), as `tools/bincache.py` does for the binding groups.
+Between boxes the programs are shared through R2, with the binding cache's machinery in its `ts` namespace
+(`tscache/v1/<column>/linux/<key>.tar.gz`). `tools/nvidia_central.sh` submit (and so `tools/cpu_central.sh check`)
+mints a URL map with this Mac's credentials for `cpu_box_checks_job.sh` and `native_checks_gpu_job.sh` and stages it
+beside the job as a 0600 file (`NC_TS_URLS`); the credentials never reach a box. On a local miss the box fetches the
+archive and places it only when its manifest's key and fields are the ones the box computed; a program it compiles is
+uploaded into the job's inbox and recorded in the results (`ts-uploads/`). `tools/box_persist.py fetch` promotes
+those uploads when it extracts the final results (`bincache.py promote --namespace ts`, which re-derives each key and
+refuses a fault build); `sh tools/bincache_leg.sh promote --namespace ts <dir>` does it by hand. `NC_TS_R2=0` at
+submit turns the R2 level off for that job.
 
 ## Scripts adopted from ~/mojolearn-evidence (2026-10-28)
 

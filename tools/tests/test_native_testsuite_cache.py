@@ -8,6 +8,7 @@ checkout, copied into another and run there) was shown with Mojo 1.2.0 on 2026-1
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 from pathlib import Path
@@ -187,3 +188,140 @@ def test_the_github_build_restores_the_cache_before_building_and_saves_it_after(
     path = steps[restore]["with"]["path"]
     assert steps[build]["env"]["NC_TS_CACHE"] == path == steps[save]["with"]["path"]
     assert steps[restore]["with"]["key"] == steps[save]["with"]["key"] and steps[restore]["with"]["restore-keys"]
+
+
+# --- the shared level: R2 through the URL map (a directory reached by file:// URLs stands in for the bucket) ------
+
+class _DirStore:
+    """bincache.R2Store's three methods over a directory (the promote transport in the tests)."""
+
+    def __init__(self, root: Path):
+        self.root = root
+
+    def fetch(self, name, dest):
+        src = self.root / name
+        if not src.is_file():
+            return False
+        import shutil
+        shutil.copyfile(src, dest)
+        return True
+
+    def copy(self, src, dest):
+        import shutil
+        (self.root / dest).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.root / src, self.root / dest)
+
+    def delete(self, name):
+        (self.root / name).unlink()
+
+
+def _map(path: Path, store: Path, gets=(), leg="job1", slots=3, namespace="ts") -> Path:
+    lines = ["#partition\tcpu/linux", "#image\tnvidia_central:test", "#leg\t" + leg]
+    if namespace:
+        lines.append("#namespace\t" + namespace)
+    lines += [f"get\t{k}\tfile://{store}/tscache/v1/cpu/linux/{k}.tar.gz" for k in gets]
+    lines += [f"put\t{i:03d}\tfile://{store}/tscache/inbox/{leg}/{i:03d}.tar.gz" for i in range(slots)]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def _fields(root: Path) -> dict[str, dict]:
+    return {f"{kind} {ident}": f for kind, ident, f in
+            cache.unit_fields(root.resolve(), "cpu", root.resolve() / "build/tsgen", list(FLAGS), ENV)}
+
+
+def test_a_program_built_on_one_box_is_reused_on_another_through_r2(tmp_path):
+    import bincache
+    store = tmp_path / "r2"
+    store.mkdir()
+    # box A: compiles group 0, keeps it in its directory and uploads it into the job's inbox
+    _tree(tmp_path / "a")
+    fa = _fields(tmp_path / "a")["group 0"]
+    key = cache.key_of(fa)
+    prog = tmp_path / "a-prog"
+    prog.write_bytes(b"\x7fELF group 0 program")
+    home = cache.local_put(tmp_path / "a-cache", key, prog)
+    m = cache.url_map({"NC_TS_URLS": str(_map(tmp_path / "a-map/urls.tsv", store))})
+    uploads = tmp_path / "a-results/ts-uploads"
+    assert cache.remote_put(m, key, fa, home, prog, uploads) == "uploaded 000"
+    assert (store / "tscache/inbox/job1/000.tar.gz").is_file()
+    # the Mac: promote re-derives the key from the recorded fields and moves the archive to its content address
+    assert bincache.cmd_promote(["--namespace", "ts", str(uploads)], store=_DirStore(store)) == 0
+    assert (store / f"tscache/v1/cpu/linux/{key}.tar.gz").is_file()
+    assert not (store / "tscache/inbox/job1/000.tar.gz").exists()
+    # box B: another path, an empty directory cache; the map lists the promoted key
+    _tree(tmp_path / "b")
+    fb = _fields(tmp_path / "b")["group 0"]
+    assert cache.key_of(fb) == key
+    mb = cache.url_map({"NC_TS_URLS": str(_map(tmp_path / "b-map/urls.tsv", store, gets=[key], leg="job2"))})
+    dst = tmp_path / "b/bin/tsg/group_0"
+    assert cache.remote_get(mb, key, fb, dst, tmp_path / "b-cache") == "hit"
+    assert dst.read_bytes() == prog.read_bytes() and os.access(dst, os.X_OK)
+    assert cache.local_get(tmp_path / "b-cache", key, tmp_path / "again")  # now in B's own directory too
+    # a key already in R2 is not uploaded again
+    assert cache.remote_put(mb, key, fb, None, prog, tmp_path / "b-results/ts-uploads") == "present"
+
+
+def test_r2_refuses_an_archive_of_other_fields_and_promote_refuses_a_fault_build(tmp_path):
+    import bincache
+    store = tmp_path / "r2"
+    store.mkdir()
+    _tree(tmp_path / "a")
+    fields = _fields(tmp_path / "a")
+    key0, key1 = cache.key_of(fields["group 0"]), cache.key_of(fields["group 1"])
+    prog = tmp_path / "prog"
+    prog.write_bytes(b"program")
+    m = cache.url_map({"NC_TS_URLS": str(_map(tmp_path / "map/urls.tsv", store))})
+    uploads = tmp_path / "res/ts-uploads"
+    assert cache.remote_put(m, key0, fields["group 0"], None, prog, uploads).startswith("uploaded")
+    # the archive stored under key1's address holds key0's manifest: a box computing key1 refuses it
+    target = store / f"tscache/v1/cpu/linux/{key1}.tar.gz"
+    target.parent.mkdir(parents=True)
+    (store / "tscache/inbox/job1/000.tar.gz").rename(target)
+    mb = cache.url_map({"NC_TS_URLS": str(_map(tmp_path / "mb/urls.tsv", store, gets=[key1], leg="job2"))})
+    verdict = cache.remote_get(mb, key1, fields["group 1"], tmp_path / "dst", None)
+    assert verdict.startswith("refused") and not (tmp_path / "dst").exists()
+    # a row whose recorded fields name a fault is refused by promote, and nothing is written
+    bad = dict(fields["group 1"], args=FLAGS + ["-D", "MOJOLEARN_SABOTAGE_X=1"])
+    bad_key = cache.key_of(bad)
+    (uploads / "keys" / f"{bad_key}.json").write_text(json.dumps(bad))
+    (uploads / "uploads.tsv").write_text(f"job1\t001\ttscache/v1/cpu/linux/{bad_key}.tar.gz\t{bad_key}\tsabotage=0\n")
+    (store / "tscache/inbox/job1/001.tar.gz").write_bytes(b"x")
+    assert bincache.cmd_promote(["--namespace", "ts", str(uploads)], store=_DirStore(store)) == 0
+    assert not (store / f"tscache/v1/cpu/linux/{bad_key}.tar.gz").exists()
+    # a row naming the binding store is refused in the ts namespace
+    try:
+        bincache.check_upload_row(f"job1\t000\tbincache/v1/cpu/linux/{key0}.tar.gz\t{key0}\tsabotage=0", uploads / "keys",
+                                  "ts")
+        raise AssertionError("a ts promote accepted a destination in the binding store")
+    except ValueError:
+        pass
+
+
+def test_a_map_of_another_namespace_or_no_slot_left_is_not_used(tmp_path):
+    store = tmp_path / "r2"
+    assert cache.url_map({"NC_TS_URLS": str(_map(tmp_path / "m1/urls.tsv", store, namespace=None))}) is None
+    assert cache.url_map({"NC_TS_URLS": str(tmp_path / "absent.tsv")}) is None
+    _tree(tmp_path / "a")
+    f = _fields(tmp_path / "a")["group 0"]
+    prog = tmp_path / "prog"
+    prog.write_bytes(b"p")
+    m = cache.url_map({"NC_TS_URLS": str(_map(tmp_path / "m2/urls.tsv", store, slots=1))})
+    assert cache.remote_put(m, cache.key_of(f), f, None, prog, tmp_path / "u").startswith("uploaded")
+    f1 = _fields(tmp_path / "a")["group 1"]
+    assert cache.remote_put(m, cache.key_of(f1), f1, None, prog, tmp_path / "u") == "skipped: every inbox slot of this job is used"
+
+
+def test_the_submit_stages_the_map_only_for_the_native_check_jobs_and_fetch_promotes():
+    central = (ROOT / "tools/nvidia_central.sh").read_text()
+    block = central[central.index("THE NATIVE-CHECK PROGRAM CACHE IN R2"):central.index("BOX_PERSIST_JOB_EOF")]
+    assert "cpu_box_checks_job.sh) tscol=cpu" in block and "native_checks_gpu_job.sh) tscol=gpu" in block
+    assert "plan --namespace ts" in block and "NC_TS_URLS=$tsmap" in block and "umask 077" in block
+    assert "with_creds plan" in (ROOT / "tools/bincache_leg.sh").read_text()
+    persist = (ROOT / "tools/box_persist.py").read_text()
+    assert 'promote_ts(x)' in persist and '"promote", "--namespace", "ts"' in persist
+    for job in ("tools/ops/cpu_box_checks_job.sh", "tools/ops/native_checks_gpu_job.sh"):
+        assert "NC_TS_UPLOADS=" in (ROOT / job).read_text(), job
+    script = (ROOT / "tools/ops/native_testsuite.sh").read_text()
+    assert script.count('--fields "$TS_GEN/keys"') == 2

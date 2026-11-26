@@ -383,9 +383,37 @@ central_submit() {  # the `submit` command (a function so tools/cpu_central.sh c
         case "$script" in /*) abs=$script ;; *) abs=$tree/$script ;; esac
         res=${results:-box-out/$BP_TAG}; case "$res" in /*) ;; *) res=$tree/$res ;; esac
         jobsh=$BP_BOX_ROOT/jobs/$BP_TAG/job.sh
+        # THE NATIVE-CHECK PROGRAM CACHE IN R2 (2026-11-26, tools/ops/native_testsuite_cache.py): for the two jobs that
+        # build the native checks, a URL map of namespace "ts" (GET the programs any box built, PUT into this job's
+        # inbox), minted here with this Mac's credentials and staged as a 0600 file beside job.sh; the job reads it
+        # through NC_TS_URLS, and tools/box_persist.py fetch promotes what it uploaded. No credentials or a failed
+        # listing: the job runs without it and compiles what its box has not.
+        tsmap=''
+        case "$(basename "$1")" in
+            cpu_box_checks_job.sh) tscol=cpu ;;
+            native_checks_gpu_job.sh) tscol=gpu ;;
+            *) tscol='' ;;
+        esac
+        if [ -n "$tscol" ] && [ "${NC_TS_R2:-1}" = 1 ]; then
+            if sh "$ROOT/tools/bincache_leg.sh" plan --namespace ts --partition "$tscol/linux" \
+                    --image "nvidia_central:$lane" --leg-id "$BP_TAG" --slots "${NC_TS_SLOTS:-400}" \
+                    --expires "${NC_TS_EXPIRES:-86400}" > "$TMPD/tsmap.tsv" 2> "$TMPD/tsmap.err" \
+                    && grep -q '^#namespace	ts$' "$TMPD/tsmap.tsv"; then
+                tsmap=$BP_BOX_ROOT/jobs/$BP_TAG/ts-urls.tsv
+                jobenv="$jobenv NC_TS_URLS=$tsmap"
+                say "native-check programs in R2: $(grep -c '^get' "$TMPD/tsmap.tsv") to reuse, map staged with the job"
+            else
+                say "native-check programs in R2: off for this job ($(tail -n 1 "$TMPD/tsmap.err" 2> /dev/null | cut -c1-160)); its box's own cache still applies"
+            fi
+        fi
         {
             printf '[ -f %s ] || { echo "nvidia_central: no script %s on the box" >&2; exit 4; }\n' "$(sq "$abs")" "$abs"
             cat "$TMPD/persist.sh"
+            if [ -n "$tsmap" ]; then
+                printf '(umask 077; mkdir -p %s && cat > %s) <<'"'"'TS_MAP_EOF'"'"'\n' "$(sq "$(dirname "$tsmap")")" "$(sq "$tsmap")"
+                cat "$TMPD/tsmap.tsv"
+                printf 'TS_MAP_EOF\n'
+            fi
             printf "cat > %s <<'BOX_PERSIST_JOB_EOF'\n" "$(sq "$jobsh")"
             printf '#!/bin/bash\n# tools/nvidia_central.sh submit: %s under tools/box_persist_run.sh (results persist to R2 from the box)\n' "$abs"
             # --env values are checked plain above, so they need no quoting here

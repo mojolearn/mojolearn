@@ -27,8 +27,9 @@
 #                                      target (NC_TARGET, default that baseline on x86_64; set empty for none).
 #                                      Exit 0 even when a file failed (its own row is red); 2 on a setup failure.
 #                                      NC_TS_CACHE=<dir> (the box jobs set it) reuses a group program or single
-#                                      whose inputs did not change since an earlier build on the box
-#                                      (tools/ops/native_testsuite_cache.py); unset, everything compiles.
+#                                      whose inputs did not change since an earlier build on the box, and
+#                                      NC_TS_URLS (a map the Mac staged at submit) since a build on any box, through
+#                                      R2 (tools/ops/native_testsuite_cache.py); unset, everything compiles.
 #   one <column> [-D DEFINE ...] <name> ...
 #                                      build each named file alone (the build step's defines and target, plus the given
 #                                      defines) and run it, its output on stdout; exit 0 when every one passed (the
@@ -91,7 +92,7 @@ compile_unit() {
     # is every source file it imports, the flags and the toolchain); TS_KEYS is empty when there is no cache
     key=""
     [ -s "${TS_KEYS:-}" ] && key=$(awk -v k="$kind" -v i="$id" '$1 == k && $2 == i {print $3; exit}' "$TS_KEYS")
-    if [ -n "$key" ] && $TS_PY tools/ops/native_testsuite_cache.py get "$key" "$dst" > "$log" 2>&1; then
+    if [ -n "$key" ] && $TS_PY tools/ops/native_testsuite_cache.py get "$key" "$dst" --fields "$TS_GEN/keys" > "$log" 2>&1; then
         echo "reused from NC_TS_CACHE, key $key" >> "$log"
         echo "testsuite build $kind $id reused ${key:0:12} $(( $(date +%s) - t0 ))s"
         return 0
@@ -102,7 +103,7 @@ compile_unit() {
         pixi run mojo build $TS_FLAGS -I . -I "$TS_GEN" -o "$dst" "$src" > "$log" 2>&1
     fi
     rc=$?
-    [ $rc -eq 0 ] && [ -n "$key" ] && $TS_PY tools/ops/native_testsuite_cache.py put "$key" "$dst" >> "$log" 2>&1
+    [ $rc -eq 0 ] && [ -n "$key" ] && $TS_PY tools/ops/native_testsuite_cache.py put "$key" "$dst" --fields "$TS_GEN/keys" >> "$log" 2>&1
     if [ $rc -ne 0 ]; then
         rm -f "$dst"
         [ "$kind" = single ] && $TS_PY tools/ops/native_checks_report.py result "$id" --log "$log" --rc "$rc" \

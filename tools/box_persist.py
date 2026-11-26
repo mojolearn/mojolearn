@@ -50,6 +50,7 @@ import math
 import os
 import re
 import secrets
+import subprocess
 import sys
 import tarfile
 import urllib.error
@@ -484,6 +485,8 @@ def fetch(a):
                 x = os.path.join(dest, n[:-4])
                 skipped = extract_tolerant(p, x)
                 print("EXTRACTED %s -> %s (%d skipped)" % (n, x, len(skipped)))
+                if n == "final.tgz":
+                    promote_ts(x)
                 if not a.keep_tarball:
                     os.unlink(p)
                     print("DROPPED %s (extracted to %s; R2 keeps the verified object, sha256=%s)" % (p, x, sha))
@@ -491,6 +494,21 @@ def fetch(a):
             bad += 1
             print("VERIFY-FAILED %s http=%s sha256=%s want=%s" % (n, code, got, sha))
     return 1 if bad else 0
+
+
+def promote_ts(extracted):
+    """The native-check programs a job uploaded to R2's inbox (its results' ts-uploads/, written by
+    tools/ops/native_testsuite_cache.py) go to their content address: tools/bincache.py promote --namespace ts, which
+    re-derives each key from the recorded fields and refuses a fault build. Only the final results are complete. A
+    failure prints its line and never fails the fetch: the inbox objects stay, and the same command promotes them
+    later (sh tools/bincache_leg.sh promote --namespace ts <dir>)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for root, _dirs, files in os.walk(extracted):
+        if os.path.basename(root) == "ts-uploads" and "uploads.tsv" in files:
+            r = subprocess.run(["sh", os.path.join(here, "bincache_leg.sh"), "promote", "--namespace", "ts", root],
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            last = (r.stdout.strip().splitlines() or ["no output"])[-1]
+            print("TS-PROMOTE %s: %s (rc=%d)" % (root, last, r.returncode))
 
 
 # ---------------------------------------------------------------- opt-out

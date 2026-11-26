@@ -8,23 +8,36 @@ of the CPU column's group programs and 99 percent of the GPU column's had the sa
 and 7 of 14 (CPU) and 11 of 14 (GPU) had the same inputs 44 commits apart. A program whose inputs did not change is
 copied from the cache; one whose inputs changed compiles as before. Nothing is skipped: every check still runs.
 
-    keys --column C --gen DIR --flags "..." [--repo .]   one line per unit of DIR/plan.txt on stdout:
-                                                         `group <k> <key>` / `single <name> <key>`
-    get <key> <dst>     copy the cached program to <dst>; exit 0 on a hit, 1 on a miss (or no cache directory)
-    put <key> <src>     keep a program that just compiled
+    keys --column C --gen DIR --flags "..." [--repo .]   one line per unit of DIR/plan.txt on stdout
+                                                         (`group <k> <key>` / `single <name> <key>`); the fields of
+                                                         each key go to DIR/keys/<key>.json
+    get <key> <dst> [--fields DIR]   the program to <dst>: from NC_TS_CACHE, else from R2 through the URL map; exit 0
+                                     on a hit, 1 on a miss
+    put <key> <src> [--fields DIR]   keep a program that just compiled: in NC_TS_CACHE, and in R2's inbox through the
+                                     URL map when there is one
 
-The cache directory is NC_TS_CACHE; unset or empty means no cache (keys still print). It is a plain directory on the
-box: <dir>/<key[:2]>/<key>/{bin,meta.json}. An entry not read for NC_TS_CACHE_DAYS (default 14) is deleted by `put`.
+TWO LEVELS. (1) NC_TS_CACHE, a plain directory on the box: <dir>/<key[:2]>/<key>/{bin,meta.json}; unset or empty
+means none. An entry not read for NC_TS_CACHE_DAYS (default 14) is deleted by `put`. (2) R2, shared by every box,
+through tools/bincache.py's machinery in its "ts" namespace (objects tscache/v1/<partition>/<key>.tar.gz): the Mac
+lists the objects and mints short-lived presigned URLs at submit (tools/nvidia_central.sh central_submit, for
+tools/ops/cpu_box_checks_job.sh and tools/ops/native_checks_gpu_job.sh); the map reaches the box as a 0600 file named
+by NC_TS_URLS. The box can GET objects that exist and PUT only into the job's inbox slots, and records each upload in
+NC_TS_UPLOADS (uploads.tsv and keys/<key>.json, inside the job's results). The Mac promotes an inbox object to its
+content address after the results come back (tools/box_persist.py fetch runs `bincache.py promote --namespace ts`),
+re-deriving the key from the recorded fields and refusing a fault build. The R2 credentials never reach a box.
+A fetched archive is placed only when its manifest's key and fields are the ones this box computed and every byte
+matches its sha256 (bincache.verify_archive).
 
-THE KEY is every input that decides the program's bytes, and no path:
+THE KEY is sha256 over the canonical JSON of every input that decides the program's bytes, and no path (the same
+key_of as the binding cache):
   the unit's members, in order; the generated driver and member copies (their bytes); the sha256 of every source
   file the members import, transitively (the import parser of tools/development_build.py, the one the binding cache
-  uses; an import it cannot resolve widens the key to every source file of the tree); the compile flags (defines and
-  target); the compiler binary's sha256, its version line, the precompiled standard-library packages' sha256 and the
-  locked and installed toolchain; the OS, glibc, linker and C compiler; the MOJOLEARN_/MOJO_/MODULAR_ build
-  environment; on the GPU column the device architecture the build targets (sm_89, gfx942) and the ptxas version.
-  The commit is not in the key: two commits with the same inputs build the same program.
-A build whose flags or environment name a fault (sabotage) gets no keys: it never reads or fills the cache.
+  uses; an import it cannot resolve widens the key to every source file of the tree); the compile flags (`args`:
+  defines and target); the compiler binary's sha256, its version line, the precompiled standard-library packages'
+  sha256 and the locked and installed toolchain; the OS, glibc, linker and C compiler; the MOJOLEARN_/MOJO_/MODULAR_
+  build environment (`build_env`); on the GPU column the device architecture the build targets (sm_89, gfx942) and
+  the ptxas version. The commit is not in the key: two commits with the same inputs build the same program.
+A build whose flags or environment name a fault (sabotage) gets no keys: it never reads or fills either level.
 
 A cached program was linked in another checkout. Its runpath names that checkout's toolchain directory, so the
 runner puts the current checkout's `.pixi/envs/default/lib` on LD_LIBRARY_PATH (same toolchain: it is in the key).
@@ -35,7 +48,6 @@ checkout that built it, which appears only in a failure's file name.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import platform
@@ -49,19 +61,12 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE.parent), str(HERE)]
 
-SCHEMA = "mojolearn.native-testsuite-program.v1"
+import bincache  # noqa: E402  (tools/ on the path above)
 
-
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for block in iter(lambda: f.read(1 << 20), b""):
-            h.update(block)
-    return h.hexdigest()
-
-
-def key_of(fields: dict) -> str:
-    return hashlib.sha256(json.dumps(fields, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+SCHEMA = "mojolearn.native-testsuite-program.v2"
+NAMESPACE = "ts"
+key_of = bincache.key_of
+sha256_file = bincache.sha256_file
 
 
 def first_line(argv: list[str]) -> str:
@@ -115,7 +120,6 @@ class Sources:
         return {str(p.relative_to(self.repo)): self.graph.hashes[p] for p in files}
 
     def tree(self) -> str:
-        import bincache
         return key_of(self.hashes(Path(p).resolve() for p in bincache.tree_sources(self.repo)))
 
 
@@ -133,18 +137,12 @@ def toolchain_fields(repo: Path, flags: list[str]) -> dict | None:
     return out
 
 
-def sabotage(flags: list[str], environment: dict) -> bool:
-    import bincache
-    return bincache.is_sabotage({"build_env": environment, "args": flags})
-
-
-def unit_keys(repo: Path, column: str, gen: Path, flags: list[str], environ=None) -> list[tuple[str, str, str]]:
-    """[(kind, id, key)] for every unit of the plan; [] when this build must not use the cache."""
-    import bincache
+def unit_fields(repo: Path, column: str, gen: Path, flags: list[str], environ=None) -> list[tuple[str, str, dict]]:
+    """[(kind, id, fields)] for every unit of the plan; [] when this build must not use the cache."""
     import native_checks_report
     environ = os.environ if environ is None else environ
     environment = bincache.build_env(environ)
-    if sabotage(flags, environment):
+    if bincache.is_sabotage({"build_env": environment, "args": flags}):
         return []
     toolchain = toolchain_fields(repo, flags)
     if toolchain is None:
@@ -159,10 +157,10 @@ def unit_keys(repo: Path, column: str, gen: Path, flags: list[str], environ=None
     if column == "gpu":
         device = {"arch": bincache.device_arch(),
                   "ptxas": first_line([environ.get("MODULAR_NVPTX_COMPILER_PATH") or "ptxas", "--version"])}
-    common = {"schema": SCHEMA, "column": column, "flags": flags, "toolchain": toolchain, "environment": environment,
+    common = {"schema": SCHEMA, "column": column, "args": flags, "toolchain": toolchain, "build_env": environment,
               "device": device, "machine": platform.machine().lower()}
     tree = None
-    keys = []
+    out = []
     for kind, ident, members in units:
         files, unresolved = set(), set()
         for member in members:
@@ -178,9 +176,16 @@ def unit_keys(repo: Path, column: str, gen: Path, flags: list[str], environ=None
         if unresolved:
             tree = tree or sources.tree()
             fields["tree"] = tree
-        keys.append((kind, ident, key_of(fields)))
-    return keys
+        out.append((kind, ident, fields))
+    return out
 
+
+def unit_keys(repo: Path, column: str, gen: Path, flags: list[str], environ=None) -> list[tuple[str, str, str]]:
+    """[(kind, id, key)] for every unit of the plan; [] when this build must not use the cache."""
+    return [(kind, ident, key_of(fields)) for kind, ident, fields in unit_fields(repo, column, gen, flags, environ)]
+
+
+# --- level 1: the box's directory -------------------------------------------------------------------------------
 
 def cache_dir(environ=None) -> Path | None:
     value = (os.environ if environ is None else environ).get("NC_TS_CACHE", "")
@@ -188,12 +193,21 @@ def cache_dir(environ=None) -> Path | None:
 
 
 def entry(root: Path, key: str) -> Path:
-    if len(key) != 64 or any(c not in "0123456789abcdef" for c in key):
+    if not bincache.KEY_RE.match(key or ""):
         raise SystemExit(f"native_testsuite_cache: not a key: {key!r}")
     return root / key[:2] / key
 
 
-def get(root: Path | None, key: str, dst: Path) -> bool:
+def _copy_executable(src: Path, dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=dst.parent, prefix=dst.name + ".")
+    os.close(fd)
+    shutil.copyfile(src, tmp)
+    os.chmod(tmp, 0o755)
+    os.replace(tmp, dst)
+
+
+def local_get(root: Path | None, key: str, dst: Path) -> bool:
     if root is None:
         return False
     home = entry(root, key)
@@ -203,12 +217,7 @@ def get(root: Path | None, key: str, dst: Path) -> bool:
             return False
     except (OSError, ValueError):
         return False
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=dst.parent, prefix=dst.name + ".")
-    os.close(fd)
-    shutil.copyfile(home / "bin", tmp)
-    os.chmod(tmp, 0o755)
-    os.replace(tmp, dst)
+    _copy_executable(home / "bin", dst)
     os.utime(home / "meta.json")
     return True
 
@@ -225,12 +234,13 @@ def prune(root: Path, days: float) -> int:
     return removed
 
 
-def put(root: Path | None, key: str, src: Path, days: float = 14.0) -> bool:
+def local_put(root: Path | None, key: str, src: Path, days: float = 14.0) -> Path | None:
+    """The entry directory holding `bin`, or None without a cache directory."""
     if root is None:
-        return False
+        return None
     home = entry(root, key)
     if (home / "meta.json").is_file():
-        return True
+        return home
     home.parent.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(dir=home.parent, prefix=key[:8] + "."))
     try:
@@ -240,11 +250,95 @@ def put(root: Path | None, key: str, src: Path, days: float = 14.0) -> bool:
         try:
             os.rename(tmp, home)
         except OSError:  # another build stored the same key first
-            shutil.rmtree(tmp, ignore_errors=True)
+            pass
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     prune(root, days)
-    return True
+    return home
+
+
+# Kept for the callers and tests of the first version: the directory level alone.
+def get(root: Path | None, key: str, dst: Path) -> bool:
+    return local_get(root, key, dst)
+
+
+def put(root: Path | None, key: str, src: Path, days: float = 14.0) -> bool:
+    return local_put(root, key, src, days) is not None
+
+
+# --- level 2: R2 through the URL map ----------------------------------------------------------------------------
+
+def url_map(environ=None) -> dict | None:
+    """The staged map (bincache.read_map) when NC_TS_URLS names one of namespace "ts"; else None."""
+    path = (os.environ if environ is None else environ).get("NC_TS_URLS", "")
+    if not path or not os.path.isfile(path):
+        return None
+    m = bincache.read_map(path)
+    if m["header"].get("namespace") != NAMESPACE or not bincache.SEG_RE.match(m["header"].get("leg", "")):
+        return None
+    m["path"] = path
+    return m
+
+
+def read_fields(fields_dir: Path | None, key: str) -> dict | None:
+    if fields_dir is None:
+        return None
+    try:
+        fields = json.loads((fields_dir / f"{key}.json").read_text())
+    except (OSError, ValueError):
+        return None
+    return fields if key_of(fields) == key else None
+
+
+def remote_get(m: dict | None, key: str, fields: dict | None, dst: Path, root: Path | None) -> str:
+    """'hit' (placed in dst and the directory), 'miss', or 'refused: <why>'."""
+    if m is None or fields is None or key not in m["get"]:
+        return "miss"
+    with tempfile.TemporaryDirectory(prefix="ts-get-") as td:
+        arc = Path(td) / "a.tar.gz"
+        code = bincache.http_get(m["get"][key], str(arc))
+        if code != 200:
+            return "miss" if code == 404 else f"refused: GET HTTP {code}"
+        try:
+            _, blobs = bincache.verify_archive(str(arc), key, fields)
+        except bincache.Reject as exc:
+            return f"refused: {exc}"
+        if set(blobs) != {"bin"}:
+            return "refused: the archive holds other files than the program"
+        prog = Path(td) / "bin"
+        prog.write_bytes(blobs["bin"])
+        home = local_put(root, key, prog)
+        _copy_executable(home / "bin" if home else prog, dst)
+    return "hit"
+
+
+def remote_put(m: dict | None, key: str, fields: dict | None, home: Path | None, src: Path,
+               uploads: Path | None) -> str:
+    """'uploaded <slot>', 'present', or 'skipped: <why>'. Records the upload for the Mac's promote."""
+    if m is None or fields is None or uploads is None:
+        return "skipped: no map, fields or upload record"
+    if key in m["get"]:
+        return "present"
+    slot, url = bincache.claim_slot(m["path"], m["put"])
+    if slot is None:
+        return "skipped: every inbox slot of this job is used"
+    with tempfile.TemporaryDirectory(prefix="ts-put-") as td:
+        base = home
+        if base is None:
+            base = Path(td) / "entry"
+            base.mkdir()
+            shutil.copyfile(src, base / "bin")
+        arc = Path(td) / "a.tar.gz"
+        bincache.pack(str(arc), key, fields, str(base), ["bin"], {})
+        code = bincache.http_put(url, str(arc))
+        if code != 200:
+            return f"skipped: PUT HTTP {code}"
+    dest = "%s/%s/%s.tar.gz" % (bincache.NAMESPACES[NAMESPACE]["objects"], m["header"]["partition"], key)
+    (uploads / "keys").mkdir(parents=True, exist_ok=True)
+    (uploads / "keys" / f"{key}.json").write_text(json.dumps(fields, sort_keys=True))
+    with open(uploads / "uploads.tsv", "a") as fh:  # one short line per write: O_APPEND keeps concurrent units whole
+        fh.write("%s\t%s\t%s\t%s\tsabotage=0\n" % (m["header"]["leg"], slot, dest, key))
+    return f"uploaded {slot}"
 
 
 def main(argv=None) -> int:
@@ -255,20 +349,34 @@ def main(argv=None) -> int:
     k.add_argument("--gen", required=True)
     k.add_argument("--flags", default="")
     k.add_argument("--repo", default=".")
-    g = sub.add_parser("get")
-    g.add_argument("key")
-    g.add_argument("dst")
-    s = sub.add_parser("put")
-    s.add_argument("key")
-    s.add_argument("src")
+    for name in ("get", "put"):
+        s = sub.add_parser(name)
+        s.add_argument("key")
+        s.add_argument("path")
+        s.add_argument("--fields", help="the keys/ directory `keys` wrote (needed for R2)")
     a = p.parse_args(argv)
     if a.cmd == "keys":
-        for kind, ident, key in unit_keys(Path(a.repo).resolve(), a.column, Path(a.gen).resolve(), a.flags.split()):
+        gen = Path(a.gen).resolve()
+        rows = unit_fields(Path(a.repo).resolve(), a.column, gen, a.flags.split())
+        if rows:
+            (gen / "keys").mkdir(exist_ok=True)
+        for kind, ident, fields in rows:
+            key = key_of(fields)
+            (gen / "keys" / f"{key}.json").write_text(json.dumps(fields, sort_keys=True))
             print(kind, ident, key)
         return 0
+    root, fields_dir = cache_dir(), Path(a.fields) if a.fields else None
     if a.cmd == "get":
-        return 0 if get(cache_dir(), a.key, Path(a.dst)) else 1
-    put(cache_dir(), a.key, Path(a.src), float(os.environ.get("NC_TS_CACHE_DAYS", "14")))
+        if local_get(root, a.key, Path(a.path)):
+            return 0
+        verdict = remote_get(url_map(), a.key, read_fields(fields_dir, a.key), Path(a.path), root)
+        print(f"native_testsuite_cache: R2 {verdict}")
+        return 0 if verdict == "hit" else 1
+    home = local_put(root, a.key, Path(a.path), float(os.environ.get("NC_TS_CACHE_DAYS", "14")))
+    uploads = Path(os.environ["NC_TS_UPLOADS"]) if os.environ.get("NC_TS_UPLOADS") else None
+    m = url_map()
+    if m is not None:
+        print(f"native_testsuite_cache: R2 {remote_put(m, a.key, read_fields(fields_dir, a.key), home, Path(a.path), uploads)}")
     return 0
 
 
