@@ -11,7 +11,7 @@
 # `PyObject_Call` and the double-failure exception wrapper are gone: the
 # counters are native integers and a failed cleanup is reported in words.
 from std.python import Python, PythonObject
-from bindings.arena_cache_get_door import arena_cache_key, arena_cache_view
+from bindings.arena_cache_get_door import arena_cache_put_key, arena_cache_view
 from bindings.arena_scope_door import arena_cache_slot
 from bindings.optimizer_public_words_unpack import PENDING_PYTHON_ERROR, PYTHON_ERROR_PENDING
 from core.arena_state import ARENA_CACHES, arena_handle
@@ -71,7 +71,7 @@ def _restore_pending(mut saved: CachePendingError) raises:
 def arena_cache_id_of(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var source = args[0]
     var view = arena_cache_view(model, context)
-    var key = arena_cache_key(source, context)
+    var key = arena_cache_put_key(source, context)
     if key.words < 1:
         # No entry of an empty buffer can exist: the upload refuses it.
         raise Error("ValueError: DeviceCache: an empty buffer has no device copy")

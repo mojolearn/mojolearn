@@ -290,6 +290,27 @@ def arena_cache_key(source: PythonObject, context: PythonObject) raises -> Arena
     return ArenaCacheKey(_key_word(address, -1, -1), _key_word(size, 0, Int.MAX))
 
 
+def arena_cache_put_key(source: PythonObject, context: PythonObject) raises -> ArenaCacheKey:
+    """`id_of`'s key: the words are READ at the address, so a word outside the Int range is refused, never
+    replaced. `arena_cache_key`'s lookup sentinels (`_key_word`: address -1, size Int.MAX, "names no buffer")
+    reached the put here: an address of 2^100 became -1 and the store copied three words from it (lane
+    gs-fix-4: the SIGSEGV of test_cache_upload_native [address_overflow] on the L40S; the store refuses only
+    address 0). A size below 1 (a negative one of any magnitude included) is the empty buffer `id_of` refuses
+    in its own words; every other out-of-range word raises its conversion's own OverflowError; a negative
+    address is refused in words. In-range values pay the two conversions they paid before."""
+    if not _itemsize_four(_attribute(source,"itemsize",PythonObject(4),False,context),context):
+        raise Error("ValueError: DeviceCache: a store slot holds 4-byte words")
+    var address = _integer(_attribute(source,"_addr",PythonObject(None),True,context),context)
+    var size = _integer(_attribute(source,"size",PythonObject(None),True,context),context)
+    if Bool(py=size < PythonObject(1)):
+        return ArenaCacheKey(0, 0)
+    var words = Int(py=size)
+    var at = Int(py=address)
+    if at < 0:
+        raise Error("ValueError: DeviceCache: a buffer address is not negative")
+    return ArenaCacheKey(at, words)
+
+
 def _key_word(value: PythonObject, below: Int, above: Int) raises -> Int:
     """An admitted exact int as a key word. One outside the Int range names
     no buffer: `below` for a negative one, `above` for a positive one (lane
