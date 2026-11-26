@@ -22,14 +22,21 @@ def test_training_device_owner_refuses_replaced_object_constructor(monkeypatch, 
             raise AssertionError("mutable device object constructor entered")
     with monkeypatch.context() as scope:
         scope.setattr(builtins, "object", Replacement)
-        refused = audit_native_call(method, *args, **kwargs)
-    # Since 31fc85981 a replaced connected builtins export is refused before
-    # any callback runs (tests/_connected_exports.py); then the restored
-    # export allocates natively.
-    assert_connected_export_refused(refused, "builtins", "object")
+        audited = audit_native_call(method, *args, **kwargs)
     assert not calls
-    result = audit_native_call(method, *args, **kwargs)
-    device = result.assert_native()
+    if owner is None:
+        # Since 31fc85981 a replaced connected builtins export is refused before
+        # any callback runs (tests/_connected_exports.py); then the restored
+        # export allocates natively.
+        assert_connected_export_refused(audited, "builtins", "object")
+        device = audit_native_call(method, *args, **kwargs).assert_native()
+    else:
+        # A reshape of a connected owner reads no connected export: its provider
+        # comes from the identity hit of providers/python/neural_descriptor_pyapi_door.mojo
+        # `neural_descriptor_connect_factory_once`, which reads no module since lane
+        # gs-fix-4 (2026-11-26). It allocates natively under the replacement and
+        # never calls it.
+        device = audited.assert_native()
     expected = source.reshape(2, 6) if owner is not None else source
     host = audit_native_call(device.to_host).assert_native()
     assert np.asarray(host).tobytes() == expected.tobytes()

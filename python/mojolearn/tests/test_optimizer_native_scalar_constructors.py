@@ -28,6 +28,26 @@ def poisoned_call(monkeypatch, name, operation, *args, **kwargs):
     return audit_native_call(operation, *args, **kwargs).assert_native()
 
 
+def poisoned_native(monkeypatch, name, operation, *args, **kwargs):
+    """`operation` under a replaced `builtins.<name>` when it reads no
+    connected export: it completes natively and never calls the replacement.
+    A device owner's method reaches its provider through the identity hit of
+    providers/python/neural_descriptor_pyapi_door.mojo
+    `neural_descriptor_connect_factory_once`, which reads no module since lane
+    gs-fix-4 (2026-11-26; the builtins read on every call was what refused
+    here before), so there is no connection check left to refuse in."""
+    calls = []
+    def hook(*args, **kwargs):
+        calls.append(name)
+        raise AssertionError("mutable scalar constructor entered")
+    with monkeypatch.context() as patch:
+        patch.setattr(dis, name, getattr(builtins, name), raising=False)
+        patch.setattr(builtins, name, hook)
+        result = audit_native_call(operation, *args, **kwargs).assert_native()
+    assert not calls, calls
+    return result
+
+
 def compare_state(actual, expected):
     left = audit_native_call(actual.state_dict).assert_native()
     right = expected.state_dict()
@@ -108,7 +128,9 @@ def test_device_scalar_controls_use_retained_native_integer(monkeypatch, operati
         owner = T.AdamW([source], numeric_mode="identical")
         owner.params_to_device()
         method, args = owner.param_device, (0,)
-    output = poisoned_call(monkeypatch, "int", method, *args)
+    # The owner already connected its provider above (train_to_device /
+    # params_to_device), so the audited call is the steady-state one.
+    output = poisoned_native(monkeypatch, "int", method, *args)
     result = audit_native_call(output.to_host).assert_native()
     assert np.asarray(result).tobytes() == source.tobytes()
     assert result.shape == ((2, 6) if operation == "reshape" else source.shape)

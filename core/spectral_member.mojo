@@ -123,7 +123,7 @@ from core.spectral_native_api import (
     SpectralQueryShape, SpectralQueryRequest, SpectralPrepareRequest, SpectralResidentQueryRequest,
     SPECTRAL_DATASET, SPECTRAL_CAP_RESIDENT,
 )
-from spectral.cfb_spectral_run import _sc_check_shape, _se_check_shape
+from spectral.cfb_spectral_run import _sc_check_shape, _se_check_shape, spectral_lanczos_fits
 from core.spectral_native_api import SpectralEmbeddingRequest, SpectralEmbeddingOptions
 from core.spectral_native_api import SPECTRAL_DENSE, SPECTRAL_GRAPH
 from core.spectral_native_api import (
@@ -613,7 +613,7 @@ def _fit_rows(slot: _Slot, call: _Call, x_addr: Int, rows: Int, d: Int, store_sl
     var coo = SpectralCOOStorage(0)
     var source_input: SpectralInput
     var status = SpectralAffinityStatus()
-    var fused = ((affinity == _AFF_RBF or affinity == _AFF_PNN) and clusters <= n and k < n
+    var fused = ((affinity == _AFF_RBF or affinity == _AFF_PNN) and clusters <= n and spectral_lanczos_fits(k, n)
         and (affinity == _AFF_RBF or (d == n and n > 0)) and _fused_affinity(call, slot[].fit_dense))
     if store_slot >= 0 and not (affinity == _AFF_NN or (fused and affinity == _AFF_RBF)):
         _sc_check_shape(clusters, n, k)  # the class's refusal first (the only case the fused route declines)

@@ -56,6 +56,7 @@ from core.device_route import (
     DeviceRoute, DEVICE_CPU, DEVICE_GPU, DEVICE_INSTALL, device_code, device_refusal, device_installed,
     device_cpu_absent,
 )
+from core.shared_slot import SharedSlot
 
 # An estimator's entry route (one family owns an estimator).
 comptime DEVICE_ROUTE_SLOT = "device_route_v1"
@@ -68,6 +69,26 @@ comptime _DEVICE_ROUTE_FIXED_PINS = 8
 comptime _DEVICE_GUARD_NONE = 0
 comptime _DEVICE_GUARD_COUNT = 1
 comptime _DEVICE_GUARD_READ = 2
+
+
+struct DeviceCpuConnected(Defaultable, Movable):
+    """Whether this process already ran the lazy CPU-image connection of a
+    device="cpu" admission (`device_admit_class`). The connection is one
+    process-wide step (python/mojolearn/_native_family_bridge.py `connect_cpu`,
+    later calls return at its `_CPU_DONE` flag; family modules imported after
+    it load their CPU images at import), so the compiled check calls it once
+    and then reads this word. Before (lane gs-fix-6, L40S smoke of main
+    9bdb1a9e8c): every device="cpu" construction or set_params called the
+    Python connector, two Python frames per admission in steady state
+    (test_native_field_constructors `test_reinitialization_keeps_unrelated_fields_in_place[LabelEncoder]`)."""
+
+    var done: Bool
+
+    def __init__(out self):
+        self.done = False
+
+
+comptime _DEVICE_CPU_CONNECTED = SharedSlot[DeviceCpuConnected, "MojolearnDeviceCpuConnectedV1"]
 
 
 struct DeviceRouteOwner(Movable, Writable):
@@ -242,7 +263,8 @@ def device_admit_class(model: PythonObject, value: PythonObject, cpu_only: Bool,
     python/mojolearn/_native_family_bridge.py `connect_cpu`) loads the host
     label and metrics images of the shared family context: called on the
     admitted CPU branch only, so a process with no device="cpu" estimator
-    never loads them; once per process (it returns at a flag after)."""
+    never loads them; called at the first admitted CPU branch of the process,
+    a native word after (`DeviceCpuConnected`)."""
     var device = device_unpack(value, b)
     # Both held routes go (fx-audit 29, 2026-11-21): the entry route
     # (`device_route_held` checks the mode and the context, never the
@@ -266,7 +288,13 @@ def device_admit_class(model: PythonObject, value: PythonObject, cpu_only: Bool,
     if py_type(answer) is b.str:
         device_cpu_absent(String(cls.__name__), String(answer))
     if connect is not None:
-        _ = py_call(connect)
+        # Once per process (DeviceCpuConnected): set after the connection
+        # returned, so a connection that raised is tried again by the next
+        # admission, in its own words.
+        var connected = _DEVICE_CPU_CONNECTED.get_or_create_ptr()
+        if not connected[].done:
+            _ = py_call(connect)
+            connected[].done = True
 
 
 def archive_load_device(loaded: PythonObject, device: PythonObject, context: PythonObject) raises:
