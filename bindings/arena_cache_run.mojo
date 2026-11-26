@@ -497,8 +497,12 @@ def arena_scope_cache(scope: Int, store: EntryRef, ops: ArenaStoreOps, prefix: S
     var cache = lease[].cache_of(prefix, route)
     if cache == ARENA_HANDLE_NONE:
         _family_store_note(prefix, route, store, ops)  # the close frees into this family's own store
-        cache = arena_cache_new(store, prefix)
-        lease[].add_cache(prefix, route, cache)
+        # THE FOLDS OF A WAVE SHARE THE SCOPE (rel-fix-1, core/arena_state.mojo ArenaScopeState): two first calls
+        # may race here; the scope keeps one cache and the loser releases its own (still empty: nothing to free)
+        var made = arena_cache_new(store, prefix)
+        cache = lease[].add_cache_if_absent(prefix, route, made)
+        if cache != made:
+            ARENA_CACHES.release(arena_handle(made))
     return cache
 
 
@@ -612,8 +616,9 @@ struct ArenaCacheCounts(Copyable, Movable):
 
 def arena_scope_stats(scope: Int) raises -> List[ArenaCacheCounts]:
     var lease = ARENA_SCOPES.acquire(arena_handle(scope))
+    var caches = lease[].caches_copy()
     var counts = List[ArenaCacheCounts]()
-    for i in range(len(lease[].caches)):  # driver-loop: over the scope's caches, in creation order
-        var cache = ARENA_CACHES.acquire(arena_handle(lease[].caches[i].cache))
-        counts.append(ArenaCacheCounts(lease[].caches[i].prefix, cache[].upload_count(), cache[].hit_count()))
+    for i in range(len(caches)):  # driver-loop: over the scope's caches, in creation order
+        var cache = ARENA_CACHES.acquire(arena_handle(caches[i].cache))
+        counts.append(ArenaCacheCounts(caches[i].prefix, cache[].upload_count(), cache[].hit_count()))
     return counts^

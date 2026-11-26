@@ -442,36 +442,102 @@ struct ArenaScopeCache(Copyable, Movable):
     var cache: Int
 
 
-struct ArenaScopeState(Movable):
-    """One `resident()` scope of a thread: the size floor and the caches the
-    runner created in it, one per binding family and store route. A scope is
-    reached only through its thread's thread-local, so it carries no lock
-    word."""
-    var min_words: Int
+struct _ScopeTable(Movable):
+    """The caches of one scope (`ArenaScopeState`), behind its lock."""
     var caches: List[ArenaScopeCache]
+
+    def __init__(out self):
+        self.caches = List[ArenaScopeCache]()
+
+
+struct ArenaScopeState(Movable):
+    """One `resident()` scope: the size floor and the caches the runner
+    created in it, one per binding family and store route.
+
+    LOCKED (rel-fix-1, 2026-11-26). The note here said a scope is reached
+    only through its thread's thread-local, so it carried no lock word. Not
+    so: model selection's own scope (bindings/msel_cv_door.mojo
+    `msel_rows_scope_open`) is handed to every fold of a wave
+    (core/msel_search_run.mojo `run.scope`), and the GIL-free members fit
+    those folds at once (host_parallelize): their first `arena_scope_cache`
+    calls raced on the caches List (an append that reallocates under a
+    concurrent scan), and the close then read a torn row ("no device store
+    recorded for the binding family '\x04'", GPU smoke of 3423ae229e,
+    test_device_rows_door_cv.py[boosting], order and load dependent). The
+    caches now live in `_ScopeTable`, the one element of the heap List
+    `cell`, reached through `_table()` after the lock (the DeviceCacheState
+    pattern: as fields read through `self` the compiler may load a List's
+    pointer and length before the lock). `min_words` never changes after
+    construction."""
+    var min_words: Int
+    var lock: ArenaStateLock
+    #: exactly one `_ScopeTable`, never grown, so its address is stable
+    var cell: List[_ScopeTable]
 
     def __init__(out self, min_words: Int):
         self.min_words = min_words
-        self.caches = List[ArenaScopeCache]()
+        self.lock = ArenaStateLock()
+        self.cell = List[_ScopeTable]()
+        self.cell.append(_ScopeTable())
 
-    def cache_of(self, prefix: String, route: Int) -> Int:
-        """The scope's cache handle word for (`prefix`, `route`), or
-        `ARENA_HANDLE_NONE`."""
-        for i in range(len(self.caches)):  # driver-loop: over the scope's caches (one per binding family and mode: a handful)
-            if self.caches[i].route == route and self.caches[i].prefix == prefix:
-                return self.caches[i].cache
+    def _table(self) -> MutPointer[_ScopeTable, MutUntrackedOrigin]:
+        return MutPointer[_ScopeTable, MutUntrackedOrigin](unsafe_from_address=Int(self.cell.unsafe_ptr()))
+
+    @staticmethod
+    def _find(table: MutPointer[_ScopeTable, MutUntrackedOrigin], prefix: String, route: Int) -> Int:
+        for i in range(len(table[].caches)):  # driver-loop: over the scope's caches (one per binding family and mode: a handful)
+            if table[].caches[i].route == route and table[].caches[i].prefix == prefix:
+                return table[].caches[i].cache
         return ARENA_HANDLE_NONE
 
+    def cache_of(mut self, prefix: String, route: Int) -> Int:
+        """The scope's cache handle word for (`prefix`, `route`), or
+        `ARENA_HANDLE_NONE`."""
+        var table = self._table()
+        self.lock.acquire()
+        var found = Self._find(table, prefix, route)
+        self.lock.release()
+        return found
+
     def add_cache(mut self, prefix: String, route: Int, cache: Int):
-        self.caches.append(ArenaScopeCache(prefix, route, cache))
+        var table = self._table()
+        self.lock.acquire()
+        table[].caches.append(ArenaScopeCache(prefix, route, cache))
+        self.lock.release()
+
+    def add_cache_if_absent(mut self, prefix: String, route: Int, cache: Int) -> Int:
+        """Link `cache` for (`prefix`, `route`) unless another thread linked
+        one first; the cache the scope keeps (the caller releases its own
+        when it lost)."""
+        var table = self._table()
+        self.lock.acquire()
+        var found = Self._find(table, prefix, route)
+        if found == ARENA_HANDLE_NONE:
+            table[].caches.append(ArenaScopeCache(prefix, route, cache))
+            found = cache
+        self.lock.release()
+        return found
+
+    def caches_copy(mut self) -> List[ArenaScopeCache]:
+        """The scope's caches, in creation order (`resident.stats()`)."""
+        var table = self._table()
+        self.lock.acquire()
+        var out = List[ArenaScopeCache]()
+        for i in range(len(table[].caches)):  # driver-loop: over the scope's caches
+            out.append(table[].caches[i].copy())
+        self.lock.release()
+        return out^
 
     def take_caches(mut self) -> List[ArenaScopeCache]:
         """Unlink every cache (`close`) and return them for the caller to
         close and release."""
+        var table = self._table()
+        self.lock.acquire()
         var taken = List[ArenaScopeCache]()
-        for i in range(len(self.caches)):  # driver-loop: over the scope's caches
-            taken.append(self.caches[i].copy())
-        self.caches = List[ArenaScopeCache]()
+        for i in range(len(table[].caches)):  # driver-loop: over the scope's caches
+            taken.append(table[].caches[i].copy())
+        table[].caches = List[ArenaScopeCache]()
+        self.lock.release()
         return taken^
 
 
@@ -656,5 +722,5 @@ def arena_resident_release_entry[F: ArenaStoreFree](
 
 comptime ARENA_ROWS = StateRegistry[DeviceRowsState, "MojolearnArenaRowsStatesV1"]
 comptime ARENA_CACHES = StateRegistry[DeviceCacheState, "MojolearnArenaCacheStatesV2"]
-comptime ARENA_SCOPES = StateRegistry[ArenaScopeState, "MojolearnArenaScopeStatesV2"]
+comptime ARENA_SCOPES = StateRegistry[ArenaScopeState, "MojolearnArenaScopeStatesV3"]  # V3: the locked table (rel-fix-1)
 comptime ARENA_RESIDENTS = StateRegistry[ArenaResidentState, "MojolearnArenaResidentStatesV2"]
