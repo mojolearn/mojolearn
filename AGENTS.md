@@ -73,6 +73,31 @@ decision is already known elsewhere, list them with their cost, and open work to
 ones. Pricing a removal and not doing it is a defect; each priced removal is implemented or
 retired with a reason within two weeks. Applies to hardware, firmware and software alike.
 
+### HARD RULE: RELEASE-ONLY WORK. WE DO NOT VERIFY ON EVERY COMMIT TO MAIN (Andrew, 2026-11-26)
+
+Agents get this wrong over and over. Read it before writing any brief, gate or box plan.
+
+**Every development round (every merge to main, every integration branch, every fix wave) runs ONLY:**
+1. the compile: the integration build and the GitHub build (`tools/release.py candidate`);
+2. the tests: pytest, the native checks, the proving suite;
+3. the GPU smoke: the built wheels installed on the box, every lane run once on the GPU. It compares nothing and
+   records nothing. Its job is to find what crashes or refuses on the GPU.
+
+**RELEASE ONLY: once, on the frozen release commit, when Andrew says it is time to release. Never in a round:**
+- `python -m mojolearn verify` comparing lanes against references, on any side, CPU column included;
+- the identity record (recording reference columns, `tools/ops/identity_record_job.sh`,
+  `tools/identity_wheel_record.py`);
+- `_identity_break` or any other same-bits, repeat or stability check of lanes. We do not check the same bits of every
+  lane per round. That includes "the lanes the change touched" and "all lanes because the change was wide";
+- the sabotage arms, host and GPU (building and running them). Checking that the patches still apply is static and
+  cheap, so a round may run it;
+- the cross-vendor comparison, and the Apple build with its column.
+
+A stale or absent reference in a round is RECORD OWED. It is never a red, never a reason to record, and never a
+reason to re-verify. A brief, a gate, a plan or a box queue that puts any release-only item in a round is wrong. The
+orchestrator removes it before launch, and a lane that finds one in its brief says so and skips it. A release-only job
+that is already queued or running is left to finish: never cancel a job without Andrew's word (2026-11-26).
+
 ## 2. The product
 
 ### The name is Mojolearn, with a capital M (Andrew, 2026-11-02)
@@ -491,8 +516,9 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 
 - Verification happens once, before the release: freeze the source, run one global verify of every lane on every
   device from the built wheels, see the columns match, publish. Nothing is verified after a release.
-- No same-bits checks during development: no identity (ID) run per lane, per fix or per merge. A plan that would run
-  identity twice for one release is wrong: say so up front and fix the order or the tool.
+- No same-bits checks during development: see the hard rule "RELEASE-ONLY WORK" in part 1, which lists what a
+  round runs and what only the release runs. A plan that would run identity twice for one release is wrong: say so
+  up front and fix the order or the tool.
 - A cross-vendor mismatch found by the verify is a bug to fix in code; then the affected lanes run again.
 - Identity runs once (`REPEATS=1`); a mismatch is never a reason to rerun unchanged code. One identity check per
   release: the table admit. No release step re-fits or re-diffs identity after it (Andrew, 2026-10-10).
