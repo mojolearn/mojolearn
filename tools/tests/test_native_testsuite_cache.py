@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -437,3 +438,50 @@ def test_a_miss_names_the_nearest_stored_key_and_the_first_differing_field(tmp_p
     text = (ROOT / "tools/ops/native_testsuite.sh").read_text()
     assert "R2 miss report:" in text and '> "$log.get"' in text
     assert "R2 miss report" in (ROOT / "tools/ops/native_testsuite_cache.py").read_text()
+
+
+def _column_flags(column: str, env: dict) -> list[str]:
+    """TS_FLAGS exactly as tools/ops/native_testsuite.sh composes them (its column_flags, then
+    TS_FLAGS="$TS_DEFINES $TS_TARGET", the string `keys --flags` receives), under ENV."""
+    text = (ROOT / "tools/ops/native_testsuite.sh").read_text()
+    body = text[text.index("column_flags() {"):]
+    body = body[:body.index("\n}\n") + 3]
+    script = body + f'column_flags {column}\nprintf "%s" "$TS_DEFINES $TS_TARGET"\n'
+    run_env = {k: v for k, v in os.environ.items() if k not in ("NC_DEFINES", "NC_TARGET")}
+    run_env.update(env)
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=run_env, check=True).stdout
+    return out.split()
+
+
+@pytest.mark.parametrize("why,defines", [
+    ("an NC_DEFINES MOJOLEARN_ define", "-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D MOJOLEARN_OTHER=1"),
+    ("a FAST experiment arm", "-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D MOJOLEARN_KMEANS_FAST_X=1"),
+    ("an _OFF arm", "-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D MOJOLEARN_KMEANS_FAST_X_OFF=1"),
+    ("a define's value", "-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=2"),
+    ("a define dropped", "-D MOJOLEARN_NUMERIC_IDENTICAL=1"),
+])
+def test_every_nc_defines_define_changes_the_key_through_the_shell_flags(tmp_path, why, defines):
+    """w3-integrate-22 (the define condition of rel-fix-1's schema v4): NC_DEFINES reaches the key through the flags the
+    job composes (`args`), never through the environment, so a define build can never hit a clean program; the
+    variable NC_DEFINES itself is not a key field."""
+    _tree(tmp_path)
+    clean = _column_flags("cpu", {})
+    armed = _column_flags("cpu", {"NC_DEFINES": defines})
+    assert "-D" in clean and armed != clean
+    before = _keys(tmp_path, flags=clean, env=_persist_env("t1", "/r1"))
+    after = _keys(tmp_path, flags=armed, env=dict(_persist_env("t2", "/r2"), NC_DEFINES=defines))
+    assert before and all(after[u] != before[u] for u in before), why
+
+
+@pytest.mark.parametrize("defines", ["-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_SABOTAGE_KMEANS=1",
+                                     "-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_FAULT_INJECT_GBDT=1"])
+def test_a_sabotage_or_fault_define_in_nc_defines_gets_no_key(tmp_path, defines):
+    _tree(tmp_path)
+    assert _keys(tmp_path, flags=_column_flags("cpu", {"NC_DEFINES": defines})) == {}
+
+
+def test_nc_target_changes_the_key_through_the_shell_flags(tmp_path):
+    _tree(tmp_path)
+    clean = _column_flags("cpu", {})
+    other = _column_flags("cpu", {"NC_TARGET": "--target-cpu x86-64-v4"})
+    assert _keys(tmp_path, flags=other) != _keys(tmp_path, flags=clean)
