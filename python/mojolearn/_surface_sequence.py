@@ -68,7 +68,7 @@ FAMILIES = (
                         "sequence-norms-resnet1d-gn", "sequence-norms-instance",
                         # nn-norms end
                         # lane nn-optim begin (2026-11-23): Sequential.compile's rmsprop, adagrad, lamb and schedules
-                        "sequence-optim-rmsprop", "sequence-optim-adagrad", "sequence-optim-lamb",
+                        "sequence-optim-rmsprop", "sequence-optim-adagrad", "sequence-optim-lamb", "sequence-optim-adafactor",
                         # lane nn-optim end
                         # nn-conv3d begin
                         "sequence-composed-conv3d", "sequence-composed-pool3d",
@@ -308,6 +308,7 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        # lane nn-optim begin
                        "sequence-optim-rmsprop": "Sequential rmsprop with cosine_warm_restarts and multi_step",
                        "sequence-optim-adagrad": "Sequential adagrad with reduce_on_plateau and cosine",
+                       "sequence-optim-adafactor": "Sequential Adafactor matrix and vector updates, groups and checkpoint resume",
                        "sequence-optim-lamb": "Sequential lamb with one_cycle and linear_warmup",
                        # lane nn-optim end
     # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table (RECORD OWED)
@@ -441,6 +442,7 @@ PUBLIC_PENDING_LANES = {
     "sequence-optim-rmsprop": "no reference",
     "sequence-optim-adagrad": "no reference",
     "sequence-optim-lamb": "no reference",
+    "sequence-optim-adafactor": "no reference",
     # lane nn-optim end
     # nn-blocks-scatter begin
     "ops-scatter-segment": "no reference",

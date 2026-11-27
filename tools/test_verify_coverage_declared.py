@@ -106,7 +106,7 @@ def test_public_cnn_and_optimizer_lanes_have_faults_and_published_references():
         for lane in arm["lanes"]:
             sides.setdefault(lane, set()).update(coverage_sabotage.arm_sides(arm))
 
-    for lane in {*lanes.values(), "nn-ep-cnn-fits", "nn-ep-cnn-layers", "x-cnn-gnn-disabled-options"}:
+    for lane in {*lanes.values(), "sequence-optim-adafactor", "nn-ep-cnn-fits", "nn-ep-cnn-layers", "x-cnn-gnn-disabled-options"}:
         assert lane in identity_break.LANES, f"missing installed verifier lane: {lane}"
         assert sides.get(lane) == {"cpu", "gpu"}, f"{lane} declares faults on {sides.get(lane)}"
 

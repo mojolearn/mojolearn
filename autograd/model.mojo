@@ -18,6 +18,7 @@ from sequence.ops import (
     OPT_ADAM, OPT_ADAMW, OPT_SGD, dummy_ptr,
 )
 from sequence.mlp import mlp_epoch_key, mlp_perm_args
+from sequence.adafactor_update import adafactor_partial_words, adafactor_update
 from sequence.recurrent import OptConfig, OptState, opt_step
 from sequence.gemm_split import gemm_split_shape
 from checks.numerics import ftz, identical_div, identical_pow64, identical_sqrt
@@ -69,7 +70,7 @@ from autograd.nn_attention import (
 # nn-attention end
 # lane nn-optim (2026-11-23): rmsprop, adagrad, lamb and the schedules multi_step .. reduce_on_plateau
 from autograd.nn_optim import (
-    NN_OPT_ADAGRAD, NN_SCHED_MULTI_STEP, NN_SCHED_PLATEAU, NnLamb, NnPlateau, nn_epoch_lr, nn_multi_step_count,
+    NN_OPT_ADAFACTOR, NN_OPT_ADAGRAD, NN_SCHED_MULTI_STEP, NN_SCHED_PLATEAU, NnLamb, NnPlateau, nn_epoch_lr, nn_multi_step_count,
     nn_opt_step, nn_optim_admit, nn_sched_per_step, nn_step_lrs, nn_opt_keeps_third,
 )
 # lane stream-fits (2026-11-25): Sequential.fit(source=), the streamed instance of the fit loop
@@ -711,6 +712,7 @@ struct FitConfig(Copyable, Movable):
     var sched_args: List[Float64]
     var tensor_offs: List[Int]
     # nn-blocks-pgseq: the parameter groups (autograd/nn_pgseq.mojo; empty: none, the single-launch step)
+    var af_tensors: List[Tuple[Int, Int, Int, Int]]  # parameter offset, rows, columns (0 for vector), group
     var groups: PgSeqTable
 
     def __init__(
@@ -738,6 +740,7 @@ struct FitConfig(Copyable, Movable):
         self.init = init
         self.sched_args = sched_args^
         self.tensor_offs = tensor_offs^
+        self.af_tensors = List[Tuple[Int, Int, Int, Int]]()
         self.groups = PgSeqTable()
 
 
@@ -1436,13 +1439,9 @@ def model_fit_state[E: Exec](
 
     `Wio` (lane stream-fits): the address of the third optimizer state buffer (n_params float32, `optimizer_w_`)
     when the optimizer keeps one (autograd/nn_optim.mojo nn_opt_keeps_third: centered RMSprop), else 0."""
-    if cfg_in.groups.on():
-        return _model_fit_state[E, True, False](
-            ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation, codes_dev, lengths,
-            target_lengths, loop_words, Wio, 0, 0, 0)
-    return _model_fit_state[E, False, False](
-            ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation, codes_dev, lengths,
-            target_lengths, loop_words, Wio, 0, 0, 0)
+    return _dispatch_fit_state[E, False](
+        ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation, codes_dev,
+        lengths, target_lengths, loop_words, Wio, 0, 0, 0)
 
 
 def model_fit_state_source[E: Exec](
@@ -1471,16 +1470,37 @@ def model_fit_state_source[E: Exec](
     one launch a batch) and token_cross_entropy (each record's target row holds its token ids); ctc is refused (a
     target row holds no target length)."""
     var address = Int(UnsafePointer(to=stream))
+    return _dispatch_fit_state[E, True](
+        ex, spec, cfg_in, CastIn.f32_c(0, 1, 1), CastIn.f32_c(0, 1, 1), stream.n, Pio, curve,
+        Mio, Vio, St, curve_prev, resume, validation, 0, None, None, loop_words, Wio, address, max_steps, source_out)
+
+
+def _dispatch_fit_state[E: Exec, streamed: Bool](
+    mut ex: E, spec: ModelSpec, cfg_in: FitConfig, X: CastIn, Y: CastIn, N: Int, Pio: FP, curve: FP,
+    Mio: FP, Vio: FP, St: IP64, curve_prev: FP, resume: Bool,
+    validation: Optional[FitValidation], codes_dev: Int, lengths: Optional[FP],
+    target_lengths: Optional[FP], loop_words: Int, Wio: Int, stream_address: Int, max_steps: Int,
+    source_out: Int,
+) raises -> Int:
+    """Select the minibatch update once for this array or streamed fit."""
+    if cfg_in.opt.kind == NN_OPT_ADAFACTOR:
+        if cfg_in.groups.on():
+            return _model_fit_state[E, True, streamed, True](
+                ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation,
+                codes_dev, lengths, target_lengths, loop_words, Wio, stream_address, max_steps, source_out)
+        return _model_fit_state[E, False, streamed, True](
+            ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation,
+            codes_dev, lengths, target_lengths, loop_words, Wio, stream_address, max_steps, source_out)
     if cfg_in.groups.on():
-        return _model_fit_state[E, True, True](
-            ex, spec, cfg_in, CastIn.f32_c(0, 1, 1), CastIn.f32_c(0, 1, 1), stream.n, Pio, curve, Mio, Vio, St,
-            curve_prev, resume, validation, 0, None, None, loop_words, Wio, address, max_steps, source_out)
-    return _model_fit_state[E, False, True](
-        ex, spec, cfg_in, CastIn.f32_c(0, 1, 1), CastIn.f32_c(0, 1, 1), stream.n, Pio, curve, Mio, Vio, St,
-        curve_prev, resume, validation, 0, None, None, loop_words, Wio, address, max_steps, source_out)
+        return _model_fit_state[E, True, streamed](
+            ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation,
+            codes_dev, lengths, target_lengths, loop_words, Wio, stream_address, max_steps, source_out)
+    return _model_fit_state[E, False, streamed](
+        ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation,
+        codes_dev, lengths, target_lengths, loop_words, Wio, stream_address, max_steps, source_out)
 
 
-def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
+def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool, adafactor: Bool = False](
     mut ex: E, spec: ModelSpec, cfg_in: FitConfig, X: CastIn, Y: CastIn, N: Int, Pio: FP, curve: FP,
     Mio: FP, Vio: FP, St: IP64, curve_prev: FP, resume: Bool,
     validation: Optional[FitValidation], codes_dev: Int, lengths: Optional[FP],
@@ -1755,6 +1775,22 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
         # torch Adagrad's initial_accumulator_value: the sum starts there (one fill a fit)
         _fill(ex, s2, np_, cfg.opt.f2)
     # lane nn-optim: LAMB's buffers and tensor table, once a fit (nothing for the other optimizers)
+    var af_update = dummy_ptr()
+    var af_scales = dummy_ptr()
+    var af_parts = dummy_ptr()
+    comptime if adafactor:
+        if len(cfg.af_tensors) == 0:
+            raise Error("model fit: Adafactor needs the model's vector and matrix parameter shapes")
+        var max_size = 1
+        var max_parts = 1
+        for j in range(len(cfg.af_tensors)):  # driver-loop: over parameter shapes, once per fit
+            var tensor = cfg.af_tensors[j]
+            var size = tensor[1] * max(1, tensor[2])
+            max_size = max(max_size, size)
+            max_parts = max(max_parts, adafactor_partial_words(size))
+        af_update = ex.alloc(max_size)
+        af_scales = ex.alloc(4)
+        af_parts = ex.alloc(max_parts)
     var lamb = NnLamb(ex, cfg.opt, cfg.tensor_offs, np_)
     # nn-blocks-pgseq begin: the parameter groups, resolved once a fit (nothing without groups): each group's
     # running products from the step count, LAMB's per-run tables, adagrad's starting sums per group
@@ -2021,6 +2057,22 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
                 if per_step:
                     for g in range(cfg.groups.groups()):  # driver-loop: over parameter groups (a rate a group)
                         pg_rates[g] = pg_step_lrs[g][step - step0 - 1]
+            comptime if adafactor:
+                for j in range(len(cfg.af_tensors)):  # driver-loop: over parameter tensors on the executor
+                    var tensor = cfg.af_tensors[j]
+                    var off = tensor[0]
+                    var rate = step_lr
+                    var eps = cfg.opt.eps
+                    var decay = cfg.opt.wd
+                    comptime if grouped:
+                        var group = tensor[3]
+                        rate = pg_rates[group]
+                        eps = cfg.groups.cfgs[group].eps
+                        decay = cfg.groups.cfgs[group].wd
+                    adafactor_update(ex, P + off, Gr + off, s1 + off, s2 + off, tensor[1], tensor[2], step,
+                                     Float64(rate), -0.8, Float64(eps), 0.001, 1.0, Float64(decay),
+                                     af_update, af_scales, af_parts)
+            elif grouped:
                 pgseq_step(ex, cfg.groups, pg_state, step, pg_rates, P, Gr, s1, s2, s3, lamb, pg_lamb)
             else:
                 nn_opt_step(ex, cfg.opt, st, step, step_lr, P, Gr, s1, s2, s3, np_, lamb)

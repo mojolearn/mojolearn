@@ -67,7 +67,7 @@ _OUT_RAW, _OUT_SOFTMAX, _OUT_SIGMOID, _OUT_PROBA2, _OUT_ARGMAX, _OUT_THRESHOLD =
 # sequence/ops.mojo OPT_*: "momentum" is SGD with a momentum buffer.
 _OPT = {"sgd": 0, "momentum": 0, "adam": 1, "adamw": 2,
         # lane nn-optim begin (autograd/nn_optim.mojo NN_OPT_*)
-        "rmsprop": 3, "adagrad": 4, "lamb": 10,
+        "rmsprop": 3, "adagrad": 4, "lamb": 10, "adafactor": 11,
         # lane nn-optim end
         }
 # core/cast_in.mojo CAST_KIND_* and item size -> the classes_ dtype of a
@@ -1652,12 +1652,17 @@ class Sequential(_CheckMixin):
             of the labels over every alignment of the sample's steps;
             ``token_cross_entropy`` trains a model ending in
             :meth:`lm_head` on ``(n_samples, length)`` int32 token ids.
-        optimizer : {'sgd', 'momentum', 'adam', 'adamw', 'rmsprop', 'adagrad', 'lamb'}, default 'adam'
+        optimizer : {'sgd', 'momentum', 'adam', 'adamw', 'rmsprop', 'adagrad', 'lamb', 'adafactor'}, default 'adam'
             ``'momentum'`` is SGD with ``momentum``. ``'rmsprop'`` and
             ``'adagrad'`` follow ``torch.optim.RMSprop`` and
             ``torch.optim.Adagrad``; ``'lamb'`` is LAMB as in timm's
             ``Lamb`` (bias correction and gradient averaging on, the
             layer-wise trust ratio applied to each parameter tensor).
+            Adafactor uses row and column variances for a matrix and one variance
+            per entry for a vector. It accepts the same parameter ranks as standalone
+            Adafactor. Its decay exponent is -0.8, its RMS clipping threshold is 1,
+            and its parameter-scale floor is 0.001. The scalar eps sets its first
+            epsilon (default: float32 machine epsilon).
         lr : float, default 1e-3
             Learning rate (> 0); the peak rate of ``'one_cycle'`` and
             ``'linear_warmup'``.

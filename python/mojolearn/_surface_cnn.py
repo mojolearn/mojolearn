@@ -90,6 +90,7 @@ TRAINING_LANE_NAMES = {
     "nn-ep-cnn-layers": "Conv1d, Conv2d, BatchNorm1d: layers",
 }
 PUBLIC_PENDING_LANES = {
+    "x-cnn-gnn-disabled-options": "no reference",
     "public-cnn-layer-fit": "unwatched",
     "public-cnn-classifier-predict": "unwatched",
     }
