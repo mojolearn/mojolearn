@@ -97,13 +97,31 @@ def test_lightgbm_objectives_require_query_ids_and_integer_grades(loss):
         ranker.fit(X, rel, group_id=groups, eval_set=(X, rel))
     cat_x = X.copy()
     cat_x[:, 0] = (cat_x[:, 0] > 0).astype(np.float32)
-    with pytest.raises(Exception, match="numeric features"):
-        _model(loss=loss, cat_features=[0]).fit(cat_x, rel, group_id=groups)
+    model = _model(loss=loss, cat_features=[0], n_estimators=1)
+    assert model.fit(cat_x, rel, group_id=groups, eval_set=(cat_x, rel, groups), eval_at=1) is model
+    for invalid_cutoff in (0, -1, 1.5, True, 2**31):
+        with pytest.raises(ValueError, match="eval_at"):
+            model.fit(cat_x, rel, group_id=groups, eval_set=(cat_x, rel, groups), eval_at=invalid_cutoff)
     for bad_grade in (-1, 0.5, 31):
         invalid = rel.copy()
         invalid[0] = bad_grade
         with pytest.raises(Exception, match=r"integer relevance grades in \[0, 30\]"):
             ranker.fit(X, invalid, group_id=groups)
+        with pytest.raises(Exception, match="integer relevance grades"):
+            ranker.fit(X, rel, group_id=groups, eval_set=(X, invalid, groups))
+
+
+def test_query_softmax_refuses_unsupported_tree_and_validation_inputs():
+    X, y, groups = _fixture(8)
+    with pytest.raises(ValueError, match="QuerySoftMax.*SymmetricTree"):
+        _model(loss="QuerySoftMax", grow_policy="Lossguide")
+    for option in ("cat_features", "one_hot_features"):
+        model = _model(loss="QuerySoftMax", **{option: [0]})
+        with pytest.raises(ValueError, match="QuerySoftMax.*numeric features"):
+            model.fit(X, y, group_id=groups)
+    model = _model(loss="QuerySoftMax")
+    with pytest.raises(ValueError, match="QuerySoftMax.*eval_set"):
+        model.fit(X, y, group_id=groups, eval_set=(X, y, groups))
 
 
 def test_split_query_still_refused():

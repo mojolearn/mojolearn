@@ -19,8 +19,8 @@ diff --git a/gbdt/train.mojo b/gbdt/train.mojo
      if len(eval_group_sizes) > 0 and not is_querywise:
          raise Error("held-out query ids require a grouped ranking loss")
 @@ -1703,7 +1713,7 @@
-         # LightGBM already owns the validated device grouping in rank_layout.
-         if not lightgbm_rank:
+         # The grouped ranking workspace already owns its validated layout.
+         if not grouped_rank:
              if len(group_sizes) > 0 and len(group_sizes) < n_rows:
 -                query_sizes = group_sizes.copy()
 +                query_sizes = sab_group_sizes.copy()

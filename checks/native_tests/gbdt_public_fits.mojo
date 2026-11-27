@@ -85,7 +85,7 @@ from std.sys.compile import is_defined
 comptime FIXTURE_DIR = "checks/native_tests/fixtures/gbdt/"
 comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites); including the grouped CTR and held-out loss examples
-comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS + 6
+comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS + 8
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
 comptime GBDT_HOST_UNITS = 55
 
@@ -239,6 +239,7 @@ struct GbdtInputs(Movable):
     var weights: List[Float32]
     var eval_x: List[Float32]
     var eval_y: List[Float32]
+    var eval_at: Int
     var eval_group_sizes: List[UInt32]
     var group_sizes: List[UInt32]
     var pairs: List[UInt32]
@@ -252,6 +253,7 @@ struct GbdtInputs(Movable):
         self.weights = List[Float32]()
         self.eval_x = List[Float32]()
         self.eval_y = List[Float32]()
+        self.eval_at = 0
         self.eval_group_sizes = List[UInt32]()
         self.group_sizes = List[UInt32]()
         self.pairs = List[UInt32]()
@@ -519,6 +521,8 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
                 s.i(n_pairs)
                 s.i(pw)
         if len(inp.eval_group_sizes) > 0:
+            if inp.eval_at > 0:
+                s.i(inp.eval_at)
             s.i(Int(inp.eval_group_sizes.unsafe_ptr()))
             s.i(len(inp.eval_group_sizes))
     var x_addr = Int(inp.x.unsafe_ptr())
@@ -1277,11 +1281,43 @@ def _heldout_ctr_model_example[I: GbdtImage]() raises:
     require_fails_with(err, "There are NaNs in feature number 0", "unseen validation NaN beside a CTR column")
 
 
+def _leafwise_ranking_validation[I: GbdtImage](loss: String) raises:
+    var inp = GbdtInputs([0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2], 6, 2, [0, 1, 2, 0, 1, 2])
+    inp.group_sizes = [3, 3]
+    inp.eval_x = [3, 3, 3, 3, 0, 0, 0, 0]
+    inp.eval_y = [0, 2, 2, 0]
+    inp.eval_group_sizes = [2, 2]
+    inp.eval_at = 1
+    var opts = GbdtOpts(loss, 5, 2)
+    opts.deterministic()
+    opts.grow_policy = "Lossguide"
+    opts.max_leaves = 3
+    opts.cat_features = [0]
+    opts.leaf_method = "Newton"
+    opts.leaf_iterations = 1
+    opts.od_type = "Iter"
+    opts.od_wait = 1
+    opts.use_best_model = 1
+    var result = fit[I](opts, inp)
+    require(result.stopped_early and len(result.test) < 5, "flat held-out NDCG stops the fit")
+    require(len(result.test) > 0, "held-out metric missing")
+    for value in result.test:
+        require(value == 0.5, "stable ties across the two held-out queries must give NDCG@1 of 1/2")
+    var prediction = predict(result.text, inp.x, 6)
+    require(prediction[0] != prediction[2], "leaf-wise model must separate distinct training grades")
+    require(len(load_model_text(result.text).ctr_tables) > 0, "ranking fit lost its categorical statistics")
+    require("\nntree 0 " in result.text, "the saved ranking model must contain a non-symmetric tree")
+
+
 def common_unit[I: GbdtImage](unit: Int) raises:
     if unit == GBDT_COMMON_UNITS - 1:
         _heldout_ctr_model_example[I]()
     elif unit == GBDT_COMMON_UNITS - 2:
         _query_prior_example()
+    elif unit == GBDT_COMMON_UNITS - 6:
+        _leafwise_ranking_validation[I]("lambdarank")
+    elif unit == GBDT_COMMON_UNITS - 7:
+        _leafwise_ranking_validation[I]("rank_xendcg")
     elif unit >= GBDT_COMMON_UNITS - 5:
         _grouped_validation_example[I](unit - (GBDT_COMMON_UNITS - 5))
     elif unit == 26 + FF_UNITS + QW_UNITS:

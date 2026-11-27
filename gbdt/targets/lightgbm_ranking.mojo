@@ -12,17 +12,25 @@ with g=p-t and apply the off-diagonal matrix M[i,j]=p[i]/(1-p[j]) twice.
 The objective gradient is g+Mg+M(Mg). Computing the dominant document's
 column as a softmax of the remaining documents avoids division by a rounded
 zero on saturated scores. Each query's RNG skips directly to this round.
-Upstream equations and RNG: src/objective/rank_objective.hpp and
+For CatBoost's QuerySoftMax, Mojolearn accumulates weighted terms in portable
+binary64 because their sums can overflow FP32 even when the final derivative
+and mean loss fit. This arithmetic also runs on Apple GPUs.
+Upstream LightGBM equations and RNG: src/objective/rank_objective.hpp and
 include/LightGBM/utils/random.h at github.com/lightgbm-org/LightGBM.
 """
+from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF
 from std.memory import bitcast
 from core.float_sort_key import sort_key_bits
+from checks.soft_f64 import (
+    SF64_ZERO, SF64_INF, sf64_add, sf64_sub, sf64_mul, sf64_div, sf64_exp, sf64_log,
+    sf64_from_f32, sf64_to_f32,
+)
 from checks.numerics import ftz, identical_div, identical_log1p, identical_mul
 from gbdt.targets.pointwise_bodies import routed_exp, routed_log
 
 comptime RF = MutPointer[Float32, MutAnyOrigin]
 comptime RU = MutPointer[UInt32, MutAnyOrigin]
-comptime LR_CUTOFF = 30
+comptime LR_CUTOFF = DEFAULT_NDCG_CUTOFF
 # A small stripe bounds pair workspace independently of query length and cutoff.
 comptime LR_STRIPE = 4
 comptime LR_PLANES = 2 * LR_STRIPE + 4
@@ -60,6 +68,13 @@ comptime QS_DERIVATIVES = 33
 comptime QS_LOSS = 34
 comptime QS_TOTAL = 35
 comptime QS_OUT = 36
+comptime QS_FOLD = 37
+# Even planes keep all binary64 accumulators aligned inside the existing workspace.
+comptime QS_DEN = 2
+comptime QS_REL = 4
+comptime QS_ROW_EXP = 6
+comptime QS_LOSS_SUM = 8
+comptime QS_WEIGHT_SUM = 10
 
 @fieldwise_init
 struct RankView(ImplicitlyCopyable, Movable):
@@ -83,6 +98,10 @@ struct RankView(ImplicitlyCopyable, Movable):
     @always_inline
     def plane(self, col: Int) -> RF:
         return self.scratch + col * self.n
+
+    @always_inline
+    def wide_plane(self, col: Int) -> MutPointer[UInt64, MutAnyOrigin]:
+        return rebind[MutPointer[UInt64, MutAnyOrigin]](self.plane(col))
 
 
 @always_inline
@@ -215,12 +234,12 @@ def rank_row[phase: Int](a: RankView, row: Int, arg: Int, width: Int, col: Int):
     comptime if phase == QS_TOTAL:
         if row % (2 * arg) == 0 and row + arg < a.n:
             for i in range(2):
-                var plane = a.plane(4 + i)
-                plane[row] = ftz(plane[row] + plane[row + arg])
+                var plane = a.wide_plane(QS_LOSS_SUM + 2 * i)
+                plane[row] = sf64_add(plane[row], plane[row + arg])
         return
     elif phase == QS_OUT:
-        var mass = a.plane(5)[0]
-        a.direction[0] = identical_div(a.plane(4)[0], mass) if mass > 0 else Float32(0)
+        var mass = a.wide_plane(QS_WEIGHT_SUM)[0]
+        a.direction[0] = sf64_to_f32(sf64_div(a.wide_plane(QS_LOSS_SUM)[0], mass)) if mass != SF64_ZERO else Float32(0)
         return
     elif phase == RR_METRIC_FOLD:
         if row % (2 * arg) == 0 and row + arg < a.groups:
@@ -252,28 +271,58 @@ def rank_row[phase: Int](a: RankView, row: Int, arg: Int, width: Int, col: Int):
             a.plane(0)[row] = max(a.plane(0)[row], a.plane(0)[row + arg])
     elif phase == QS_MASSES:
         var w = a.weights[row] if a.weighted else Float32(1)
-        var e = identical_mul(w, routed_exp(a.scores[row] - a.plane(0)[first])) if w > 0 else Float32(0)
-        a.plane(1)[row] = e
-        a.plane(2)[row] = identical_mul(w, a.labels[row])
-        a.plane(3)[row] = e
+        var e = SF64_ZERO
+        if w > 0:
+            var shift = ftz(a.scores[row] - a.plane(0)[first])
+            # A large weight can make an exp below the FP32 range relevant again.
+            var ex = sf64_from_f32(routed_exp(shift)) if shift >= -80 else sf64_exp(sf64_from_f32(shift))
+            e = sf64_mul(sf64_from_f32(w), ex)
+        a.wide_plane(QS_DEN)[row] = e
+        a.wide_plane(QS_ROW_EXP)[row] = e
+        a.wide_plane(QS_REL)[row] = sf64_mul(sf64_from_f32(w), sf64_from_f32(a.labels[row]))
+    elif phase == QS_FOLD:
+        if pos % (2 * arg) == 0 and pos + arg < size:
+            for i in range(2):
+                var plane = a.wide_plane(QS_DEN + 2 * i)
+                plane[row] = sf64_add(plane[row], plane[row + arg])
     elif phase == QS_DERIVATIVES or phase == QS_LOSS:
         var w = a.weights[row] if a.weighted else Float32(1)
-        var target = identical_mul(w, a.labels[row])
-        var mass = a.plane(2)[first]
-        var denom = a.plane(1)[first]
+        var target = sf64_mul(sf64_from_f32(w), sf64_from_f32(a.labels[row]))
+        var mass = a.wide_plane(QS_REL)[first]
+        var denom = a.wide_plane(QS_DEN)[first]
         comptime if phase == QS_DERIVATIVES:
-            var p = identical_div(a.plane(3)[row], denom) if w > 0 and mass > 0 else Float32(0)
-            a.direction[row] = ftz(target - identical_mul(mass, p))
-            # CatBoost QuerySoftMax defaults: beta=1 and lambda=0.01.
-            a.hessian[row] = identical_mul(mass, identical_mul(p, 1 - p) + Float32(0.01)) if w > 0 and mass > 0 else Float32(0)
+            var e = a.wide_plane(QS_ROW_EXP)[row]
+            var p = sf64_div(e, denom) if w > 0 and mass != SF64_ZERO else SF64_ZERO
+            # Subtract before dividing so equal weighted masses cancel exactly even for unequal weights.
+            var numerator = sf64_sub(sf64_mul(target, denom), sf64_mul(mass, e))
+            a.direction[row] = ftz(sf64_to_f32(sf64_div(numerator, denom))) if w > 0 else Float32(0)
+            # CatBoost's beta=1, lambda=0.01. The final direction and curvature are FP32.
+            var prob = sf64_to_f32(p)
+            var curvature = identical_mul(prob, 1 - prob) + Float32(0.01)
+            a.hessian[row] = ftz(sf64_to_f32(sf64_mul(mass, sf64_from_f32(curvature)))) if w > 0 else Float32(0)
         else:
-            var loss = Float32(0)
-            if target > 0:
-                # log(p) from the shifted score stays finite when exp underflows.
-                var log_p = ftz(a.scores[row] - a.plane(0)[first]) + ftz(routed_log(w) - routed_log(denom))
-                loss = -identical_mul(target, log_p)
-            a.plane(4)[row] = loss
-            a.plane(5)[row] = target
+            var loss = SF64_ZERO
+            if target != SF64_ZERO:
+                var e = a.wide_plane(QS_ROW_EXP)[row]
+                var ratio = sf64_div(denom, e) if e != SF64_ZERO else SF64_INF
+                var recover_from_score = ratio == SF64_INF
+                if recover_from_score:
+                    ratio = sf64_div(denom, sf64_from_f32(w))
+                var ratio32 = sf64_to_f32(ratio)
+                var nll = sf64_from_f32(routed_log(ratio32)) if (
+                    ratio32 >= Float32(1.17549435e-38) and ratio32 <= Float32.MAX_FINITE
+                ) else sf64_log(ratio)
+                if not recover_from_score and ratio32 == Float32(1) and denom != e:
+                    # A nearly certain document can still contribute a representable nonzero loss.
+                    var tail = sf64_to_f32(sf64_div(sf64_sub(denom, e), e))
+                    nll = sf64_from_f32(identical_log1p(tail))
+                if recover_from_score:
+                    # The probability or its reciprocal exceeded binary64's range.
+                    var gap = sf64_sub(sf64_from_f32(a.plane(0)[first]), sf64_from_f32(a.scores[row]))
+                    nll = sf64_add(gap, nll)
+                loss = sf64_mul(target, nll)
+            a.wide_plane(QS_LOSS_SUM)[row] = loss
+            a.wide_plane(QS_WEIGHT_SUM)[row] = target
     elif phase == RR_SUM or phase == RR_TOP_MERGE:
         if pos % (2 * arg) != 0 or pos + arg >= size:
             return
@@ -287,7 +336,7 @@ def rank_row[phase: Int](a: RankView, row: Int, arg: Int, width: Int, col: Int):
         var discounts = a.plane(LR_DISCOUNT)
         comptime if phase == RR_IDCG:
             discounts[row] = identical_div(Float32(0.6931471805599453), routed_log(Float32(pos + 2)))
-        a.plane(0)[row] = identical_mul(_gain(a.labels[Int(a.order[row])]), discounts[row]) if pos < LR_CUTOFF else Float32(0)
+        a.plane(0)[row] = identical_mul(_gain(a.labels[Int(a.order[row])]), discounts[row]) if pos < arg else Float32(0)
     elif phase == RR_CLEAR:
         a.direction[row] = 0
         a.hessian[row] = 0
@@ -366,9 +415,9 @@ def rank_fold[R: RankStages, phase: Int](mut r: R, a: RankView, largest: Int, wi
         step *= 2
 
 
-def rank_ideal[R: RankStages](mut r: R, a: RankView, largest: Int) raises:
+def rank_ideal[R: RankStages](mut r: R, a: RankView, largest: Int, cutoff: Int = LR_CUTOFF) raises:
     r.order_by[True](a)
-    r.rows[RR_IDCG](a, a.n, 0, 0, 0)
+    r.rows[RR_IDCG](a, a.n, cutoff, 0, 0)
     rank_fold[R, RR_SUM](r, a, largest, 1, 0)
     r.rows[RR_SAVE_IDCG](a, a.groups, 0, 0, 0)
 
@@ -396,9 +445,9 @@ def xe_derivatives[R: RankStages](mut r: R, a: RankView, largest: Int) raises:
     r.rows[RR_XE_THIRD](a, a.n, 0, 0, 1)
 
 
-def rank_ndcg[R: RankStages](mut r: R, a: RankView, largest: Int) raises:
+def rank_ndcg[R: RankStages](mut r: R, a: RankView, largest: Int, cutoff: Int = LR_CUTOFF) raises:
     r.order_by[False](a)
-    r.rows[RR_DCG](a, a.n, 0, 0, 0)
+    r.rows[RR_DCG](a, a.n, cutoff, 0, 0)
     rank_fold[R, RR_SUM](r, a, largest, 1, 0)
     r.rows[RR_QUERY_NDCG](a, a.groups, 0, 0, 0)
     var step = 1
@@ -408,11 +457,13 @@ def rank_ndcg[R: RankStages](mut r: R, a: RankView, largest: Int) raises:
     r.rows[RR_METRIC_OUT](a, 1, 0, 0, 0)
 
 
-def query_softmax[R: RankStages, metric: Bool](mut r: R, a: RankView, largest: Int) raises:
-    r.rows[QS_SCORE](a, a.n, 0, 0, 0)
-    rank_fold[R, QS_MAX](r, a, largest, 0, 0)
-    r.rows[QS_MASSES](a, a.n, 0, 0, 0)
-    rank_fold[R, RR_SUM](r, a, largest, 2, 1)
+def query_softmax[R: RankStages, metric: Bool, reuse_terms: Bool = False](mut r: R, a: RankView, largest: Int) raises:
+    # Only the metric immediately following derivatives on the same scores may reuse these planes.
+    comptime if not reuse_terms:
+        r.rows[QS_SCORE](a, a.n, 0, 0, 0)
+        rank_fold[R, QS_MAX](r, a, largest, 0, 0)
+        r.rows[QS_MASSES](a, a.n, 0, 0, 0)
+        rank_fold[R, QS_FOLD](r, a, largest, 0, 0)
     comptime if metric:
         r.rows[QS_LOSS](a, a.n, 0, 0, 0)
         var step = 1

@@ -1,0 +1,12 @@
+diff --git a/gbdt/host/gbdt_oracle_depthwise.mojo b/gbdt/host/gbdt_oracle_depthwise.mojo
+--- a/gbdt/host/gbdt_oracle_depthwise.mojo
++++ b/gbdt/host/gbdt_oracle_depthwise.mojo
+@@ -1538,7 +1538,7 @@
+                     + " values for a non-symmetric tree of " + String(n_bins) + " bins"
+                 )
+             var scaled = rescale_apply_leaves_host(
+-                cursors[p], estimated, lr, row_index, offsets, sizes, n_bins
++                cursors[p], estimated, lr * Float32(0.5) if rank.__bool__() else lr, row_index, offsets, sizes, n_bins
+             )
+             # the EXPORTED ensemble is the estimation permutation's
+             if p == est_p:

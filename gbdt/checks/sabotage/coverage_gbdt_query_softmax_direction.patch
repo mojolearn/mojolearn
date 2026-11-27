@@ -1,12 +1,12 @@
 diff --git a/gbdt/targets/lightgbm_ranking.mojo b/gbdt/targets/lightgbm_ranking.mojo
 --- a/gbdt/targets/lightgbm_ranking.mojo
 +++ b/gbdt/targets/lightgbm_ranking.mojo
-@@ -263,7 +263,7 @@
-         var denom = a.plane(1)[first]
-         comptime if phase == QS_DERIVATIVES:
-             var p = identical_div(a.plane(3)[row], denom) if w > 0 and mass > 0 else Float32(0)
--            a.direction[row] = ftz(target - identical_mul(mass, p))
-+            a.direction[row] = ftz(identical_mul(mass, p) - target)
-             # CatBoost QuerySoftMax defaults: beta=1 and lambda=0.01.
-             a.hessian[row] = identical_mul(mass, identical_mul(p, 1 - p) + Float32(0.01)) if w > 0 and mass > 0 else Float32(0)
-         else:
+@@ -290,7 +290,7 @@
+             var e = a.wide_plane(QS_ROW_EXP)[row]
+             var p = sf64_div(e, denom) if w > 0 and mass != SF64_ZERO else SF64_ZERO
+             # Subtract before dividing so equal weighted masses cancel exactly even for unequal weights.
+-            var numerator = sf64_sub(sf64_mul(target, denom), sf64_mul(mass, e))
++            var numerator = sf64_sub(sf64_mul(mass, e), sf64_mul(target, denom))
+             a.direction[row] = ftz(sf64_to_f32(sf64_div(numerator, denom))) if w > 0 else Float32(0)
+             # CatBoost's beta=1, lambda=0.01. The final direction and curvature are FP32.
+             var prob = sf64_to_f32(p)
