@@ -1479,8 +1479,9 @@ def main(argv=None, _gates=True):
     if a.candidate_defines and not a.local_version:
         raise SystemExit('pack_wheel: --candidate-defines needs --local-version (a candidate build)')
     if a.local_version and not LOCAL_VERSION_RE.fullmatch(a.local_version):
-        raise SystemExit('pack_wheel: --local-version must look like 0.8.67.dev0+0123456789ab[.label] '
-                         '(a PEP 440 local version), not ' + repr(a.local_version))
+        raise SystemExit('pack_wheel: --local-version must look like X.Y.Z.devN+<sha12>[.label], e.g. '
+                         '0.9.0.dev0+0123456789ab or 0.8.67.dev0+0123456789ab.label (a PEP 440 local version), not '
+                         + repr(a.local_version))
     source_root = a.source_root.resolve()
     python_root = source_root / 'python'
     package_root = python_root / 'mojolearn'

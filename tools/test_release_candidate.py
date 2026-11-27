@@ -23,7 +23,14 @@ class Version(unittest.TestCase):
     def test_local_version(self):
         self.assertEqual(RC.candidate_version("0.8.67", SHA, ""), "0.8.67.dev0+0123456789ab")
         self.assertEqual(RC.candidate_version("0.8.67", SHA, "d1a2b3c4d"), "0.8.67.dev0+0123456789ab.d1a2b3c4d")
-        self.assertEqual(RC.next_version("0.8.66"), "0.8.67")
+        self.assertEqual(RC.candidate_version("0.9.0", SHA, ""), "0.9.0.dev0+0123456789ab")
+        self.assertEqual(RC.candidate_version("0.9.0", SHA, "small.mlp"), "0.9.0.dev0+0123456789ab.small.mlp")
+        # the declared next release (NEXT_RELEASE) while the committed version is older, then one patch on
+        self.assertEqual(RC.NEXT_RELEASE, "0.9.0")
+        self.assertEqual(RC.next_version("0.8.66"), "0.9.0")
+        self.assertEqual(RC.next_version("0.9.0"), "0.9.1")
+        self.assertEqual(RC.next_version("0.8.66", declared=""), "0.8.67")
+        self.assertEqual(RC.next_version("0.10.0", declared="0.9.0"), "0.10.1")
         with self.assertRaises(SystemExit):
             RC.next_version("0.8.66rc1")
 
@@ -37,6 +44,8 @@ class Version(unittest.TestCase):
         import pack_wheel as P
         self.assertTrue(P.LOCAL_VERSION_RE.fullmatch("0.8.67.dev0+0123456789ab"))
         self.assertTrue(P.LOCAL_VERSION_RE.fullmatch("0.8.67.dev0+0123456789ab.em1"))
+        self.assertTrue(P.LOCAL_VERSION_RE.fullmatch("0.9.0.dev0+0123456789ab"))
+        self.assertTrue(P.LOCAL_VERSION_RE.fullmatch("0.9.0.dev0+0123456789ab.small.mlp.generic"))
         for bad in ("0.8.67", "0.8.67.dev0", "0.8.67.dev0+0123456789ab.em-1", "0.8.67.dev0+0123"):
             self.assertIsNone(P.LOCAL_VERSION_RE.fullmatch(bad), bad)
         text = '# header\n__version__ = "0.8.66"\n'
@@ -44,6 +53,8 @@ class Version(unittest.TestCase):
                          b'# header\n__version__ = "0.8.67.dev0+0123456789ab"\n')
         with self.assertRaises(SystemExit):
             P.candidate_version_py(text, "0.8.65", "0.8.67.dev0+0123456789ab")
+        self.assertEqual(P.candidate_version_py(text, "0.8.66", "0.9.0.dev0+0123456789ab"),
+                         b'# header\n__version__ = "0.9.0.dev0+0123456789ab"\n')
 
 
 class Defines(unittest.TestCase):

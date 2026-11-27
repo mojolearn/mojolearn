@@ -1001,7 +1001,7 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("stage", help="validate + copy the candidate wheels to the box; print the submit line")
     s.add_argument("vendor", choices=("nvidia", "amd"))
-    s.add_argument("--version", required=True, help="the candidate's version (the freeze, e.g. 0.8.67)")
+    s.add_argument("--version", required=True, help="the candidate's version (the freeze, e.g. 0.9.0)")
     s.add_argument("--source-commit", required=True, help="the frozen source commit (40 hex)")
     s.add_argument("--wheel-dir", default=None,
                    help="default ~/mojolearn-evidence/release/<version>/<commit12>/linux/final (release.py linux-pack), "

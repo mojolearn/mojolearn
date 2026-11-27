@@ -7,7 +7,7 @@ it never touches main, tags or PyPI, and no release happens until everything is 
 subcommand keeps the name `candidate`.
 
     python3 tools/release.py candidate --commit <sha40> [--targets sm_89,sm_80] [--vendors nvidia,amd]
-        [--defines "-D A=1 -D B=2"] [--label NAME] [--base-version 0.8.67] [--ref <pushed tooling branch>] [--dry-run]
+        [--defines "-D A=1 -D B=2"] [--label NAME] [--base-version 0.9.0] [--ref <pushed tooling branch>] [--dry-run]
 
 Builds the Linux wheels of one exact commit with the release's own steps and nothing else: tools/release.py's
 reuse-plan, linux-builds (.github/workflows/release-linux-build.yml on GitHub's free runners for that commit,
@@ -574,10 +574,23 @@ def remote_refs():
                 local_tags_sha256=hashlib.sha256("\n".join(local).encode()).hexdigest(), local_tags=len(local))
 
 
-def next_version(committed):
+#: THE NEXT RELEASE (Andrew, 2026-11-27: "the next release is 0.9.0, not 0.8.67"): the X.Y.Z of every measurement
+#: build's .dev0 version while the committed _version.py is older. Once _version.py says this release or later (it was
+#: published), next_version is the committed version plus one patch again. Only wheel metadata carries the version: no
+#: binding-cache key, testsuite-cache key, build define or compiled byte reads it (lane version-090, 2026-11-26).
+NEXT_RELEASE = "0.9.0"
+
+
+def _xyz(version):
+    return tuple(int(x) for x in version.split("."))
+
+
+def next_version(committed, declared=NEXT_RELEASE):
     m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", committed or "")
     if not m:
         raise SystemExit(f"candidate: the commit's _version.py says {committed!r}; pass --base-version X.Y.Z")
+    if declared and _xyz(declared) > _xyz(committed):
+        return declared
     return f"{m[1]}.{m[2]}.{int(m[3]) + 1}"
 
 
@@ -713,7 +726,7 @@ def parse(argv):
                     "owed_arm. Repeat it for several arms: each runs as its own measurement build, all at once (ARMS)")
     ap.add_argument("--owed-file", default=OWED_FILE, help="the owed file (default %(default)s)")
     ap.add_argument("--base-version", default="", help="X.Y.Z of the .dev0 version (default: the commit's "
-                    "_version.py plus one patch)")
+                    "_version.py's next release: NEXT_RELEASE while _version.py is older, else plus one patch)")
     ap.add_argument("--ref", default="", help="the pushed tooling branch the workflow runs from (default: this "
                     "checkout's branch; it must hold this checkout's HEAD)")
     ap.add_argument("--work-root", default=str(CANDIDATE_ROOT), help="default ~/mojolearn-evidence/release-candidates")

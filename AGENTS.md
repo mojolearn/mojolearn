@@ -518,9 +518,9 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 - Cross-vendor agreement is always checked in full. A lane whose newest result is bad is fixed in code, then
   recorded.
 - Andrew says when it is time to release (2026-11-09). No agent starts, schedules or proposes a release
-  date. 0.8.67 is not rushed: the fixes matter most. The Python-at-the-boundary rollout
+  date. 0.9.0 is not rushed: the fixes matter most. The Python-at-the-boundary rollout
   (`docs/plans/PYTHON_AT_THE_BOUNDARY.md`: Python objects only in the unpack and pack files of each
-  public call, Mojo values everywhere else) is part of 0.8.67 and gates it.
+  public call, Mojo values everywhere else) is part of 0.9.0 and gates it.
 
 ## 5. How we work
 

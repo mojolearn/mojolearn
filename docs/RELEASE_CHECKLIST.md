@@ -17,9 +17,9 @@ qualified evidence; it does not bypass these gates. Source audits qualify only
 source checks, and compilation does not qualify runtime behavior.
 
 ```sh
-python3 tools/release_ledger.py sync --ledger "$HOME/mojolearn-evidence/release/0.8.57/requirements.json" --version 0.8.57 --revision integ/0857 --configuration /path/to/qualification-inputs.json
-python3 tools/release_ledger.py plan --ledger "$HOME/mojolearn-evidence/release/0.8.57/requirements.json" --json
-python3 tools/release_ledger.py check --ledger "$HOME/mojolearn-evidence/release/0.8.57/requirements.json" --stage pre
+python3 tools/release_ledger.py sync --ledger "$HOME/mojolearn-evidence/release/0.9.0/requirements.json" --version 0.9.0 --revision integ/090 --configuration /path/to/qualification-inputs.json
+python3 tools/release_ledger.py plan --ledger "$HOME/mojolearn-evidence/release/0.9.0/requirements.json" --json
+python3 tools/release_ledger.py check --ledger "$HOME/mojolearn-evidence/release/0.9.0/requirements.json" --stage pre
 ```
 
 The input configuration is retained in the ledger. It declares `release_modes`,
