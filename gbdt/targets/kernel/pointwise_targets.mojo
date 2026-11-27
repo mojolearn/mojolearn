@@ -46,6 +46,7 @@ already a log-likelihood. Both are theirs. Flipping either here would
 silently invert every early-stopping comparison later.
 """
 
+from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG
 from std.atomic import Atomic
 from std.math import isfinite
 from std.memory import stack_allocation
@@ -286,13 +287,17 @@ def objective_from_name(name: String) raises -> Int:
         return OBJECTIVE_PAIR_LOGIT
     if name == "YetiRank":
         return OBJECTIVE_YETI_RANK
+    if name == "lambdarank":
+        return OBJECTIVE_LAMBDARANK
+    if name == "rank_xendcg":
+        return OBJECTIVE_RANK_XENDCG
     if name == "MultiRMSE":
         return OBJECTIVE_MULTIRMSE
     raise Error(
         "unknown loss '" + name + "': this implementation trains RMSE, Logloss,"
         " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
         " Expectile, Tweedie, Huber, MultiClass, MultiClassOneVsAll,"
-        " QueryRMSE, PairLogit, YetiRank and MultiRMSE"
+        " QueryRMSE, PairLogit, YetiRank, MultiRMSE, lambdarank and rank_xendcg"
     )
 
 
@@ -332,6 +337,10 @@ def objective_name(objective: Int) -> String:
         return String("PairLogit")
     if objective == OBJECTIVE_YETI_RANK:
         return String("YetiRank")
+    if objective == OBJECTIVE_LAMBDARANK:
+        return String("lambdarank")
+    if objective == OBJECTIVE_RANK_XENDCG:
+        return String("rank_xendcg")
     if objective == OBJECTIVE_MULTIRMSE:
         return String("MultiRMSE")
     return String("<unknown>")

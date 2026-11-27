@@ -336,6 +336,9 @@ from gbdt.targets.kernel.multilogit import (
     launch_one_vs_all_value_and_der,
     multilogit_blocks,
 )
+from gbdt.targets.ranking_options import is_lightgbm_ranking, ranking_seed
+from gbdt.targets.kernel.ranking_fit import DeviceRankingFit
+from gbdt.data.group_layout import GroupLayout, device_group_layout
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     OBJECTIVE_MULTICLASS,
@@ -1560,6 +1563,7 @@ def _estimate_and_apply(
     # them from `finish_deferred_estimation` after its next drain). Every
     # other path ignores it and drains as before.
     defer_tail: Bool = False,
+    var rank_derivatives: Optional[DeviceBuffer[DType.float32]] = None,
     # TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the
     # `tail_drain` argument); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SYM_DERIV_FUSED.patch.
     # TOMBSTONE: MOJOLEARN_EST_SHRINK_FUSED (DROPPED-inconclusive) deleted 2026-10-09 on lane/owed-deletions-D1 (the
@@ -1624,7 +1628,7 @@ def _estimate_and_apply(
     comptime if EST_APPLE_ANY:
         if apple_est_handles(
             objective, leaf_estimation_method, approx_dim, iters,
-            query.__bool__() or pairs.__bool__() or yeti.__bool__(),
+            query.__bool__() or pairs.__bool__() or yeti.__bool__() or rank_derivatives.__bool__(),
         ):
             var a_sm = est_sm
             if a_sm < 0:
@@ -1770,6 +1774,15 @@ def _estimate_and_apply(
         yeti_seed,
         oracle_ws^,
     )
+    if rank_derivatives.__bool__():
+        # One Newton update uses the original derivative at this tree's
+        # starting point. Gather once before the walk; the regularizer
+        # still sees the actual sample weights in the separate weight plane.
+        launch_gather_planes_with_mask_f32(
+            ctx, oracle.d_eval_stats, rank_derivatives.value(), row_index, n_rows,
+            UInt32(0xFFFFFFFF), 2, n_rows,
+        )
+        launch_yeti_rank_zero_value(ctx, oracle.d_fv, (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE)
     stage_times.end(ctx, "est.make_oracle")
     # `TDocParallelLeavesEstimator::Estimate`
     # (`doc_parallel_leaves_estimator.cpp:9-16`): Exact REPLACES
@@ -3870,6 +3883,7 @@ def fit_with_test(
     # `run_tree_ctr_tree`, the level-synchronized driver, and the entry
     # comes back in `FitResult.tree_ctr` holding what the trees chose.
     var tree_ctr: List[TreeCtrFit] = List[TreeCtrFit](),
+    var ranking_layout: Optional[GroupLayout] = None,
 ) raises -> FitResult:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -4292,6 +4306,16 @@ def fit_with_test(
     # (`gbdt/targets/kernel/yeti_rank.mojo`), on the same arm as QueryRMSE,
     # at the reference's loss defaults (permutations 10, decay 0.85,
     # `loss_description.cpp:181-193`).
+    var rank = Optional[DeviceRankingFit]()
+    if is_lightgbm_ranking(objective):
+        if non_symmetric or perm_count > 1 or (test.__bool__() and test.value().n_rows > 0):
+            raise Error("lambdarank and rank_xendcg require one permutation of a numeric SymmetricTree without eval_set")
+        if not ranking_layout.__bool__():
+            # Native callers can enter fit_with_test directly.
+            ranking_layout = Optional(device_group_layout[True](
+                ctx, group_sizes, n_rows, "group_id: group ", "group_id: the group sizes cover ",
+            ))
+        rank = Optional(DeviceRankingFit(ctx, ranking_layout.take(), n_rows))
     var is_yeti_rank = objective == OBJECTIVE_YETI_RANK
     var yeti_buffers = Optional[YetiRankTargetBuffers]()
     # ================= DEVIATION: the YetiRank draw stream =================
@@ -4327,9 +4351,9 @@ def fit_with_test(
     # would silently change the algorithm. Keep that new combination
     # explicitly unavailable until those search leaves are carried through.
     querywise_pointwise_leaf_check(
-        use_pointwise_searcher, is_querywise or is_pair_logit or is_yeti_rank, leaf_estimation_method
+        use_pointwise_searcher, is_querywise or is_pair_logit or is_yeti_rank or rank.__bool__(), leaf_estimation_method
     )
-    if not (is_querywise or is_pair_logit or is_yeti_rank) and (
+    if not (is_querywise or is_pair_logit or is_yeti_rank or rank.__bool__()) and (
         len(group_sizes) > 0 or len(pair_winners) > 0
     ):
         raise Error(
@@ -4736,6 +4760,10 @@ def fit_with_test(
                 stats, n_rows,
                 mag_part, mags_in_mse,
             )
+        elif rank.__bool__():
+            rank.value().search(ctx, objective, targets, lcur, weights, has_weights, n_rows,
+                                ranking_seed(random_seed), iteration, second_order, stats,
+                                fv_part, mag_part, mags_in_mse)
         elif use_pointwise_searcher and (is_querywise or is_pair_logit or is_yeti_rank):
             # Complete grouped derivatives before bootstrap. The existing
             # pointwise noise reduction below intentionally sees these
@@ -4807,6 +4835,8 @@ def fit_with_test(
         if objective == OBJECTIVE_MULTICLASS:
             fv_blocks = multilogit_blocks(n_rows)
         var mag_blocks = fv_blocks
+        if rank.__bool__():
+            fv_blocks = 1
         if is_pair_logit:
             fv_blocks = pair_buffers.value().blocks()
             comptime if PAIRLOGIT_GROUP_FUSED:
@@ -5579,6 +5609,9 @@ def fit_with_test(
                         y_est = Optional(yeti_buffers.value().handles())
                         # this tree's second draw: the estimation stream's seed
                         y_seed = yeti_rand.next_uniform_l()
+                    var rank_est = Optional[DeviceBuffer[DType.float32]]()
+                    if rank.__bool__():
+                        rank_est = Optional(rank.value().raw.copy())
                     _estimate_and_apply(
                         ctx, n_rows, approx_dim, len(sizes), sizes,
                         leaf_offsets,
@@ -5599,7 +5632,7 @@ def fit_with_test(
                         y_seed,
                         # lane fix-g1-gbdt: one task per tree and no eval
                         # set, so nothing below needs the values this tree
-                        defer_tail=sym_defer_est,
+                        defer_tail=sym_defer_est, rank_derivatives=rank_est^,
                     )
                 else:
                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
@@ -5728,7 +5761,7 @@ def fit_with_test(
                 # lane fix-g1-gbdt: this tree's model is appended later
                 trees_so_far += 1
             if trees_so_far > 1:
-                losses.append(-v / loss_norm)
+                losses.append(1.0 - v if rank.__bool__() else -v / loss_norm)
 
     # lane fix-g1-gbdt (`IDN_GBDT_SYM_EST_DEFER_DRAIN`): the last tree's
     # deferred estimation
@@ -5792,6 +5825,9 @@ def fit_with_test(
             ctx, pair_buffers.value(), cursor, False,
             stats, fv_part, True, mag_part, False,
         )
+    elif rank.__bool__():
+        rank.value().metric(ctx, targets, cursor, n_rows, fv_part)
+        final_blocks = 1
     elif is_yeti_rank:
         # YetiRank has no function value (`FillBuffer(FunctionValue, 0)`,
         # `kernel.h:421-423`): the final learn loss is 0 and no draw is taken
@@ -5854,9 +5890,8 @@ def fit_with_test(
                 if SAB_2002_DEAD_DEVICE else ""
             )
         )
-    losses.append(
-        -Float64(h_fv.unsafe_ptr().unsafe_load(0)) / loss_norm
-    )
+    var final_value = Float64(h_fv.unsafe_ptr().unsafe_load(0))
+    losses.append(1.0 - final_value if rank.__bool__() else -final_value / loss_norm)
     # DEVIATION 74, MEASURED RATHER THAN ARGUED. A nonzero count means
     # some leaf's Hessian was not positive definite, Cholesky stopped, and
     # that leaf took a gradient step instead of a Newton one -- silently,

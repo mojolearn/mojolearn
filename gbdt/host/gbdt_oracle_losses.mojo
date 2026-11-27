@@ -137,6 +137,8 @@ from gbdt.host.gbdt_oracle_query import (
     query_rmse_search_pass,
     query_rmse_value,
 )
+from gbdt.host.ranking_fit import HostRankingFit
+from gbdt.targets.ranking_options import is_lightgbm_ranking, ranking_seed
 from gbdt.host.gbdt_oracle_yeti import yeti_rank_eval, yeti_rank_search_pass
 from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.data.permutation import TRandom
@@ -1051,6 +1053,7 @@ def _estimate_leaves_for_loss(
     yeti_tasks: Optional[YetiRankTasks] = None,
     yeti_seed: UInt64 = UInt64(0),
     weights: List[Float32] = List[Float32](),
+    rank: Optional[HostRankingFit] = None,
 ) raises -> List[Float32]:
     """`_estimate_and_apply`'s estimate (`doc_parallel_boosting.mojo:
     698-797`): the gathers by the row index, then Exact or the walker.
@@ -1062,8 +1065,12 @@ def _estimate_leaves_for_loss(
     var g_cursor = List[Float32](length=n_rows, fill=Float32(0.0))
     # the gathers and the bins move values, one position a device thread:
     # `_gbdt_units` ranges of positions each (lane gbdt-host-par)
-    _gather_rows(targets, row_index, n_rows, g_target)
-    _gather_rows(cursor, row_index, n_rows, g_cursor)
+    if rank.__bool__():
+        _gather_rows(rank.value().directions, row_index, n_rows, g_target)
+        _gather_rows(rank.value().hessians, row_index, n_rows, g_cursor)
+    else:
+        _gather_rows(targets, row_index, n_rows, g_target)
+        _gather_rows(cursor, row_index, n_rows, g_cursor)
     var bins = List[Int](length=n_rows, fill=0)
     _leaf_bins(offsets, sizes, n_rows, bins)
     var weights_cpu = List[Float64]()
@@ -1107,6 +1114,22 @@ def _estimate_leaves_for_loss(
     else:
         for leaf in range(n_leaves):
             weights_cpu.append(Float64(sizes[leaf]))
+    if rank.__bool__():
+        # The searcher may have snapped or resampled its own copies of these
+        # planes. The Newton leaf uses the original, weighted objective.
+        var grad_sums = List[Float32](length=n_leaves, fill=Float32(0))
+        var hess_sums = List[Float32](length=n_leaves, fill=Float32(0))
+        _pinned_partition_stats(g_target, offsets, sizes, GBDT_PARTITION_CHUNKS, grad_sums)
+        _pinned_partition_stats(g_cursor, offsets, sizes, GBDT_PARTITION_CHUNKS, hess_sums)
+        var gradient = List[Float64](capacity=n_leaves)
+        var curvature = List[Float64](capacity=n_leaves)
+        for leaf in range(n_leaves):
+            gradient.append(Float64(grad_sums[leaf]))
+            curvature.append(Float64(hess_sums[leaf]) + Float64(l2_leaf_reg))
+        var origin = List[Float32](length=n_leaves, fill=Float32(0))
+        var step = _walker_move(origin, _diagonal_direction(gradient, curvature), 1.0)
+        _regularize(weights_cpu, step)
+        return step^
     if loss.method == GBDT_LEAF_EXACT:
         return _exact_estimate(
             loss, g_target, g_cursor, offsets, sizes, weights_cpu, n_rows,
@@ -1217,10 +1240,14 @@ def gbdt_losses_host_fit(
         loss.objective == GBDT_OBJ_QUERY_RMSE
         or loss.objective == GBDT_OBJ_PAIR_LOGIT
         or loss.objective == GBDT_OBJ_YETI_RANK
+        or is_lightgbm_ranking(loss.objective)
     ) and len(group_sizes) < 1:
         raise Error("the querywise host fit needs the query sizes")
     # the YetiRank task table (`InitYetiRank`'s query size refusal inside) and
     # draw stream, as `doc_parallel_boosting.mojo::fit_with_test` builds them
+    var rank = Optional[HostRankingFit]()
+    if is_lightgbm_ranking(loss.objective):
+        rank = Optional(HostRankingFit(group_sizes, y))
     var yeti_tasks = Optional[YetiRankTasks]()
     var yeti_rand = TRandom(params.random_seed ^ UInt64(0x5945544952414E4B))
     if loss.objective == GBDT_OBJ_YETI_RANK:
@@ -1273,6 +1300,7 @@ def gbdt_losses_host_fit(
         loss.objective == GBDT_OBJ_QUERY_RMSE
         or loss.objective == GBDT_OBJ_PAIR_LOGIT
         or loss.objective == GBDT_OBJ_YETI_RANK
+        or is_lightgbm_ranking(loss.objective)
     )
     if has_test:
         if len(eval.x_colmajor) != eval.n_rows * n_features:
@@ -1406,6 +1434,8 @@ def gbdt_losses_host_fit(
         fv_blocks = pairs.value().blocks()
         if pairs.value().group_layout:
             mag_blocks = fv_blocks
+    if rank.__bool__():
+        fv_blocks = 1
     var fv_part = List[Float32](length=fv_blocks, fill=Float32(0.0))
     var mag_part = List[Float32](length=2 * mag_blocks, fill=Float32(0.0))
     var bootstrap_on = loss.bootstrap_kind >= 0
@@ -1453,6 +1483,9 @@ def gbdt_losses_host_fit(
                 mag_part,
                 second_order,
             )
+        elif rank.__bool__():
+            rank.value().search(loss.objective, y, cursors[learn_p], weights, ranking_seed(params.random_seed),
+                                iteration, second_order, stats, fv_part, mag_part)
         elif loss.objective == GBDT_OBJ_QUERY_RMSE:
             query_rmse_search_pass(
                 y, cursors[learn_p], group_sizes, n_rows, stats, fv_part,
@@ -1711,7 +1744,7 @@ def gbdt_losses_host_fit(
                 var estimated = _estimate_leaves_for_loss(
                     loss, y, cursors[p], row_index, offsets, sizes, n_rows,
                     params.l2_leaf_reg, group_sizes, pairs, yeti_tasks,
-                    yeti_tree_seed, weights,
+                    yeti_tree_seed, weights, rank,
                 )
                 if zero_average:
                     # `MakeZeroAverage` (`doc_parallel_leaves_estimator.cpp:
@@ -1774,10 +1807,12 @@ def gbdt_losses_host_fit(
         if len(losses) < params.n_estimators:
             var v = Float64(fv)
             if iteration + 1 > 1:
-                losses.append(-v / loss_norm)
+                losses.append(1.0 - v if rank.__bool__() else -v / loss_norm)
     var fit_loop = fit_loop_stop(fit_loop_t0, len(tree_split_offsets) - 1)
 
-    if loss.objective == GBDT_OBJ_YETI_RANK:
+    if rank.__bool__():
+        losses.append(1.0 - Float64(rank.value().workspace.ndcg(y, cursors[est_p])))
+    elif loss.objective == GBDT_OBJ_YETI_RANK:
         # the device's final pass writes 0.0 partials and takes no draw
         losses.append(-Float64(Float32(0.0)) / Float64(n_rows))
     elif loss.objective == GBDT_OBJ_PAIR_LOGIT:
