@@ -438,6 +438,7 @@ def main(argv=None):
     ap.add_argument("--ref", default="", help="compare against this commit or tag (default: the last v* tag)")
     ap.add_argument("--head", default="HEAD", help="the commit whose changes select (the WORKING TREE is compiled)")
     ap.add_argument("--source-root", default="", help="frozen source checkout when tooling is checked out separately")
+    ap.add_argument("--log-dir", default="", help="write each job's full compiler output to DIR/<job>/build.log")
     ap.add_argument("--keep-artifacts", default="", help="Linux only: retain full logs, source, native binaries and runtime bytes here; use the binding's build script")
     ap.add_argument("--archs", default=",".join(DEFAULT_ARCHS))
     ap.add_argument("--tiers", default="", help="comma list; default every tier the Linux lists ship")
@@ -502,6 +503,21 @@ def main(argv=None):
         print(f"cross-compile-check: {len(jobs)} job(s) written to {a.list_json}")
         return 0
     mojo = a.mojo.split()
+    # GENERATED SOURCES FIRST (0.9.0 release blocker, 2026-11-27). The source tree's generated modules (the archive
+    # Unicode table core/archive_unicode_names_generated.mojo and the others tools/generated_sources.py lists) are not
+    # tracked; merged_build.sh, build_host_family.sh and bincache.py build prepare them, but this check compiles the
+    # roots directly, so run 46009010595 failed _mojolearn_x_sequence and _mojolearn_x_tokenizer on sm_80, sm_89 and
+    # gfx942 with "unable to locate module 'archive_unicode_names_generated'". The SOURCE tree's own generator runs
+    # once, before any job (its outputs are byte-verified and reused when present).
+    generator = root / "tools/generated_sources.py"
+    if not a.dry_run and generator.is_file():
+        prepared = subprocess.run([sys.executable, str(generator), "prepare", "--repo", str(root)], cwd=str(root),
+                                  stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        if prepared.returncode:
+            print(f"REFUSED: generated sources of {root} did not prepare (rc {prepared.returncode}); nothing was compiled")
+            print((prepared.stdout + prepared.stderr)[-4000:])
+            return 2
+        print("generated sources prepared (tools/generated_sources.py of the source tree)")
     results = []
     scratch = Path(tempfile.mkdtemp(prefix="mojolearn-xcc-"))
     try:
@@ -534,8 +550,10 @@ def main(argv=None):
                     source_commit=source["source_commit"], platform=platform.platform(),
                     qualification="raw diagnostic candidate; not a release or GPU pass"), indent=2) + "\n")
             child_env = dict(os.environ, **overrides) if retained else None
+            # the compiler's full output of every job (cross-compile-check.yml uploads out/ always): --log-dir
+            logged = retained or (Path(a.log_dir) / job_key(name, tier, arch) if a.log_dir else None)
             verdict, secs, tail = run_one(cmd, out, a.timeout, a.stall, cwd=root,
-                                          retain=retained, env=child_env)
+                                          retain=logged, env=child_env)
             if retained and out.is_file():
                 binary = retained / (name + ".so")
                 shutil.copy2(out, binary)
