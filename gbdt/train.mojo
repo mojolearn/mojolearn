@@ -45,7 +45,15 @@ from gbdt.models.kernel.resident_link import (
     LINK_SIGMOID,
     LINK_SOFTMAX,
     resident_link_kernel,
+    resident_stage_kernel,
+    STAGE_BLOCK,
+    STAGE_NO_BAD,
+    STAGE_SKIP,
 )
+from gbdt.models.kernel.resident_ctr import (
+    ResidentCtrPlan, enqueue_resident_ctr_expand, resident_ctr_raise_if_bad,
+)
+from gbdt.models.tensor_ctr_apply import TTensorCtrApplyTable
 from gbdt.data.group_layout import device_group_layout
 from gbdt.data.cat_code_scan import (
     cat_column_codes_resident,
@@ -3131,8 +3139,8 @@ def train(
     # `UpdateUseBestModel` (`options_helper.cpp:100-113`). Their
     # `hasTestConstTarget` is the reason for the second half: a test set
     # whose target never varies cannot rank iterations, so they leave the
-    # default off rather than shrink on a flat curve. `hasTestPairs` is
-    # theirs and not ours -- this implementation carries no pairwise loss.
+    # default off rather than shrink on a flat curve. Grouped pair metrics
+    # also require a comparable pair in the supplied held-out queries.
     var t_rows = eval_rows if eval_rows > 0 else 1
     var test_targets = ctx.enqueue_create_buffer[DType.float32](t_rows)
     # the caller's eval targets straight into the device buffer (one H2D),
@@ -3175,25 +3183,9 @@ def train(
             + String(best_model_min_trees)
         )
 
-    var eval_expanded: List[Float32]
-    if eval_rows > 0 and ctr_column_count != 0:
-        # the base columns from the tables; a tree-CTR slot starts at
-        # zero on the held-out rows too (the fit writes its bins)
-        eval_expanded = expand_raw_columns(
-            ctr_tables, n_base_columns, eval_x_colmajor, eval_rows
-        )
-        if tree_on:
-            eval_expanded.resize(len(fold_counts) * eval_rows, Float32(0.0))
-    elif eval_rows > 0:
-        eval_expanded = eval_x_colmajor.copy()
-    else:
-        eval_expanded = List[Float32]()
-        for _ in range(len(fold_counts)):  # small-loop(fold_counts: features of the one-row placeholder): one zero per feature for an empty eval set
-            eval_expanded.append(Float32(0.0))
-
-    var test_cindex = _build_cindex_from_floats(
-        ctx, eval_expanded, t_rows, borders, fold_counts,
-        column_nan_treatment,
+    var test_cindex = _heldout_cindex(
+        ctx, eval_x_colmajor, eval_rows, n_features, ctr_tables, n_base_columns,
+        borders, fold_counts, column_nan_treatment,
     )
 
     var approx_dim = 1
@@ -3908,6 +3900,78 @@ def _build_cindex_from_device_floats(
     _ = hb^
     _ = db^
     return cindex^
+
+
+def _heldout_cindex(
+    ctx: DeviceContext,
+    raw: List[Float32],
+    rows: Int,
+    features: Int,
+    tables: List[TCtrValueTable],
+    base_columns: Int,
+    borders: List[List[Float32]],
+    folds: List[Int],
+    nan_treatment: List[Int],
+) raises -> DeviceBuffer[DType.uint32]:
+    """Build the test index on the GPU from the raw held-out columns.
+    Simple CTRs use the fitted inference table. Dynamic tree-CTR slots
+    start at zero and are filled when a tree chooses its split."""
+    if rows == 0:
+        # Keep the same one-row placeholder as the existing empty-eval path.
+        var placeholder = List[Float32](length=len(folds), fill=Float32(0.0))
+        return _build_cindex_from_floats(ctx, placeholder, 1, borders, folds, nan_treatment)
+    var cols = len(borders)
+    var expanded = ctx.enqueue_create_buffer[DType.float32](cols * rows)
+    var plan = Optional[ResidentCtrPlan]()
+    var host_ptr = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(raw.unsafe_ptr()))
+    if len(tables) > 0:
+        plan = Optional(ResidentCtrPlan(
+            ctx, tables, List[TTensorCtrApplyTable](), base_columns, List[Bool](), features,
+        ))
+    var treatment = List[Int32](capacity=cols)
+    for f in range(cols):  # driver-loop: over feature metadata, never held-out rows
+        var t = Int32(STAGE_SKIP)
+        if len(borders[f]) > 0:
+            t = Int32(nan_treatment[f]) if len(nan_treatment) == cols else Int32(NAN_TREATMENT_AS_IS)
+        treatment.append(t)
+    var d_treat = ctx.enqueue_create_buffer[DType.int32](cols)
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
+    var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    try:
+        if plan:
+            # Only tensor tables read a border slab. This simple plan takes a view
+            # of its existing output allocation for the unused buffer argument.
+            var unused_borders = expanded.copy()
+            enqueue_resident_ctr_expand(ctx, plan.value(), host_ptr, rows, False, unused_borders, expanded)
+        else:
+            var raw_view = expanded.create_sub_buffer[DType.float32](0, len(raw))
+            ctx.enqueue_copy(dst_buf=raw_view, src_ptr=raw.unsafe_ptr())
+        if base_columns < cols:
+            var tail = expanded.create_sub_buffer[DType.float32](base_columns * rows, (cols - base_columns) * rows)
+            enqueue_fill(ctx, tail, Float32(0.0))
+        ctx.enqueue_copy(dst_buf=d_treat, src_ptr=treatment.unsafe_ptr())
+        enqueue_fill(ctx, d_bad, STAGE_NO_BAD)
+        var blocks = min((rows * cols + STAGE_BLOCK - 1) // STAGE_BLOCK, 65535)
+        # Column-major input: each stage thread reads and writes its own cell.
+        ctx.enqueue_function[resident_stage_kernel](
+            expanded.unsafe_ptr(), expanded.unsafe_ptr(), d_treat.unsafe_ptr(), d_bad.unsafe_ptr(),
+            Int32(rows), Int32(cols), Int32(0), grid_dim=blocks, block_dim=STAGE_BLOCK,
+        )
+        ctx.enqueue_copy(dst_buf=h_bad, src_buf=d_bad)
+        var cindex = _build_cindex_from_device_floats(ctx, expanded, rows, borders, folds)
+        if plan:
+            resident_ctr_raise_if_bad(plan.value(), host_ptr, rows, False)
+        var bad = h_bad.unsafe_ptr().unsafe_load(0)
+        if bad != STAGE_NO_BAD:
+            raise Error("There are NaNs in feature number " + String(Int(bad))
+                        + " but there were no NaNs in the learn dataset")
+        _ = len(raw)
+        _ = len(treatment)
+        return cindex^
+    except err:
+        # Keep borrowed input bytes and prepared buffers alive until queued work finishes.
+        ctx.synchronize()
+        raise err
 
 
 def train_ordered_rmse_ptr(
