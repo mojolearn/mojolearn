@@ -39,15 +39,15 @@ from sequence.exec_device import DeviceExec
 from sequence.ops import FP, CELL_GRU
 from core.cast_in import CastIn
 from core.hostptr import f32_ptr
-from autograd.ops_api import OpsSession
+from autograd.ops_api import OPS_COPY, OpsSession
 from autograd.program import OpsProgram, program_words, program_from_words
 from autograd.nn_scan_frontend import scan_session
 from autograd.nn_scan import OPS_SCAN, scan_encode
-from checks.native_tests.ops_higher_common import tensor, values, gradient
+from checks.native_tests.ops_higher_common import tensor, values, gradient, scale
 from checks.native_tests.sequence_port_common import normal
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, CPU_COLUMN_BUILD, require
 
-comptime NN_SCAN_UNITS = 6
+comptime NN_SCAN_UNITS = 10
 
 comptime _MATMUL = 1
 comptime _ADD = 2
@@ -579,6 +579,49 @@ def run_cache_unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E]) raises:
         _fail("scan: a damaged fingerprint was not refused; got '" + refused + "'")
 
 
+def run_custom_unit[E: Exec & Movable & Deinitable](
+    mut c: OpsSession[E], mut s: OpsSession[E], reverse: Bool, checkpoint_every: Int,
+) raises:
+    # Identity forward, user derivative g*y (the ordinary identity derivative would be g).
+    # The same rule on both sides of the scan catches a scratch replay losing parent records.
+    var zeros = List[Float32](length=2, fill=0)
+    var a = tensor(c, zeros, [2, 1])
+    var af = _op1(c, OPS_COPY, a)
+    var fid = c.capture([a], [af])
+    var y = tensor(c, zeros, [2, 1])
+    var g = tensor(c, zeros, [2, 1])
+    var gy = _op(c, _MUL, g, y)
+    var bid = c.capture([y, g], [gy])
+    var fwd = c.program(fid)
+    var bwd = c.program(bid)
+    var rule = c.cbw_define(fwd, bwd, [0], 1)
+    var ch = tensor(c, zeros, [2, 1])
+    var cx = tensor(c, zeros, [2, 1])
+    var hx = _op(c, _ADD, ch, cx)
+    var ch1 = c.cbw_call(rule, [hx])[0]
+    var cid = c.capture([ch, cx], [ch1, ch1])
+
+    var rule_s = s.cbw_define(fwd, bwd, [0], 1)
+    var initial = tensor(s, [1, 2], [2, 1], True)
+    var h0 = s.cbw_call(rule_s, [initial])[0]
+    var xs = tensor(s, [1, 4, 2, 7, 3, 9], [3, 2, 1], True)
+    var lengths = tensor(s, [3, 1], [2])
+    var scanned = scan_session(s, c.program(cid), xs, [h0], lengths, List[Int](), reverse, 0, checkpoint_every)
+    var final = s.cbw_call(rule_s, [scanned[1]])[0]
+    s.backward(scale(s, _total(s, final), 3), False)
+    _same("scan custom final", values(s, scanned[1], [2, 1]), [7, 6])
+    # g starts at 3. For the full row the outer rule gives 21, then BPTT
+    # multiplies by the saved states 7, 4, 2 (forward), or 7, 6, 4 (reverse).
+    if reverse:
+        _same("reverse scan custom output", values(s, scanned[0], [3, 2, 1]), [7, 6, 6, 0, 4, 0])
+        _same("reverse scan custom dx", gradient(s, xs, [3, 2, 1]), [147, 108, 882, 0, 3528, 0])
+        _same("reverse scan custom initial", gradient(s, initial, [2, 1]), [3528, 216])
+    else:
+        _same("scan custom output", values(s, scanned[0], [3, 2, 1]), [2, 6, 4, 0, 7, 0])
+        _same("scan custom dx", gradient(s, xs, [3, 2, 1]), [1176, 108, 588, 0, 147, 0])
+        _same("scan custom initial", gradient(s, initial, [2, 1]), [1176, 216])
+
+
 # ---------------------------------------------------------------- the columns
 def _unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSession[E], mut z: OpsSession[E],
                                          unit: Int) raises:
@@ -592,6 +635,8 @@ def _unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSessio
         run_dropout_unit(c)
     elif unit == 5:
         run_cache_unit(c)
+    elif unit >= 6:
+        run_custom_unit(c, s, unit % 2 == 1, 2 if unit >= 8 else 0)
     else:
         run_refusal_unit(c)
 
