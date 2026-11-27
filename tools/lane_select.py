@@ -406,6 +406,15 @@ VERIFICATION_DOORS = {
     os.path.join(PKG, "model_selection.py"): {("_BaseSearch", "check"): ("_verify_check",)},
     # `model.check(ids)` on a causal language model (lane dw-neural-models, 2026-11-21): the same door.
     os.path.join(PKG, "models", "causal_lm.py"): {("CausalLM", "check"): ("_verify_check",)},
+    # The cell worker's `execute` (74fe38e8d1 / 7f0de5302b, 2026-11-26): its "extended" action imports
+    # `_verify_extended` to capture verify's single-device commands (verify-graph, -generation, -causal-lm,
+    # the program verifiers) in the sweep's pool. No lane is an extended action: a lane's cells take the
+    # "cells" path of the same def. Without this entry `_verify_extended` and through it `_verify_graph.py`
+    # entered the package import closure (tools/test_lane_select.py::test_package_modules_the_verifier_alone_
+    # uses_are_unreachable, w3-integrate-22). The def's other imports (`_verify_all`, `_verify`, ...) stay edges.
+    os.path.join(PKG, "_verify_worker.py"): {("", "execute"): ("_verify_extended",)},
+    # The same module, imported by `verify --all`'s own driver and report (7f0de5302b): no lane runs either.
+    VERIFY_ALL: {("", "cmd_verify_all"): ("_verify_extended",), ("", "format_human"): ("_verify_extended",)},
 }
 
 _BINDING_RE = re.compile(r"_mojolearn[a-z0-9_]*")
@@ -990,7 +999,15 @@ def _verification_door_imports(rel, tree):
             if not allowed:
                 continue
             for sub in ast.walk(fn):
-                if isinstance(sub, ast.ImportFrom) and _import_dotted(rel, sub) in allowed:
+                if not isinstance(sub, ast.ImportFrom):
+                    continue
+                dotted = _import_dotted(rel, sub)
+                if dotted is None:
+                    continue
+                # `from ._verify_check import check` names the module; `from . import _verify_extended`
+                # names the package and the module as an imported name: every name must be allowed.
+                named = {".".join(p for p in (dotted, a.name) if p) for a in sub.names}
+                if dotted in allowed or (named and named <= set(allowed)):
                     found.add(id(sub))
     return frozenset(found)
 
@@ -6160,7 +6177,7 @@ def _ls_disk_key():
         return None, "a listing was injected"
     if not _ls_read_cache_is_the_tree():
         return None, "the read cache holds a text that is not the file's"
-    state, why = _select_tree_state()
+    state, why = _select_tree_state(dirty=True)
     if state is None:
         return None, why
     import platform
@@ -11901,13 +11918,29 @@ def _select_git(*args):
     return res.stdout if res.returncode == 0 else None
 
 
-def _select_tree_state():
-    """(state dict, None) for a clean checkout, or (None, why) to bypass the cache."""
+def _select_tree_state(dirty=False):
+    """(state dict, None) for a clean checkout, or (None, why) to bypass the cache. With `dirty`
+    (the lane map's key, `_ls_disk_key`) a checkout with tracked edits, staged changes or untracked
+    files is keyed too: every path `git status` lists, with the digest of its content (or "absent")."""
     status = _select_git("status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none")
     if status is None:
         return None, "git status failed"
+    edits = None
     if status.strip("\0").strip():
-        return None, "the checkout has tracked edits, staged changes or untracked files"
+        if not dirty:
+            return None, "the checkout has tracked edits, staged changes or untracked files"
+        import hashlib
+        h = hashlib.sha256(status.encode("utf-8", "surrogateescape"))
+        for entry in status.split("\0"):
+            rel = entry[3:] if len(entry) > 3 and entry[2] == " " else ""
+            full = os.path.join(ROOT, rel)
+            if not rel or os.path.isdir(full):
+                continue
+            try:
+                h.update(rel.encode("utf-8", "surrogateescape") + b"\0" + _sha256_file(full).encode() + b"\n")
+            except OSError:
+                h.update(rel.encode("utf-8", "surrogateescape") + b"\0absent\n")
+        edits = h.hexdigest()
     head = (_select_git("rev-parse", "--verify", "--quiet", "HEAD^{commit}") or "").strip()
     tree = (_select_git("rev-parse", "--verify", "--quiet", "HEAD^{tree}") or "").strip()
     if not head or not tree:
@@ -11940,7 +11973,10 @@ def _select_tree_state():
             ignored.update(os.path.relpath(f, ROOT).encode("utf-8", "surrogateescape") + b"\0"
                            + digest.encode() + b"\n")
             count += 1
-    return dict(head=head, tree=tree, ignored=ignored.hexdigest(), ignored_files=count), None
+    state = dict(head=head, tree=tree, ignored=ignored.hexdigest(), ignored_files=count)
+    if edits is not None:
+        state["edits"] = edits
+    return state, None
 
 
 def _select_cache_write(path, body):
