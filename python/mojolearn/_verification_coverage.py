@@ -60,7 +60,7 @@ def inventory(harness, table, vendor_class):
     from ._verification_light_reference import DATA as LIGHT_REFERENCE
     from ._verification_api_reference import DATA as API_REFERENCE
     from ._verify_api_runner import selected_endpoints
-    from ._verify_api_faults import FAULTS as API_FAULTS
+    from ._verify_api_faults import FAULTS as API_FAULTS, fault_endpoints
     light_errors = reference_errors(LIGHT_REFERENCE, _verify_light)
     if LIGHT_REFERENCE.get('witnesses', {}).get('metal', {}).get('version') != __version__:
         light_errors.append('reference is from another release; normal verification must confirm unchanged native artifacts before reuse')
@@ -129,6 +129,7 @@ def inventory(harness, table, vendor_class):
                                dict(policy=table.get('admission_policy', dict(status='legacy')))))
     for name, lane in lanes.items():
         evidence = HISTORICAL_EVIDENCE['lanes'].get(name, {})
+        lane['native_fault_arms'] = ENDPOINTS['native_fault_arms'].get(name, {})
         lane['historical_evidence'] = evidence
         lane['multi_gpu_scope'] = ('parallel_lane' if name.startswith('par-')
                                    else 'no_parallel_lane_declared_here')
@@ -177,7 +178,7 @@ def inventory(harness, table, vendor_class):
                 vendor_class=vendor_class, provenance=PROVENANCE, entries=entries, lanes=lanes,
                 evidence_provenance={k: v for k, v in HISTORICAL_EVIDENCE.items() if k != 'lanes'},
                 evidence_snapshot_matches_harness=snapshot_matches,
-                public_endpoints=ENDPOINTS,
+                public_endpoints={k: v for k, v in ENDPOINTS.items() if k != 'native_fault_arms'},
                 endpoint_snapshot_matches_sources=(ENDPOINTS['sources'] == public_sources(Path(__file__).parent)
                     and ENDPOINTS['supplemental_sources'] == supplemental_sources(Path(__file__).parent)
                     and ENDPOINTS['harness_sources'] == harness_sources(harness)),
@@ -185,7 +186,9 @@ def inventory(harness, table, vendor_class):
                     neural_command='verify --neural', neural_expected=len(selected_endpoints('neural')),
                     reference_device_validation=API_REFERENCE.get('device_validation',{}),
                     reference_untested_vendors=API_REFERENCE.get('untested_vendors',[]),
-                    execution='not run', fault_controls=len(API_FAULTS), faults_in_normal_run=True,
+                    execution='not run', fault_controls=len(API_FAULTS),
+                    fault_endpoints={name: list(fault_endpoints(name)) for name in API_FAULTS},
+                    faults_in_normal_run=True, fault_sides='each applicable side',
                     scope='bounded endpoint fixtures; availability is not numerical execution'),
                 light_verification=dict(command='verify', cases=list(_verify_light.EXPECTED_CASES),
                     outputs=sum(_verify_light.OUTPUT_COUNTS.values()), max_input_elements=_verify_light.MAX_INPUT_ELEMENTS,
@@ -233,6 +236,9 @@ def format_human(report):
               "Use --json for sabotage pairs, backend records and one-versus-multiple GPU comparisons."]
     if not report['evidence_snapshot_matches_harness']:
         lines.append("Historical snapshot was generated from a different harness; newer lanes may lack evidence entries.")
+    by_side = [side for lane in report["lanes"].values() for side in lane["native_fault_arms"].values()]
+    lines.append(f"Native fault declarations: {sum(bool(arms) for arms in by_side)}/{len(by_side)} lane sides."
+                 " The JSON lists the arms. Detection requires a faulted build.")
     endpoints = report['public_endpoints']
     lines.append('Public endpoint source mapping: ' + ', '.join(f'{v} {k}' for k, v in sorted(endpoints['counts'].items())))
     lines.append('Unmapped endpoints need review; source mapping is not runtime verification. See public_endpoints in JSON.')

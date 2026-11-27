@@ -24,11 +24,25 @@ def require_complete_mapping(rows, targets, routes):
         raise ValueError('unimplemented endpoint fixtures: '+', '.join(sorted(missing)))
 
 
+def native_faults_by_lane(harness):
+    from coverage_sabotage import arms, arm_sides
+
+    faults = {lane: {side: [] for side in ('cpu', 'gpu')
+                     if side != (harness.one_sided(lane) or (None,))[0]}
+              for lane in harness.record_lanes()}
+    for name, arm in arms().items():
+        for lane in arm['lanes']:
+            for side in arm_sides(arm):
+                if side in faults.get(lane, {}):
+                    faults[lane][side].append(name)
+    return faults
+
+
 def build():
     import lane_select as lanes
-    from verify_coverage_audit import Walker, NameClosure, lane_reach, endpoint_rows
+    from verify_coverage_audit import Walker, lane_reach, endpoint_rows
     walker = Walker()
-    reach = lane_reach(lanes, walker, NameClosure(walker))
+    reach = lane_reach(lanes, walker, public_only=True)
     rows = endpoint_rows(walker, reach)
     # Load test controllers without importing an unbuilt product package.
     import importlib, sys, types
@@ -52,6 +66,7 @@ def build():
                 sources=source.public_sources(ROOT/'python/mojolearn'),
                 supplemental_sources=source.supplemental_sources(ROOT/'python/mojolearn'),
                 harness_sources=source.harness_sources(lanes.identity_break()),
+                native_fault_arms=native_faults_by_lane(lanes.identity_break()),
                 endpoints=rows, counts=dict(Counter(row['status'] for row in rows)),
                 limitations=['Source mapping is not endpoint execution or numerical qualification.',
                              'Unmapped means the analyzer did not resolve a verifier call; manual review may be needed.',
