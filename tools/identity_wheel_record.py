@@ -45,6 +45,7 @@ Nothing here builds, rents or publishes. Tests: tools/test_identity_wheel_record
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -126,16 +127,16 @@ def label(column, device):
 
 def lane_costs(lanes, path=None):
     """{lane: estimated record seconds}: the shipped verify cost hint (mean seconds of one cell) plus
-    LANE_OVERHEAD_S; a lane with no hint gets the median. Only packs the chunks; nothing recorded reads it."""
+    LANE_OVERHEAD_S; a lane with no hint gets its family's (`_allocation.lane_cost`). Only packs the chunks; nothing recorded reads it."""
     try:
         doc = json.loads(Path(path or COST_HINTS).read_text())
         hints = {k: float(v) for k, v in (doc.get("seconds") or {}).items()
                  if not k.startswith("@") and isinstance(v, (int, float)) and v >= 0}
     except (OSError, ValueError, AttributeError):
         hints = {}
-    known = sorted(hints[x] for x in lanes if x in hints)
-    median = known[len(known) // 2] if known else 1.0
-    return {x: hints.get(x, median) + LANE_OVERHEAD_S for x in lanes}
+    # a lane with no hint packs at its family's cost (`_allocation.lane_cost`, rel-fix-3), not the median: 42 lanes
+    # (most of them gbdt-*) have no row in the shipped table and packed at 0.41 s
+    return {x: ALLOCATION.lane_cost(hints, x)[0] + LANE_OVERHEAD_S for x in lanes}
 
 
 def chunks(lanes, n, cost=None):
@@ -188,20 +189,10 @@ def auto_workers(gpus, nproc, free_gib, host_gib=None):
 
 
 def host_available_gib():
-    """MemAvailable, capped by the cgroup's memory.max less its use (GiB), or None where unreadable."""
-    try:
-        with open("/proc/meminfo", encoding="ascii") as stream:
-            avail = next(int(line.split()[1]) for line in stream if line.startswith("MemAvailable:")) / 2 ** 20
-    except (OSError, StopIteration, ValueError, IndexError):
-        return None
-    try:
-        limit = Path("/sys/fs/cgroup/memory.max").read_text().strip()
-        if limit != "max":
-            used = int(Path("/sys/fs/cgroup/memory.current").read_text().strip())
-            avail = min(avail, (int(limit) - used) / 2 ** 30)
-    except (OSError, ValueError):
-        pass
-    return avail
+    """Available host memory in GiB (python/mojolearn/_allocation.py `mem_available_bytes`: MemAvailable capped by
+    the cgroup v2 or v1 memory limit less its use), or None where unreadable."""
+    avail = ALLOCATION.mem_available_bytes()
+    return None if avail is None else avail / 2 ** 30
 
 
 def children_cpu_seconds():
@@ -230,22 +221,24 @@ def lane_seconds(paths):
     return out
 
 
+def _allocation():
+    """python/mojolearn/_allocation.py of this tree, loaded by path (the package is not imported here)."""
+    spec = importlib.util.spec_from_file_location("mojolearn_allocation_by_path",
+                                                  ROOT / "python" / "mojolearn" / "_allocation.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+ALLOCATION = _allocation()
+
+
 def alloc_cores():
-    """The process's core allocation: affinity, capped by the cgroup's cpu.max (AGENTS.md part 1: on a rented box the
-    core count is the allocation, not the host's visible CPUs). rel-fix-1, 2026-11-26: os.cpu_count() read the
-    L40S host's 128 CPUs for a 14-core pod ("busy plan: 3 worker(s) of 3 (1 device(s), 128 core(s)...")."""
-    try:
-        cores = len(os.sched_getaffinity(0))
-    except (AttributeError, OSError):
-        cores = os.cpu_count() or 1
-    try:
-        with open("/sys/fs/cgroup/cpu.max", encoding="ascii") as stream:
-            quota, period = stream.read().split()[:2]
-        if quota != "max":
-            cores = min(cores, max(1, int(quota) // int(period)))
-    except (OSError, ValueError):
-        pass
-    return max(1, cores)
+    """The process's core allocation from the one allocation function (python/mojolearn/_allocation.py `cores`): the
+    job's MOJOLEARN_ALLOC_CORES, else the affinity capped by the cgroup v2 or v1 CPU quota (AGENTS.md part 1).
+    rel-fix-3, 2026-11-26: the copy here read only v2 cpu.max and planned the L40S pod's v1 14-core quota as 128
+    ("busy plan: 14 worker(s) of 14 (1 device(s), 128 core(s)", the 14 from GPU memory, not the cores)."""
+    return ALLOCATION.cores()[0]
 
 
 def gpu_used_gib(vendor):
@@ -420,8 +413,8 @@ class Run:
                 tasks.append((c, i, chunk, slot))
         total = sum(len(s) for s in slots.values()) if devices else len(next(iter(slots.values())))
         busy = len(tasks)
-        self.say("busy plan: %d worker(s) of %d (%d device(s), %d core(s), %d CPU thread(s) per worker%s%s)" % (
-            busy, total, len(devices), nproc, CPU_THREADS,
+        self.say("busy plan: %d worker(s) of %d (%d device(s), %d core(s) from %s, %d CPU thread(s) per worker%s%s)"
+                 % (busy, total, len(devices), nproc, ALLOCATION.cores()[1], CPU_THREADS,
             "" if free is None else ", %.0f GiB free per device" % free,
             "" if host is None else ", %.0f GiB host memory available" % host))
         threads, results = [], {}

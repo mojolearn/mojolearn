@@ -184,6 +184,12 @@ if [ -n "$GATE_FETCH_URL" ]; then
 fi
 cd "$GATE_TREE"
 git config --global --add safe.directory "$GATE_TREE" 2>/dev/null || true
+# THE ALLOCATION, MEASURED ONCE (rel-fix-3): the one allocation function (python/mojolearn/_allocation.py through
+# box_cores_lib.sh), exported as MOJOLEARN_ALLOC_CORES to the recorder, verify and every stage below; nproc is the
+# host's visible CPUs on a pod (128 on the L40S for a 14-core quota).
+. "$GATE_TREE/tools/ops/box_cores_lib.sh"
+say "allocation: $(alloc_cores) core(s) of $(nproc) visible ($(alloc_reason))"
+echo "alloc_cores=$(alloc_cores)" >> "$J/box-facts.txt"
 [ "$(git rev-parse HEAD)" = "$GATE_SOURCE_COMMIT" ] && [ -z "$(git status --porcelain --untracked-files=no)" ] \
     || { say "$GATE_TREE is not a clean tree at $GATE_SOURCE_COMMIT (HEAD $(git rev-parse HEAD 2>/dev/null))"; exit 3; }
 if [ "${GATE_REUSE:-0}" = 1 ]; then
@@ -272,7 +278,7 @@ if [ -n "${GATE_IDENTITY_COLUMNS:-}" ]; then
             if [[ "$droplet" =~ ^[0-9]+$ ]]; then export IDENTITY_RECORD_BOX="digitalocean:$droplet"; fi
         fi
     fi
-    say "identity: columns $GATE_IDENTITY_COLUMNS on $ngpu GPU(s), $(nproc) core(s), box ${IDENTITY_RECORD_BOX:-unnamed}"
+    say "identity: columns $GATE_IDENTITY_COLUMNS on $ngpu GPU(s), $(alloc_cores) core(s) of $(nproc) visible, box ${IDENTITY_RECORD_BOX:-unnamed}"
     # RUN EVERYTHING by default (Andrew 2026-11-05); GATE_REUSE_UNCHANGED=1 (release.py --reuse-unchanged) opts in
     reuse=(); [ "${GATE_REUSE_UNCHANGED:-0}" = 1 ] && reuse=(--reuse-unchanged)
     python3 tools/identity_wheel_record.py --columns "$GATE_IDENTITY_COLUMNS" ${reuse[@]+"${reuse[@]}"} \

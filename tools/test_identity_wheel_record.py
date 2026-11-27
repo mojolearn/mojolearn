@@ -99,12 +99,15 @@ def test_chunks_pack_equal_cost_longest_lane_first():
     assert sorted(x for c in got for x in c) == sorted(cost)
 
 
-def test_lane_costs_read_the_shipped_hints_and_default_to_the_median(tmp_path):
+def test_lane_costs_read_the_shipped_hints_and_default_to_the_family(tmp_path):
+    """rel-fix-3: a lane with no hint packs at its family's slowest measured lane (longest shared name prefix), else
+    the 90th percentile of every lane; never the median (42 shipped-table lanes packed at 0.41 s)."""
     hints = tmp_path / "cell_seconds.json"
-    hints.write_text(json.dumps(dict(format="x", seconds={"a": 10.0, "b": 2.0, "c": 4.0, "@models": 60.0})))
-    got = R.lane_costs(["a", "b", "c", "new"], hints)
+    hints.write_text(json.dumps(dict(format="x", seconds={"a": 10.0, "b": 2.0, "c": 4.0, "gbdt-x": 5.0,
+                                                          "gbdt-y": 3.0, "@models": 60.0})))
+    got = R.lane_costs(["a", "b", "c", "new", "gbdt-new"], hints)
     assert got == {"a": 10.0 + R.LANE_OVERHEAD_S, "b": 2.0 + R.LANE_OVERHEAD_S, "c": 4.0 + R.LANE_OVERHEAD_S,
-                   "new": 4.0 + R.LANE_OVERHEAD_S}
+                   "new": 10.0 + R.LANE_OVERHEAD_S, "gbdt-new": 5.0 + R.LANE_OVERHEAD_S}
     assert R.lane_costs(["a"], tmp_path / "missing.json") == {"a": 1.0 + R.LANE_OVERHEAD_S}
     shipped = R.lane_costs(["generic-pickle-trees", "pca"])
     assert shipped["generic-pickle-trees"] > shipped["pca"]
@@ -233,3 +236,11 @@ def test_the_venv_gets_the_harness_numpy_after_the_release_wheels(tmp_path):
     assert pips[0][-1] == str(w) and not any(x.startswith("numpy") for x in pips[0])
     assert pips[1][-len(R.HARNESS_REQUIREMENTS):] == list(R.HARNESS_REQUIREMENTS)
     assert any(x.startswith("numpy>=") for x in pips[1])
+
+
+def test_the_recorder_reads_the_one_allocation_function(monkeypatch):
+    """rel-fix-3: the recorder's cores are python/mojolearn/_allocation.py's; the job's measured count wins."""
+    monkeypatch.setenv("MOJOLEARN_ALLOC_CORES", "14")
+    assert R.alloc_cores() == 14
+    monkeypatch.delenv("MOJOLEARN_ALLOC_CORES")
+    assert R.alloc_cores() == R.ALLOCATION.cores()[0] >= 1

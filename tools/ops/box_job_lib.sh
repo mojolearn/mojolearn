@@ -114,19 +114,9 @@ disk_gate() {   # <what> <races> <board processes> <MB per race>
 # back to /proc/stat with busy = delta(user+nice+system+irq+softirq+steal) over delta(those + idle + iowait), scaled
 # by the cpu lines /proc/stat lists. A delta that goes backwards (counter reset) is not a sample: it is logged as
 # `busy=NA` and the next sample starts from it; a value outside 0..total is clamped and marked `clamped`.
-alloc_cores() {
-    local q per n
-    n=$(nproc 2> /dev/null || echo 1)
-    if read -r q per < /sys/fs/cgroup/cpu.max 2> /dev/null && [ "$q" != max ] && [ "${per:-0}" -gt 0 ] 2> /dev/null; then
-        q=$(( (q + per - 1) / per ))
-        [ "$q" -ge 1 ] && [ "$q" -lt "$n" ] && n=$q
-    elif read -r q < /sys/fs/cgroup/cpu/cpu.cfs_quota_us 2> /dev/null && read -r per < /sys/fs/cgroup/cpu/cpu.cfs_period_us 2> /dev/null \
-            && [ "$q" -gt 0 ] 2> /dev/null && [ "${per:-0}" -gt 0 ] 2> /dev/null; then
-        q=$(( (q + per - 1) / per ))     # cgroup v1 (the RunPod L40S pods)
-        [ "$q" -ge 1 ] && [ "$q" -lt "$n" ] && n=$q
-    fi
-    echo "$n"
-}
+# alloc_cores, alloc_reason, export_alloc: the one allocation function (tools/ops/box_cores_lib.sh, which runs
+# python/mojolearn/_allocation.py; rel-fix-3 removed the copy that was here).
+. "$(dirname "${BASH_SOURCE[0]}")/box_cores_lib.sh"
 cpu_sample() {   # "<wall_usec> <cpu_usec> cgroup" or "<total ticks> <busy ticks> <cpus> procstat"
     local u
     u=$(awk '$1 == "usage_usec" {print $2}' /sys/fs/cgroup/cpu.stat 2> /dev/null)

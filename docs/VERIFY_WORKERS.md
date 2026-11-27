@@ -17,8 +17,14 @@ an untouched input matches and the perturbed input diverges. Portable model
 checks and optional smoke checks also use bounded fresh workers. Each cell
 has a limit, including interpreter startup for the first cell of a batch and
 cleanup: four times its lane's measured seconds per cell (from the last run
-on this machine, else the shipped `verify_reference/cell_seconds.json`), at
-least `--cell-timeout SECONDS` (default 120) and at most 1800 seconds. A cell
+on this machine, else the shipped `verify_reference/cell_seconds.json`; a lane
+with no figure takes the slowest lane of its name family), times the ratio of
+workers to cores when `--cell-workers` asks for more workers than cores, at
+least `--cell-timeout SECONDS` (default 120) and at most 1800 seconds. The
+worker count is the process's core allocation (affinity capped by the cgroup
+v2 or v1 CPU quota, or `MOJOLEARN_ALLOC_CORES` when set), bounded by available
+memory at 4 GiB, GPU free memory at 2 GB and the cgroup's task limit per
+worker; the run prints the count and its reason. A cell
 past its limit FAILS: it is refused, listed under `execution.timed_out_cells`
 and named in the report, and the sweep goes on with every other cell. A
 timeout is an incomplete verification, never a successful skipped check, and

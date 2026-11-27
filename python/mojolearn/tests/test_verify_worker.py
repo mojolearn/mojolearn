@@ -513,7 +513,8 @@ def test_a_batch_timeout_fails_that_cell_and_the_rest_run(monkeypatch, tmp_path)
 
 def test_each_cell_limit_comes_from_its_lane_measured_cost(monkeypatch, tmp_path):
     """The limit of a cell is CELL_LIMIT_FACTOR times its lane's measured seconds, never below --cell-timeout and at
-    most CELL_LIMIT_MAX_S; a lane with no measurement keeps --cell-timeout."""
+    most CELL_LIMIT_MAX_S; a lane with no measurement takes its family's cost, else the 90th percentile of every
+    lane (rel-fix-3: it kept the bare --cell-timeout)."""
     run_verify = controller(monkeypatch, tmp_path, lanes=LANES)
     monkeypatch.setattr(verifier, "cell_cost_hints", lambda: ({"one": 65.6, "two": 1e6, "three": 0.1}, "test"))
     limits = {}
@@ -530,7 +531,8 @@ def test_each_cell_limit_comes_from_its_lane_measured_cost(monkeypatch, tmp_path
     assert code == verifier.EXIT_VERIFIED
     assert limits["one"] == pytest.approx(verifier.CELL_LIMIT_FACTOR * 65.6)
     assert limits["two"] == verifier.CELL_LIMIT_MAX_S
-    assert limits["three"] == limits["four"] == limits["five"] == 1
+    assert limits["three"] == 1
+    assert limits["four"] == limits["five"] == verifier.CELL_LIMIT_MAX_S    # the p90 of the three is 1e6 s
 
 
 def test_batch_limits_are_per_request(monkeypatch):

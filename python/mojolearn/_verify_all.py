@@ -1267,6 +1267,11 @@ VERIFY_BATCH_CELLS = 24
 #: Memory one cell worker process may take, for the worker count (GiB). A
 #: placeholder until the gate measures the heaviest lanes' peak RSS.
 VERIFY_WORKER_GIB = 4.0
+#: GPU memory one cell worker may take, for the worker count (MB): the GPU smoke's budget
+#: (tools/ops/wheel_verify_smoke.py GPU_MEM_PER_WORKER_MB). The L40S record of 3ce09e341f measured 1.73 GiB a
+#: record worker on the same lanes; on its 44 GiB free this allows 19, above the 14-core allocation. Without a GPU
+#: tool (CPU, Apple) there is no GPU bound.
+VERIFY_GPU_MB_PER_WORKER = 2048
 
 
 #: The public checks' worker limit (a hang guard, not a budget): they ran in the controller with no limit before.
@@ -1317,11 +1322,14 @@ def cell_cost_hints():
     return hints, "+".join(sources) or "none"
 
 
-def cell_limit(hints, lane, floor):
+def cell_limit(hints, lane, floor, load=1.0):
     """One cell's worker limit in seconds: `floor` (--cell-timeout), raised to CELL_LIMIT_FACTOR times the lane's
-    measured mean cell seconds, at most CELL_LIMIT_MAX_S (and never below the floor)."""
-    measured = float(hints.get(lane, 0.0) or 0.0)
-    return max(floor, min(CELL_LIMIT_MAX_S, CELL_LIMIT_FACTOR * measured))
+    cell cost times `load` (workers over cores, at least 1), at most CELL_LIMIT_MAX_S (and never below the floor).
+    The cost is the lane's measured mean, else its family's (`_allocation.lane_cost`, rel-fix-3): a lane missing
+    from the hints no longer gets the bare floor."""
+    from . import _allocation
+    cost, _source = _allocation.lane_cost(hints, lane)
+    return max(floor, min(CELL_LIMIT_MAX_S, CELL_LIMIT_FACTOR * cost * max(1.0, load)))
 
 
 def _children_cpu_seconds():
@@ -1358,40 +1366,20 @@ def save_cell_cost_hints(hints, cell_seconds, unit_seconds, skip=()):
         pass
 
 
-def verify_cell_workers(requested=None):
-    """How many cell-worker processes run at once: the process's core
-    allocation (affinity), bounded by the available memory at
-    `VERIFY_WORKER_GIB` a worker; `requested` (``--cell-workers``) pins it."""
-    if requested:
-        return max(1, int(requested))
-    try:
-        cores = len(os.sched_getaffinity(0))
-    except (AttributeError, OSError):
-        cores = os.cpu_count() or 1
-    try:
-        with open("/sys/fs/cgroup/cpu.max", encoding="ascii") as stream:
-            quota, period = stream.read().split()[:2]
-        if quota != "max":
-            cores = min(cores, max(1, int(int(quota) // int(period))))
-    except (OSError, ValueError):
-        pass
-    available = None
-    try:
-        with open("/proc/meminfo", encoding="ascii") as stream:
-            for line in stream:
-                if line.startswith("MemAvailable:"):
-                    available = int(line.split()[1]) * 1024
-                    break
-    except (OSError, ValueError):
-        pass
-    if available is None:
-        try:
-            available = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_AVPHYS_PAGES")
-        except (AttributeError, OSError, ValueError):
-            available = None
-    if available is not None:
-        cores = min(cores, max(1, int(available // int(VERIFY_WORKER_GIB * (1 << 30)))))
-    return max(1, cores)
+def verify_cell_workers(requested=None, with_reason=False, gpu=True):
+    """How many cell-worker processes run at once, from the one allocation function (`_allocation.workers`): the
+    job's measured cores (MOJOLEARN_ALLOC_CORES) or the affinity capped by the cgroup v2 or v1 CPU quota, bounded
+    by available memory at `VERIFY_WORKER_GIB`, by the GPU's free memory at `VERIFY_GPU_MB_PER_WORKER` (every cell
+    worker holds its own device context) and by the cgroup's remaining tasks at one interpreter's threads a worker.
+    `requested` (``--cell-workers``) pins it. rel-fix-3 (2026-11-26): this read only v2 `cpu.max`, and the L40S pod's
+    v1 quota left it at 128 workers on 14 cores. `gpu=False` (a CPU run) leaves the GPU bound out."""
+    from . import _allocation
+    n, reason = _allocation.workers(requested=requested, host_gib_per_worker=VERIFY_WORKER_GIB,
+                                    gpu_mb_per_worker=VERIFY_GPU_MB_PER_WORKER if gpu else None,
+                                    threads_per_worker=_allocation.interpreter_threads())
+    return (n, reason) if with_reason else n
+
+
 # Saved-model CPU loaders for these public tree algorithms already ship.
 # Their host family has no inference_lanes entry, so the old selector omitted
 # them despite being able to compare the same GPU-trained model on the CPU.
@@ -4532,7 +4520,8 @@ def cmd_verify_all(args):
         # FAILED here, with its stacks, named in the report and counted REFUSED, so the run exits non-zero; every other
         # cell still runs. An unhealthy-device signal still stops the sweep.
         with lock:
-            execution["timed_out_cells"].append(dict(lane=lane, fixture=f, limit_s=cell_limit(hints, lane, timeout),
+            execution["timed_out_cells"].append(dict(lane=lane, fixture=f,
+                                                     limit_s=cell_limit(hints, lane, timeout, load),
                                                      error=message[:500]))
             log(f"    TIMED OUT (cell FAILED, sweep continues): {message[:300]}")
         record(lane, f, refused_sides("timed out: " + message), seconds)
@@ -4543,7 +4532,7 @@ def cmd_verify_all(args):
         with lock:
             log(f"  [{execution['completed_cells'] + 1}/{execution['total_cells']}] {lane}/{f} (fresh process)")
         try:
-            parts = isolated("cell", limit=cell_limit(hints, lane, timeout),
+            parts = isolated("cell", limit=cell_limit(hints, lane, timeout, load),
                              **{k: v for k, v in cell_request(lane, f).items()
                                 if k not in ("action", "harness", "table")})
             with lock:
@@ -4574,11 +4563,18 @@ def cmd_verify_all(args):
 
     cells = [(lane, f) for lane in lanes for f in fixtures]
     cell_order = {cell: i for i, cell in enumerate(cells)}
-    cell_workers = verify_cell_workers(getattr(args, "cell_workers", None))
+    cell_workers, workers_reason = verify_cell_workers(getattr(args, "cell_workers", None), with_reason=True,
+                                                       gpu=vendor != "cpu")
+    from . import _allocation
+    alloc_cores, alloc_reason = _allocation.cores()
     execution["cell_workers"] = cell_workers
+    execution["allocation"] = dict(cores=alloc_cores, cores_source=alloc_reason, workers_reason=workers_reason)
+    # LIMITS FOLLOW THE LOAD (rel-fix-3): a pinned --cell-workers above the allocation's cores runs every cell
+    # slower by that ratio, so each cell's limit is raised by it (1 when the workers fit the cores).
+    load = max(1.0, cell_workers / max(1, alloc_cores))
     # distinct crashed lanes that stop the sweep: at least one per parallel worker
     crash_device_limit = max(crash_streak_limit, cell_workers)
-    log(f"# {cell_workers} cell worker(s) at once (core allocation, {VERIFY_WORKER_GIB:g} GiB a worker)")
+    log(f"# {cell_workers} cell worker(s) at once: {workers_reason}")
 
     def run_chunk(chunk):
         while chunk:
@@ -4607,7 +4603,7 @@ def cmd_verify_all(args):
                 last[0] = now
 
         stop = worker.run_batch([cell_request(lane, f) for lane, f in chunk],
-                                [cell_limit(hints, lane, timeout) for lane, _ in chunk], log, answered)
+                                [cell_limit(hints, lane, timeout, load) for lane, _ in chunk], log, answered)
         if stop is None:
             return []
         lane, f = chunk[stop.index]
@@ -4647,9 +4643,13 @@ def cmd_verify_all(args):
     # set each cell's worker limit (`cell_limit`, rel-fix-2), nothing else: the cells, their parts, fixtures,
     # comparisons and the report's cell order are unchanged.
     hints, hint_source = cell_cost_hints()
-    known = sorted(v for k, v in hints.items() if not k.startswith("@") and v > 0)
-    default_cost = known[len(known) // 2] if known else 1.0
-    cell_cost = lambda cell: float(hints.get(cell[0], default_cost))  # noqa: E731
+    # a lane with no measured cost plans at its family's (`_allocation.lane_cost`, rel-fix-3), not the median
+    lane_costs = {lane: _allocation.lane_cost(hints, lane)[0] for lane in lanes}
+    cell_cost = lambda cell: lane_costs[cell[0]]  # noqa: E731
+    unmeasured = sorted(lane for lane in lanes if _allocation.lane_cost(hints, lane)[1] != "measured")
+    if unmeasured:
+        log(f"# cost hints: {len(unmeasured)} lane(s) with no measured cost plan and limit at their family's: "
+            + ", ".join(unmeasured[:12]) + (" ..." if len(unmeasured) > 12 else ""))
     if fresh_only:
         units, body = [(cell,) for cell in cells], run_one
         unit_costs = [cell_cost(cell) for cell in cells]
@@ -4784,10 +4784,7 @@ def cmd_verify_all(args):
     busy = (_children_cpu_seconds() - sweep_cpu0) / sweep_s if sweep_s > 0 else 0.0
     slowest = sorted([(f"{lane}/{f}", s) for (lane, f), s in cell_seconds.items()]
                      + [(key, max(v)) for key, v in unit_seconds.items() if key and v], key=lambda kv: -kv[1])[:5]
-    try:
-        cores = len(os.sched_getaffinity(0))
-    except (AttributeError, OSError):
-        cores = os.cpu_count() or 1
+    cores = alloc_cores
     execution["timing"] = dict(sweep_s=round(sweep_s, 1), busy_cores_mean=round(busy, 1), cores=cores,
                                workers=cell_workers, slowest=[dict(unit=u, seconds=round(s, 1)) for u, s in slowest])
     log(f"# sweep: {sweep_s:.0f}s wall, busy cores mean {busy:.1f} of {cores} ({cell_workers} worker(s)); slowest units: "

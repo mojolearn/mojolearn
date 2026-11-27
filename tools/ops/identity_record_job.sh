@@ -16,8 +16,12 @@
 #
 # PARALLEL PLAN (AGENTS.md hard rules: 100 percent of rented CPU, parallel by default). Both steps use the one GPU, so
 # they run one after the other; inside each, the work spreads over the allocation:
-#   verify: its cell workers default to the process's core allocation (affinity and cgroup cpu.max), bounded by
-#           available memory at 4 GiB a worker (mojolearn._verify_all.verify_cell_workers); no --cell-workers pin.
+#   the allocation is measured ONCE, when box_cores_lib.sh is sourced (python/mojolearn/_allocation.py: affinity
+#           capped by the cgroup v2 or v1 CPU quota), and exported as MOJOLEARN_ALLOC_CORES, which verify and the
+#           recorder take as given (rel-fix-3: verify read v2 only and ran 128 workers on the pod's 14-core v1 quota);
+#   verify: its cell workers are those cores, bounded by available memory at 4 GiB, the GPU's free memory at
+#           2048 MB and the cgroup's tasks a worker (mojolearn._verify_all.verify_cell_workers; it prints
+#           "# N cell worker(s) at once: <reason>", grepped below); no --cell-workers pin, so the bounds still apply.
 #   record: --workers-per-gpu auto: one worker per core (a GPU record worker keeps 0.83 of a core busy, measured),
 #           bounded by the GPU's free memory at 3 GiB a worker and the host's at 4 GiB; lanes packed into chunks of
 #           equal estimated cost, longest first. It prints "busy plan: W worker(s) of T" (grepped into this job's
@@ -70,7 +74,7 @@ pf=$(ir_preflight); prc=$?
 printf '%s\n' "$pf" | sed 's/^PREFLIGHT/IDREC preflight/'
 [ "$prc" -eq 0 ] || { echo "IDREC inputs refused; nothing ran"; exit 4; }
 . "$HERE/box_cores_lib.sh"
-echo "IDREC allocation: $(alloc_cores) core(s) of $(nproc) visible, $(( $(alloc_mem_kb) / 1048576 )) GiB available"
+echo "IDREC allocation: $(alloc_cores) core(s) of $(nproc) visible ($(alloc_reason)), $(( $(alloc_mem_kb) / 1048576 )) GiB available; MOJOLEARN_ALLOC_CORES=$MOJOLEARN_ALLOC_CORES for every step"
 
 # The venvs live outside the results dir (it is uploaded to R2) and go when the job ends.
 SCRATCH="$(mktemp -d "${TMPDIR:-/root}/idrec-XXXXXX")"
@@ -127,6 +131,8 @@ verify_all() {
 }
 step verify verify_all
 grep -m 1 '^IDREC verify wheel' "$RES/logs/verify.log" || true
+grep -m 1 -E '^# [0-9]+ cell worker\(s\) at once' "$RES/logs/verify.log" | sed 's/^# /IDREC verify /' | cut -c1-400 || true
+grep -m 1 -E '^# cost hints: ' "$RES/logs/verify.log" | sed 's/^# /IDREC verify /' | cut -c1-400 || true
 grep -m 1 -E '^# sweep: ' "$RES/logs/verify.log" | sed 's/^# /IDREC verify /' | cut -c1-400 || true
 grep -m 1 -E '^# TIMED OUT: ' "$RES/logs/verify.log" | sed 's/^# /IDREC verify /' | cut -c1-400 || true
 # The separate `verify --all --neural-training` step (verify-neural.json) is gone (verify-profiles, 2026-11-26): `verify

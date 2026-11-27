@@ -8,13 +8,36 @@ def test_requested_count_pins_the_workers():
 
 
 def test_default_is_bounded_by_the_allocation():
-    import os
+    from mojolearn import _allocation
     got = va.verify_cell_workers()
-    assert got >= 1
-    try:
-        assert got <= len(os.sched_getaffinity(0))
-    except AttributeError:
-        assert got <= (os.cpu_count() or 1)
+    assert 1 <= got <= _allocation.cores()[0]
+
+
+def test_the_jobs_measured_allocation_sets_the_workers_and_the_reason_is_printed(monkeypatch):
+    """rel-fix-3 (2026-11-26): the L40S record job measured 14 cores and verify ran 128 workers (it read cgroup v2
+    only; the pod's quota is v1). The job's MOJOLEARN_ALLOC_CORES is taken as given, still bounded by memory, the
+    GPU and the cgroup's tasks; the count comes with its reason."""
+    from mojolearn import _allocation
+    monkeypatch.setenv(_allocation.ENV_CORES, "3")
+    monkeypatch.setattr(_allocation, "gpu_free_mb", lambda timeout=30: 45000)
+    n, reason = va.verify_cell_workers(with_reason=True)
+    assert n <= 3 and "MOJOLEARN_ALLOC_CORES=3" in reason
+    monkeypatch.setattr(_allocation, "gpu_free_mb", lambda timeout=30: 4096)
+    n, reason = va.verify_cell_workers(with_reason=True)
+    assert n == 1 and "gpu memory 1" in reason
+    n, reason = va.verify_cell_workers(with_reason=True, gpu=False)
+    assert "gpu memory" not in reason
+    assert va.verify_cell_workers(7, with_reason=True) == (7, "7 requested")
+
+
+def test_a_lane_without_a_measured_cost_is_limited_at_its_familys_and_the_load():
+    """rel-fix-3: a lane missing from the hints took the bare --cell-timeout; it now takes its family's cost, and a
+    pinned worker count above the cores raises every limit by that ratio."""
+    hints = {"gbdt-a": 50.0, "pca": 1.0}
+    assert va.cell_limit(hints, "gbdt-multiclass", 120.0) == 4 * 50.0
+    assert va.cell_limit(hints, "pca", 120.0) == 120.0
+    assert va.cell_limit(hints, "pca", 10.0, load=9.0) == 4 * 1.0 * 9.0
+    assert va.cell_limit(hints, "gbdt-a", 120.0, load=0.5) == 4 * 50.0
 
 
 def test_cost_hints_ship_and_the_last_run_overrides_them(monkeypatch, tmp_path):

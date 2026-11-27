@@ -209,6 +209,8 @@ HARNESS_RUNTIME_IMPORTS = (
 #: Whole files that only orchestrate: the bounded, disposable cell workers.
 VERIFY_ORCHESTRATION_FILES = (
     os.path.join(PKG, "_verify_worker.py"),
+    # the core, memory and task allocation and the lanes' planning costs (rel-fix-3): worker counts and limits only
+    os.path.join(PKG, "_allocation.py"),
 )
 VERIFY_ALL = os.path.join(PKG, "_verify_all.py")
 #: The definitions of `_verify_all.py` that only orchestrate or report. NOT here (they feed bytes or
@@ -225,6 +227,9 @@ VERIFY_ALL_ORCHESTRATION = frozenset({
     # the drivers: cell workers, crash handling, scheduling (the fixtures they pass come from the harness)
     "cmd_verify_all", "_cmd_self_test", "_cmd_cross_check", "_cross_check_batched", "_reexec_identical",
     "_depth", "_extra_parts",
+    # worker counts, cell limits and the cost hints that order the pool (rel-fix-1/2/3): no value reads them
+    "verify_cell_workers", "cell_limit", "cell_cost_hints", "save_cell_cost_hints", "_cell_cost_cache",
+    "_children_cpu_seconds",
     # reporting: counts, verdict text, accounting of which lanes ran
     "summarize", "lane_state_from_rows", "lane_accounting", "lane_verdict_gaps", "lane_scope",
     "lane_scope_clause", "verdict", "format_self_test", "format_cross_check", "_cell_lines", "format_compare",
