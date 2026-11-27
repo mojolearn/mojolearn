@@ -467,6 +467,7 @@ def _by_path(fn):
     wrapped.__name__ = fn.__name__
     wrapped.__doc__ = fn.__doc__
     wrapped.cache = cache          # tests seed this to ask about a file that is not in the tree
+    wrapped.uncached = fn          # what the path reads now (`_ls_read_cache_is_the_tree`)
     return wrapped
 
 
@@ -5285,12 +5286,25 @@ def lane_sources():
 
     MEMOIZED for the life of the process. `select()` and the property tests
     each ask for the map several times, and deriving it is the expensive part
-    of every command here."""
-    global _LANE_SOURCES
+    of every command here. Across a reset of an unchanged tree the remembered
+    map is handed back (`_reuse_lane_sources`); across PROCESSES the clean
+    checkout's map is shared on disk (`_LaneMapDisk`), so the workers of one
+    pytest-xdist run, the shards of tools/run_tool_tests.sh and the next
+    command derive it once between them instead of once each."""
     if _LANE_SOURCES is not None:
         return _LANE_SOURCES
     if _reuse_lane_sources():
         return _LANE_SOURCES
+    with _LaneMapDisk() as disk:
+        if not disk.loaded:
+            _derive_lane_sources()
+            disk.store()
+    return _LANE_SOURCES
+
+
+def _derive_lane_sources():
+    """`lane_sources`' derivation itself (one process, minutes on this tree)."""
+    global _LANE_SOURCES
     ib = identity_break()
     hs = host_surface()
     py_files = _python_files()
@@ -5952,7 +5966,11 @@ _LS_NOT_INPUTS = {"_ENUMERATORS", "_LANE_SOURCES", "_SOURCE_HASHED", "_TRACKED",
                   "_HOST_CLASS_ROUTES", "_CORPUS", "_CORPUS_TEXT", "_REVERSE", "_REGISTRIES", "_INCLUDE_ROOTS",
                   "_GRAPH_REVERSE", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_LANE_CPU_ROUTE_ONLY",
                   "_HOOK_CLASSES", "_LS_MEMO", "_LANE_DEVICE_CALLS", "_DISPATCH_VOCAB", "_MOJO_CALLERS", "_DISPATCHER_NAMES", "_BINDING_HELD",
-                  "_CONTEXT_DOORS"}
+                  "_CONTEXT_DOORS"} | set(_RESET_TO_NONE) | {"_RESET_COUNT"}
+# Every memo `reset_caches` drops and its counter are outputs, not inputs. `_RESET_COUNT` (2026-11-18) and
+# `_IMPORT_TIME_CLOSURE` (2026-11-05) were missing: the counter's value (an int, a new object per reset) changed
+# `_ls_identities()` on EVERY reset, so no remembered map was ever handed back after one and each probe of a
+# clean tree derived the whole map again (minutes each; tools/test_lane_select.py ran 36 min at -n 10).
 
 
 def _ls_digest(text):
@@ -5975,12 +5993,17 @@ def _ls_tree_state():
 
 
 def _ls_git_state():
+    """HEAD and the CONTENT of the index (every staged path, mode and blob), never the index file's
+    size and mtime: `git status` rewrites the index to refresh stat data without changing what is
+    staged, and tools/test_lane_select.py runs it (`_refuse_if_manifest_dirty`), which threw the
+    remembered map away for nothing."""
+    import hashlib
     try:
-        res = subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD", "--git-path", "index"],
-                             capture_output=True, text=True, check=True)
-        head, index = res.stdout.split()[:2]
-        st = os.stat(index if os.path.isabs(index) else os.path.join(ROOT, index))
-        return head, st.st_size, st.st_mtime_ns
+        head = subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD"],
+                              capture_output=True, text=True, check=True).stdout.strip()
+        staged = subprocess.run(["git", "-C", ROOT, "ls-files", "-s", "-z"],
+                                capture_output=True, check=True).stdout
+        return head, hashlib.sha256(staged).hexdigest()
     except (OSError, ValueError, subprocess.CalledProcessError):
         return None
 
@@ -6070,6 +6093,196 @@ def _reuse_lane_sources():
             _LS_MEMO = _LS_MEMO[:index] + _LS_MEMO[index + 1:] + [memo]
             return True
     return False
+
+
+# ------------------------------------------------- lane_sources across processes
+# THE CLEAN CHECKOUT'S MAP IS SHARED ON DISK (tool-reds-2, 2026-11-26). Every process derived the map
+# itself: ten pytest-xdist workers of tools/test_lane_select.py derived it ten times over, and each
+# shard of tools/run_tool_tests.sh once more. The map of a CLEAN checkout is a function of what
+# `select_cache_key` already keys on (HEAD's tree, the digest of every ignored file, every tools/*.py,
+# Python, platform), so it is stored under that key beside the selection cache (`<dir>/map/`), as a
+# pickle of exactly what `_remember_lane_sources` keeps. A process that finds no entry takes the
+# key's lock and derives; the others block on the lock (idle, not deriving) and then load. Bypassed
+# (derived, not stored, not served) when the cache is off, the checkout is not clean, a function of
+# this module or its helpers is not the one imported (a test's monkeypatch), the read cache holds a
+# text that is not the file's (a test's seeded edit), a listing was injected, or the checkout moved
+# while the map was derived. Unlike the selection cache it is ON under pytest: the bypasses above
+# are what keep a test's perturbation out, and the real map is what every other test reads.
+LANE_MAP_CACHE_SCHEMA = 1
+_LANE_MAP_CACHE_KEEP = 6                 # entries kept per directory (newest first)
+_LS_DISK_BUSY = []                       # non-empty while this process holds a key's lock
+
+
+def lane_map_cache_dir():
+    """The on-disk lane map directory, or None when the cache is off."""
+    raw = os.environ.get(SELECT_CACHE_ENV, "").strip()
+    if raw.lower() in ("0", "off", "no", "none", "false"):
+        return None
+    return os.path.join(raw or os.path.join(os.path.expanduser("~"), "mojolearn-evidence", "lane-select-cache"),
+                        "map")
+
+
+def _ls_read_cache_is_the_tree():
+    """Every text in `_read`'s cache is what `_read` would read now (no seeded edit, no fake path)."""
+    for path, text in list(_read.cache.items()):
+        try:
+            if _read.uncached(path) != text:
+                return False
+        except (OSError, TypeError, ValueError):
+            return False
+    return True
+
+
+def _ls_listings_are_the_tree():
+    """The tracked set and the package listing, where already memoized, are what the tree lists now
+    (a test may inject either). Each is listed afresh and the memo put back as it was."""
+    for name, fresh in (("_TRACKED", tracked_files), ("_PYTHON_FILES", _python_files)):
+        held = globals()[name]
+        if held is None:
+            continue
+        globals()[name] = None
+        try:
+            now = fresh()
+        finally:
+            globals()[name] = held
+        if now != held:
+            return False
+    return True
+
+
+def _ls_disk_key():
+    """(key dict, None), or (None, why the disk map is bypassed)."""
+    if lane_map_cache_dir() is None:
+        return None, "cache off"
+    if not _select_cache_genuine():
+        return None, "a selection function is not the imported one"
+    if not _ls_listings_are_the_tree():
+        return None, "a listing was injected"
+    if not _ls_read_cache_is_the_tree():
+        return None, "the read cache holds a text that is not the file's"
+    state, why = _select_tree_state()
+    if state is None:
+        return None, why
+    import platform
+    env = {k: v for k, v in os.environ.items()
+           if k.startswith("MOJOLEARN_") and k != SELECT_CACHE_ENV}
+    return dict(schema=LANE_MAP_CACHE_SCHEMA, module=__name__, tool=_select_tool_digest(), env=env,
+                python="%s-%d.%d" % (sys.implementation.name, sys.version_info[0], sys.version_info[1]),
+                platform=sys.platform, machine=platform.machine(), **state), None
+
+
+class _LaneMapDisk:
+    """`with _LaneMapDisk() as disk`: `disk.loaded` is True when the map was read from disk (the
+    module's map globals are then set); otherwise derive and call `disk.store()`."""
+
+    def __init__(self):
+        self.loaded, self.key, self.path, self.fd = False, None, None, None
+
+    def __enter__(self):
+        if _LS_DISK_BUSY:
+            return self                  # re-entered while deriving: no second lock on the same key
+        key, _why = _ls_disk_key()
+        if key is None:
+            return self
+        import hashlib
+        token = hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()[:32]
+        self.key, self.path = key, os.path.join(lane_map_cache_dir(), token + ".pickle")
+        if self._load():
+            return self
+        try:
+            import fcntl
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            self.fd = os.open(self.path + ".lock", os.O_RDWR | os.O_CREAT, 0o644)
+        except (OSError, ImportError):
+            self._unlock()
+            return self
+        try:
+            fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            # Another process is deriving this key: wait for it (idle), then read what it stored.
+            # If it stored nothing (it bypassed, or failed), derive WITHOUT the lock, so a key no
+            # process can store never serializes the derivations behind one another.
+            try:
+                fcntl.flock(self.fd, fcntl.LOCK_EX)
+            except OSError:
+                pass
+            self._unlock()
+            self._load()
+            return self
+        _LS_DISK_BUSY.append(self)       # this process derives the key; the others wait on the lock
+        if self._load():                 # stored between our first look and the lock
+            self._unlock()
+        return self
+
+    def _load(self):
+        import pickle
+        try:
+            with open(self.path, "rb") as fh:
+                body = pickle.load(fh)
+        except Exception:  # noqa: BLE001 - absent, partial or foreign: a miss
+            return False
+        if not isinstance(body, dict) or body.get("key") != self.key:
+            return False
+        global _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, _LANE_DEVICE_CALLS
+        try:
+            (_LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY,
+             _LANE_DEVICE_CALLS, operations) = body["result"]
+        except (KeyError, TypeError, ValueError):
+            return False
+        LANE_OPERATIONS.clear()
+        LANE_OPERATIONS.update(operations)
+        self.loaded = True
+        _remember_lane_sources()         # a later reset of the same tree reuses it in this process too
+        return True
+
+    def store(self):
+        if self.key is None or self.loaded or _LANE_SOURCES is None:
+            return
+        after, _why = _ls_disk_key()     # the checkout must not have moved while the map was derived
+        if after != self.key:
+            return
+        import pickle
+        import tempfile
+        body = dict(key=self.key, result=(_LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS,
+                                          _LANE_CPU_ROUTE_ONLY, _LANE_DEVICE_CALLS, dict(LANE_OPERATIONS)))
+        directory = os.path.dirname(self.path)
+        try:
+            os.makedirs(directory, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(prefix=os.path.basename(self.path) + ".", suffix=".tmp", dir=directory)
+        except OSError:
+            return
+        try:
+            with os.fdopen(fd, "wb") as out:
+                pickle.dump(body, out, protocol=pickle.HIGHEST_PROTOCOL)
+                out.flush()
+                os.fsync(out.fileno())
+            os.replace(tmp, self.path)
+        except Exception:  # noqa: BLE001 - best effort: an unpicklable or unwritable map is derived next time
+            return
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+        try:
+            kept = sorted((os.path.join(directory, n) for n in os.listdir(directory) if n.endswith(".pickle")),
+                          key=os.path.getmtime, reverse=True)
+            for old in kept[_LANE_MAP_CACHE_KEEP:]:
+                os.unlink(old)
+        except OSError:
+            pass
+
+    def _unlock(self):
+        if self.fd is not None:
+            try:
+                os.close(self.fd)        # closing the descriptor releases the flock
+            except OSError:
+                pass
+            self.fd = None
+
+    def __exit__(self, *exc):
+        if self in _LS_DISK_BUSY:
+            _LS_DISK_BUSY.remove(self)
+        self._unlock()
+        return False
 
 
 _REVERSE = None

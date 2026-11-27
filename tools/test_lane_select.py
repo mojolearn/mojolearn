@@ -9,8 +9,14 @@ really does move a lane, which makes every change look verified while
 checking nothing. Every test below is written so that it FAILS if the
 selector goes quiet, not merely if it errors.
 
-    .pixi/envs/test/bin/python -m pytest tools/test_lane_select.py -q
+    .pixi/envs/test/bin/python -m pytest tools/test_lane_select.py -q -n <cores> --dist worksteal
     python3 tools/test_lane_select.py          # same checks, no pytest
+
+PARALLEL (2026-11-26). Every test is an independent unit for pytest-xdist. The real map is derived
+ONCE per clean checkout and shared on disk between the workers (`lane_select._LaneMapDisk`; the
+others wait on its lock, idle), and a reset of an unchanged tree hands the remembered map back in
+each worker (`_reuse_lane_sources`). What is left per worker is the tests that derive a map of an
+EDITED tree, one derivation each; `--dist worksteal` spreads them over idle workers.
 """
 import ast
 import os
@@ -1124,17 +1130,18 @@ def test_the_two_mojo_exemptions_are_the_ones_that_were_measured():
     each declare their OWN `U32Stream` and neither imports the other, so
     matching by trait name alone invented an edge and claimed 80 missing
     lanes."""
-    for rel in ("ensemble/checks/core_primitives_check.mojo", "ensemble/checks/philox_check.mojo"):
+    # Three checks/ mains became registered `run_checks` modules (d670f88186) and then, on purpose,
+    # standalone `TestSuite` programs again (ts-b9 915d27f92c: each has `def main()` running
+    # `TestSuite.discover_tests`), so they are back under the exemption, and they must still reach no
+    # lane: a test that conforms to a trait is not an implementation of it.
+    _, rev = _lane_sets()
+    for rel in ("ensemble/checks/core_primitives_check.mojo", "ensemble/checks/philox_check.mojo",
+                "checks/feature_tensor_check.mojo", "checks/newton_walker_check.mojo",
+                "checks/pointwise_loop_check.mojo"):
         assert lane_select.is_standalone_program(rel), \
             f"{rel} was a standalone program and is not any more; the exemption needs re-deriving"
-    # Three checks/ mains became registered `run_checks` modules on purpose (d670f88186: the column
-    # runner imports them). They are no longer standalone, so the exemption no longer covers them, and
-    # they must still reach no lane: a test that conforms to a trait is not an implementation of it.
-    _, rev = _lane_sets()
-    for rel in ("checks/feature_tensor_check.mojo", "checks/newton_walker_check.mojo",
-                "checks/pointwise_loop_check.mojo"):
-        assert not lane_select.is_standalone_program(rel), f"{rel} has its own main again; move it back above"
-        assert not rev.get(rel), f"{rel} is a registered check and reaches lanes {sorted(rev[rel])[:5]}"
+        if rel.startswith("checks/"):
+            assert not rev.get(rel), f"{rel} is a standalone check and reaches lanes {sorted(rev[rel])[:5]}"
     for rel in ("gbdt/methods/kernel/pointwise_hist2_one_byte_7bit.mojo",
                 "gbdt/methods/leaves_estimation/pointwise_oracle.mojo",
                 "core/philox.mojo", "mamba/host/gen/philox.mojo"):
@@ -3296,3 +3303,75 @@ def test_an_import_time_glue_edit_keeps_every_lane_that_runs_it_and_an_uncalled_
 
     helper = old + "\n\ndef _probe_glue_helper(x):\n    return x\n"
     assert _py(helper, old, path) == (["_probe_glue_helper"], set())
+
+
+# ------------------------------------- the remembered map across resets and processes (2026-11-26)
+def test_a_reset_does_not_change_what_the_remembered_map_is_keyed_on():
+    """`_ls_identities()` is the remembered map's key on the module's own functions and values. The
+    memos a reset drops and the reset counter are outputs: `_RESET_COUNT` (a new int per reset) and
+    `_IMPORT_TIME_CLOSURE` were keyed on, so no map was ever handed back after a reset and every probe
+    of a clean tree derived the whole map again (this file: 36 min at -n 10). No derivation here."""
+    before = lane_select._ls_identities()
+    lane_select.reset_caches()
+    lane_select.reset_caches()
+    after = lane_select._ls_identities()
+    assert after == before, sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+    # THE ARM THAT MUST CHANGE: a replaced function is still a different key.
+    real = lane_select.harness_lanes
+    lane_select.harness_lanes = lambda *a, **k: None
+    try:
+        assert lane_select._ls_identities() != before
+    finally:
+        lane_select.harness_lanes = real
+
+
+def test_the_disk_map_round_trips_and_is_bypassed_for_a_seeded_edit():
+    """`_LaneMapDisk` stores the map a clean checkout derived and hands it to the next process; a
+    seeded read-cache text, a replaced function or a cache turned off bypasses it. The tree state
+    and the genuine-function check are stood in for, and a tiny map replaces the real one; the real
+    map is put back by the reset below and the autouse fixture."""
+    import tempfile
+    names = ("_LANE_SOURCES", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_LANE_CPU_ROUTE_ONLY",
+             "_LANE_DEVICE_CALLS", "_LS_MEMO")
+    saved = {n: getattr(lane_select, n) for n in names}
+    saved_ops = dict(lane_select.LANE_OPERATIONS)
+    real_state, real_genuine = lane_select._select_tree_state, lane_select._select_cache_genuine
+    env = os.environ.get(lane_select.SELECT_CACHE_ENV)
+    tiny = ({"alpha": {"core/a.mojo"}}, {"alpha": {"declared": []}})
+    with tempfile.TemporaryDirectory() as cache:
+        try:
+            os.environ[lane_select.SELECT_CACHE_ENV] = cache
+            lane_select._select_tree_state = lambda: (dict(head="h", tree="t", ignored="i", ignored_files=0), None)
+            lane_select._select_cache_genuine = lambda: True
+            lane_select._read.cache.clear()
+            lane_select._LANE_SOURCES, lane_select._LANE_SEED_CALLS = tiny, {"alpha": {}}
+            lane_select._LANE_PRECISION_PATHS, lane_select._LANE_CPU_ROUTE_ONLY = {}, {}
+            lane_select._LANE_DEVICE_CALLS = {}
+            lane_select.LANE_OPERATIONS.clear()
+            with lane_select._LaneMapDisk() as disk:
+                assert disk.key is not None and not disk.loaded
+                disk.store()
+            assert os.listdir(os.path.join(cache, "map")), "nothing was stored"
+            lane_select._LANE_SOURCES = None
+            with lane_select._LaneMapDisk() as disk:
+                assert disk.loaded and lane_select._LANE_SOURCES == tiny
+            # THE ARMS THAT MUST BYPASS: a seeded text, a replaced function, the cache off.
+            lane_select._read.cache["<seeded>"] = "not a file"
+            assert lane_select._ls_disk_key()[0] is None
+            lane_select._read.cache.pop("<seeded>")
+            lane_select._select_cache_genuine = lambda: False
+            assert lane_select._ls_disk_key()[0] is None
+            lane_select._select_cache_genuine = lambda: True
+            os.environ[lane_select.SELECT_CACHE_ENV] = "off"
+            assert lane_select._ls_disk_key()[0] is None
+        finally:
+            lane_select._select_tree_state, lane_select._select_cache_genuine = real_state, real_genuine
+            if env is None:
+                os.environ.pop(lane_select.SELECT_CACHE_ENV, None)
+            else:
+                os.environ[lane_select.SELECT_CACHE_ENV] = env
+            for n, v in saved.items():
+                setattr(lane_select, n, v)
+            lane_select.LANE_OPERATIONS.clear()
+            lane_select.LANE_OPERATIONS.update(saved_ops)
+            lane_select.reset_caches()      # the autouse fixture restores the real map's memos
