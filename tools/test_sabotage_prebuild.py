@@ -8,10 +8,12 @@ import signal
 import subprocess
 import sys
 import time
+import zipfile
 
 import pytest
 
 import sabotage_prebuild as pre
+from sabotage_natives import configured_dirs, natives, stage_wheels
 
 
 def test_reuse_requires_clean_bytes_and_the_complete_patched_set(tmp_path):
@@ -129,3 +131,41 @@ def test_prebuild_releases_descendants_before_returning(tmp_path, stop, expected
                         os.kill(int(pid_file.read_text()), signal.SIGKILL)
                     except ProcessLookupError:
                         pass
+
+
+def test_wheel_staging_snapshot_and_reuse_share_native_inventory(tmp_path):
+    wheel = tmp_path / "candidate.whl"
+    compiled = {
+        "mojolearn/pkg/extension.so", "mojolearn/pkg/macos.dylib", "mojolearn/_mojolearn_merged.json",
+        "mojolearn/runtime/libmojo.so.1.2", "mojolearn.libs/libsupport-a1b2.so.9",
+    }
+    ignored = {"unrelated/extension.so", "mojolearn/libs.so.info", "mojolearn/module.py"}
+    with zipfile.ZipFile(wheel, "w") as archive:
+        for name in compiled | ignored:
+            archive.writestr(name, name.encode())
+    root = tmp_path / "batch" / "out"
+    sibling = root / "python/mojolearn.libs"
+    sibling.mkdir(parents=True)
+    (sibling / "old.so.1").touch()
+    (sibling / "keep.txt").touch()
+    assert stage_wheels(root, [wheel]) == (1, len(compiled))
+    expected = sorted("python/" + rel for rel in compiled)
+    assert natives(root) == pre.natives(root) == expected
+    assert (sibling / "keep.txt").is_file()
+    assert all(not (root / "python" / rel).exists() for rel in ignored)
+    hashes = {rel: pre.sha(root / rel) for rel in expected}
+    receipt = dict(prepared=True, clean_sha256="clean", rc={"build": 0}, changed=hashes)
+    (root.parent / "ready").write_text(json.dumps(receipt))
+    assert pre.reusable(root.parent, {"builds": ["build"]}, "clean")
+    (sibling / "libsupport-a1b2.so.9").write_bytes(b"corrupt")
+    assert not pre.reusable(root.parent, {"builds": ["build"]}, "clean")
+
+
+def test_extra_native_roots_keep_the_wheel_inventory(monkeypatch, tmp_path):
+    monkeypatch.setenv("NATIVE_DIRS", "extra/host")
+    expected = ["extra/host/host.so", "python/mojolearn/ext.so", "python/mojolearn.libs/dep.so.1"]
+    for name in expected:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True)
+        path.touch()
+    assert natives(tmp_path, configured_dirs()) == expected

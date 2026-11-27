@@ -243,32 +243,7 @@ if [ -n "${SAB_WHEEL_DIR:-}" ]; then
     echo "$match" | sed 's/^/  wheel /' >> "$RES/summary.txt"
     [ "$mrc" = 0 ] || { say "BASE the staged wheels are not this tree's commit ($SAB_WHEEL_DIR)"; exit 2; }
     t=$(date +%s)
-    python3 - "$TREE/python" "$SAB_WHEEL_DIR"/*.whl > "$RES/base-wheels.log" 2>&1 <<'EOF'
-import os, re, sys, zipfile
-root, wheels = sys.argv[1], sys.argv[2:]
-native = re.compile(r"(\.so(\.\d+)*|\.dylib|/_mojolearn_merged\.json)$")
-top = ("mojolearn/", "mojolearn.libs/")
-removed = 0
-for base in ("mojolearn", "mojolearn.libs"):  # driver-loop: over the two native trees
-    for d, _, files in os.walk(os.path.join(root, base)):
-        for f in files:  # driver-loop: over the tree's files (the old clean set goes, sources stay)
-            p = os.path.join(d, f)
-            if native.search(p):
-                os.remove(p); removed += 1
-placed = 0
-for w in wheels:  # driver-loop: over the staged wheels
-    with zipfile.ZipFile(w) as z:
-        for m in z.namelist():  # driver-loop: over one wheel's members (natives only: the sources are the tree's)
-            if m.startswith(top) and native.search(m):
-                z.extract(m, root); placed += 1
-                info = z.getinfo(m)
-                mode = (info.external_attr >> 16) & 0o777
-                if mode:
-                    os.chmod(os.path.join(root, m), mode)
-print(f"removed {removed} native files, placed {placed} from {len(wheels)} wheels")
-if not placed:
-    sys.exit("no native file in the staged wheels")
-EOF
+    python3 tools/sabotage_natives.py stage "$TREE" "$SAB_WHEEL_DIR"/*.whl > "$RES/base-wheels.log" 2>&1
     brc=$?
     say "BASE from the staged wheels rc=$brc secs=$(( $(date +%s) - t )): $(tail -n 1 "$RES/base-wheels.log")"
     [ $brc -eq 0 ] || exit 2

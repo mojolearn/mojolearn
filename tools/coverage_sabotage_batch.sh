@@ -120,15 +120,15 @@ fi
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     log "TREE NOT CLEAN"; rm -rf "$SCRATCH"; exit 4
 fi
-# NATIVE_DIRS: where the builds write native files (default python/mojolearn; add a host set dir if
-# the box keeps one outside the tree)
+# NATIVE_DIRS can include extra roots for a separately staged host set. The default
+# includes the package and the sibling dependency directory in repaired Linux wheels.
 # The development layout (tools/development_build.py) loads its groups through the index _mojolearn_merged.json
 # beside them; a sabotaged development build re-points that index at the sabotaged group, so the index is part of
 # the native state snapshotted and restored with the binaries (2026-11-23, nn-integrate: without it a tree built in
 # the development layout kept loading the clean groups and every arm read unmoved).
-natives() { find ${NATIVE_DIRS:-python/mojolearn} \( -name '*.so' -o -name '*.dylib' -o -name '_mojolearn_merged.json' \) -type f 2>/dev/null | sort; }
+natives() { python3 tools/sabotage_natives.py list "$ROOT"; }
 if command -v sha256sum > /dev/null 2>&1; then HASH=(sha256sum); else HASH=(shasum -a 256); fi
-snap() { natives | while read -r f; do "${HASH[@]}" "$f" || exit 1; done; }
+snap() ( set -o pipefail; natives | while IFS= read -r f; do "${HASH[@]}" "$f" || exit 1; done )
 # Both sides run in ONE identity_break process (the lanes' device="cpu" and device="gpu" calls): the GPU
 # side to <tag>_device.json, then the CPU side to <tag>_cpu.json. An installation without a GPU records the
 # CPU side only (its GPU side reads not applicable; a gpu arm cannot be proven there).
@@ -201,8 +201,8 @@ restore() {
             log "REVERT FAILED"
         fi
     fi
-    natives | while read -r f; do grep -qxF "$f" "$OUT/clean_natives.txt" || rm -f "$f" || exit 1; done || rc=1
-    tar -xf "$SCRATCH/clean_natives.tar" || rc=1
+    ( set -o pipefail; natives | while IFS= read -r f; do grep -qxF "$f" "$OUT/clean_natives.txt" || rm -f -- "$f" || exit 1; done ) || rc=1
+    tar -Pxf "$SCRATCH/clean_natives.tar" || rc=1
     snap > "$SCRATCH/restored.sha" && cmp -s "$SCRATCH/restored.sha" "$OUT/clean_natives.sha" || rc=1
     if [ "$rc" -ne 0 ]; then
         log "RESTORE FAILED: retained $SCRATCH"
@@ -229,7 +229,7 @@ finish() {
 trap finish EXIT
 trap 'stop_all' INT TERM
 natives > "$OUT/clean_natives.txt" && [ -s "$OUT/clean_natives.txt" ] && \
-    snap > "$OUT/clean_natives.sha" && tar -cf "$SCRATCH/clean_natives.tar" -T "$OUT/clean_natives.txt" || exit 4
+    snap > "$OUT/clean_natives.sha" && tar -Pcf "$SCRATCH/clean_natives.tar" -T "$OUT/clean_natives.txt" || exit 4
 backup_ok=1
 
 run_cols clean || exit 6

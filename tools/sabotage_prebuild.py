@@ -13,8 +13,8 @@ clean natives of the tree copied in, the batch's patches applied, its bindings b
 share the allocation's cores: the scheduler keeps at most one compile per core and the sum of the compiles' recorded
 peak memory (tools/development_build.py cache peaks, with headroom; a group without a record takes --default-gib)
 under 80 percent of the allocation's memory, starting units in plan order so the run loop never waits on a late
-batch. When a batch's builds are done its changed or new native files (python/mojolearn: *.so, *.dylib,
-_mojolearn_merged.json) are copied to <out>/<batch>/out/<same relative path>, the build logs, return codes and
+batch. When a batch's builds are done its changed or new native files (package extensions, versioned shared libraries, wheel dependencies
+and the merged index) are copied to <out>/<batch>/out/<same relative path>, the build logs, return codes and
 seconds to <out>/<batch>/, `ready` is written last, and the worktree is deleted.
 
 The batch run (coverage_sabotage_batch.sh with SAB_PREBUILT=<out>) applies the same patches to the tree, copies
@@ -44,9 +44,8 @@ import threading
 import time
 
 from build_process import stop_group
+from sabotage_natives import NATIVE_DIRS, configured_dirs, natives
 
-NATIVE_SUFFIXES = (".so", ".dylib")
-INDEX = "_mojolearn_merged.json"
 PEAK_HEADROOM = 1.2
 _stop_signal = 0
 _GIT = threading.Lock()  # git worktree add/remove share the tree's administrative files
@@ -72,12 +71,6 @@ def recorded(cache, build):
     if not isinstance(saved, dict) or saved.get("status") != "passed":
         return 0, 0.0
     return int(saved.get("peak_rss_bytes") or 0), float(saved.get("elapsed_seconds") or 0.0)
-
-
-def natives(root):
-    base = Path(root) / "python" / "mojolearn"
-    return sorted(str(p.relative_to(root)) for p in base.rglob("*")
-                  if p.is_file() and (p.suffix in NATIVE_SUFFIXES or p.name == INDEX))
 
 
 def sha(path):
@@ -179,7 +172,7 @@ class Batch:
         out = self.dir / "out"
         changed = {}
         if self.prepared:
-            for rel in natives(self.tree):  # driver-loop: over the worktree's native files
+            for rel in natives(self.tree, self.args.native_dirs):  # driver-loop: over the worktree's native files
                 if _stop_signal:
                     return
                 digest = sha(self.tree / rel)
@@ -204,7 +197,7 @@ class Batch:
         pending.replace(self.dir / "ready")
 
 
-def reusable(directory, spec, clean_sha256):
+def reusable(directory, spec, clean_sha256, native_dirs=NATIVE_DIRS):
     """Reuse only a completed, successful build for these exact clean native files."""
     try:
         receipt = json.loads((directory / "ready").read_bytes())
@@ -212,7 +205,7 @@ def reusable(directory, spec, clean_sha256):
                 or receipt.get("rc") != dict.fromkeys(spec["builds"], 0)):
             return False
         changed = receipt.get("changed")
-        if not isinstance(changed, dict) or not changed or set(natives(directory / "out")) != set(changed):
+        if not isinstance(changed, dict) or not changed or set(natives(directory / "out", native_dirs)) != set(changed):
             return False
         return all(not _stop_signal and sha(directory / "out" / rel) == digest for rel, digest in changed.items())
     except (OSError, ValueError, AttributeError):
@@ -234,7 +227,12 @@ def main(argv=None):
                     help="the command prefix of the tree's environment (default: pixi run with the TREE's manifest, so "
                          "no worktree gets an environment of its own)")
     a = ap.parse_args(argv)
-    a.tree = str(Path(a.tree).resolve())
+    tree = Path(a.tree).resolve()
+    a.tree = str(tree)
+    try:
+        a.native_dirs = tuple(str((tree / path).resolve().relative_to(tree)) for path in configured_dirs())
+    except ValueError:
+        raise SystemExit("native directory outside the tree requires an in-place build")
     a.prefix = (shlex.split(a.prefix) if a.prefix else
                 ["pixi", "run", "--manifest-path", str(Path(a.tree) / "pixi.toml"), "-e", "default"])
     if a.cores < 1:
@@ -259,7 +257,7 @@ def main(argv=None):
         shutil.copy2(Path(a.tree) / rel, dst)
         return rel, sha(dst)
     with ThreadPoolExecutor(max_workers=a.cores) as pool:
-        a.clean_hashes = dict(pool.map(snapshot, natives(a.tree)))
+        a.clean_hashes = dict(pool.map(snapshot, natives(a.tree, a.native_dirs)))
     if _stop_signal:
         return 128 + _stop_signal
     if not a.clean_hashes:
@@ -267,7 +265,7 @@ def main(argv=None):
     a.clean_sha256 = hashlib.sha256(json.dumps(a.clean_hashes, sort_keys=True).encode()).hexdigest()
     batches = []
     with ThreadPoolExecutor(max_workers=a.cores) as pool:
-        cached = pool.map(lambda x: reusable(Path(a.out) / x, plan[x], a.clean_sha256), ids)
+        cached = pool.map(lambda x: reusable(Path(a.out) / x, plan[x], a.clean_sha256, a.native_dirs), ids)
         for x, valid in zip(ids, cached):
             if _stop_signal:
                 return 128 + _stop_signal
