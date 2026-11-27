@@ -1124,17 +1124,18 @@ def test_the_two_mojo_exemptions_are_the_ones_that_were_measured():
     each declare their OWN `U32Stream` and neither imports the other, so
     matching by trait name alone invented an edge and claimed 80 missing
     lanes."""
-    for rel in ("ensemble/checks/core_primitives_check.mojo", "ensemble/checks/philox_check.mojo"):
+    # Three checks/ mains became registered `run_checks` modules (d670f88186) and then, on purpose,
+    # standalone `TestSuite` programs again (ts-b9 915d27f92c: each has `def main()` running
+    # `TestSuite.discover_tests`), so they are back under the exemption, and they must still reach no
+    # lane: a test that conforms to a trait is not an implementation of it.
+    _, rev = _lane_sets()
+    for rel in ("ensemble/checks/core_primitives_check.mojo", "ensemble/checks/philox_check.mojo",
+                "checks/feature_tensor_check.mojo", "checks/newton_walker_check.mojo",
+                "checks/pointwise_loop_check.mojo"):
         assert lane_select.is_standalone_program(rel), \
             f"{rel} was a standalone program and is not any more; the exemption needs re-deriving"
-    # Three checks/ mains became registered `run_checks` modules on purpose (d670f88186: the column
-    # runner imports them). They are no longer standalone, so the exemption no longer covers them, and
-    # they must still reach no lane: a test that conforms to a trait is not an implementation of it.
-    _, rev = _lane_sets()
-    for rel in ("checks/feature_tensor_check.mojo", "checks/newton_walker_check.mojo",
-                "checks/pointwise_loop_check.mojo"):
-        assert not lane_select.is_standalone_program(rel), f"{rel} has its own main again; move it back above"
-        assert not rev.get(rel), f"{rel} is a registered check and reaches lanes {sorted(rev[rel])[:5]}"
+        if rel.startswith("checks/"):
+            assert not rev.get(rel), f"{rel} is a standalone check and reaches lanes {sorted(rev[rel])[:5]}"
     for rel in ("gbdt/methods/kernel/pointwise_hist2_one_byte_7bit.mojo",
                 "gbdt/methods/leaves_estimation/pointwise_oracle.mojo",
                 "core/philox.mojo", "mamba/host/gen/philox.mojo"):
