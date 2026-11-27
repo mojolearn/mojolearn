@@ -12,8 +12,7 @@ host generator seeded from `random_state`, so a shuffled fit is not the
 reference's sample order.
 
 Refused by name (sequence/NOT_IMPLEMENTED.tsv): solver='lbfgs',
-early_stopping=True, warm_start, partial_fit, multilabel targets, verbose,
-float64 input."""
+early_stopping=True, warm_start, partial_fit, multilabel targets, verbose."""
 from ._optional_numpy import require_numpy
 from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_mlp')
@@ -74,7 +73,7 @@ class MLPRegressor(_BaseMLP):
     generator, and the shuffle order is mojolearn's own, so results for a given
     `random_state` differ from scikit-learn's.
 
-    `X` must be 2-D float32 (float64 raises `TypeError`); `y` is (n_samples,) or
+    `X` is 2-D float32 (float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused); `y` is (n_samples,) or
     (n_samples, n_outputs). Not supported: ``solver='lbfgs'``, ``early_stopping=True``,
     `warm_start`, `partial_fit` and `verbose`.
 
@@ -213,7 +212,7 @@ class MLPClassifier(_BaseMLP):
     generator, and the shuffle order is mojolearn's own, so results for a given
     `random_state` differ from scikit-learn's.
 
-    `X` must be 2-D float32 (float64 raises `TypeError`); `y` is a 1-D array of labels
+    `X` is 2-D float32 (float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused); `y` is a 1-D array of labels
     with at least two classes. Not supported: multilabel targets, ``solver='lbfgs'``,
     ``early_stopping=True``, `warm_start`, `partial_fit` and `verbose`.
 

@@ -52,8 +52,8 @@ class VARResults:
         Parameters
         ----------
         y : array-like of shape (n, neqs), float32
-            History to start from; at least ``k_ar`` rows. float64 raises
-            TypeError.
+            History to start from; at least ``k_ar`` rows. float64 input is converted to float32,
+            once, with round-to-nearest-even; values outside float32's range are refused.
         steps : int
             Number of steps to forecast.
 
@@ -77,7 +77,7 @@ class VAR(ParamsMixin):
     Parameters
     ----------
     endog : array-like of shape (n_obs, n_variables)
-        The multivariate series, float32. float64 raises TypeError.
+        The multivariate series, float32 (float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused).
     exog : None
         Exogenous variables are not supported; anything other than None
         raises NotImplementedError.

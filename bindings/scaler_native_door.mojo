@@ -16,6 +16,7 @@ from bindings.classical_attributes_door import classical_connect_numpy, classica
 from bindings.classical_arrays_door import classical_input, classical_address, classical_typed, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order
 from providers.python.preprocessing_input_pyapi_door import ScalerInputSnapshot, scaler_operation_input
 from core.scaler_fit_impl import scaler_cast, scaler_fill, scaler_counts
+from core.admitted_input import admitted_cast_f32
 from std.python._cpython import GILReleased
 from core.entry_table import entry_ref_call, entry_ref_unresolved
 from core.prep_entry_table import PrepEntryKey, scaler_ref, xp_transport_ref
@@ -60,7 +61,7 @@ def _input(source: PythonObject, ndim: Int, strict: Bool, context: PythonObject)
     if strict and not sequence and not classical_is_f32(value, context):
         # A nonnative float32 buffer normalizes byte order, as _buffer did.
         if classical_is_array(value, context) or String(value.dtype.kind) != "f" or Int(py=value.itemsize) != 4:
-            raise Error("TypeError: Scaler input must have dtype float32")
+            raise Error("TypeError: Scaler input must have dtype float32 or float64")
     if rank != ndim:
         raise Error("Scaler requires a nonempty two-dimensional input" if strict else "sample_weight must be one-dimensional")
     var rows = 1 if rank == 0 else Int(py=value.shape[0])
@@ -80,7 +81,12 @@ def _input(source: PythonObject, ndim: Int, strict: Bool, context: PythonObject)
     var addr = Int(py=classical_address(value))
     var s0 = Int(py=value.strides[0]) if rank else 0
     var s1 = Int(py=value.strides[1]) if rank == 2 else 0
-    scaler_cast(addr, s0, s1, rows, cols, item, kind, native, dest)
+    if native:
+        # The shared admission cast (parallel; a float64 outside float32's
+        # range refused by its column); scaler_cast only swaps byte order.
+        _ = admitted_cast_f32(addr, s0, s1, rows, cols, item, kind, dest)
+    else:
+        scaler_cast(addr, s0, s1, rows, cols, item, kind, native, dest)
     _ = value^
     _ = prepared^
     return output

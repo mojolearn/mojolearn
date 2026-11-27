@@ -71,8 +71,8 @@ def test_disabled_direct_entry_stays_native_and_preserves_bits(monkeypatch):
 
 
 @pytest.mark.parametrize("bad,exception", [
-    (np.ones((4, 2), np.float64), TypeError),
     (np.ones((4, 2), np.int32), TypeError),
+    (np.array([[1e39, 1]], np.float64), ValueError),
     (np.array([[np.inf, 1]], np.float32), ValueError),
     (np.array([[-np.inf, 1]], np.float32), ValueError),
     (np.empty((0, 2), np.float32), ValueError),
@@ -88,8 +88,16 @@ def test_native_pandas_nan_and_dtype_contract():
     model = ml.StandardScaler()
     audit_native_call(model.fit, pd.DataFrame(x)).assert_native()
     np.testing.assert_allclose(np.asarray(model.mean_), [3, 5])
-    with pytest.raises(TypeError, match="float32"):
-        model.fit(pd.DataFrame(x.astype(np.float64)))
+    # float64 storage is converted once (round-to-nearest-even): the float32
+    # frame's statistics, bit for bit; a value outside float32's range is
+    # refused by its column.
+    wide = ml.StandardScaler().fit(pd.DataFrame(x.astype(np.float64)))
+    for name in ("mean_", "var_", "scale_"):
+        assert np.asarray(getattr(wide, name)).tobytes() == np.asarray(getattr(model, name)).tobytes()
+    with pytest.raises(ValueError, match="column 1 holds a float64 value"):
+        ml.StandardScaler().fit(pd.DataFrame(np.array([[1.0, 1e39], [2.0, 3.0]])))
+    with pytest.raises(TypeError, match="float32 or float64"):
+        model.fit(pd.DataFrame(x.astype(np.int32)))
 
 
 def test_fresh_import_then_numpy_first_fit_is_native():

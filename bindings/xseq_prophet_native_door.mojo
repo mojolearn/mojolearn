@@ -11,6 +11,7 @@ from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.xseq_native_common_door import xseq_route_of, xseq_addr, xseq_column_i64
 from bindings.forecast_device_door import forecast_finite
+from bindings.admitted_sequence_door import admit_nd_f32
 from core.entry_table import EntryRef
 from sequence.xseq_prophet_run import (
     ProphetPredictPlan, ProphetPredictInput, prophet_run_predict_setup, prophet_run_parameter_count,
@@ -178,14 +179,20 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var t_owner = PythonObject(None)
     var t = _times(args[0], context, t_owner)
     var y = prophet_source(args[1], context)
-    var y_float64 = Bool(py=y.dtype == py_item(context, nk[].k_float64))
+    if Bool(py=y.dtype == py_item(context, nk[].k_float64)):
+        # A float64 y is converted once to float32, the dtype the fit
+        # computes in, by the shared cast (bindings/admitted_sequence_door.mojo
+        # admit_nd_f32: round-to-nearest-even, a finite value outside
+        # float32's range refused by its column); the times stay float64.
+        # It replaces the fit's "float64 y is refused" (Andrew, 2026-11-27).
+        y = admit_nd_f32(y, "y", False, context)
     var rank = Int(py=y.ndim)
     var one = rank == 1
     var Y = PythonObject(None)
     var B = 0
     var N = 0
     var finite = True
-    if not y_float64 and (rank == 1 or rank == 2):
+    if rank == 1 or rank == 2:
         Y = prophet_contiguous(y, False, context)
         if one:
             Y = py_call(Y.reshape, 1, -1)
@@ -206,7 +213,7 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         changepoint_range = Float64(py=py_item(fields, nk[].k_changepoint_range))
         n_changepoints = Int(py=py_item(fields, nk[].k_n_changepoints))
     var fit_input = ProphetFitInput(
-        t.copy(), y_float64, rank, N, finite, _seasons(fields),
+        t.copy(), rank, N, finite, _seasons(fields),
         _auto_setting(fields, "yearly", py_item(fields, nk[].k_yearly_seasonality)),
         _auto_setting(fields, "weekly", py_item(fields, nk[].k_weekly_seasonality)),
         _auto_setting(fields, "daily", py_item(fields, nk[].k_daily_seasonality)),

@@ -22,8 +22,10 @@ Run the same script with the same release on any of them and the model and its p
 ## The estimator interface
 
 Estimators follow scikit-learn's conventions: construct with hyperparameters, then `fit`, `predict`,
-`predict_proba`, `transform` or `score` as the estimator supports. Inputs are float32 arrays; NumPy arrays
-work directly, and the library itself does not require NumPy.
+`predict_proba`, `transform` or `score` as the estimator supports. Every estimator, metric and
+model-selection function computes in float32: float64 inputs are converted to float32 once, with
+round-to-nearest-even; values outside float32's range are refused. NumPy arrays work directly, and the
+library itself does not require NumPy.
 
 ```python
 from mojolearn import KMeans, PCA, RandomForestClassifier

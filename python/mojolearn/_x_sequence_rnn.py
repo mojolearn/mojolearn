@@ -18,7 +18,7 @@ between layers, `bias`, `clip_grad_norm`, `class_weight`, early stopping on
 validation data, `warm_start`, `partial_fit`, an initial state `h_0` / `c_0`
 and streaming `step`. Variable lengths (`lengths=`) in fit, predict, score
 and hidden_sequence. Refused by name (sequence/NOT_IMPLEMENTED.tsv):
-proj_size, float64, float16 / bfloat16.
+proj_size, float16 / bfloat16.
 """
 from ._mode import ParamsMixin
 
@@ -473,11 +473,11 @@ class LSTMRegressor(_RecurrentRegressor):
     layer's last hidden state, and training minimizes the mean squared error by backpropagation
     through time.
 
-    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
-    raises `TypeError`). `y` is (n_samples,) or (n_samples, n_outputs).
+    `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
+    with round-to-nearest-even; values outside float32's range are refused). `y` is (n_samples,) or (n_samples, n_outputs).
 
     Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float64, float16 or bfloat16 data.
+    and float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -610,11 +610,11 @@ class LSTMClassifier(_RecurrentClassifier):
     layer's last hidden state, and training minimizes the softmax cross-entropy by backpropagation
     through time.
 
-    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
-    raises `TypeError`). `y` holds class labels (at least two classes).
+    `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
+    with round-to-nearest-even; values outside float32's range are refused). `y` holds class labels (at least two classes).
 
     Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float64, float16 or bfloat16 data.
+    and float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -752,11 +752,11 @@ class GRURegressor(_RecurrentRegressor):
     layer's last hidden state, and training minimizes the mean squared error by backpropagation
     through time.
 
-    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
-    raises `TypeError`). `y` is (n_samples,) or (n_samples, n_outputs).
+    `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
+    with round-to-nearest-even; values outside float32's range are refused). `y` is (n_samples,) or (n_samples, n_outputs).
 
     Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float64, float16 or bfloat16 data.
+    and float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -889,11 +889,11 @@ class GRUClassifier(_RecurrentClassifier):
     layer's last hidden state, and training minimizes the softmax cross-entropy by backpropagation
     through time.
 
-    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
-    raises `TypeError`). `y` holds class labels (at least two classes).
+    `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
+    with round-to-nearest-even; values outside float32's range are refused). `y` holds class labels (at least two classes).
 
     Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float64, float16 or bfloat16 data.
+    and float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -1031,11 +1031,11 @@ class RNNRegressor(_RecurrentRegressor):
     layer's last hidden state, and training minimizes the mean squared error by backpropagation
     through time.
 
-    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
-    raises `TypeError`). `y` is (n_samples,) or (n_samples, n_outputs).
+    `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
+    with round-to-nearest-even; values outside float32's range are refused). `y` is (n_samples,) or (n_samples, n_outputs).
 
     Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float64, float16 or bfloat16 data.
+    and float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -1169,11 +1169,11 @@ class RNNClassifier(_RecurrentClassifier):
     layer's last hidden state, and training minimizes the softmax cross-entropy by backpropagation
     through time.
 
-    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
-    raises `TypeError`). `y` holds class labels (at least two classes).
+    `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
+    with round-to-nearest-even; values outside float32's range are refused). `y` holds class labels (at least two classes).
 
     Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float64, float16 or bfloat16 data.
+    and float16 or bfloat16 data.
 
     Parameters
     ----------

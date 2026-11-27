@@ -418,14 +418,12 @@ def _pd_locations(block: PythonObject, context: PythonObject) raises -> PythonOb
     return result^
 
 
-def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bool = False, allow_nonfinite: Bool = False,
-                      refuse_double: String = "") raises -> PythonObject:
+def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bool = False,
+                      allow_nonfinite: Bool = False) raises -> PythonObject:
     """One C-ordered float32 copy of an exact pandas DataFrame or Series.
-    A nonempty `refuse_double` is the refusal raised, before any conversion,
-    when the storage's common dtype is not float32-or-narrower (float64, or
-    object promotion of object/nullable-frame/bool-with-number blocks): the
-    dtype `np.asarray` would give, so float64-refusing callers keep their
-    rule while integer, half and float32 storage is still admitted."""
+    float64 storage (and storage pandas promotes to float64) is narrowed
+    once, round-to-nearest-even; a finite value outside float32's range is
+    refused by its column (core/classical_pandas_impl.mojo)."""
     var b = native_loaded_module("builtins")
     if not native_pandas_exact(value):
         raise Error("TypeError: pandas input requires an exact DataFrame or Series")
@@ -474,7 +472,7 @@ def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bo
         var positions = List[Int](length=1, fill=0) if series else _pd_locations_native(block, context)
         plan.add_block(descriptor^, positions^, dtype, pair[1])
         owned.append(data)
-    plan.finish(strict_f32, refuse_double)
+    plan.finish(strict_f32)
     var result = sequential_array_native(native_matrix_shape(plan.rows, 0 if series else plan.cols), py_item(context, nk[].k_float32), context)
     var output = Int(py=sequential_address(result))
     var int_word = Int(b.int._obj_ptr)

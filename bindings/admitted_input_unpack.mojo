@@ -120,6 +120,7 @@ from core.admitted_f32_plan import (
     admitted_target_plan, admitted_target_shape, admitted_weight_shape, admitted_weights_run,
 )
 from core.admitted_ids import admitted_ids_i64, admitted_ids_i32
+from core.admitted_input_nd import admitted_cast_nd_f32
 from core.admitted_rows_plan import admitted_rows_base, admitted_rows_indices, admitted_rows_shape, admitted_rows_store, admitted_rows_run
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from std.python._cpython import PyObjectPtr, GILReleased
@@ -464,6 +465,30 @@ def admit_weight_words(source: PythonObject, rows: Int, context: PythonObject,
         w = admit_weights(source, rows, context, admitted)
     var x = AdmittedX(w, source, Int(py=classical_address(w)), rows, 1, 1, w is source, True)
     return x^
+
+
+def admit_nd_array_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """A new C-order float32 mojolearn Array of an admitted array of any
+    rank (an Array or an ndarray: its shape, strides and item words), by ONE
+    parallel cast (core/admitted_input_nd.mojo `admitted_cast_nd_f32`): a
+    float64 input is narrowed round-to-nearest-even and a finite value
+    outside float32's range is refused by its column. Non-finite words are
+    copied as they are (the caller keeps its own finite rule)."""
+    var item = Int(py=value.itemsize)
+    var kind = classical_cast_kind(value, item, name, context)
+    var shape = value.shape  # one attribute read each, not one per axis
+    var strides = value.strides
+    var rank = len(shape)
+    var dims = List[Int](capacity=rank)
+    var steps = List[Int](capacity=rank)
+    for axis in range(rank):  # driver-loop: over array rank metadata
+        dims.append(Int(py=shape[axis]))
+        steps.append(Int(py=strides[axis]))
+    var result = admitted_storage_native(dims.copy(), "<f4", context, "C", True)
+    var destination = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
+    _ = admitted_cast_nd_f32(Int(py=classical_address(value)), dims, steps, item, kind, destination)
+    _ = value  # keep the source storage alive through the native cast above
+    return result
 
 
 def admitted_dtype(view: PythonObject, context: PythonObject) raises -> String:

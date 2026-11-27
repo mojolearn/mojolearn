@@ -39,21 +39,29 @@ from std.memory import bitcast
 from core.classical_cast import classical_f32_bits
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
-from core.admitted_input import admitted_raw_word
+from core.cast_in import CAST_KIND_FLOAT
+from core.admitted_input import (
+    admitted_raw_word, admitted_f64_rounds_to_inf, admitted_f64_overflow_refuse, admitted_f64_nan_fix,
+)
 
 comptime _AN_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _AN_INTP = MutPointer[Int, MutUntrackedOrigin]
 comptime _AN_U8P = MutPointer[UInt8, MutUntrackedOrigin]
 comptime _AN_EXP = UInt32(0x7F800000)
+comptime _AN_NO_COLUMN = 9223372036854775807
 
 
 def admitted_cast_nd_f32(
     base: Int, dims: List[Int], steps: List[Int], item: Int, kind: Int, dst: _AN_F32P,
-) -> Bool:
+) raises -> Bool:
     """`np.array(a, dtype=float32, order="C")` of the strided array at `base`
     into `dst` (element i in C order at `dst[i]`); True when every written
     word is finite. A caller that does not refuse non-finite input ignores
-    the flag."""
+    the flag. A float64 input holding a finite value outside float32's
+    range is refused by its column (the last axis; 0 for a vector) with the
+    one refusal of core/admitted_input.mojo (`admitted_f64_overflow_refuse`),
+    never turned into an infinity; the test runs only on a word already
+    found non-finite."""
     # parallel: N-d cast and finiteness test over row tasks across host cores (was the serial odometer xseq_cast_nd)
     var rank = len(dims)
     var total = 1
@@ -78,11 +86,15 @@ def admitted_cast_nd_f32(
     var chunk = host_predict_chunk(rows, tasks)
     var flags = List[UInt8](length=tasks, fill=UInt8(1))
     var flag_ptr = rebind[_AN_U8P](flags.unsafe_ptr())
+    var firsts = List[Int](length=tasks, fill=_AN_NO_COLUMN)
+    var first_ptr = rebind[_AN_INTP](firsts.unsafe_ptr())
+    var wide = kind == CAST_KIND_FLOAT and item == 8
 
-    def _rows(t: Int) {imm base, imm item, imm kind, imm dst, imm cols, imm col_step, imm rows, imm lead, imm dims_ptr, imm steps_ptr, imm chunk, imm flag_ptr}:
+    def _rows(t: Int) {imm base, imm item, imm kind, imm dst, imm cols, imm col_step, imm rows, imm lead, imm dims_ptr, imm steps_ptr, imm chunk, imm flag_ptr, imm first_ptr, imm wide}:
         var lo = t * chunk
         var hi = min(lo + chunk, rows)
         var finite = True
+        var first = _AN_NO_COLUMN
         for r in range(lo, hi):  # native input marshaling: this task's input rows
             var offset = 0
             var rest = r
@@ -95,23 +107,34 @@ def admitted_cast_nd_f32(
             for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
                 var raw = admitted_raw_word(base + offset + c * col_step, item)
                 var bits = classical_f32_bits(raw, kind, item)
-                dst.unsafe_store(r * cols + c, bitcast[DType.float32](bits))
                 if (bits & _AN_EXP) == _AN_EXP:
                     finite = False
+                    bits = admitted_f64_nan_fix(raw, bits, wide)
+                    if admitted_f64_rounds_to_inf(raw, bits, wide) and c < first:
+                        first = c
+                dst.unsafe_store(r * cols + c, bitcast[DType.float32](bits))
         if not finite:
             flag_ptr.unsafe_store(t, UInt8(0))
+        if first < _AN_NO_COLUMN:
+            first_ptr.unsafe_store(t, first)
 
     if tasks <= 1:
         _rows(0)
     else:
         host_parallelize(_rows, tasks)
     var all_finite = True
+    var column = _AN_NO_COLUMN
     for t in range(tasks):  # driver-loop: over the row tasks' flags (at most one per core)
         if flags[t] == UInt8(0):
             all_finite = False
+        if firsts[t] < column:
+            column = firsts[t]
     _ = flags^
+    _ = firsts^
     _ = lead_dims^
     _ = lead_steps^
+    if column < _AN_NO_COLUMN:
+        admitted_f64_overflow_refuse(column)
     return all_finite
 
 

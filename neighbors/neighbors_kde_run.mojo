@@ -10,7 +10,7 @@ these functions at the point the public method made each step, so refusal
 order and wording are unchanged. Nothing here imports the interpreter.
 """
 from std.memory import unsafe_memcpy
-from core.admitted_input import admitted_cast_f32
+from core.admitted_input import admitted_cast_f32_words, ADMITTED_ALL_FINITE
 from core.cast_in import CAST_KIND_FLOAT
 from core.host_finite_scan import host_finite_status
 from core.kde_native_api import KDEPrepareRequest, KDEQueryRequest, KDEResidentQuery, KDE_CAP_RESIDENT, KDE_CAP_IMMUTABLE
@@ -115,7 +115,9 @@ def kde_copy_finite_f32(src: Int, dst: Int, rows: Int, cols: Int) -> Bool:
     one parallel row-task copy (float32 to float32: the same bits). True when
     every word is finite."""
     # parallel: the copy and the finiteness verdict over row tasks across host cores
-    return admitted_cast_f32(src, cols * 4, 4, rows, cols, 4, CAST_KIND_FLOAT, _F32P(unsafe_from_address=dst))
+    # A float32 source never rounds to an infinity: the non-raising status form.
+    return admitted_cast_f32_words(src, cols * 4, 4, rows, cols, 4, CAST_KIND_FLOAT,
+                                   _F32P(unsafe_from_address=dst)) == ADMITTED_ALL_FINITE
 
 
 def kde_query_finite_status(query: Int, count: Int) -> Int:

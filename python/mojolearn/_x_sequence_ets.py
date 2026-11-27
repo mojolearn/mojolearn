@@ -82,7 +82,7 @@ class ETS(ParamsMixin):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Each series needs at
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Each series needs at
     least 4 observations, and more than the number of parameters plus 4.
     Multiplicative errors or seasons need strictly positive data.
     Prediction intervals, fitted values and exogenous regressors are not
@@ -143,8 +143,8 @@ class ETS(ParamsMixin):
 
         Raises
         ------
-        TypeError
-            If ``y`` is float64.
+        ValueError
+            If a float64 value is outside float32's range.
         ValueError
             If a series has fewer than 4 observations, if a multiplicative
             model meets non-positive or non-finite values, or if there are

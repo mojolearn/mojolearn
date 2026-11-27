@@ -121,12 +121,16 @@ struct PandasInputPlan(Movable):
             self.placements.append(position)
         self.blocks.append(block^)
 
-    def finish(mut self, strict_f32: Bool, refuse_double: String) raises:
-        if strict_f32 and (self.objects or self.booleans or self.common_kind != "f" or self.common_size != 4):
-            raise Error("TypeError: Scaler input must have dtype float32")
+    def finish(mut self, strict_f32: Bool) raises:
+        # `strict_f32` (the scalers): float32 or float64 storage only; float64
+        # takes the shared narrowing below (`double_round`, refused by column
+        # when a finite value is outside float32's range).
+        if strict_f32 and (self.objects or self.booleans or self.common_kind != "f"
+                           or (self.common_size != 4 and self.common_size != 8)):
+            raise Error("TypeError: Scaler input must have dtype float32 or float64")
         self.double_round = self.objects or (self.booleans and self.numbers) or (self.common_kind == "f" and self.common_size == 8)
-        if self.double_round and refuse_double.byte_length() > 0:
-            raise Error(refuse_double)
+        # TOMBSTONE: refuse_double (the float64-refusing callers' pandas refusal) deleted 2026-11-27 by lane
+        # fp64-inputs: every float32-computing door converts float64 storage through `double_round`.
         self.seen = List[Bool](length=self.cols, fill=False)
 
     def column(mut self, block: Int, column: Int) raises -> Int:

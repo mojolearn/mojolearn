@@ -59,14 +59,10 @@ def metric_f32_vector(value: PythonObject, name: String, require_finite: Bool,
     var code = base_format(input.fmt)
     var f32 = input.dtype == "<f4" if input.is_array else code == "f"
     var f64 = input.dtype == "<f8" if input.is_array else code == "d"
-    if regression and not f32:
-        raise Error("TypeError: mojolearn regression metrics: " + name
-                    + " must have dtype float32; cast explicitly before scoring")
-    if f64:
-        raise Error("TypeError: mojolearn metrics: " + name + " is float64; the float64 overloads of "
-                    + "r2_score, kl_divergence and silhouette_score are NOT implemented "
-                    + "(no float64 on this GPU). Cast to float32 yourself so the "
-                    + "precision you run at is the one you chose.")
+    # float64 is converted once below by the shared admission narrowing
+    # (admitted_typed_c; Andrew, 2026-11-27).
+    if regression and not f32 and not f64:
+        raise Error("TypeError: mojolearn regression metrics: " + name + " must have dtype float32 or float64")
     # The numerical owners consume an Array, so keep an operation-owned copy
     # independent of mutable source Array slots after this snapshot returns.
     var output = admitted_typed_c(input, input_pin^, "<f4", name, context, True)
