@@ -23,10 +23,16 @@ PLUGIN_DISTRIBUTIONS = {name.replace("-", "_"): name for name in (
     "mojolearn-nvidia", "mojolearn-amd")}  # the NVIDIA wheel carries its PTX set (2026-11-05)
 
 
+def require(condition, reason):
+    """Evidence checks also apply when called by an optimized interpreter."""
+    if not condition:
+        raise AssertionError(reason)
+
+
 def _self_test_sides(doc):
     """{side: row} of the sides a v2 self-test ran (2026-11-24: each side is
     nudged on its own; a side this installation lacks reads ran=False)."""
-    assert doc.get("format") == "mojolearn.verify-tamper-test.v1", doc.get("format")
+    require(doc.get("format") == "mojolearn.verify-tamper-test.v1", "unexpected tamper-test format")
     return {side: row for side, row in doc["sides"].items() if row.get("ran")}
 
 
@@ -37,19 +43,19 @@ def _gpu_side_absent(doc):
 
 def admit(kind, doc, models):
     if kind == "coverage":
-        assert doc["lanes"] and doc["cpu_execution_counts"]["declared"] > 0
+        require(doc["lanes"] and doc["cpu_execution_counts"]["declared"] > 0, "no CPU coverage declared")
     elif kind == "self-test":
-        assert doc["passed"] is True
+        require(doc["passed"] is True, "tamper test failed")
         ran = _self_test_sides(doc)
-        assert "cpu" in ran, "the self-test did not run its CPU side"
+        require("cpu" in ran, "the self-test did not run its CPU side")
         for side, row in ran.items():
-            assert row["clean"]["state"] == "IDENTICAL", (side, row["clean"])
-            assert row["perturbed"]["state"] == "DIVERGENT", (side, row["perturbed"])
+            require(row["clean"]["state"] == "IDENTICAL", (side, row["clean"]))
+            require(row["perturbed"]["state"] == "DIVERGENT", (side, row["perturbed"]))
     else:
         # A v2 report has one row per cell part PER SIDE (device="cpu" and
         # device="gpu" in one process); the side is part of the key.
         cells = {(r["lane"], r["fixture"], r["part"], r.get("side")): r for r in doc["cells"]}
-        assert len(cells) == len(doc["cells"]), "duplicate cell"
+        require(len(cells) == len(doc["cells"]), "duplicate cell")
         no_gpu = _gpu_side_absent(doc)
 
         def absent_ok(row):  # the GPU side of an installation without one reads N/A, never a failure
@@ -57,30 +63,32 @@ def admit(kind, doc, models):
 
         if kind == "extended":
             owed = [r for r in cells.values() if r["state"] == "OWED"]
-            assert (doc["exit"], doc["verdict"]) == ((5, "INCOMPLETE") if owed else (0, "VERIFIED"))
+            require((doc["exit"], doc["verdict"]) == ((5, "INCOMPLETE") if owed else (0, "VERIFIED")),
+                    "extended verdict disagrees with the cells")
             for row in cells.values():
-                assert row["state"] in ("IDENTICAL", "N/A", "OWED")
+                require(row["state"] in ("IDENTICAL", "N/A", "OWED"), row)
                 if row["state"] == "OWED":
-                    assert row["part"] in ("batchgrad", "batchscale", "ragged", "rlpair")
-                    assert row.get("error") is None and re.fullmatch("[0-9a-f]{16}", row["value"])
+                    require(row["part"] in ("batchgrad", "batchscale", "ragged", "rlpair"), row)
+                    require(row.get("error") is None and re.fullmatch("[0-9a-f]{16}", row["value"]), row)
         else:
-            assert doc["exit"] == 0 and doc["verdict"] == "VERIFIED"
+            require(doc["exit"] == 0 and doc["verdict"] == "VERIFIED", "verification failed")
         if kind == "models":
             expected = {(f"portable:{m['lane']}", m["fixture"], part)
                         for m in models for part in ("model", "batch")}
-            assert expected and {k[:3] for k in cells} == expected
-            assert {k[:3] for k in cells if k[3] in (None, "cpu")} == expected, "a model has no CPU-side row"
-            assert all(row["state"] == "IDENTICAL" or absent_ok(row) for row in cells.values())
-            assert doc["selection"]["models_only"] is True
+            require(expected and {k[:3] for k in cells} == expected, "model cells differ from the manifest")
+            require({k[:3] for k in cells if k[3] in (None, "cpu")} == expected, "a model has no CPU-side row")
+            require(all(row["state"] == "IDENTICAL" or absent_ok(row) for row in cells.values()),
+                    "model cell failed")
+            require(doc["selection"]["models_only"] is True, "expected a models-only report")
         else:
             for part in ("train", "infer", "batch"):
                 rows = [r for k, r in cells.items() if k[:3] == ("knn", "base", part)]
-                assert any(r.get("side") in (None, "cpu") for r in rows), ("knn", "base", part, "no CPU side")
-                assert rows and all(r["state"] == "IDENTICAL" or absent_ok(r) for r in rows), \
-                    ("knn", "base", part, [(r.get("side"), r["state"]) for r in rows])
+                require(any(r.get("side") in (None, "cpu") for r in rows), ("knn", "base", part, "no CPU side"))
+                if not all(r["state"] == "IDENTICAL" or absent_ok(r) for r in rows):
+                    raise AssertionError(("knn", "base", part, [(r.get("side"), r["state"]) for r in rows]))
             if kind == "extended":
-                assert {"batchgrad", "batchscale", "ragged", "rlpair"} <= {
-                    row["part"] for row in cells.values()}
+                require({"batchgrad", "batchscale", "ragged", "rlpair"} <= {row["part"] for row in cells.values()},
+                        "extended batch checks are missing")
 
 
 EXPANDED_API_GUARD = """import hashlib,importlib,json,pathlib
@@ -167,8 +175,11 @@ def expanded_checks(run, python, work, output, *, vendor, scope, devices=None):
 INSTALLED_GUARD = """import json,pathlib,sys,mojolearn
 from mojolearn import _backend
 p=pathlib.Path(mojolearn.__file__).resolve()
-assert p.is_relative_to(pathlib.Path(sys.prefix).resolve()) and 'site-packages' in p.parts
-assert mojolearn.__version__ == sys.argv[1]
+prefix=pathlib.Path(sys.prefix).resolve()
+if not p.is_relative_to(prefix) or 'site-packages' not in p.relative_to(prefix).parts:
+    raise RuntimeError(f"qualification requires an installed package in this interpreter's site-packages: {p}")
+if mojolearn.__version__ != sys.argv[1]:
+    raise RuntimeError(f"installed Mojolearn version {mojolearn.__version__} differs from {sys.argv[1]}")
 arch=_backend.gpu_arch()
 ptx=_backend.baseline_selection_receipt()
 if ptx is not None:
@@ -227,9 +238,9 @@ def admit_ptx_bindings(doc, installed):
     payloads = {digest for name, digest in installed['ptx_payload_files'].items()
                 if name.startswith('identical/')}
     gpu = [row for row in doc.get('bindings', []) if row.get('kind') != 'host']
-    assert gpu and not doc.get('bindings_error'), 'missing numerical worker binding evidence'
-    assert all(row.get('sha256') in payloads for row in gpu), \
-        'numerical worker loaded a binding outside the identical PTX payload'
+    require(gpu and not doc.get('bindings_error'), 'missing numerical worker binding evidence')
+    require(all(row.get('sha256') in payloads for row in gpu),
+            'numerical worker loaded a binding outside the identical PTX payload')
     return dict(bindings=len(gpu), sha256=sorted({row['sha256'] for row in gpu}))
 
 
@@ -301,7 +312,7 @@ def qualify_jobs(run, save, manifest, python, work, output, models, scope, devic
     # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a
     # reason to rerun. One fit per cell (--repeats 1), and the `batch` job is
     # deleted: `extended` runs the same knn/base train, infer and batch cells
-    # (admit() asserts them IDENTICAL) plus the batch checks.
+    # (admit() requires IDENTICAL results) plus the batch checks.
     commands = {
         "coverage": ["--coverage"],
         "models": ["--models-only", "--repeats", "1"],
@@ -415,6 +426,18 @@ def qualify_installed(parser, args):
     return 0 if manifest["status"] in ("PASSED", "PASSED_CPU_ONLY") else 1
 
 
+def wheel_digest(path):
+    h = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def check_wheel_bytes(record):
+    require(wheel_digest(record["wheel"]) == record["wheel_sha256"], f"wheel changed: {record['wheel']}")
+
+
 def main():
     if not __debug__:
         raise RuntimeError('qualification requires assertions enabled; Python -O is refused')
@@ -472,7 +495,7 @@ def main():
     receipt = output / "results.json"
     if receipt.exists():
         parser.error("use a fresh output directory")
-    digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+    digest = wheel_digest(wheel)
     with zipfile.ZipFile(wheel) as archive:
         models = json.loads(archive.read("mojolearn/verify_reference/models/models.json"))["models"]
         source_commit = archive.read('mojolearn/identity_columns/COMMIT').decode().strip()
@@ -486,7 +509,7 @@ def main():
         parts = plugin.name.split("-")
         if not (plugin.is_file() and parts[0] in PLUGIN_DISTRIBUTIONS and len(parts) >= 5 and parts[1] == version):
             parser.error(f"--plugin {plugin.name} is not a mojolearn_nvidia/mojolearn_amd wheel of version {version}")
-        plugins.append(dict(wheel=str(plugin), wheel_sha256=hashlib.sha256(plugin.read_bytes()).hexdigest(),
+        plugins.append(dict(wheel=str(plugin), wheel_sha256=wheel_digest(plugin),
                             distribution=PLUGIN_DISTRIBUTIONS[parts[0]]))
     if len({p["distribution"] for p in plugins}) != len(plugins):
         parser.error("one --plugin per distribution")
@@ -509,9 +532,9 @@ def main():
             run("dependencies", [python, "-m", "pip", "check"], work)
             qualify_jobs(run, save, manifest, python, work, output, models, args.scope, devices,
                          wheel.name.split("-")[1])
-            assert hashlib.sha256(wheel.read_bytes()).hexdigest() == digest, "wheel changed"
-            for p in plugins:
-                assert hashlib.sha256(Path(p["wheel"]).read_bytes()).hexdigest() == p["wheel_sha256"], "plugin changed"
+            check_wheel_bytes(manifest)
+            for plugin_record in plugins:
+                check_wheel_bytes(plugin_record)
             manifest["status"] = "PASSED" if args.scope == "expanded" else "PASSED_CPU_ONLY"
     except Exception as exc:
         manifest.update(status="FAILED", reason=repr(exc))

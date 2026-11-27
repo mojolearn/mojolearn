@@ -78,6 +78,66 @@ class PTXQualificationTests(unittest.TestCase):
 
 
 class VerifierAdmissionTests(unittest.TestCase):
+    def test_wheel_digest_recheck_rejects_changed_bytes(self):
+        import hashlib
+        import tempfile
+        from pathlib import Path
+        from qualify_verifier_wheel import check_wheel_bytes
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fixture.whl"
+            path.write_bytes(b"original")
+            record = dict(wheel=str(path), wheel_sha256=hashlib.sha256(b"original").hexdigest())
+            check_wheel_bytes(record)
+            path.write_bytes(b"changed")
+            with self.assertRaisesRegex(AssertionError, "wheel changed"):
+                check_wheel_bytes(record)
+
+    def test_child_preflight_rejects_checkout_and_wrong_version(self):
+        from contextlib import redirect_stdout
+        import io
+        from pathlib import Path
+        import sys
+        from types import ModuleType, SimpleNamespace
+        from unittest.mock import patch
+        from qualify_verifier_wheel import INSTALLED_GUARD
+
+        pkg = ModuleType("mojolearn")
+        pkg._backend = SimpleNamespace(gpu_arch=lambda: None, gpu_plugin=lambda: None,
+                                       baseline_selection_receipt=lambda: None, ptx_payload_files=dict)
+        pkg.vendor = lambda: "cpu"
+        pkg.__version__ = "1"
+        prefix = Path(sys.prefix).resolve()
+        with patch.dict(sys.modules, {"mojolearn": pkg}), patch.object(sys, "argv", ["", "1"]):
+            pkg.__file__ = str(prefix / "src/mojolearn/__init__.py")
+            with self.assertRaisesRegex(RuntimeError, "site-packages"):
+                exec(INSTALLED_GUARD, {})
+            pkg.__file__ = str(prefix / "lib/site-packages/mojolearn/__init__.py")
+            with redirect_stdout(io.StringIO()):
+                exec(INSTALLED_GUARD, {})
+            pkg.__version__ = "2"
+            with self.assertRaisesRegex(RuntimeError, "version"):
+                exec(INSTALLED_GUARD, {})
+
+    def test_imported_and_child_admission_checks_work_with_optimization(self):
+        import os
+        from pathlib import Path
+        import subprocess
+        import sys
+
+        checks = [
+            "VerifierAdmissionTests.test_self_test_requires_clean_match_and_detected_perturbation_per_side",
+            "VerifierAdmissionTests.test_models_require_every_manifest_entry_and_part",
+            "PTXQualificationTests.test_numerical_workers_must_load_the_manifest_ptx_bytes",
+            "VerifierAdmissionTests.test_wheel_digest_recheck_rejects_changed_bytes",
+            "VerifierAdmissionTests.test_child_preflight_rejects_checkout_and_wrong_version",
+        ]
+        result = subprocess.run(
+            [sys.executable, "-O", "-m", "unittest", *["test_qualify_verifier_wheel." + name for name in checks]],
+            cwd=Path(__file__).parent, env=dict(os.environ, PYTHONOPTIMIZE="1"), capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def models(self):
         models = [{"lane": "rf-clf", "fixture": "base"}]
         doc = dict(exit=0, verdict="VERIFIED", selection={"models_only": True},
