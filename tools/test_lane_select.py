@@ -1436,7 +1436,15 @@ def test_package_modules_the_verifier_alone_uses_are_unreachable():
     assert os.path.join(lane_select.PKG, "_verify_all.py") in lane_select._python_imports(worker), \
         "the door dropped another import of execute"
     assert lane_select.unreachable("python/mojolearn/_verify_graph.py")
-    assert lane_select.unreachable("python/mojolearn/verify_reference/table.json")
+    # verify_reference/table.json: nothing a lane reaches NAMES it, but lane ops-composed-cases (02e4a0ad88,
+    # 2026-11-25) lists the directory for its composed-*.json cases (tools/identity_lanes/composed_cases.py
+    # `_cc_files`), and a walked directory keeps every file in it reachable (`_path_join_roots`: a join with a
+    # variable tail builds paths under it). Pinned to that one walker; another one, or a name, fails here.
+    table = "python/mojolearn/verify_reference/table.json"
+    for token in (table, "verify_reference/table.json", "table.json"):
+        assert not lane_select._named_by_the_corpus(token, skip={table}), f"a file a lane reaches names {token}"
+    walkers = sorted(lane_select._joined_with("verify_reference", skip={table}))
+    assert walkers == ["tools/identity_lanes/composed_cases.py"], walkers
     assert lane_select.unreachable("python/mojolearn/_mode.py") is None
     closure = lane_select._package_import_closure()
     only_init = sorted(f for f in lane_select._python_imports(os.path.join(lane_select.PKG, "__init__.py"))
@@ -2408,21 +2416,28 @@ def test_an_export_name_joining_a_row_selects_the_lanes_that_call_it():
                                   'exports=("gpr_fit", "gpr_predict", "kmeans_fit")')
     answer = _registry(grown, MINI_FAMILIES)
     assert answer is not None and "kmeans" in answer, answer
-    # mamba1 is the open precision debt below (the classical dispatcher), never a hard pass here.
-    for unrelated in ("transformer", "gp"):
-        assert unrelated not in answer, f"an export named kmeans_fit selected {unrelated}"
+    # The neural and sequence lanes are the open precision debt below (one family, never name by name).
+    assert "gp" not in answer, "an export named kmeans_fit selected gp"
     assert len(answer) < len(lane_select.all_lanes()) // 2, len(answer)
 
 
-@_pending_precision("kmeans_fit joining a row selects mamba1 (w3-integrate-22): the same unresolved generic "
-                    "classical-dispatcher edge as modeling_mamba.mojo selecting kmeans; a WIDER answer, which "
-                    "skips no lane. See tools/LANE_SELECTOR_PRECISION.md.")
-def test_pending_precision_an_export_name_joining_a_row_leaves_mamba1_out():
+#: Lanes of the neural and sequence families (mamba1/2/3, transformer, samba, the byte and causal LMs,
+#: Sequential and its optimizers): no classical export reaches them except through the generic dispatcher.
+_NEURAL_LANE = re.compile(r"^(mamba|transformer|samba|sequence-|byte-lm|causal|lm-|nn-|rnn)")
+
+
+@_pending_precision("A classical export joining a row selects neural/sequence lanes (mamba1 at w3-integrate-22, "
+                    "transformer at w3-integrate-23): their maps reach the generic classical dispatcher, whose "
+                    "native branches the selector cannot resolve statically (the same unresolved-native-dispatch "
+                    "edge as modeling_mamba.mojo selecting kmeans). A WIDER answer; it skips no lane. "
+                    "tools/LANE_SELECTOR_PRECISION.md.")
+def test_pending_precision_a_classical_export_selects_no_neural_lane():
     grown = MINI_FAMILIES.replace('exports=("gpr_fit", "gpr_predict")',
                                   'exports=("gpr_fit", "gpr_predict", "kmeans_fit")')
-    answer = _registry(grown, MINI_FAMILIES)
-    if answer is None or "mamba1" in answer:
-        raise _UnprovedPrecision("an export named kmeans_fit selected mamba1")
+    answer = _registry(grown, MINI_FAMILIES) or []
+    neural = sorted(lane for lane in answer if _NEURAL_LANE.match(lane))
+    if neural:
+        raise _UnprovedPrecision(f"an export named kmeans_fit selected {len(neural)} neural lane(s): {neural[:8]}")
 
 
 def test_any_other_row_field_edit_selects_the_rows_lanes():
