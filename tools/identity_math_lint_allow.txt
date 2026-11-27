@@ -84,7 +84,7 @@ neighbors/impl/detail/fast_topk_knn.mojo:fast_topk_merge_kernel:sqrt  # SAFE-FAS
 packaging/native_only/cases/smoke_preprocessing.mojo:main:sqrt  # SAFE-NOT-SHIPPED: test oracle (expected value) in a native_only smoke case run by tools/native_only_smoke.py (.github/workflows/native-only-smoke.yml:42); not in any binding
 packaging/native_only/cases/svm_core.mojo:_rbf_expected:exp  # SAFE-NOT-SHIPPED: second exp on the same line, same oracle
 preprocessing/standard.mojo:standard_finalize_kernel:sqrt  # SAFE-FAST: else arm of comptime IDENTICAL in standard_finalize_kernel (standard.mojo:106) which uses portable_sqrtf
-sequence/ops_impl.mojo:adafactor_core:sqrt  # SAFE-EXACT: host scalar setup in adafactor_core: sqrt(Float64(t)) of an integer step, Float64 IEEE on host
+sequence/adafactor_update.mojo:adafactor_update:sqrt  # SAFE-EXACT: host scalar setup in adafactor_update (moved from ops_impl adafactor_core, 2026-11-27): sqrt(Float64(t)) of an integer step, Float64 IEEE on host
 sequence/xseq_neural_run.mojo:xseq_run_mlp_glorot:sqrt  # SAFE-EXACT: host Glorot bound, Float64 IEEE on host
 sequence/xseq_neural_run.mojo:xseq_run_rnn_bound:sqrt  # SAFE-EXACT: host init bound 1/sqrt(hidden), Float64 IEEE on host
 spectral/impl/sparse/solver/detail/lanczos.mojo:_host_sqrt:sqrt  # SAFE-NOT-SHIPPED: inside comptime if SAB_STD_SQRT (lanczos.mojo:520); SAB_STD_SQRT = is_defined[MOJOLEARN_SPECTRAL_SABOTAGE_STD_SQRT] (lanczos.mojo:218), sabotage only

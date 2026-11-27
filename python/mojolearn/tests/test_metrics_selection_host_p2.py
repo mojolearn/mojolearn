@@ -39,12 +39,11 @@ def _cls_pair(n=60, seed=1):
 
 def test_mean_absolute_error_and_rmse_refusals():
     y, p = _reg_pair()
-    with pytest.raises(TypeError):
-        metrics.mean_absolute_error(y.astype(np.float64), p)
+    # float64 is converted to float32 once (lane fp64-inputs, 2026-11-27): the float32 bits, never a refusal
+    assert metrics.mean_absolute_error(y.astype(np.float64), p) == metrics.mean_absolute_error(y, p)
     with pytest.raises(ValueError):
         metrics.mean_absolute_error(y, p[:-1])
-    with pytest.raises(TypeError):
-        metrics.root_mean_squared_error(y, p.astype(np.float64))
+    assert metrics.root_mean_squared_error(y, p.astype(np.float64)) == metrics.root_mean_squared_error(y, p)
     with pytest.raises(ValueError):
         metrics.root_mean_squared_error(y[:-2], p)
 

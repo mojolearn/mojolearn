@@ -126,11 +126,14 @@ def test_projection_nonfinite_dense_values_are_refused_natively(tmp_path, case, 
 
 @pytest.mark.parametrize("case", ["pca", "tsvd"])
 @pytest.mark.parametrize("method", METHODS)
-def test_unwhitened_projection_keeps_finite_float64_overflow_cast(tmp_path, case, method):
+def test_unwhitened_projection_refuses_finite_float64_overflow(tmp_path, case, method):
+    # float64 input is converted to float32 once (Andrew, 2026-11-27, lane fp64-inputs): a finite value that would
+    # become infinity is refused naming its column, never carried into the projection as inf
     model = _model(tmp_path, case)
     x = _query(method).astype(np.float64)
     x[0, 0] = 1e300
-    assert _state(audit_native_call(getattr(model, method), x).assert_native()) == _state(_expected(model, x, case, method))
+    with pytest.raises(ValueError, match="column 0 holds a float64 value whose magnitude exceeds float32"):
+        getattr(model, method)(x)
 
 
 @pytest.mark.parametrize("case", CASES)

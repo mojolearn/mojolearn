@@ -240,6 +240,7 @@ def test_macos_build_moves_the_stale_artifacts_before_the_build_starts(tmp_path,
     monkeypatch.setattr(release.release_reuse, "plan_rows", lambda plan, platform=None, decision=None: [])
     monkeypatch.setattr(release.release_reuse, "parse_modes", lambda v: ("identical",))
     r.release_modes = ("identical",)
+    monkeypatch.setattr(r, "macos_backend", lambda: "laptop")  # this test is the laptop route (github: mac-speed-1)
     with pytest.raises(release.StepFailed, match="expected one macOS wheel"):
         r.step_macos_build()          # the fake build makes no wheel; the pre-flight ran first
     assert seen == [[]]
@@ -276,6 +277,7 @@ def test_macos_build_seeds_from_the_one_mac_cache_and_copies_its_archives_back(t
     monkeypatch.setattr(release.release_reuse, "plan_rows", lambda plan, platform=None, decision=None: [])
     monkeypatch.setattr(release.release_reuse, "parse_modes", lambda v: ("identical",))
     r.release_modes = ("identical",)
+    monkeypatch.setattr(r, "macos_backend", lambda: "laptop")  # the one Mac cache is the laptop route's
     with pytest.raises(release.StepFailed, match="expected one macOS wheel"):
         r.step_macos_build()          # the fake build makes no wheel; the write-back ran before that check
     assert seen["MOJOLEARN_BINCACHE_DIR"] == str(r.macos_bincache()), "the release keeps its own provenance cache"

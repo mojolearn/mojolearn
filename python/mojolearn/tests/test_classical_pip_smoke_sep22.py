@@ -202,8 +202,9 @@ def test_float32_metrics_take_plain_lists():
     assert mse == pytest.approx(1.25 / 3, rel=1e-6)
     assert auc == 1.0
     assert ll == pytest.approx(-(math.log(0.75) + math.log(0.5)) / 2, rel=1e-5)
-    with pytest.raises(TypeError, match="float32"):
-        mojolearn.metrics.mean_squared_error(np.array([1.0, 2.0]), np.array([1.0, 2.0]))
+    # float64 arrays are converted to float32 once (lane fp64-inputs, 2026-11-27): the float32 bits
+    assert mojolearn.metrics.mean_squared_error(np.array([1.0, 2.0]), np.array([1.5, 2.0])) == \
+        mojolearn.metrics.mean_squared_error(np.array([1.0, 2.0], np.float32), np.array([1.5, 2.0], np.float32))
 
 
 # 6. SciPy's `confidence_interval.low` / `.high` spelling.

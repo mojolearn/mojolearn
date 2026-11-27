@@ -116,7 +116,8 @@ def _finite(v: Float64) -> Bool:
 
 @always_inline
 def nn_positive_lr(rate: Float32) -> Bool:
-    return rate > Float32(0) and rate <= Float32.MAX
+    # Float32.MAX is +inf in Mojo; MAX_FINITE is the largest finite float32 (an lr of 1e100 narrows to inf)
+    return rate > Float32(0) and rate <= Float32.MAX_FINITE
 
 
 # ---------------------------------------------------------------- admission (compile and fit call this one body)

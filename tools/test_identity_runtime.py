@@ -29,6 +29,14 @@ def run_fixture(monkeypatch, tmp_path):
     verify = ModuleType("mojolearn._verify")
     verify.binding_artifacts = lambda: []
     monkeypatch.setitem(sys.modules, "mojolearn._verify", verify)
+    # identity_break reads the running side through mojolearn._verify_device (stdlib only): the real module
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "mojolearn._verify_device", Path(__file__).resolve().parents[1] / "python/mojolearn/_verify_device.py")
+    vd = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(vd)
+    monkeypatch.setitem(sys.modules, "mojolearn._verify_device", vd)
+    ml._verify_device = vd
     monkeypatch.setenv("MOJOLEARN_NUMERIC_MODE", "identical")
     monkeypatch.setattr(ib, "commit_witness", lambda: ("a" * 40, "fixture"))
     monkeypatch.setattr(ib, "refuse_routine_apple_column", lambda *a: "")

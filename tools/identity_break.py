@@ -1828,8 +1828,9 @@ def lane_floors():
 #: key lands here with a sentence saying what moved. An entry whose key does
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
-    "nn-ep-samba-inference": "The inference fixture supplies deterministic weights directly from the config's "
-                             "registry so it runs on the CPU of a GPU installation as well.",
+    "nn-ep-samba-inference": "2026-11-27 (lane post-release-090): the inference fixture supplies deterministic weights "
+                             "directly from the config's registry so it runs on the CPU of a GPU installation as "
+                             "well; fixture sizes unchanged",
     "linalg-eigh": "2026-10-12: Gram fixture uses explicit float32 products and ascending-row sums; BLAS and array-layout dependent input bytes removed, fixture dimensions unchanged",
     "x-metrics-regression": "2026-09-28: undefined variance-weighted scores return explicit NaN before zero-times-infinity; platform NaN sign removed at API arithmetic, fixture sizes unchanged",
     "trees-dart-options": "2026-09-28: arithmetic, not input: TreeSHAP skips unreachable zero-cover paths before zero-over-zero unwinding; old NaN output hashes are not valid references; fixture sizes unchanged",
@@ -4172,12 +4173,13 @@ def _lane_refuses(fn, text):
 # The saved-model readers it checks (HostForest, HostGBDT, host_predict,
 # host_predict_proba) are the CPU inference surface: no GPU side (vd-verify,
 # 2026-11-24).
-for _host_infer_lane in ("byte-lm-host-infer", "byte-lm-host-infer-threaded"):
-    _one_sided(_host_infer_lane, missing="gpu",
-               reason="LanguageModelInference is a CPU inference class on every installation")
+# literal lanes: tools/identity_admission_guard.py and tools/release_identity_evidence.py read these calls by AST
+_one_sided("byte-lm-host-infer", missing="gpu",
+           reason="LanguageModelInference is a CPU inference class on every installation")
+_one_sided("byte-lm-host-infer-threaded", missing="gpu",
+           reason="LanguageModelInference is a CPU inference class on every installation")
 _one_sided("byte-lm-host-train", missing="gpu",
            reason="this fixture explicitly requests LanguageModelTrainer(device='cpu'); byte-lm exercises the GPU")
-del _host_infer_lane
 
 
 _one_sided("saved-model-host-infer", missing="gpu",

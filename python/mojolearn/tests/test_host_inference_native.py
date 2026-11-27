@@ -135,11 +135,13 @@ def test_coordinate_descent_public_validation_rejects_nonfinite_before_cast(tmp_
 
 
 @pytest.mark.parametrize("name", ["ElasticNet", "Lasso"])
-def test_finite_float64_overflow_keeps_previous_prediction_semantics(tmp_path, name):
+def test_finite_float64_overflow_is_refused_by_column(tmp_path, name):
+    # float64 input is converted to float32 once (Andrew, 2026-11-27, lane fp64-inputs): a finite value that would
+    # become infinity is refused naming its column, never carried as inf (the old cast's semantics)
     model = _model(tmp_path, name)
     x = np.asarray([[1e300, 1., 2.], [-1e300, 1., 2.]], dtype="<f8")
-    expected = legacy.public_cd_predict(model, x)
-    assert _state(audit_native_call(model.predict, x).assert_native()) == _state(expected)
+    with pytest.raises(ValueError, match="column 0 holds a float64 value whose magnitude exceeds float32"):
+        model.predict(x)
 
 
 @pytest.mark.parametrize("name", NAMES)
@@ -225,12 +227,13 @@ def test_dataframe_validation_rejects_nonfinite_before_prediction(tmp_path, name
 
 
 @pytest.mark.parametrize("name", ["ElasticNet", "Lasso"])
-def test_dataframe_finite_float64_overflow_preserves_old_cast_semantics(tmp_path, name):
+def test_dataframe_finite_float64_overflow_is_refused_by_column(tmp_path, name):
+    # the pandas door takes the same float64 -> float32 rule (lane fp64-inputs, 2026-11-27)
     pd = pytest.importorskip("pandas")
     model = _model(tmp_path, name)
     x = pd.DataFrame([[1e300, 1., 2.], [-1e300, 1., 2.]], dtype="float64")
-    expected = legacy.public_cd_predict(model, x)
-    assert _state(audit_native_call(model.predict, x).assert_native()) == _state(expected)
+    with pytest.raises(ValueError, match="column 0 holds a float64 value whose magnitude exceeds float32"):
+        model.predict(x)
 
 
 @pytest.mark.parametrize("name", NAMES)
