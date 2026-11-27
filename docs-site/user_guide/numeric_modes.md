@@ -92,8 +92,11 @@ The verifier also refuses to run under `fast` (see [Verify on your hardware](ver
 ## Numeric profiles
 
 A numeric profile is a separate setting from the numeric mode. The mode is the promise; the profile is
-the number format the matrix products compute in. `fp32_v1` is the default for every family and every
-trainer. Other profiles are opt-in and apply only to the families they list.
+the number format the matrix products compute in. Transformer language-model inference (`CausalLM`,
+`ParallelCausalLM`) uses `fixed15_v1` by default; every other family, Mamba models and all training use
+`fp32_v1`. Other profiles are opt-in and apply only to the families they list. See
+[Language models](language_models.md#hugging-face-checkpoints) for what `fixed15_v1` computes and how to choose `fp32_v1`
+instead.
 
 | Function | Purpose |
 |---|---|
