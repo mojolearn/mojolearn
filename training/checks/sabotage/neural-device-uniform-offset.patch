@@ -1,0 +1,12 @@
+diff --git a/core/philox_neural.mojo b/core/philox_neural.mojo
+--- a/core/philox_neural.mojo
++++ b/core/philox_neural.mojo
+@@ -180,7 +180,7 @@
+     var kind = Int(kind_in)
+     if kind == NRNG_UNIFORM:
+         out_buf.unsafe_store(
+-            i, neural_uniform_at(seed_lo, seed_hi, stream, index, a, b)
++            i, neural_uniform_at(seed_lo, seed_hi, stream, index + 1, a, b)  # SABOTAGE: next uniform draw
+         )
+         return
+     if kind == NRNG_NORMAL:
