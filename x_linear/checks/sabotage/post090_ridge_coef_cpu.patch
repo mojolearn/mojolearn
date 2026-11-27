@@ -1,0 +1,13 @@
+diff --git a/x_linear/ridge_descriptor_host.mojo b/x_linear/ridge_descriptor_host.mojo
+--- a/x_linear/ridge_descriptor_host.mojo
++++ b/x_linear/ridge_descriptor_host.mojo
+@@ -31,6 +31,9 @@
+         var ip: List[Int32] = [Int32(targets), Int32(p[2]), 1, Int32(p[3])]
+         var fp: List[Float32] = [Float32(f[0])]
+         var value = x_linear_fit_host(ALGO_RIDGE, a[0], a[1], dims, ip, fp, a[2])
++        if targets > 0 and cols > 0:
++            var coef = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=a[2])
++            coef[0] = coef[0] + Float32(1.0)
+         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value
+         return 0
+     except problem:

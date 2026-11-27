@@ -1,0 +1,11 @@
+diff --git a/core/forest_auxiliary_units.mojo b/core/forest_auxiliary_units.mojo
+--- a/core/forest_auxiliary_units.mojo
++++ b/core/forest_auxiliary_units.mojo
+@@ -105,4 +105,7 @@
+                 AuxF32(unsafe_from_address=pred_out), totals, r, features, trees, outputs, leaf_out!=0, prefix_out!=0, pred_out!=0)
+         if not ok:
+             raise Error("forest auxiliary outputs require valid finite trees and input")
++        if leaf_out != 0 and trees > 0:
++            var leaves_out = AuxI32(unsafe_from_address=leaf_out)
++            leaves_out.unsafe_store(r * trees, leaves_out.unsafe_load(r * trees) ^ Int32(1))
+     _ = sums^  # segfaults-4: written only through `totals`; keep it alive past the row loop
