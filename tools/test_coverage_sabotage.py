@@ -335,3 +335,39 @@ def test_any_other_movement_on_the_other_side_still_fails(tmp_path, lane, error)
     arm = dict(arm='coverage-test-gpu', side='gpu', bindings=['build'], lanes=[lane])
     paths = _sided_records(tmp_path, lane, {'verdict': 'REFUSED', 'hashes': [], 'error': error})
     assert any('moved' in failure for failure in gate.stays_put(arm, 'cpu', *paths))
+
+
+@pytest.mark.parametrize("problem", [None, "missing", "wrong backend", "different fixture", "unmoved", "N/A"])
+def test_gpu_batch_requires_cpu_only_evidence_for_samba(tmp_path, trial, problem):
+    from identity_break import GPU_INSTALL_CPU_NA
+
+    arm, clean, sab, restored, _ = trial
+    arm.update(side="cpu+gpu", lanes=["samba"])
+    exclusion = {"verdict": "N/A", "hashes": ["n/a:gpu-install: " + GPU_INSTALL_CPU_NA["samba"]]}
+    paths = {}
+    for run in ("gpu", "cpu", "cpu-only"):
+        if run == "cpu-only" and problem == "missing":
+            continue
+        paths[run] = []
+        for phase, source in zip(("clean", "sab", "restored"), (clean, sab, restored)):
+            record = copy.deepcopy(source)
+            record["side"] = "gpu" if run == "gpu" else "cpu"
+            record["vendor"] = "nvidia-test" if run == "gpu" else "cpu-test"
+            record["package"]["loaded_backend"] = "cpu" if run == "cpu-only" else "cuda"
+            record["resume_signature"]["options"]["lanes"] = "samba"
+            for fixture in record["fixtures"]:
+                value = record["cells"].pop("one/" + fixture)
+                record["cells"]["samba/" + fixture] = exclusion if run == "cpu" else value
+            if run == "cpu-only" and phase == "sab":
+                if problem == "wrong backend":
+                    record["package"]["loaded_backend"] = "cuda"
+                if problem == "different fixture":
+                    record["fixtures"]["base"]["X"] = "unrelated"
+                if problem == "unmoved":
+                    record["cells"]["samba/base"] = clean["cells"]["one/base"]
+            if run == "cpu-only" and problem == "N/A":
+                record["cells"]["samba/base"] = exclusion
+            path = tmp_path / f"{run}-{phase}.json"
+            path.write_text(json.dumps(record))
+            paths[run].append(path)
+    assert gate.check_sides(arm, paths, root=tmp_path) == (0 if problem is None else 1)

@@ -122,23 +122,57 @@ tar -cf "$SCRATCH/clean_natives.tar" -T "$OUT/clean_natives.txt"
 # Both sides run in ONE identity_break process (the lanes' device="cpu" and device="gpu" calls): the GPU
 # side to <tag>_device.json, then the CPU side to <tag>_cpu.json. An installation without a GPU records the
 # CPU side only (its GPU side reads not applicable; a gpu arm cannot be proven there).
-GPU_SIDE=$(MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" -c \
-    'import mojolearn as ml; print("no" if ml.vendor() == "cpu" else "yes")' 2> "$OUT/side_probe.err" | tail -n 1)
-log "GPU side in this installation: ${GPU_SIDE:-probe failed}"
+BACKEND=$(MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" -c \
+    'import mojolearn as ml; print(ml.vendor())' 2> "$OUT/side_probe.err") || exit 4
+case "$BACKEND" in cpu) GPU_SIDE=no ;; cuda|hip|metal) GPU_SIDE=yes ;; *) log "unknown backend: $BACKEND"; exit 4 ;; esac
+if [ -n "${SAB_REQUIRED_BACKEND:-}" ] && [ "$BACKEND" != "$SAB_REQUIRED_BACKEND" ]; then
+    log "expected $SAB_REQUIRED_BACKEND bindings, loaded $BACKEND"
+    exit 4
+fi
+log "loaded backend: $BACKEND"
+CPU_ONLY_LANES=""
+if [ "$GPU_SIDE" = yes ]; then
+    CPU_ONLY_LANES=$(PYTHONPATH="$ROOT/tools:$ROOT/python" "${PY[@]}" -c '
+import sys
+from identity_break import GPU_INSTALL_CPU_NA
+print(",".join(name for name in sys.argv[1].split(",") if name in GPU_INSTALL_CPU_NA))
+' "$LANES") || exit 4
+fi
 run_cols() { # $1 = clean | sab | restored
-    local tag=$1
+    local tag=$1 host_pid="" rc host_rc=0 col
+    local cols=(cpu)
+    [ "$GPU_SIDE" = no ] || cols+=(device)
+    [ -z "$CPU_ONLY_LANES" ] || cols+=(cpu_only)
+    if [ -n "$CPU_ONLY_LANES" ]; then
+        # SambaStack has host blocks only in the CPU-only binding set. The
+        # fresh process must load that set, including the actual patched
+        # host bindings for the sabotaged phase. Its records stay separate.
+        MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
+            --require-backend cpu --side cpu --lanes "$CPU_ONLY_LANES" --fixtures "$FIXTURES" --repeats 1 \
+            --json "$OUT/${tag}_cpu_only.pending.$$.json" > "$OUT/${tag}_cpu_only.log" 2>&1 &
+        host_pid=$!
+    fi
     if [ "$GPU_SIDE" = yes ]; then
         MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
-            --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --side both \
-            --json "$OUT/${tag}_device.json" --cpu-json "$OUT/${tag}_cpu.json" \
+            --require-backend "$BACKEND" --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --side both \
+            --json "$OUT/${tag}_device.pending.$$.json" --cpu-json "$OUT/${tag}_cpu.pending.$$.json" \
             > "$OUT/${tag}_sides.log" 2>&1
     else
         MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
-            --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --side cpu --json "$OUT/${tag}_cpu.json" \
+            --require-backend cpu --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --side cpu --json "$OUT/${tag}_cpu.pending.$$.json" \
             > "$OUT/${tag}_sides.log" 2>&1
     fi
-    local rc=$?
+    rc=$?
+    if [ -n "$host_pid" ]; then
+        wait "$host_pid" || host_rc=$?
+        log "RUN $tag CPU-only lanes=$CPU_ONLY_LANES rc=$host_rc"
+    fi
     log "RUN $tag sides=$([ "$GPU_SIDE" = yes ] && echo both || echo cpu) rc=$rc"
+    # Faulted fixtures can return nonzero. Judge the records this process
+    # wrote, and never pick up an old phase after a crash or failed import.
+    for col in "${cols[@]}"; do
+        mv "$OUT/${tag}_${col}.pending.$$.json" "$OUT/${tag}_${col}.json" || return 1
+    done
 }
 
 APPLIED=0
@@ -162,7 +196,7 @@ RESTORED=0
 trap '[ "$RESTORED" = 1 ] || restore; rm -rf "$SCRATCH"' EXIT
 trap 'stop_all' INT TERM
 
-run_cols clean
+run_cols clean || exit 6
 # shellcheck disable=SC2046
 if ! git apply $(echo "$PATCHES" | tr ',' ' '); then
     log "APPLY FAILED"; exit 3
@@ -223,25 +257,28 @@ for b in ${BUILDS//,/ }; do
         grep -m 3 -B 2 -A 8 -i 'error' "$OUT/build_$b.log" | cut -c1-240 | head -30 >> "$OUT/summary.txt"
     fi
 done
-[ $brc = 0 ] && run_cols sab
+if [ $brc = 0 ]; then run_cols sab || exit 6; fi
 restore
 RESTORED=1
 if [ $brc != 0 ]; then
     for arm in ${ARMS//,/ }; do echo "SABOTAGE batch=$BATCH arm=$arm side=all verdict=BUILD-FAIL" | tee -a "$OUT/summary.txt"; done
     exit 5
 fi
-run_cols restored
+run_cols restored || exit 6
 miss=0
 for arm in ${ARMS//,/ }; do
     side=$("${PY[@]}" tools/coverage_sabotage.py list | awk -F'\t' -v a="$arm" '$1==a {print $5}')
     sideargs=()
-    for col in cpu device; do
+    cols=(cpu)
+    [ "$GPU_SIDE" = no ] || cols+=(device)
+    [ -z "$CPU_ONLY_LANES" ] || cols+=(cpu_only)
+    for col in "${cols[@]}"; do
         [ -f "$OUT/clean_$col.json" ] || continue
-        s=$([ $col = cpu ] && echo cpu || echo gpu)
+        case "$col" in cpu) s=cpu ;; device) s=gpu ;; cpu_only) s=cpu-only ;; esac
         sideargs+=(--$s-clean "$OUT/clean_$col.json" --$s-sabotaged "$OUT/sab_$col.json" --$s-restored "$OUT/restored_$col.json")
         # A committed review (tools/identity_lanes/coverage_sabotage_reviews.json) binds to the faulted side's
         # records only when the sabotaged cell refused with the reviewed first line under the reviewed patch bytes.
-        case "+$side+" in *+$s+*)
+        case "+$side+" in *+${s%-only}+*)
             [ -f "$OUT/evidence_${arm}_$col.json" ] || "${PY[@]}" tools/coverage_sabotage.py review --arm "$arm" \
                 --clean "$OUT/clean_$col.json" --sabotaged "$OUT/sab_$col.json" --restored "$OUT/restored_$col.json" \
                 --out "$OUT/evidence_${arm}_$col.json" > "$OUT/review_${arm}_$col.txt" 2>&1
@@ -253,8 +290,9 @@ for arm in ${ARMS//,/ }; do
     nogpu=(); [ "$GPU_SIDE" = yes ] || nogpu=(--no-gpu)
     "${PY[@]}" tools/coverage_sabotage.py check-sides --arm "$arm" "${sideargs[@]}" ${nogpu[@]+"${nogpu[@]}"} \
         --batch-bindings "$BUILDS" > "$OUT/check_${arm}.txt" 2>&1
-    v=$(tail -n 1 "$OUT/check_${arm}.txt" | awk '{print $3}')
-    [ "$v" = CAUGHT ] || [ "$v" = GPU-OWED ] || miss=1
+    check_rc=$?
+    v=$(awk -v wanted="$arm" 'END {if ($1 == "ARM" && $2 == wanted) print $3}' "$OUT/check_${arm}.txt")
+    case "$check_rc:$v" in 0:CAUGHT|3:GPU-OWED) ;; *) miss=1; v=MISSED ;; esac
     echo "SABOTAGE batch=$BATCH arm=$arm side=${side:-?} verdict=${v:-ERROR}" | tee -a "$OUT/summary.txt"
     # The check's reasons ride with a miss in summary.txt (lane w3f5-e, 2026-11-24: gate 3cda8a05b3's copies
     # kept only summary.txt, so eight MISSED arms carried no cause: an unstable clean lane, an unmoved
