@@ -2,7 +2,7 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
-## Unreleased (0.9.0)
+## 0.9.0 (published 2026-11-27)
 
 0.9.0 is a large release: the public calls run in compiled Mojo from argument checks to results, `fast` can be named on every vendor, and `verify` is rebuilt.
 
