@@ -281,7 +281,8 @@ jobs:
         with:
           run-install: true
           cache: true
-          cache-write: false
+          # one writer (the first Apple job): the others restore the macOS environment it saved
+          cache-write: ${{ matrix.index == 0 }}
           environments: >-
             default
             pkg

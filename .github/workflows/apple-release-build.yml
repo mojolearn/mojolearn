@@ -133,7 +133,8 @@ jobs:
         with:
           run-install: true
           cache: true
-          cache-write: false
+          # one writer (the first group job): every other macOS job restores the environment it saved
+          cache-write: ${{ matrix.index == 0 }}
           environments: >-
             default
             pkg
