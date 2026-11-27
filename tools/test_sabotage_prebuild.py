@@ -5,6 +5,22 @@ import json
 import sabotage_prebuild as pre
 
 
+def test_reuse_requires_clean_bytes_and_the_complete_patched_set(tmp_path):
+    specification = {"builds": ["build"]}
+    rel = "python/mojolearn/sample.so"
+    patched = tmp_path / "out" / rel
+    patched.parent.mkdir(parents=True)
+    patched.write_bytes(b"patched")
+    receipt = dict(prepared=True, clean_sha256="clean", rc={"build": 0}, changed={rel: pre.sha(patched)})
+    (tmp_path / "ready").write_text(json.dumps(receipt))
+    assert pre.reusable(tmp_path, specification, "clean")
+    assert not pre.reusable(tmp_path, specification, "different clean build")
+    patched.write_bytes(b"truncated")
+    assert not pre.reusable(tmp_path, specification, "clean")
+    patched.unlink()
+    assert not pre.reusable(tmp_path, specification, "clean")
+
+
 def test_every_plan_build_maps_to_a_development_group():
     groups = json.load(open(pre.Path(__file__).resolve().parent.parent / "bindings" / "development_groups.json"))
     # the development stems the base build records (identical-_mojolearn_dev_core, host-_mojolearn_dev_core_host)

@@ -246,6 +246,15 @@ def negative_control_moves(cell, clean, part):
         return changed != baseline
     values = part_value(cell, part)
     verdict = cell.get("verdict" if part == "train" else part + "_verdict", "") if isinstance(cell, dict) else ""
+    if verdict == "RELOAD-MOVED":
+        # This assertion compares predictions before/after loading. The
+        # serialized model can keep its clean digest when its reader is faulty.
+        reloads, infers = cell.get("reload"), cell.get("infer")
+        return bool(part == "model" and values and isinstance(reloads, list) and isinstance(infers, list)
+                    and len(values) == len(reloads) == len(infers)
+                    and all(isinstance(v, str) and re.fullmatch(r"[0-9a-f]{16}", v)
+                            for group in (values, reloads, infers) for v in group)
+                    and reloads != infers)
     if verdict not in ("MOVED", "DIVERGENT", "RELOAD-MOVED", "BATCH_MOVED", "RLPAIR_MOVED"):
         return False
     # An explicit assertion failure is evidence, an exception or N/A is not.

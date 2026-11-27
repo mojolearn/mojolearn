@@ -78,6 +78,7 @@ jobs:
           /tmp/yaml-venv/bin/python -m pytest -q \
             tools/test_verify_coverage_declared.py::test_every_record_lane_has_a_fault_on_each_applicable_side \
             tools/test_verify_coverage_declared.py::test_public_cnn_and_optimizer_lanes_have_faults_and_published_references \
+            tools/test_coverage_sabotage.py tools/test_sabotage_prebuild.py \
             tools/tests/test_wheel_verify_smoke.py::SideStates
       - name: Tiny verifier rejects faults and endpoint inventory is current
         # Source inspection and comparator tests only; no GPU, fits or timing.

@@ -127,13 +127,31 @@ ORIG=$(git rev-parse HEAD)
 index=$(git rev-parse --git-path index)
 saved_index=$(mktemp) || exit 2
 cp "$index" "$saved_index" || exit 2
-trap 'git reset -q --soft "$ORIG"; cp "$saved_index" "$index"; rm -f "$saved_index"' EXIT
+clean_up() {
+    local rc=$?
+    trap - EXIT
+    if [ -n "${PREPID:-}" ]; then
+        kill "$PREPID" "$psampler" 2>/dev/null || true
+        wait "$PREPID" 2>/dev/null || true
+    fi
+    if git reset -q --soft "$ORIG" && cp "$saved_index" "$index"; then
+        rm -f "$saved_index"
+    else
+        say "Could not restore the job checkout; original index retained at $saved_index"
+        rc=2
+    fi
+    exit "$rc"
+}
+trap clean_up EXIT
 added=$(git rev-parse --git-path devpod_added)
 if [ -s "$added" ]; then
     git add --pathspec-from-file="$added" || { say "could not stage the synced source additions"; exit 2; }
 fi
 if ! git diff --quiet HEAD --; then
-    git -c user.name=sabotage-gpu -c user.email=sabotage-gpu@localhost commit -q -a -m "sabotage-gpu: synced $SOURCE" \
+    # The same synced tree must keep its commit and prebuild cache on resume.
+    stamp=$(git show -s --format=%cI "$ORIG") || exit 2
+    GIT_AUTHOR_DATE="$stamp" GIT_COMMITTER_DATE="$stamp" \
+        git -c user.name=sabotage-gpu -c user.email=sabotage-gpu@localhost commit -q -a -m "sabotage-gpu: synced $SOURCE" \
         || { say "could not snapshot the synced source"; exit 2; }
 fi
 echo "$SOURCE" > "$RES/source-commit.txt"
@@ -148,7 +166,7 @@ persist_now() {
 
 [ -f tools/fixture_packs.py ] && python3 tools/fixture_packs.py unpack > "$RES/fixtures.log" 2>&1
 pixi install -e default > "$RES/pixi-install.log" 2>&1 || { say "pixi install failed"; tail -n 20 "$RES/pixi-install.log"; exit 2; }
-pixi run -e default mojo --version > "$RES/compiler-version.log" 2>&1
+pixi run -e default mojo --version > "$RES/compiler-version.log" 2>&1 || { say "compiler version unavailable"; exit 2; }
 pixi run -e default python tools/generated_sources.py prepare --repo "$PWD" < /dev/null > "$RES/generated-sources.log" 2>&1 \
     || { say "generated sources failed"; exit 2; }
 # Always plan from this source and its manifest. A named campaign plan
@@ -272,19 +290,23 @@ persist_now
 # 1b. the batches' patched bindings, compiled AHEAD (tools/sabotage_prebuild.py): one scratch worktree per batch, the
 # builds of every batch packed over the allocation's cores and memory in run order, beside the runs of the batches
 # before them. Keyed by the source commit, so a RESUME submission on the same pod reuses the batches already built.
-PREBUILT=${SAB_SCRATCH}/prebuilt-$(git rev-parse --short=12 HEAD)-${MOJOLEARN_GPU_ARCHS}-${plan_hash}
+compiler_key=$(sha256sum "$RES/compiler-version.log" | cut -c1-16)
+PREBUILT=${SAB_SCRATCH}/prebuilt-$(git rev-parse --short=12 HEAD)-${MOJOLEARN_GPU_ARCHS}-${compiler_key}-${plan_hash}
 mkdir -p "$PREBUILT"
+rm -f "$PREBUILT/_clean.done" || exit 2
 export SAB_PREBUILT=$PREBUILT
 psampler=$(busy_sampler "$RES/busy_cores_prebuild.txt")
 pixi run -e default python tools/sabotage_prebuild.py --plan "$PLAN" --tree "$TREE" --out "$PREBUILT" \
     --batches "$IDS" --cores "$CORES" --mem-kb "$(alloc_mem_kb)" --cache "$DEV_CACHE" \
     --unit-seconds "$(( ${SAB_BUILD_MIN:-40} * 60 ))" > "$RES/prebuild.log" 2>&1 &
 PREPID=$!
-trap 'kill "$PREPID" "$psampler" 2>/dev/null; git reset -q --soft "$ORIG"' EXIT
 say "PREBUILD started (pid $PREPID, $(echo "$IDS" | wc -w) batches, $CORES cores): $PREBUILT"
 # No batch touches the tree before the prebuild has its snapshot of the clean natives.
 while [ ! -f "$PREBUILT/_clean.done" ] && kill -0 "$PREPID" 2>/dev/null; do sleep 2; done  # driver-loop: one wait
-[ -f "$PREBUILT/_clean.done" ] || say "PREBUILD stopped before its clean snapshot: every batch compiles in place"
+if [ ! -f "$PREBUILT/_clean.done" ]; then
+    unset SAB_PREBUILT
+    say "PREBUILD stopped before its clean snapshot: every batch compiles in place"
+fi
 
 # the proven-table rows of one batch (tools/identity_lanes/coverage_sabotage_proven.tsv columns: arm, builds,
 # verdict, lanes, reference, reverted, seconds), to paste after reading the checks; MISSED, BUILD-FAIL and TIMEOUT
@@ -339,8 +361,8 @@ for b in $IDS; do  # driver-loop: over batches, each owns the tree and the GPU
     rm -rf "${PREBUILT:?}/$b"   # placed and restored (a rerun of this batch compiles it again): the disk keeps only the batches still to run
     persist_now
     # A batch that could not put the tree back leaves every later batch unattributable: stop starting batches.
-    if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-        say "TREE NOT CLEAN after batch $b: no further batch starts ($(git status --porcelain --untracked-files=no | head -n 3 | tr '\n' ' '))"
+    if [ "$brc" -eq 7 ] || ! grep -q 'NATIVE RESTORED$' "$RES/$b/summary.txt" || [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+        say "RESTORATION UNCONFIRMED after batch $b: no further batch starts"
         left=STOPPED; rc=1
     fi
 done

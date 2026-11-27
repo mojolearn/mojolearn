@@ -33,6 +33,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shlex
 import shutil
@@ -114,22 +115,12 @@ class Batch:
                      a.tree, log)
         if rc:
             return False
-        # The synced tree's new files are untracked (the job commits with -a): they are sources the builds need.
-        listed = subprocess.run(["git", "-C", a.tree, "ls-files", "-z", "--others", "--exclude-standard"],
-                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False).stdout
-        for rel in filter(None, listed.decode(errors="surrogateescape").split("\0")):  # driver-loop: over new files
-            src = Path(a.tree) / rel
-            if src.is_file() and not rel.startswith("python/mojolearn/"):
-                (self.tree / rel).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, self.tree / rel)
-        # The clean natives from the snapshot taken before any batch ran: the tree itself holds another batch's
-        # fault binaries while that batch runs.
-        self.clean = {}
-        for rel in natives(a.clean):  # driver-loop: over the clean native files (about 100)
+        # Every source is in the job's committed tree. Only the frozen clean
+        # native artifacts are copied in alongside it.
+        for rel in a.clean_hashes:
             dst = self.tree / rel
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(Path(a.clean) / rel, dst)
-            self.clean[rel] = sha(dst)
         wt = shlex.quote(str(self.tree))
         if run(a.prefix + ["bash", "-c", f"cd {wt} && exec python tools/generated_sources.py prepare --repo {wt}"],
                str(self.tree), log):
@@ -153,14 +144,15 @@ class Batch:
     def finish(self):
         """Harvest the changed natives, write the records and `ready`, delete the worktree."""
         out = self.dir / "out"
-        changed = []
+        changed = {}
         if self.prepared:
             for rel in natives(self.tree):  # driver-loop: over the worktree's native files
-                if self.clean.get(rel) != sha(self.tree / rel):
+                digest = sha(self.tree / rel)
+                if self.args.clean_hashes.get(rel) != digest:
                     dst = out / rel
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(self.tree / rel, dst)
-                    changed.append(rel)
+                    changed[rel] = digest
         for b in self.spec["builds"]:  # driver-loop: over the batch's builds
             (self.dir / f"build_{b}.rc").write_text(f"{self.rc.get(b, 98)}\n")
             (self.dir / f"build_{b}.secs").write_text(f"{self.secs.get(b, 0)}\n")
@@ -168,8 +160,26 @@ class Batch:
             run(["git", "-C", self.args.tree, "worktree", "remove", "--force", str(self.tree)], self.args.tree,
                 self.dir / "prepare.log")
         shutil.rmtree(self.tree, ignore_errors=True)
-        (self.dir / "ready").write_text(json.dumps(dict(prepared=bool(self.prepared), rc=self.rc, secs=self.secs,
-                                                        changed=changed), sort_keys=True) + "\n")
+        receipt = dict(prepared=bool(self.prepared), rc=self.rc, secs=self.secs,
+                       changed=changed, clean_sha256=self.args.clean_sha256)
+        pending = self.dir / "ready.pending"
+        pending.write_text(json.dumps(receipt, sort_keys=True) + "\n")
+        pending.replace(self.dir / "ready")
+
+
+def reusable(directory, spec, clean_sha256):
+    """Reuse only a completed, successful build for these exact clean native files."""
+    try:
+        receipt = json.loads((directory / "ready").read_bytes())
+        if (receipt.get("prepared") is not True or receipt.get("clean_sha256") != clean_sha256
+                or receipt.get("rc") != dict.fromkeys(spec["builds"], 0)):
+            return False
+        changed = receipt.get("changed")
+        if not isinstance(changed, dict) or not changed or set(natives(directory / "out")) != set(changed):
+            return False
+        return all(sha(directory / "out" / rel) == digest for rel, digest in changed.items())
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 def main(argv=None):
@@ -194,6 +204,8 @@ def main(argv=None):
         raise SystemExit("--cores must be at least 1")
     plan = {b["id"]: b for b in json.loads(Path(a.plan).read_text())["batches"]}
     ids = [x for x in a.batches.split() if x]
+    if len(ids) != len(set(ids)) or any(not re.fullmatch(r"[a-zA-Z0-9_]+-[1-9][0-9]*", x) for x in ids):
+        raise SystemExit("invalid or duplicate batch IDs")
     missing = [x for x in ids if x not in plan]
     if missing:
         raise SystemExit("no batch " + ", ".join(missing) + " in " + a.plan)
@@ -202,23 +214,33 @@ def main(argv=None):
     a.clean = str(Path(a.out) / "_clean")
     (Path(a.out) / "_clean.done").unlink(missing_ok=True)
     shutil.rmtree(a.clean, ignore_errors=True)
-    for rel in natives(a.tree):  # driver-loop: over the tree's native files
+    def snapshot(rel):
         dst = Path(a.clean) / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(Path(a.tree) / rel, dst)
-    (Path(a.out) / "_clean.done").write_text("snapshot taken\n")  # the job's batch loop starts after this
+        return rel, sha(dst)
+    with ThreadPoolExecutor(max_workers=a.cores) as pool:
+        a.clean_hashes = dict(pool.map(snapshot, natives(a.tree)))
+    if not a.clean_hashes:
+        raise SystemExit("no clean native files to snapshot")
+    a.clean_sha256 = hashlib.sha256(json.dumps(a.clean_hashes, sort_keys=True).encode()).hexdigest()
     batches = []
-    for x in ids:  # driver-loop: over batches (skip what an earlier submission of this commit already built)
-        if (Path(a.out) / x / "ready").is_file():
-            print(f"PREBUILD {x} ready from an earlier submission", flush=True)
-        else:
-            batches.append(Batch(plan[x], a))
+    with ThreadPoolExecutor(max_workers=a.cores) as pool:
+        cached = pool.map(lambda x: reusable(Path(a.out) / x, plan[x], a.clean_sha256), ids)
+        for x, valid in zip(ids, cached):
+            if valid:
+                print(f"PREBUILD {x} ready from an earlier submission", flush=True)
+            else:
+                (Path(a.out) / x / "ready").unlink(missing_ok=True)
+                batches.append(Batch(plan[x], a))
     queue = []  # (batch, build, need bytes) in run order
     for bt in batches:  # driver-loop: over batches
         for b in bt.spec["builds"]:  # driver-loop: over one batch's builds
             peak, _ = recorded(a.cache, b)
             need = int(peak * PEAK_HEADROOM) if peak else int(a.default_gib * (1 << 30))
             queue.append((bt, b, min(need, budget)))
+    # The run loop may consume a cached marker as soon as the barrier opens.
+    (Path(a.out) / "_clean.done").write_text(a.clean_sha256 + "\n")
     running = {}
     used = 0
     # Workers: one per core for the compiles, plus the worktree preparations, which run beside them.

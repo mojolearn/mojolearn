@@ -234,6 +234,22 @@ def test_unmapped_patch_remains_the_only_fault_in_its_batch():
     assert [b['arms'] for b in batches] == [['a'], ['b']]
 
 
+def test_broad_and_precise_native_reach_both_exclude_a_batch_partner():
+    table = {n: dict(arm=n, patch=n + '.patch', bindings=['build'], lanes=['l' + n]) for n in ('a', 'b')}
+    audit = {'native': [dict(sabotage_patches=['a.patch'], lanes=['la'], lanes_wide=['lb'], lanes_closure=2),
+                        dict(sabotage_patches=['b.patch'], lanes=['lb'], lanes_wide=[], lanes_closure=1)]}
+    batches = gate.batch_plan(table, audit, triage=lambda r: ('covered', r['lanes'], ''), co_apply=lambda p: True)
+    assert [b['arms'] for b in batches] == [['a'], ['b']]
+
+
+def test_reload_fault_requires_real_disagreement_in_predictions():
+    clean = {'model_verdict': 'STABLE', 'model': ['a' * 16]}
+    fault = dict(clean, model_verdict='RELOAD-MOVED', infer=['b' * 16], reload=['c' * 16])
+    assert gate.negative_control_moves(fault, clean, 'model')
+    for invalid in ([], ['uncomputed'], fault['infer']):
+        assert not gate.negative_control_moves(dict(fault, reload=invalid), clean, 'model')
+
+
 def test_batch_plan_keeps_arms_of_one_patch_in_one_build():
     table = {n: dict(arm=n, patch='same.patch', bindings=['build_rf'], lanes=['l' + n]) for n in ('a', 'b')}
     audit = {'native': [dict(entry='e', sabotage_patches=['same.patch'], lanes=['la', 'lb'])]}
@@ -334,6 +350,17 @@ def test_a_twin_lane_moves_with_its_faulted_side_on_the_other_side(tmp_path):
     arm = dict(arm='coverage-test-gpu', side='gpu', bindings=['build'], lanes=['check-generic-other'])
     paths = _sided_records(tmp_path, 'check-generic-other', {'verdict': 'REFUSED', 'hashes': [], 'error': _MISMATCH})
     assert gate.stays_put(arm, 'cpu', *paths) == []
+
+
+def test_identical_refusals_are_not_a_stable_unaffected_side(tmp_path):
+    arm = dict(arm='gpu-arm', side='gpu', lanes=['one'])
+    refused = {'verdict': 'REFUSED', 'error': 'could not load'}
+    paths = _sided_records(tmp_path, 'one', refused)
+    for path in paths:
+        doc = json.loads(path.read_bytes())
+        doc['cells']['one/base'] = refused
+        path.write_text(json.dumps(doc))
+    assert gate.stays_put(arm, 'cpu', *paths)
 
 
 @pytest.mark.parametrize('lane, error', [

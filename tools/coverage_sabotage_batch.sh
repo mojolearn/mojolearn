@@ -36,13 +36,15 @@
 set -u
 PLAN=${1:?usage: coverage_sabotage_batch.sh <plan.json> <batch id>}
 BATCH=${2:?usage: coverage_sabotage_batch.sh <plan.json> <batch id>}
+[[ "$BATCH" =~ ^[a-zA-Z0-9_]+-[1-9][0-9]*$ ]] || { echo "invalid batch ID: $BATCH" >&2; exit 2; }
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 OUT=${OUT:-$HOME/mojolearn-sabotage/$BATCH}
 FIXTURES=${FIXTURES:-base}
 mkdir -p "$OUT"
-SCRATCH=${SAB_SCRATCH:-$HOME/mojolearn-sabotage-scratch}/$BATCH
-rm -rf "$SCRATCH" && mkdir -p "$SCRATCH"
+scratch_parent=${SAB_SCRATCH:-$HOME/mojolearn-sabotage-scratch}
+mkdir -p "$scratch_parent" || exit 4
+SCRATCH=$(mktemp -d "$scratch_parent/$BATCH.XXXXXXXX") || exit 4
 if [ -n "${PYTHON:-}" ]; then
     read -r -a PY <<< "$PYTHON"
 elif command -v pixi > /dev/null 2>&1 && [ -f pixi.toml ]; then
@@ -125,11 +127,7 @@ fi
 # the development layout kept loading the clean groups and every arm read unmoved).
 natives() { find ${NATIVE_DIRS:-python/mojolearn} \( -name '*.so' -o -name '*.dylib' -o -name '_mojolearn_merged.json' \) -type f 2>/dev/null | sort; }
 if command -v sha256sum > /dev/null 2>&1; then HASH=(sha256sum); else HASH=(shasum -a 256); fi
-snap() { natives | while read -r f; do "${HASH[@]}" "$f"; done; }
-natives > "$OUT/clean_natives.txt"
-snap > "$OUT/clean_natives.sha"
-tar -cf "$SCRATCH/clean_natives.tar" -T "$OUT/clean_natives.txt"
-
+snap() { natives | while read -r f; do "${HASH[@]}" "$f" || exit 1; done; }
 # Both sides run in ONE identity_break process (the lanes' device="cpu" and device="gpu" calls): the GPU
 # side to <tag>_device.json, then the CPU side to <tag>_cpu.json. An installation without a GPU records the
 # CPU side only (its GPU side reads not applicable; a gpu arm cannot be proven there).
@@ -179,6 +177,9 @@ run_cols() { # $1 = clean | sab | restored
         log "RUN $tag CPU-only lanes=$CPU_ONLY_LANES rc=$host_rc"
     fi
     log "RUN $tag sides=$([ "$GPU_SIDE" = yes ] && echo both || echo cpu) rc=$rc"
+    if [ "$tag" != sab ] && { [ "$rc" -ne 0 ] || [ "$host_rc" -ne 0 ]; }; then
+        return 1
+    fi
     # Faulted fixtures can return nonzero. Judge the records this process
     # wrote, and never pick up an old phase after a crash or failed import.
     for col in "${cols[@]}"; do
@@ -188,15 +189,25 @@ run_cols() { # $1 = clean | sab | restored
 
 APPLIED=0
 restore() {
+    local rc=0
     if [ "$APPLIED" = 1 ]; then
         # shellcheck disable=SC2046
-        git apply -R $(python3 -c 'import sys; print(" ".join(reversed(sys.argv[1].split(","))))' "$PATCHES") \
-            && log "REVERTED" || log "REVERT FAILED"
-        APPLIED=0
+        if git apply -R $(python3 -c 'import sys; print(" ".join(reversed(sys.argv[1].split(","))))' "$PATCHES"); then
+            APPLIED=0
+            log "REVERTED"
+        else
+            rc=1
+            log "REVERT FAILED"
+        fi
     fi
-    natives | while read -r f; do grep -qxF "$f" "$OUT/clean_natives.txt" || rm -f "$f"; done
-    tar -xf "$SCRATCH/clean_natives.tar"
-    if [ "$(snap)" = "$(cat "$OUT/clean_natives.sha")" ]; then log "NATIVE RESTORED"; else log "NATIVE RESTORE FAILED"; fi
+    natives | while read -r f; do grep -qxF "$f" "$OUT/clean_natives.txt" || rm -f "$f" || exit 1; done || rc=1
+    tar -xf "$SCRATCH/clean_natives.tar" || rc=1
+    snap > "$SCRATCH/restored.sha" && cmp -s "$SCRATCH/restored.sha" "$OUT/clean_natives.sha" || rc=1
+    if [ "$rc" -ne 0 ]; then
+        log "RESTORE FAILED: retained $SCRATCH"
+        return 1
+    fi
+    log "NATIVE RESTORED"
 }
 # A per-batch time limit (the job's `timeout`) sends TERM to this whole process group: the builds and the
 # runs die, this shell stops them all and exits, and the EXIT trap restores the tree and the natives.
@@ -204,8 +215,21 @@ restore() {
 # shellcheck disable=SC2046
 stop_all() { log "STOPPED (signal): killing the batch's builds and runs"; kill $(jobs -p) 2>/dev/null; exit 143; }
 RESTORED=0
-trap '[ "$RESTORED" = 1 ] || restore; rm -rf "$SCRATCH"' EXIT
+backup_ok=0
+finish() {
+    local rc=$?
+    trap - EXIT
+    if [ "$backup_ok" = 1 ] && [ "$RESTORED" = 0 ]; then
+        restore || exit 7
+    fi
+    rm -rf "$SCRATCH"
+    exit "$rc"
+}
+trap finish EXIT
 trap 'stop_all' INT TERM
+natives > "$OUT/clean_natives.txt" && [ -s "$OUT/clean_natives.txt" ] && \
+    snap > "$OUT/clean_natives.sha" && tar -cf "$SCRATCH/clean_natives.tar" -T "$OUT/clean_natives.txt" || exit 4
+backup_ok=1
 
 run_cols clean || exit 6
 # shellcheck disable=SC2046
@@ -251,7 +275,7 @@ if [ -n "$PRE" ] && [ -f "$PRE/ready" ]; then
         cp "$PRE/build_$b.log" "$OUT/build_$b.log" 2>/dev/null
         log "BUILD $b rc=$(cat "$OUT/build_$b.rc") secs=$(cat "$PRE/build_$b.secs" 2>/dev/null || echo 0) (prebuilt)"
     done
-    [ -d "$PRE/out" ] && cp -a "$PRE/out/." "$ROOT/"
+    if [ -d "$PRE/out" ]; then cp -a "$PRE/out/." "$ROOT/" || exit 5; fi
     log "PREBUILT natives placed: $(find "$PRE/out" -type f 2> /dev/null | wc -l) files"
 else
     bsampler=$(busy_sampler "$OUT/busy_cores_build.txt")
@@ -269,7 +293,7 @@ for b in ${BUILDS//,/ }; do
     fi
 done
 if [ $brc = 0 ]; then run_cols sab || exit 6; fi
-restore
+restore || exit 7
 RESTORED=1
 if [ $brc != 0 ]; then
     for arm in ${ARMS//,/ }; do echo "SABOTAGE batch=$BATCH arm=$arm side=all verdict=BUILD-FAIL" | tee -a "$OUT/summary.txt"; done

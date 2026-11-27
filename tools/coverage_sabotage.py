@@ -441,7 +441,7 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
                     failures.append(f"{key}: incomplete sabotaged output")
                     continue
                 if (not all(isinstance(h, str) and h and not h.startswith("n/a:") for h in sc["hashes"]) or
-                        any(v not in ("STABLE", "DIVERGENT", "MOVED", "BATCH_MOVED", "RLPAIR_MOVED", "N/A") for k, v in sc.items()
+                        any(v not in ("STABLE", "DIVERGENT", "MOVED", "RELOAD-MOVED", "BATCH_MOVED", "RLPAIR_MOVED", "N/A") for k, v in sc.items()
                             if k.endswith("_verdict")) or sc.get("error") or sc.get("probe_error")):
                     failures.append(f"{key}: sabotaged output contains an unreviewed failure")
                     continue
@@ -523,6 +523,8 @@ def stays_put(arm, side, clean_path, sab_path, restored_path):
     Returns the failures (a moved cell means the fault is not in one side)."""
     failures = []
     try:
+        from identity_break import one_sided_na
+
         records = [_record(p)[0] for p in (clean_path, sab_path, restored_path)]
         for label, record in zip(("clean", "sabotaged", "restored"), records):
             if record.get("complete") is not True:
@@ -530,10 +532,17 @@ def stays_put(arm, side, clean_path, sab_path, restored_path):
             if _record_side(record) != side:
                 raise ValueError(f"{side} side {label}: the record is the {_record_side(record)} side")
         clean, sab, restored = records
-        for key in PROTOCOL:
+        if not clean.get("fixtures") or not clean.get("repeats"):
+            raise ValueError(f"{side} side: missing fixtures or repeat count")
+        for key in ("commit", *PROTOCOL):
             if clean.get(key) != sab.get(key) or clean.get(key) != restored.get(key):
                 raise ValueError(f"{side} side: different {key}: records are not comparable")
         for lane in arm["lanes"]:
+            absent = one_sided_na(lane, side)
+            if absent:
+                if not all(_declared_absence(record, lane, absent) for record in records):
+                    failures.append(f"{side} side {lane}: missing the declared exclusion")
+                continue
             for fixture in clean.get("fixtures") or {}:
                 key = lane + "/" + fixture
                 cells = [r["cells"].get(key) for r in records]
@@ -541,6 +550,9 @@ def stays_put(arm, side, clean_path, sab_path, restored_path):
                     failures.append(f"{side} side {key}: missing clean, sabotaged or restored cell")
                     continue
                 cc, sc, rc = cells
+                if not _stable(cc, clean["repeats"]) or not _stable(rc, clean["repeats"]):
+                    failures.append(f"{side} side {key}: clean or restored data is missing or unstable")
+                    continue
                 same = lambda a, b: (a.get("verdict") == b.get("verdict") and _signature(a) == _signature(b)
                                      and str(a.get("error") or "") == str(b.get("error") or ""))
                 if not same(cc, sc) and _twin_moved(lane, cc, sc, rc, same):
@@ -551,6 +563,8 @@ def stays_put(arm, side, clean_path, sab_path, restored_path):
                                     f"the fault is not in the {arm_sides(arm)[0]} side's code alone")
                 elif not same(cc, rc):
                     failures.append(f"{side} side {key}: restoration changed the clean result" + _changed_parts(cc, rc))
+                elif not _stable(sc, clean["repeats"]):
+                    failures.append(f"{side} side {key}: faulted build has an unstable result on the unaffected side")
                 else:
                     print(f"{side} side {key}: stayed put")
     except (ValueError, OSError, KeyError, TypeError) as error:
@@ -652,7 +666,9 @@ def check_sides(arm, records, evidence=None, root=ROOT, batch_bindings=(), no_gp
         else:
             print(f"## {arm['arm']} {side} side: not applicable (no {side.upper()} records: no GPU in this installation)"
                   if side == "gpu" else f"## {arm['arm']} {side} side: no records")
-            if side == "cpu":
+            if side == "gpu" and not no_gpu:
+                failures.append("gpu side: no records for the unaffected GPU side")
+            elif side == "cpu":
                 failures.append("cpu side: no records (every installation has a CPU side)")
     for failure in failures:
         print(f"INVALID: {failure}")
@@ -805,11 +821,11 @@ def may_move(arm_table, audit, triage=None):
     unresolved = set()
     for row in audit.get("native", ()):
         status, lanes, _ = triage(row)
-        if status.startswith("n/a"):
-            continue
         # A broad source match is sufficient to prohibit co-batching. It
-        # never qualifies a lane's runtime result.
-        candidates = lanes or row.get("lanes_wide") or row.get("lanes_closure") or ()
+        # never qualifies a lane's runtime result. lanes_closure is a count.
+        candidates = set(lanes) | set(row.get("lanes_precise", ())) | set(row.get("lanes_wide", ()))
+        if status.startswith("n/a") and not candidates:
+            continue
         for patch in row.get("sabotage_patches", ()):
             by_patch.setdefault(patch, set()).update(candidates)
             if not candidates:
@@ -856,8 +872,12 @@ def reuse_full_plan(plan, table, selected, head, tree, manifest_hash, patch_hash
     from concurrent.futures import ThreadPoolExecutor
     def validate(b):
         owners = {}
+        if not re.fullmatch(re.escape(b["family"]) + r"-[1-9][0-9]*", b["id"]):
+            raise ValueError("unexpected batch ID for family " + b["family"])
         for name in b["arms"]:
             arm = table[name]
+            if _family(arm["bindings"][0]) != b["family"]:
+                raise ValueError(f"{b['id']}: incorrect binding family for {name}")
             if any(owners.setdefault(lane, arm["patch"]) != arm["patch"] for lane in arm["lanes"]):
                 raise ValueError(f"{b['id']}: multiple faults reach the same declared lane")
         if not b["arms"] or b != batch_record(table, b["arms"], b["family"], b["id"]) or not _co_apply(b["patches"]):

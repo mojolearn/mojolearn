@@ -103,17 +103,14 @@ jobs:
             set -eu
             git cat-file -e "${SOURCE_COMMIT}^{commit}"
             if ! git grep -q -e '--native-fault-plan' "$SOURCE_COMMIT" -- tools/verify_coverage_audit.py; then exit 0; fi
-            source_dir=$(git worktree list --porcelain | awk -v rev="$SOURCE_COMMIT" '/^worktree / {p=substr($0,10)} /^HEAD / && $2==rev {print p; exit}')
-            if [ -z "$source_dir" ]; then
-              source_dir="$RUNNER_TEMP/fault-plan-source"
-              git worktree add --detach "$source_dir" "$SOURCE_COMMIT"
-            fi
+            source_dir="$RUNNER_TEMP/fault-plan-source"
+            git worktree add --detach "$source_dir" "$SOURCE_COMMIT"
             cd "$source_dir"
             out="$RUNNER_TEMP/out"
             mkdir -p "$out"
             py="$RUNNER_TEMP/fault-plan-venv/bin/python"
             python3 -m venv "$RUNNER_TEMP/fault-plan-venv"
-            "$py" -m pip install numpy > "$out/fault-plan-dependencies.log" 2>&1
+            "$py" -m pip install numpy==2.2.6 > "$out/fault-plan-dependencies.log" 2>&1
             "$py" tools/verify_coverage_audit.py --native-fault-plan --json "$out/native-fault-reach.json" > "$out/fault-reach.log" 2>&1
             "$py" tools/coverage_sabotage.py batch-plan --audit "$out/native-fault-reach.json" --json "$out/fault-plan.json" > "$out/fault-plan.log" 2>&1
           )
