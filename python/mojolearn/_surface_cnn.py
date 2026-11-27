@@ -25,7 +25,7 @@ FAMILIES = (
                         "x-cnn-dropout2d", "x-cnn-globalpool", "x-cnn-resnet-block",
                         "x-cnn-gcn", "x-cnn-sage", "x-cnn-conv-options",
                         "x-cnn-pool-options", "x-cnn-bn-options",
-                        "x-cnn-gnn-options", "x-cnn-trainer-options",
+                        "x-cnn-gnn-options", "x-cnn-gnn-disabled-options", "x-cnn-trainer-options",
                         # lane verify-coverage-20261024: the layer fit methods and
                         # CNNClassifier.predict (tools/identity_lanes/public_cnn_methods.py)
                         "public-cnn-layer-fit", "public-cnn-classifier-predict",
@@ -81,6 +81,7 @@ TRAINING_LANE_NAMES = {
     "x-cnn-pool-options": "pooling ceil_mode and divisor_override",
     "x-cnn-bn-options": "BatchNorm momentum=None and track_running_stats=False",
     "x-cnn-gnn-options": "SAGEConv max aggregation, normalize and project",
+    "x-cnn-gnn-disabled-options": "GCN without self loops or normalization, SAGE without root weights",
     "x-cnn-trainer-options": "CNNClassifier Adam, AdamW, Nesterov and dampened SGD",
     "public-cnn-layer-fit": "Conv1d, Conv2d, BatchNorm1d and BatchNorm2d fit",
     "public-cnn-classifier-predict": "CNNClassifier predict and predict_proba",

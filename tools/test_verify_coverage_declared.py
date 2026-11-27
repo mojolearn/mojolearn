@@ -71,3 +71,50 @@ def test_triage_and_reach_state_follow_the_declaration(monkeypatch):
     plain = dict(row, entry="x_other")
     assert audit.reach_state(plain) == "wide"
     assert audit.reach_state(dict(plain, lanes_precise=["lane-c"])) == "static"
+
+
+def test_public_cnn_and_optimizer_lanes_have_faults_and_published_references():
+    """Track CNN exports, the two standalone optimizers and the three Session extensions under review."""
+    import ast
+    import json
+    import re
+    from pathlib import Path
+
+    import coverage_sabotage
+    import identity_break
+
+    root = Path(ROOT)
+    lanes = {
+        "Conv2d": "x-cnn-conv2d", "Conv1d": "x-cnn-conv1d",
+        "MaxPool2d": "x-cnn-pool", "AvgPool2d": "x-cnn-pool",
+        "MaxPool1d": "x-cnn-pool", "AvgPool1d": "x-cnn-pool",
+        "BatchNorm1d": "x-cnn-batchnorm", "BatchNorm2d": "x-cnn-batchnorm",
+        "AdaptiveAvgPool2d": "x-cnn-globalpool", "AdaptiveMaxPool2d": "x-cnn-globalpool",
+        "CNNClassifier": "x-cnn-trainer", "Dropout2d": "x-cnn-dropout2d",
+        "BasicBlock": "x-cnn-resnet-block", "GCNConv": "x-cnn-gcn", "SAGEConv": "x-cnn-sage",
+        "Adafactor": "sequence-adafactor", "LAMB": "sequence-lamb",
+        "Session.scan": "ops-scan-cell", "Session.attention": "ops-attention-qkv",
+        "Session.custom_op": "nn-cbw-custom-vjp",
+    }
+    path = root / "python/mojolearn/_expansion_cnn.py"
+    exports, = [ast.literal_eval(node.value) for node in ast.parse(path.read_text()).body
+                if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "__all__"
+                                                        for t in node.targets)]
+    assert set(exports) <= lanes.keys(), f"CNN exports missing verification lanes: {set(exports) - lanes.keys()}"
+    sides = {}
+    for arm in coverage_sabotage.arms().values():
+        for lane in arm["lanes"]:
+            sides.setdefault(lane, set()).update(coverage_sabotage.arm_sides(arm))
+
+    for lane in {*lanes.values(), "nn-ep-cnn-fits", "nn-ep-cnn-layers", "x-cnn-gnn-disabled-options"}:
+        assert lane in identity_break.LANES, f"missing installed verifier lane: {lane}"
+        assert sides.get(lane) == {"cpu", "gpu"}, f"{lane} declares faults on {sides.get(lane)}"
+
+    excluded = {line.split("\t")[0] for line in (root / "docs-site/api_exclude.txt").read_text().splitlines()}
+    cells = json.loads((root / "python/mojolearn/verify_reference/table.json").read_text())["cells"]
+    for name, lane in lanes.items():
+        if name in excluded:
+            continue
+        ref = cells.get(f"{lane}/base", {}).get("train", {})
+        assert re.fullmatch(r"[0-9a-f]+", ref.get("ref", "")), f"{name} lacks a recorded training digest"
+        assert {"apple", "nvidia", "amd", "cpu"} <= ref["cols"].keys(), f"{name} lacks a device reference"

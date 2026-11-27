@@ -332,6 +332,26 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, first, lambda e: (e.forward(np.ascontiguousarray(Xh[:256, :16]), ei),))
 
 
+@lane("x-cnn-gnn-disabled-options")
+def _(ml, X, yc, yr, Xh=None):
+    """Directed, weighted graph with repeated edges and a node without incoming edges."""
+    parts = {}
+    nodes = np.ascontiguousarray(X[:16, :4])
+    edges = _cnn_graph(len(nodes))
+    weights = np.ascontiguousarray(np.abs(X[:edges.shape[1], 0]) + np.float32(0.25))
+    for name, normalize in (("no_loops", True), ("raw_edges", False)):
+        gcn = ml.GCNConv(4, 3, normalize=normalize, add_self_loops=False, random_state=66)
+        out = gcn.forward(nodes, edges, weights)
+        dx = gcn.backward(_cnn_grad(X, out.shape))
+        parts[name] = _h(out, dx, gcn.grad_weight_, gcn.grad_bias_)
+
+    neighbors = ml.SAGEConv(4, 3, root_weight=False, random_state=67)
+    out = neighbors.forward(nodes, edges)
+    dx = neighbors.backward(_cnn_grad(X, out.shape))
+    parts["no_root"] = _h(out, dx, neighbors.lin_l.grad_weight_, neighbors.lin_l.grad_bias_)
+    return _fit(parts, neighbors, lambda e: (e.forward(np.ascontiguousarray(Xh[:16, :4]), edges),))
+
+
 @lane("x-cnn-trainer-options")
 def _(ml, X, yc, yr, Xh=None):
     """CNNClassifier's optimizer options: Adam, AdamW, and SGD with Nesterov
@@ -371,4 +391,4 @@ def _cnn_batch_dropout_eval(ml, e, Xh):
 _batch_decl(_cnn_batch_dropout_eval, "x-cnn-dropout2d", revision="expansion-batch-2026-09-28-v1")
 _batch_decl("n/a:whole-graph message passing (GCN/SAGE read neighboring nodes through a shared edge "
             "index; slicing node rows removes dependencies and is not an independent graph batch)",
-            "x-cnn-gcn", "x-cnn-sage", "x-cnn-gnn-options", revision="expansion-batch-2026-09-28-v1")
+            "x-cnn-gcn", "x-cnn-sage", "x-cnn-gnn-options", "x-cnn-gnn-disabled-options", revision="expansion-batch-2026-09-28-v1")
