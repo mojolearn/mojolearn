@@ -19,6 +19,8 @@ skips it). Builds were lost on 2026-11-15 to defects these catch:
               Then the commit's tools/mojo_lastuse_audit.py and tools/identity_math_lint.py (raw stdlib math where
               IDENTICAL must call the exact seams) over every .mojo blob of the commit (a local freed at its
               last named use while an untracked address still reads it; tools/mojo_lastuse_allow.txt). Seconds.
+              Then the commit's tools/metal_float64_lint.py (Float64 in code a device kernel reaches: Metal has none;
+              tools/metal_float64_lint_allow.txt). Seconds.
               Then the commit's tools/python_free_dirs.sh over the commit (no Mojo kernel, RUN module or non-boundary
               binding imports Python), as the pre-push hook runs it, so a commit pushed past the hook cannot build.
               Then the commit's tools/native_caller_audit.py over the commit's blobs (a registered native export or
@@ -210,10 +212,11 @@ def run_audits(tree, commit, workdir, git_root=ROOT):
     pyfree = python_free_audit(tree, commit, git_root)
     nativecall = native_caller_audit(tree, commit, git_root)
     mathlint = math_lint_audit(tree, commit, git_root)
+    f64lint = metal_float64_audit(tree, commit, git_root)
     tables = block_tables_audit(tree, commit, git_root)
     gil = gil_region_audit(tree, commit, git_root)
     sabpatch = sabotage_patches_audit(tree, commit, git_root)
-    return 1 if errors or lastuse or pyfree or nativecall or mathlint or tables or gil or sabpatch else 0
+    return 1 if errors or lastuse or pyfree or nativecall or mathlint or f64lint or tables or gil or sabpatch else 0
 
 
 def sabotage_patches_audit(tree, commit, git_root=ROOT):
@@ -280,6 +283,19 @@ def math_lint_audit(tree, commit, git_root=ROOT):
     tool = Path(tree) / "tools/identity_math_lint.py"
     if not tool.is_file():
         print(f"MATHLINT SKIP {commit[:12]} has no tools/identity_math_lint.py")
+        return 0
+    # a child process: the lint splits its files across a process pool
+    return subprocess.call([sys.executable, str(tool), "--commit", commit, "--root", str(git_root)])
+
+
+def metal_float64_audit(tree, commit, git_root=ROOT):
+    """The COMMIT's tools/metal_float64_lint.py over the commit's .mojo blobs (lane mac-speed-1, 2026-11-27): Float64
+    in code a device kernel reaches, which Metal cannot compile (0.9.0's Apple build died at the release on
+    autograd/nn_conv_ops.mojo up_candidates). Prints its F64LINT lines; returns its exit code (0 when the commit
+    predates the lint)."""
+    tool = Path(tree) / "tools/metal_float64_lint.py"
+    if not tool.is_file():
+        print(f"F64LINT SKIP {commit[:12]} has no tools/metal_float64_lint.py")
         return 0
     # a child process: the lint splits its files across a process pool
     return subprocess.call([sys.executable, str(tool), "--commit", commit, "--root", str(git_root)])
