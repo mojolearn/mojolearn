@@ -564,7 +564,7 @@ def lane_files(jdir, lane, gpu):
     return {"cpu": jdir / f"{lane}.json"}
 
 
-def side_state(path, declared=None, side=None):
+def side_state(path, declared=None, side=None, lane=None):
     """Classify a side from the training verdict and every probe verdict present in its record."""
     from verification_matrix import stable_digest
 
@@ -577,6 +577,13 @@ def side_state(path, declared=None, side=None):
     cells = doc.get("cells") if isinstance(doc, dict) else None
     if not isinstance(cells, dict) or not cells:
         return "missing", "record holds no cells"
+    if lane is not None:
+        if doc.get("complete") is not True:
+            return "invalid", "record did not finish"
+        if doc.get("side") != side or set(cells) != {lane + "/base"}:
+            return "invalid", f"expected the {side} record for {lane}/base"
+        if doc.get("mode") != "identical" or doc.get("repeats") != 1:
+            return "invalid", "expected one identical-mode smoke fit"
     applicable = False
     na_detail = ""
     reasons = set()
@@ -594,12 +601,14 @@ def side_state(path, declared=None, side=None):
                 values = cell.get(field)
                 if not isinstance(values, list) or not values:
                     return "invalid", f"{key} {part}: missing {field} values"
+                if lane is not None and len(values) != 1:
+                    return "invalid", f"{key} {part}: expected one result"
                 if verdict == "STABLE":
                     if not stable_digest(cell, "train" if part == "verdict" else field):
                         return "invalid", f"{key} {part}: invalid or inconsistent digest"
                     applicable = True
                 else:
-                    if not all(isinstance(v, str) and v.startswith("n/a") for v in values):
+                    if not all(isinstance(v, str) and v.startswith("n/a:") for v in values):
                         return "invalid", f"{key} {part}: missing N/A reason"
                     reasons.update(values)
                     na_detail = values[0][:160]
@@ -610,9 +619,15 @@ def side_state(path, declared=None, side=None):
             if verdict in ("DIVERGENT", "MOVED", "RELOAD-MOVED", "BATCH_MOVED", "RLPAIR_MOVED"):
                 return "divergent", f"{key} {part}: {verdict} {str(cell.get('oracle_errors', ''))[:240]}".rstrip()
             return "invalid", f"{key} {part}: unexpected verdict {verdict!r}"
+        if any(cell.get("oracle_errors") or []):
+            return "divergent", f"{key}: {str(cell['oracle_errors'])[:240]}"
         for field, detail in cell.items():
             if (field == "error" or field.endswith("_error")) and detail:
                 return "refused", f"{key} {field}: {str(detail)[:240]}"
+        if lane is not None:
+            for part in ("infer", "model", "batch", *(doc.get("parts_collected") or [])):
+                if part + "_verdict" not in cell:
+                    return "invalid", f"{key}: missing {part} verdict"
     if declared is not None:
         reason = declared.get(side)
         if reason and (applicable or reasons != {reason}):
@@ -629,7 +644,7 @@ def lane_check(jdir, gpu, declarations=None):
     def check(lane):
         bad = []
         for side, path in lane_files(jdir, lane, gpu).items():
-            state, detail = side_state(path, declarations[lane] if declarations is not None else None, side)
+            state, detail = side_state(path, declarations[lane] if declarations is not None else None, side, lane)
             if state not in ("ok", "n/a"):
                 bad.append(f"{side} side {state}: {detail}")
         return "; ".join(bad) or None
@@ -642,7 +657,7 @@ def sides_report(out, jdir, lanes, gpu, declarations=None):
     rows, counts = [], {}
     for lane in lanes:
         for side, path in lane_files(jdir, lane, gpu).items():
-            state, detail = side_state(path, declarations[lane] if declarations is not None else None, side)
+            state, detail = side_state(path, declarations[lane] if declarations is not None else None, side, lane)
             rows.append((lane, side, state, detail))
             counts.setdefault(side, {}).setdefault(state, 0)
             counts[side][state] += 1
@@ -696,6 +711,13 @@ def cmd_lanes(args):
         return 1
     jdir = Path(args.out) / "lanes" / "json"
     jdir.mkdir(parents=True, exist_ok=True)
+    if any(jdir.iterdir()):
+        # A child can exit before producing a record. Keep the previous run's
+        # files available without letting one satisfy this invocation's check.
+        import tempfile
+        previous = Path(tempfile.mkdtemp(prefix="previous-", dir=jdir.parent))
+        jdir.rename(previous / "json")
+        jdir.mkdir()
     extra = {"MOJOLEARN_COMMIT": args.commit} if args.commit else {}
     units = [(lane, lane_argv(args.python, lane, jdir, gpu, vendor)) for lane in lanes]
     rc = run_pool("lanes", units, args, cwd, child_env(extra), args.timeout, check=lane_check(jdir, gpu, declarations))

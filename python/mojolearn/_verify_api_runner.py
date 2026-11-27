@@ -257,9 +257,10 @@ def verify(*,self_test=True,reference=None,retain=None,scope='all'):
     endpoints fail the run; each side is judged against its own column (the
     CPU side against 'cpu', the GPU side against its vendor), and a side whose
     column the reference does not validate reads UNTESTED (its column is owed).
-    The overall status is FAILED when any side failed, else the GPU side's
-    (the CPU side's on a CPU-only installation). Each applicable side runs its own fault and restoration controls."""
+    MATCH requires agreement on every requested side. Each applicable side
+    runs its own fault and restoration controls."""
     from . import _verify_device as vd
+    from ._verify_public import combined_status
     if reference is None:
         try:
             from ._verification_api_reference import DATA
@@ -282,7 +283,7 @@ def verify(*,self_test=True,reference=None,retain=None,scope='all'):
                 results[side]['errors'].append('endpoint fault controls did not all pass')
                 results[side]['status'] = 'FAILED'
     primary=run_sides[-1]
-    result=dict(results[primary])
+    result=dict(results[primary], failures=dict(results[primary]['failures']))
     result['sides']={side:{k:v for k,v in r.items() if k!='evidence'} for side,r in results.items()}
     result['side']=primary
     for side,r in results.items():
@@ -290,8 +291,8 @@ def verify(*,self_test=True,reference=None,retain=None,scope='all'):
         result['failures'].update({side+':'+e:m for e,m in r['failures'].items()})
         result['pending']=list(result['pending'])+[side+':'+e for e in r['pending']]
         result['errors']=list(result['errors'])+[side+' side: '+e for e in r['errors'] if r['status']!='UNTESTED']
-    if any(r['status']=='FAILED' for r in results.values()) or result['failures'] or result['pending']:
-        result['status']='FAILED'
+    result['status'] = ('FAILED' if result['failures'] or result['pending']
+                        else combined_status(r['status'] for r in results.values()))
     return result
 
 

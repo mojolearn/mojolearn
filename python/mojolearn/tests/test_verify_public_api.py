@@ -96,6 +96,19 @@ def test_installed_endpoint_faults_change_outputs_and_restore_them(side):
     assert faults["estimator-regularization"]["status"] == "CAUGHT_AND_RESTORED"
 
 
+@pytest.mark.parametrize('cpu_status', ['OWED', 'UNTESTED', 'FAILED'])
+def test_gpu_match_preserves_the_cpu_verdict(monkeypatch, cpu_status):
+    monkeypatch.setattr(api, 'sides', lambda: ['cpu', 'gpu'])
+    monkeypatch.setattr(api, 'capture', lambda *, endpoints, side: {'side': side})
+    monkeypatch.setattr(api, '_judge_side', lambda clean, ref, scope:
+                        dict(status=cpu_status if clean['side']=='cpu' else 'MATCH',
+                             failures={'cpu-op': 'error'} if cpu_status=='FAILED' and clean['side']=='cpu' else {},
+                             errors=[], pending=[]))
+    result = api.verify(self_test=False, reference={})
+    assert result['status'] == cpu_status
+    assert result['sides']['gpu']['failures'] == {}
+
+
 def test_fault_controls_report_each_side_and_fail_on_cpu_only_miss(monkeypatch):
     from mojolearn import _verify_api_faults as controls
 

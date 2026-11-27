@@ -1,6 +1,15 @@
 """Public endpoint checks and fault controls in the ordinary verifier."""
 
 
+def combined_status(statuses):
+    states = set(statuses)
+    if 'FAILED' in states:
+        return 'FAILED'
+    if states == {'MATCH'}:
+        return 'MATCH'
+    return 'UNTESTED' if states and states <= {'MATCH', 'UNTESTED'} else 'OWED'
+
+
 def run(*, self_test=False, scope='all'):
     from ._verify_light_command import verify as tape_checks
     from ._verification_light_reference import DATA
@@ -14,8 +23,6 @@ def run(*, self_test=False, scope='all'):
         try:results[name]=operation()
         except Exception as error:
             results[name]=dict(status='FAILED',errors=[type(error).__name__+': '+str(error)])
-    states={r['status'] for r in results.values()}
-    status=('FAILED' if 'FAILED' in states else 'MATCH' if states=={'MATCH'}
-            else 'UNTESTED' if states<={'MATCH','UNTESTED'} else 'OWED')
+    status = combined_status(r['status'] for r in results.values())
     return dict(format='mojolearn.public-verification.v1',status=status,**results,
                 release_qualified=False,scope=scope)

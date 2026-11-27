@@ -204,11 +204,12 @@ model = mojolearn.GradientBoosting(loss="Logloss", n_estimators=200, max_depth=6
 model.fit(X, y)
 print(model.predict_proba(X[:5]))
 print(model.numeric_mode_used(), mojolearn.vendor())
+print(model.digest_)
 ```
 
-Run the example on two supported devices with the same release, seed, and settings.
-Compare `model.digest_` across machines to check that the fitted states agree.
-You can make the same comparison with your own data.
+Run the example on two supported devices and compare the printed digests.
+For your own data, use the same input bytes in the same row order, seed,
+settings and Mojolearn release on both machines.
 
 ## Build your own model
 

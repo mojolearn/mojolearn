@@ -1304,9 +1304,9 @@ def check_vendor_label(label):
     return label
 
 
-def default_vendor_label(ml, side=None):
+def default_vendor_label(ml, side=None, code_format=None, device_model=None):
     """`cpu-<cpu model slug>` for the CPU side (on any install), derived from
-    the machine and never typed; `platform.machine()` for the GPU side."""
+    the machine. A CUDA PTX column names its GPU and the selected sm80 set."""
     if (side or ("cpu" if ml.vendor() == "cpu" else "gpu")) == "cpu":
         model = cpu_model()
         if not model:
@@ -1316,6 +1316,11 @@ def default_vendor_label(ml, side=None):
                 "pass --vendor cpu-<model> explicitly"
             )
         return "cpu-" + slug(model)
+    if code_format == "ptx":
+        if not device_model:
+            raise SystemExit("REFUSING: could not read the PTX GPU model; pass --vendor nvidia-ptx-<gpu>-sm80")
+        model = slug(device_model).removeprefix("nvidia-")
+        return f"nvidia-ptx-{model}-sm80"
     return platform.machine().lower()
 
 
@@ -13072,10 +13077,6 @@ def _run_reference(args):
                          "bitwise promise; use MOJOLEARN_NUMERIC_MODE=identical")
     # PROVENANCE BEFORE THE FIRST FIT. The label and the commit are refused
     # here, in seconds, not after nine fixtures of fits.
-    vendor = check_vendor_label(args.vendor if args.vendor is not None else default_vendor_label(ml, side))
-    if (side == "cpu") != str(vendor).startswith("cpu"):
-        raise SystemExit(f"REFUSING: the {side} side's column is labelled {vendor!r}; a CPU column's label "
-                         "starts with cpu and only a CPU column's does")
     # THE PTX COLUMN (Andrew 2026-10-10: PTX is a normal target; no flag). A CUDA
     # record is the `ptx` device class exactly when the PTX set ran, and its label
     # says so (`nvidia-ptx-<gpu>-sm80`): an A100 or H100 record taken through the
@@ -13092,9 +13093,6 @@ def _run_reference(args):
         code_format = report["code_kind"]
         if code_format not in ("ptx", "native"):
             raise SystemExit(f"REFUSING: runtime_report()['code_kind'] is {code_format!r}, not 'ptx' or 'native'")
-        if (code_format == "ptx") != ("ptx" in str(vendor).lower()):
-            raise SystemExit(f"REFUSING: the {code_format} CUDA set ({gpu_arch}) is loaded and the vendor label is "
-                             f"{vendor!r}; a PTX record is labelled nvidia-ptx-<gpu>-sm80 and only a PTX record is")
     commit, commit_source = commit_witness()
     host = host_record(ml) if side == "cpu" else None
     timing_env = timing_environment()
@@ -13117,6 +13115,15 @@ def _run_reference(args):
         package["fixture_n"] = N
     if PAR_WIDE:
         package["wide"] = True
+    vendor = check_vendor_label(args.vendor if args.vendor is not None else
+                                default_vendor_label(ml, side, code_format, (run_static.get("device") or {}).get("model")))
+    if (side == "cpu") != str(vendor).startswith("cpu"):
+        raise SystemExit(f"REFUSING: the {side} side's column is labelled {vendor!r}; a CPU column's label "
+                         "starts with cpu and only a CPU column's does")
+    if side == "gpu" and ml.vendor() == "cuda":
+        if (code_format == "ptx") != ("ptx" in str(vendor).lower()):
+            raise SystemExit(f"REFUSING: the {code_format} CUDA set ({gpu_arch}) is loaded and the vendor label is "
+                             f"{vendor!r}; a PTX record is labelled nvidia-ptx-<gpu>-sm80 and only a PTX record is")
     print(f"# side={side} vendor={vendor} commit={commit} ({commit_source})"
           + (f" host.cpu_model={host['cpu_model']!r} host.column={host['column']} "
              f"host.families={sorted(host['families'])}" if host else ""))
@@ -14391,7 +14398,7 @@ def main():
     ap.add_argument("--repeats", type=int, default=1)
     ap.add_argument("--vendor", default=None,
                     help="the box label, ^[a-z0-9][a-z0-9_.-]*$ and not a placeholder; default "
-                         "cpu-<cpu model slug> for the CPU side, platform.machine() for the GPU side")
+                         "cpu-<cpu model slug> on CPU, nvidia-ptx-<gpu>-sm80 on PTX, platform.machine() otherwise")
     ap.add_argument("--side", choices=("cpu", "gpu", "both"), default=None,
                     help="the column this run records, through the public device= parameter in this "
                          "process: cpu (device='cpu'), gpu (device='gpu') or both (the GPU column to "
