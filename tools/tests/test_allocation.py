@@ -112,6 +112,13 @@ def test_cgroup_v1_memory_limit_caps_and_its_no_limit_value_does_not(tmp_path):
     assert unlimited is None or unlimited >= got
 
 
+@pytest.mark.parametrize("available, expected, status", [(8193, "8", 0), (0, "0", 0), (None, "", 1)])
+def test_mem_kb_cli_distinguishes_zero_from_an_unknown_limit(monkeypatch, capsys, available, expected, status):
+    monkeypatch.setattr(A, "mem_available_bytes", lambda: available)
+    assert A.main(["mem-kb"]) == status
+    assert capsys.readouterr().out.strip() == expected
+
+
 def test_a_lane_without_a_cost_takes_its_familys():
     hints = {"gbdt-a": 5.5, "gbdt-b": 1.0, "x-decomp-eigh-wide-pca": 0.9, "x-decomp-ica": 1.2, "pca": 0.4,
              "@public": 300.0}

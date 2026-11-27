@@ -6,7 +6,7 @@ file: the 361 GPU-column files took 4,741 s on the 14-core L40S (job nvc1-0004) 
 `run_gpu` program. Here the files of a column are dealt into G group programs; each group is ONE compile, so what its
 members share is compiled once per group.
 
-    plan --column C --list LIST --groups G --gen DIR [--costs TSV]
+    plan --column C --list LIST [--groups G] --gen DIR [--costs TSV]
 
 LIST is `native_checks_report.py testsuite` output (`<name> <path>` per line). DIR (in the build tree, never tracked)
 receives, per member, `ts_<name>.mojo`: a copy of the check file whose `main()` lists its tests by name (see "Why a
@@ -37,6 +37,7 @@ the names in SINGLES (with the reason).
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import statistics
 import sys
@@ -173,7 +174,8 @@ def main() -> int:
     pl = sub.add_parser("plan")
     pl.add_argument("--column", required=True, choices=("cpu", "gpu"))
     pl.add_argument("--list", required=True)
-    pl.add_argument("--groups", type=int, required=True)
+    # Keep the existing 14-group cache layout across different worker allocations.
+    pl.add_argument("--groups", type=int, default=os.environ.get("NC_TS_GROUPS") or 14)
     pl.add_argument("--gen", required=True)
     pl.add_argument("--costs", default=str(Path(__file__).with_name("native_testsuite_costs.tsv")))
     a = p.parse_args()

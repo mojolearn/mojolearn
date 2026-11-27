@@ -5,7 +5,7 @@
 #   alloc_cores            the cores of this allocation (python/mojolearn/_allocation.py: MOJOLEARN_ALLOC_CORES, else
 #                          affinity capped by the cgroup v2/v1 quota), not the host's CPUs; alloc_reason says why
 #   export_alloc           measures it once and exports MOJOLEARN_ALLOC_CORES for every later stage of the job
-#   alloc_mem_kb           memory available to this allocation in kB (MemAvailable, capped by the cgroup's memory.max)
+#   alloc_mem_kb           memory available to this allocation in kB (MemAvailable, capped by remaining cgroup memory)
 #   alloc_mem_total_kb     memory of this allocation in kB (MemTotal, capped by the cgroup's memory.max)
 #   busy_sampler FILE [S]  starts a background sampler (prints its pid): one line every S seconds (default 15) with the
 #                          busy cores of that interval (the allocation's CPU time per wall second: cpu_usage, from
@@ -42,7 +42,7 @@ _alloc_cap_kb() {  # <kB>: capped by the cgroup's memory.max
     fi
     echo "$kb"
 }
-alloc_mem_kb() { _alloc_cap_kb "$(awk '/MemAvailable/ {print $2}' /proc/meminfo)"; }
+alloc_mem_kb() { python3 -I "$_ALLOC_PY" mem-kb; }
 alloc_mem_total_kb() { _alloc_cap_kb "$(awk '/MemTotal/ {print $2}' /proc/meminfo)"; }
 # THE POD'S OWN CPU COUNTER (rel-fix-3): every busy-core sampler differences python/mojolearn/_allocation.py
 # `cpu_usage_seconds` (cgroup v2 cpu.stat, else v1 cpuacct.usage, else on a bare host /proc/stat) over wall time, so
