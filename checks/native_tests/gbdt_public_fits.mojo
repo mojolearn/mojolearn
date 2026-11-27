@@ -75,6 +75,7 @@ from gbdt.ctrs.ctr import CTR_BORDERS, TCtrConfig, TPrior
 from gbdt.ctrs.ctr_calcers import compute_simple_ctrs_gpu_resident
 from gbdt.host.gbdt_oracle_ctr import _ordered_target_columns
 from gbdt.models.ctr_value_table import TCtrValueTable
+from gbdt.models.model_text import load_model_text
 from std.testing import TestSuite
 from std.time import perf_counter_ns
 from checks.native_tests.testsuite_cases import check_cases, require
@@ -1239,7 +1240,7 @@ def _grouped_validation_example[I: GbdtImage](unit: Int) raises:
 def _heldout_ctr_model_example[I: GbdtImage]() raises:
     # Column 0 is continuous, column 1 crosses the one-hot limit. Code 3
     # appears only in validation; the persistent model must score it from its prior.
-    var inp = GbdtInputs([0, 1, 2, 3, 4, 5, 0, 1, 2, 0, 1, 2], 6, 2, [2, 1, 0, 0, 1, 2])
+    var inp = GbdtInputs([0, 1, 2, 3, 4, 5, 0, 0, 1, 2, 2, 1], 6, 2, [1, 1, 0, 0, 0, 1])
     inp.group_sizes = [3, 3]
     inp.eval_x = [0, 3, 4, 5, 3, 0, 1, 3]
     inp.eval_y = [0, 2, 10, 12]
@@ -1249,6 +1250,18 @@ def _heldout_ctr_model_example[I: GbdtImage]() raises:
     opts.deterministic()
     opts.use_best_model = 0
     var model = fit[I](opts, inp)
+    var saved = load_model_text(model.text)
+    var checked = 0
+    var expected: List[Int] = [0, 2, 1, 1, 2, 0]
+    for i in range(len(saved.ctr_tables)):
+        ref t = saved.ctr_tables[i]
+        if t.ctr_type == CTR_BORDERS:
+            require(t.target_classes_count == 2 and len(t.counts) == len(expected),
+                    "two target classes for each of three categories")
+            for j in range(len(expected)):
+                require(t.counts[j] == expected[j], "wrong category/target histogram in the fitted model")
+            checked += 1
+    require(checked > 0, "expected a target-dependent table in the saved model")
     var pred = predict(model.text, inp.eval_x, 4)
     # With two rows per query, its mean squared centered error is (r0-r1)^2/4.
     var d0 = (Float64(inp.eval_y[0]) - Float64(pred[0])) - (Float64(inp.eval_y[1]) - Float64(pred[1]))
