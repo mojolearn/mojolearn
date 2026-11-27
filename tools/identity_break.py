@@ -13109,7 +13109,7 @@ def _run_reference(args):
         run_static = dict(schema=RUN_FACTS_SCHEMA, unavailable=dict(run=f"{type(exc).__name__}: {exc}"[:200]))
     run_previous = None
     package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__), side=side,
-                   numpy=np.__version__, python=platform.python_version(),
+                   loaded_backend=ml.vendor(), numpy=np.__version__, python=platform.python_version(),
                    par_devices=",".join(str(d) for d in _par_devices()))
     if gpu_arch is not None:
         package.update(gpu_arch=gpu_arch, cuda_code_format=code_format)

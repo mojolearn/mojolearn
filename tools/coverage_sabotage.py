@@ -488,12 +488,15 @@ def _record_side(record):
     return "cpu" if str(record.get("vendor", "")).startswith("cpu") else "gpu"
 
 
-def _one_sided_absent(cells, lane):
-    """True when every recorded cell of `lane` is the missing side of a one-sided lane."""
-    mine = [c for k, c in cells.items() if k.split("/", 1)[0] == lane]
-    return bool(mine) and all(isinstance(c, dict) and c.get("verdict") == "N/A" and
-                              all(str(h).startswith("n/a:one-sided") for h in c.get("hashes") or ["-"])
-                              for c in mine)
+def _declared_absence(record, lane, reason):
+    """Every requested fixture must carry the harness's exact exclusion."""
+    if not reason or not record.get("fixtures"):
+        return False
+    for fixture in record["fixtures"]:
+        cell = record["cells"].get(lane + "/" + fixture)
+        if not isinstance(cell, dict) or cell.get("verdict") != "N/A" or cell.get("hashes") != [reason]:
+            return False
+    return True
 
 
 #: Lanes whose every cell compares BOTH sides in one process (tools/identity_lanes/checks_generic.py: `est.check`
@@ -555,6 +558,37 @@ def stays_put(arm, side, clean_path, sab_path, restored_path):
     return failures
 
 
+def _cpu_only_failures(lanes, combined_paths, host_paths, reasons):
+    """Admit the extra CPU run only for the same batch phases, fixtures and source."""
+    failures = []
+    if not combined_paths or not host_paths:
+        return ["CPU-only clean, sabotaged and restored records are required for " + ", ".join(lanes)]
+    for phase, combined_path, host_path in zip(("clean", "sabotaged", "restored"), combined_paths, host_paths):
+        try:
+            combined, host = (_record(path)[0] for path in (combined_path, host_path))
+            if (combined.get("complete") is not True or _record_side(combined) != "cpu"
+                    or (combined.get("package") or {}).get("loaded_backend") not in ("cuda", "hip", "metal")):
+                raise ValueError("expected a complete CPU-side record from the GPU installation")
+            if (host.get("complete") is not True or _record_side(host) != "cpu"
+                    or (host.get("package") or {}).get("loaded_backend") != "cpu"):
+                raise ValueError("expected a complete record from the loaded CPU-only bindings")
+            for field in ("commit", *PROTOCOL):
+                if host.get(field) != combined.get(field):
+                    raise ValueError(f"the CPU-only and GPU-install CPU records have different {field}")
+            if not host.get("fixtures"):
+                raise ValueError("no fixtures were recorded")
+            for lane in lanes:
+                if not _declared_absence(combined, lane, "n/a:gpu-install: " + reasons[lane]):
+                    failures.append(f"{phase} {lane}: expected the declared GPU-install exclusion on every fixture")
+                for fixture in host["fixtures"]:
+                    key = lane + "/" + fixture
+                    if phase != "sabotaged" and not _stable(host["cells"].get(key) or {}, host["repeats"]):
+                        failures.append(f"{phase} {key}: the CPU-only run did not produce stable output")
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            failures.append(f"{phase} CPU-only records: {error}")
+    return failures
+
+
 def check_sides(arm, records, evidence=None, root=ROOT, batch_bindings=(), no_gpu=False):
     """Judge an arm per side. `records` maps a side to its (clean, sabotaged,
     restored) record paths, `evidence` a side to its review evidence path. On
@@ -573,8 +607,17 @@ def check_sides(arm, records, evidence=None, root=ROOT, batch_bindings=(), no_gp
     faulted = arm_sides(arm)
     failures = []
     owed = []
-    for side in SIDES:
-        paths = records.get(side)
+    from identity_break import GPU_INSTALL_CPU_NA, one_sided_na
+
+    separate = [lane for lane in arm["lanes"] if lane in GPU_INSTALL_CPU_NA] if records.get("gpu") else []
+    runs = [("cpu", "cpu", [lane for lane in arm["lanes"] if lane not in separate]), ("gpu", "gpu", arm["lanes"])]
+    if separate:
+        failures += _cpu_only_failures(separate, records.get("cpu"), records.get("cpu-only"), GPU_INSTALL_CPU_NA)
+        runs.append(("cpu", "cpu-only", separate))
+    for side, run, lanes in runs:
+        if not lanes:
+            continue
+        paths = records.get(run)
         if side in faulted:
             if not paths:
                 if side == "gpu" and no_gpu:
@@ -585,23 +628,29 @@ def check_sides(arm, records, evidence=None, root=ROOT, batch_bindings=(), no_gp
             print(f"## {arm['arm']} {side} side: must move")
             # A one-sided lane (`_one_sided` in the harness) has no code on its missing side: every cell
             # there reads the harness's "n/a:one-sided" sentence, so it is judged on its own side only.
-            clean_cells = _record(paths[0])[0]["cells"]
-            absent = [lane for lane in arm["lanes"] if _one_sided_absent(clean_cells, lane)]
+            try:
+                snapshots = [_record(path)[0] for path in paths]
+            except (ValueError, OSError) as error:
+                failures.append(f"{run} side records: {error}")
+                continue
+            absent = [lane for lane in lanes if all(_declared_absence(record, lane, one_sided_na(lane, side))
+                                                    for record in snapshots)]
             for lane in absent:
                 print(f"{side} side {lane}: one-sided (no {side.upper()} implementation): judged on its other side")
-            sided = dict(arm, lanes=[lane for lane in arm["lanes"] if lane not in absent])
+            sided = dict(arm, lanes=[lane for lane in lanes if lane not in absent])
             if not sided["lanes"]:
-                failures.append(f"{side} side: no lane of the arm runs on this side")
+                if run != "cpu" or not separate:
+                    failures.append(f"{side} side: no lane of the arm runs on this side")
                 continue
-            if check(sided, *paths, evidence_path=evidence.get(side), root=root, batch_bindings=batch_bindings):
+            if check(sided, *paths, evidence_path=evidence.get(run), root=root, batch_bindings=batch_bindings):
                 failures.append(f"{side} side: the lanes did not all move (check above)")
             else:
-                for label, path in zip(("clean", "sabotaged", "restored"), paths):
-                    if _record_side(_record(path)[0]) != side:
-                        failures.append(f"{side} side {label}: the record is the {_record_side(_record(path)[0])} side")
+                for label, record in zip(("clean", "sabotaged", "restored"), snapshots):
+                    if _record_side(record) != side:
+                        failures.append(f"{side} side {label}: the record is the {_record_side(record)} side")
         elif paths:
             print(f"## {arm['arm']} {side} side: must stay put")
-            failures += stays_put(arm, side, *paths)
+            failures += stays_put(dict(arm, lanes=lanes), side, *paths)
         else:
             print(f"## {arm['arm']} {side} side: not applicable (no {side.upper()} records: no GPU in this installation)"
                   if side == "gpu" else f"## {arm['arm']} {side} side: no records")
@@ -859,7 +908,7 @@ def main(argv=None):
                    help="a batched run's build stems (comma separated): the other arms' bindings may change too")
     cs = sub.add_parser("check-sides", help="judge an arm per side: its side moves, the other side stays put")
     cs.add_argument("--arm", required=True)
-    for side in SIDES:
+    for side in (*SIDES, "cpu-only"):
         for part in ("clean", "sabotaged", "restored"):
             cs.add_argument(f"--{side}-{part}", default="", help=f"the {side} side's {part} record")
         cs.add_argument(f"--{side}-evidence", default="", help=f"the {side} side's review evidence")
@@ -909,14 +958,15 @@ def main(argv=None):
         return 0
     if args.cmd == "check-sides":
         records, evidence = {}, {}
-        for side in SIDES:
-            paths = [getattr(args, f"{side}_{part}") for part in ("clean", "sabotaged", "restored")]
+        for side in (*SIDES, "cpu-only"):
+            arg_name = side.replace("-", "_")
+            paths = [getattr(args, f"{arg_name}_{part}") for part in ("clean", "sabotaged", "restored")]
             if any(paths):
                 if not all(paths):
                     raise SystemExit(f"the {side} side needs --{side}-clean, --{side}-sabotaged and --{side}-restored")
                 records[side] = paths
-            if getattr(args, f"{side}_evidence"):
-                evidence[side] = getattr(args, f"{side}_evidence")
+            if getattr(args, f"{arg_name}_evidence"):
+                evidence[side] = getattr(args, f"{arg_name}_evidence")
         return check_sides(table[args.arm], records, evidence,
                            batch_bindings=[x for x in args.batch_bindings.split(",") if x], no_gpu=args.no_gpu)
     return check(table[args.arm], args.clean, args.sabotaged, args.restored, args.evidence,

@@ -90,7 +90,18 @@ EOF
 ) || { say "bad SAB_BATCHES=$BATCHES"; exit 2; }
 [ -x /usr/local/cuda/bin/ptxas ] && export MODULAR_NVPTX_COMPILER_PATH=${MODULAR_NVPTX_COMPILER_PATH:-/usr/local/cuda/bin/ptxas}
 # The identical set's target. coverage_sabotage_batch.sh unsets it for the host builds, which refuse it.
-export MOJOLEARN_GPU_ARCHS=${MOJOLEARN_GPU_ARCHS:-sm_89}
+cap=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -n 1 | tr -d ' .')
+if [[ "$cap" =~ ^[0-9]+$ ]]; then
+    gpu_probe=$(nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null | head -n 1)
+    detected_arch="sm_$cap"
+    export SAB_REQUIRED_BACKEND=cuda
+else
+    detected_arch=$(rocminfo 2>/dev/null | awk '/Name:[[:space:]]+gfx[0-9a-f]+$/ && !a {a=$NF} END {print a}')
+    [[ "$detected_arch" =~ ^gfx[0-9a-f]+$ ]] || { say "could not identify a CUDA or HIP device"; exit 2; }
+    gpu_probe=$(rocminfo 2>/dev/null | awk '/Marketing Name:/ && /AMD/ && !n {n=$0} END {print n}')
+    export SAB_REQUIRED_BACKEND=hip
+fi
+export MOJOLEARN_GPU_ARCHS=${MOJOLEARN_GPU_ARCHS:-$detected_arch}
 CORES=$(alloc_cores)
 export SAB_CORES=$CORES
 # the clean natives' tar of each batch lives here, outside the persisted results dir
@@ -106,7 +117,7 @@ git -c user.name=sabotage-gpu -c user.email=sabotage-gpu@localhost commit -q -a 
     > /dev/null 2>&1 || true
 trap 'git reset -q --soft "$ORIG"' EXIT
 say "source $SOURCE (pod HEAD $(git rev-parse --short=10 "$ORIG") + sync patch), cores $CORES of $(nproc) visible," \
-    "GPU $(nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null | head -n 1)," \
+    "GPU $gpu_probe $SAB_REQUIRED_BACKEND $detected_arch (build target $MOJOLEARN_GPU_ARCHS)," \
     "$(echo "$IDS" | wc -w) batches ($BATCHES), batch limit $BATCH_MIN min, budget $BUDGET_MIN min"
 echo "$SOURCE" > "$RES/source-commit.txt"
 
@@ -229,7 +240,7 @@ proven_rows() {  # <batch id>
         arm=${arm#arm=}; col=${col#column=}; col=${col#side=}; verdict=${verdict#verdict=}
         row=$(awk -F'\t' -v a="$arm" '$1==a' "$RES/arms.tsv")
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$arm" "$(echo "$row" | cut -f3) ($col side, batch ${bid#batch=})" \
-            "$verdict" "$(echo "$row" | cut -f4)" "L40S sm_89 $col side (both sides recorded in one process), source $SOURCE, $RES" "$reverted" "$secs"
+            "$verdict" "$(echo "$row" | cut -f4)" "$gpu_probe $SAB_REQUIRED_BACKEND $detected_arch $col side (build target $MOJOLEARN_GPU_ARCHS), source $SOURCE, $RES" "$reverted" "$secs"
     done >> "$RES/proven_rows.tsv"
 }
 
