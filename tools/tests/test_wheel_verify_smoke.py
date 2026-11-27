@@ -50,6 +50,16 @@ class LaneUnits(unittest.TestCase):
 
 
 class SideStates(unittest.TestCase):
+    def test_whole_side_na_requires_the_installed_declaration(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "lane.json"
+            _record(path, {"lane/base": NA})
+            declared = {"cpu": NA["hashes"][0], "gpu": None}
+            self.assertEqual(smoke.side_state(path, declared, "cpu")[0], "n/a")
+            self.assertEqual(smoke.side_state(path, declared, "gpu")[0], "invalid")
+            _record(path, {"lane/base": OK})
+            self.assertEqual(smoke.side_state(path, declared, "cpu")[0], "invalid")
+
     def test_states(self):
         with tempfile.TemporaryDirectory() as td:
             cases = {"ok": {"a/base": OK}, "n/a": {"a/base": NA}, "refused": {"a/base": OK, "b/base": REFUSED},

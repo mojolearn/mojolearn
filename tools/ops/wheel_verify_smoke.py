@@ -564,7 +564,7 @@ def lane_files(jdir, lane, gpu):
     return {"cpu": jdir / f"{lane}.json"}
 
 
-def side_state(path):
+def side_state(path, declared=None, side=None):
     """Classify a side from the training verdict and every probe verdict present in its record."""
     from verification_matrix import stable_digest
 
@@ -579,6 +579,7 @@ def side_state(path):
         return "missing", "record holds no cells"
     applicable = False
     na_detail = ""
+    reasons = set()
     for key, cell in cells.items():
         if not isinstance(cell, dict) or "verdict" not in cell:
             return "invalid", f"{key}: missing cell verdict"
@@ -600,6 +601,7 @@ def side_state(path):
                 else:
                     if not all(isinstance(v, str) and v.startswith("n/a") for v in values):
                         return "invalid", f"{key} {part}: missing N/A reason"
+                    reasons.update(values)
                     na_detail = values[0][:160]
                 continue
             if verdict == "REFUSED":
@@ -611,30 +613,36 @@ def side_state(path):
         for field, detail in cell.items():
             if (field == "error" or field.endswith("_error")) and detail:
                 return "refused", f"{key} {field}: {str(detail)[:240]}"
+    if declared is not None:
+        reason = declared.get(side)
+        if reason and (applicable or reasons != {reason}):
+            return "invalid", f"expected the installed harness to report {reason}"
+        if not reason and not applicable:
+            return "invalid", f"applicable side produced only N/A values: {na_detail}"
     if not applicable:
         return "n/a", na_detail
     return "ok", ""
 
 
-def lane_check(jdir, gpu):
+def lane_check(jdir, gpu, declarations=None):
     """The lanes pool's post-check (run_pool check=): a lane fails when any side it should have is not ok or n/a."""
     def check(lane):
         bad = []
         for side, path in lane_files(jdir, lane, gpu).items():
-            state, detail = side_state(path)
+            state, detail = side_state(path, declarations[lane] if declarations is not None else None, side)
             if state not in ("ok", "n/a"):
                 bad.append(f"{side} side {state}: {detail}")
         return "; ".join(bad) or None
     return check
 
 
-def sides_report(out, jdir, lanes, gpu):
+def sides_report(out, jdir, lanes, gpu, declarations=None):
     """lanes/SIDES.tsv (lane, side, state, detail) and one SUMMARY.txt line of counts per side: the lanes that never
     ran on a side are named here as failures, never left out."""
     rows, counts = [], {}
     for lane in lanes:
         for side, path in lane_files(jdir, lane, gpu).items():
-            state, detail = side_state(path)
+            state, detail = side_state(path, declarations[lane] if declarations is not None else None, side)
             rows.append((lane, side, state, detail))
             counts.setdefault(side, {}).setdefault(state, 0)
             counts[side][state] += 1
@@ -678,10 +686,11 @@ def cmd_lanes(args):
             summary(args.out, f"lanes rc=1 GPU mode on an installation whose mojolearn.vendor() is {vendor!r}")
             return 1
     keep = "True" if gpu else "(h.one_sided(n) or ('',))[0] != 'cpu'"
-    listed = probe(args.python, "import mojolearn._identity_break as h; "
-                   f"print(','.join(n for n in h.record_lanes() if {keep}))",
-                   cwd)
-    lanes = [x for x in listed.split(",") if x]
+    listed = probe(args.python, "import json, mojolearn as ml, mojolearn._identity_break as h; "
+                   f"print(json.dumps({{n: {{s: h.one_sided_na(n, s) or h.gpu_install_na(n, ml, s) "
+                   f"for s in ('cpu', 'gpu')}} for n in h.record_lanes() if {keep}}}))", cwd)
+    declarations = json.loads(listed) if listed else {}
+    lanes = list(declarations)
     if not lanes:
         summary(args.out, "lanes rc=1 installed harness listed no applicable record lanes")
         return 1
@@ -689,8 +698,8 @@ def cmd_lanes(args):
     jdir.mkdir(parents=True, exist_ok=True)
     extra = {"MOJOLEARN_COMMIT": args.commit} if args.commit else {}
     units = [(lane, lane_argv(args.python, lane, jdir, gpu, vendor)) for lane in lanes]
-    rc = run_pool("lanes", units, args, cwd, child_env(extra), args.timeout, check=lane_check(jdir, gpu))
-    sides_report(args.out, jdir, lanes, gpu)
+    rc = run_pool("lanes", units, args, cwd, child_env(extra), args.timeout, check=lane_check(jdir, gpu, declarations))
+    sides_report(args.out, jdir, lanes, gpu, declarations)
     return rc
 
 
