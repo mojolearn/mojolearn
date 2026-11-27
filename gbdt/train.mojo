@@ -4020,12 +4020,13 @@ def _heldout_cindex(
         if bad != STAGE_NO_BAD:
             raise Error("There are NaNs in feature number " + String(Int(bad))
                         + " but there were no NaNs in the learn dataset")
-        _ = len(raw)
-        _ = len(treatment)
+        _ = len(raw) + len(treatment) + len(d_treat) + len(d_bad)
         return cindex^
     except err:
         # Keep borrowed input bytes and prepared buffers alive until queued work finishes.
         ctx.synchronize()
+        _ = len(raw) + len(treatment) + len(d_treat) + len(d_bad) + len(expanded)
+        _ = plan.__bool__()
         raise err
 
 
