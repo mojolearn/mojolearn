@@ -48,14 +48,15 @@ def _new_result(key: String, context: PythonObject) raises -> PythonObject:
     return py_call(b.object.__new__, cls)
 
 
-def _matrix(value: PythonObject, name: String, context: PythonObject, reject_double: Bool = True) raises -> ArimaBuffer:
+def _matrix(value: PythonObject, name: String, context: PythonObject) raises -> ArimaBuffer:
+    """The C-order float32 matrix of `value`. A float64 input (and float64
+    pandas storage) is converted once by the shared cast
+    (core/admitted_input_nd.mojo: round-to-nearest-even, a finite value
+    outside float32's range refused by its column)."""
     var nk = forecast_keys()
-    var refusal = String("TypeError: ") + name + ": float64 is refused; pass float32"
-    var source = arima_buffer(value, name, py_item(context, nk[].k_xseq_lifecycle_context), False, refusal if reject_double else String())
+    var source = arima_buffer(value, name, py_item(context, nk[].k_xseq_lifecycle_context), False)
     if len(source.shape) > 2:
         raise Error("ValueError: " + name + " requires a vector or matrix")
-    if reject_double and source.dtype_number == NPY_DOUBLE:
-        raise Error("TypeError: " + name + ": float64 is refused; pass float32")
     if not source.f32_c() or py_type(source.keep) is not py_item(context, nk[].k_ndarray):
         var shape = Python.tuple(source.shape[0]) if len(source.shape) == 1 else Python.tuple(source.shape[0], source.shape[1])
         # One parallel cast into uninitialised storage (REGRESSIONS F3/C3).
@@ -142,9 +143,9 @@ def _var_results_initialize(model: PythonObject, args: PythonObject, context: Py
     var nk = forecast_keys()
     var fields = _state(model, "xseq_var_results", context)
     var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
-    var y = _matrix(args[0], "VARResults endog", context, False)
-    var params = _matrix(args[1], "VARResults params", context, False)
-    var resid = _matrix(args[3], "VARResults resid", context, False)
+    var y = _matrix(args[0], "VARResults endog", context)
+    var params = _matrix(args[1], "VARResults params", context)
+    var resid = _matrix(args[3], "VARResults resid", context)
     var p = _integer(args[4], lifecycle)
     var kt = _integer(args[5], lifecycle)
     _mode(args[6])
@@ -206,7 +207,7 @@ def _var_forecast(model: PythonObject, args: PythonObject, context: PythonObject
     var kt = _integer(py_item(fields, nk[].k_k_trend), lifecycle)
     var steps = _integer(args[1], lifecycle)
     var y = _matrix(args[0], "VARResults.forecast", context)
-    var params = _matrix(py_item(fields, nk[].k_params), "VARResults.params", context, False)
+    var params = _matrix(py_item(fields, nk[].k_params), "VARResults.params", context)
     if p < 0 or k < 1 or kt < 0 or kt > 1 or steps < 0 or len(y.shape) != 2 or y.shape[1] != k or y.shape[0] < p:
         raise Error("ValueError: VAR forecast requires nonnegative steps and sufficient history columns/rows")
     if len(params.shape) != 2 or params.shape[0] != Int(py=PythonObject(k) * p + kt) or params.shape[1] != k:

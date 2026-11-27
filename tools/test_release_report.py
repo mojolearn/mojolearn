@@ -110,13 +110,13 @@ def test_ready_needs_zero_failed_missing_and_blocked(tmp_path):
 def test_step_states_and_their_next_actions():
     steps = {"gate-nvidia": ("done", "x: PASS"), "reuse-plan": ("done", "x: against 0.8.64 pypi: 74 REUSE, 150 BUILD"),
              "linux-assemble": ("failed", "x: refused"), "publish-amd": ("held", "x: needs --publish", True),
-             "published-amd": ("owed", "")}
+             "published": ("owed", "")}
     rows = by_id(rr.build("0.8.66", C, {}, steps))
     assert rows["gate-nvidia"]["state"] == "passed" and rows["reuse-plan"]["state"] == "reused"
     assert rows["linux-assemble"]["state"] == "failed"
     assert rows["linux-assemble"]["next_action"].startswith("tools/release.py 0.8.66 --only linux-assemble")
     assert rows["publish-amd"]["next_action"] == "tools/release.py 0.8.66 --only publish-amd --publish pypi"
-    assert rows["published-amd"]["stage"] == "post" and rows["gate-nvidia"]["stage"] == "pre"
+    assert rows["published"]["stage"] == "post" and rows["gate-nvidia"]["stage"] == "pre"
     assert rr.build("0.8.66", C, {}, steps, stage="post")["totals"]["missing-execution"] == 2
 
 
@@ -132,7 +132,8 @@ def test_next_action_catalogue():
     assert na("adapters-apple", row()) == "tools/release.py 0.8.66 --only gate-apple"
     assert na("compile-amd", row()) == "tools/release.py 0.8.66 --only linux-builds"
     assert na("compile-apple", row()) == "tools/release.py 0.8.66 --only macos-build"
-    assert na("published-nvidia", row(stage="post")) == "tools/release.py 0.8.66 --only published-nvidia"
+    # the per-vendor published rows left the ledger (2026-11-27): an old row names no producer step
+    assert na("published-nvidia", row(stage="post")).startswith("add a producer for published-nvidia")
     assert na("runtime-cpu", row()).startswith("add a producer for runtime-cpu")
     assert "--adapter coverage-source" in na("coverage-source", row())
     assert na("runtime-amd", row("failed", "repair")) == "fix the failure it recorded, then tools/release.py 0.8.66 --only gate-amd"
@@ -380,7 +381,7 @@ def test_release_report_writes_report_json_and_md_and_runs_nothing(tmp_path):
     rows = {x["id"]: x for x in doc["rows"]}
     assert rows["coverage-source"]["state"] == "waived"
     assert rows["gate-amd"]["section"] == "step" and rows["gate-amd"]["state"] == "missing-execution"
-    assert not any(k.startswith("published-smoke-") for k in rows)   # unrequested: not selected
+    assert not any(k.startswith("published-") for k in rows)   # one `published` step, no per-vendor ones
     assert any(line.startswith("REPORT 0.8.66 ") for line in r.lines)
     assert (tmp_path / "rep" / "report.md").is_file() and r.calls == []
     assert release.Release.release_report.__doc__

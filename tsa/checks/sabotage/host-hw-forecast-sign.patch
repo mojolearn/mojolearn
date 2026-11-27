@@ -1,0 +1,11 @@
+--- a/bindings/holtwinters_host_predict_run.mojo
++++ b/bindings/holtwinters_host_predict_run.mojo
+@@ -57,6 +57,7 @@
+         st == SEASONAL_ADDITIVE,
+         h,
+     )
+-    hw_store_values(op, fc, h * batch_size)
++    for i in range(h * batch_size):
++        op[i] = -fc[i]
+     written = h * batch_size
+     return written

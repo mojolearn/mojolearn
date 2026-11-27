@@ -191,11 +191,16 @@ that is already queued or running is left to finish: never cancel a job without 
   Nothing is added without Andrew's explicit word. An agent that believes it has found a Mojo bug stops, writes
   the smallest reproducer and the ask for Modular, and reports; it does not write Python. Each entry keeps its reproduction and upstream ask; a native fix removes the entry. A path that
   uses an entry is recorded in release evidence and is never called Python-free.
-- **Move native correctness tests to Mojo (Andrew, 2026-11-10).** Kernel, numerical and native state/lifetime tests
-  belong in Mojo. Retain Python tests for the actual Python API boundary and framework interoperability, including
-  buffer admission, exceptions, returned objects and refusal of callbacks. Python test/benchmark controllers and
-  boundary fixtures or independent external oracles are testing tools, never product execution or a fallback.
-  Keep timing boundaries honest. Installing a Python package is not a runtime repair.
+- **Testing is in Mojo (Andrew, 2026-11-27; replaces 2026-11-10).**
+  - Kernel, numerical, native-state and lifetime tests are written in Mojo with std.testing's TestSuite.
+  - Python tests exist only where the thing tested is Python: the public API boundary (buffer admission, dtype and
+    shape refusals, exceptions, returned objects, get_params/set_params, pickling, callback refusal, scikit-learn API
+    compliance), framework adapters, packaging and import, and the Python tools themselves.
+  - No Python test computes a reference answer with NumPy, scikit-learn or scipy math. A reference is a stored,
+    versioned fixture or a Mojo check.
+  - Moving a library comparison (for example scikit-learn parity) means storing its expected values as fixtures,
+    never dropping it.
+  - Keep timing boundaries honest. Installing a Python package is not a runtime repair.
 - Preserve supported interfaces through native implementation; do not remove a feature to claim compliance.
   Measure the gain; do not assume removing Python makes every workload faster.
 - Audit the actual public operation and its transitive callees. Checker baseline entries, including `cpu-route`

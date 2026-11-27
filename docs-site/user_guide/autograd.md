@@ -649,5 +649,5 @@ captured or imported program saved with `save`, and for a model saved on the CPU
 ## Numeric modes
 
 Both entry points take `numeric_mode`: `Sequential(numeric_mode=...)` and
-`ops.Session(numeric_mode=...)`. The default is `identical`. `fast` is available on Apple GPUs only.
+`ops.Session(numeric_mode=...)`. The default is `identical`.
 See [Numeric modes](numeric_modes.md).

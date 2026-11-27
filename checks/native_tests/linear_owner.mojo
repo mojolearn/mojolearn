@@ -6,7 +6,8 @@ Eight Ridge cases preserve weighted/unweighted, scalar-weight, intercept and
 one-feature coverage. Twelve OLS cases preserve rank deficiency, constant and
 zero rank, column units, square and wide support/refusal. Native dyadic data
 replaces NumPy RNG; OLS solutions are known by construction, not by another
-call into the implementation. No Python objects, bindings or reference hashes.
+call into the implementation. The public coefficient cases use the original
+NumPy data and its stored float64 solutions in both row orders.
 """
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -31,13 +32,14 @@ from x_decomp.descriptor_device import x_decomp_device_v1
 from x_metrics.descriptor_device import metrics_program_device_v1
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require, fixture_f32
+from checks.native_tests.py2mojo_fixture_words import fixture_f64
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
 
 
-comptime LINEAR_OWNER_FIXTURES = 23
+comptime LINEAR_OWNER_FIXTURES = 27
 
 
 def close(actual: Float64, expected: Float64, rtol: Float64, atol: Float64, label: String) raises:
@@ -182,6 +184,14 @@ def _model(coef: Int, mean: Int, cols: Int, result: LinearFitResult) -> LinearMo
     return state^
 
 
+def _fit(api: LinearTestAPI, request: LinearFitRequest, ridge: Bool) raises -> LinearFitResult:
+    if ridge:
+        return linear_ridge_run(api.fit, api.weighted, request)
+    var plan = linear_ols_plan(api.fit, request.rows, request.cols, "LinearRegression")
+    plan.one_entry = linear_ols_one_entry(plan, api.decomp, request.intercept, request.weights != 0)
+    return linear_ols_run(api.fit, api.decomp, request, plan, api.vendor)
+
+
 def _fit_fixture(api: LinearTestAPI, fixture_id: Int) raises:
     var ridge = fixture_id < 8
     var cid = fixture_id if ridge else fixture_id - 8
@@ -221,15 +231,7 @@ def _fit_fixture(api: LinearTestAPI, fixture_id: Int) raises:
     var ma = Int(mean.unsafe_ptr()) + 4
     var request = LinearFitRequest(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()),
         Int(weights.unsafe_ptr()) if weight_mode else 0, ca, ma, rows, cols, intercept, 0.25 if ridge else 0.0)
-    var result = LinearFitResult()
-    # The wide case (cid 11, 2 x 3) fits on every column: the CPU column
-    # restates lstsq_min_norm (glm/host/glm_oracle.mojo::host_lstsq_min_norm).
-    if ridge:
-        result = linear_ridge_run(api.fit, api.weighted, request)
-    else:
-        var plan = linear_ols_plan(api.fit, rows, cols, "LinearRegression")
-        plan.one_entry = linear_ols_one_entry(plan, api.decomp, intercept, weight_mode != 0)
-        result = linear_ols_run(api.fit, api.decomp, request, plan, api.vendor)
+    var result = _fit(api, request, ridge)
     for i in range(rows * cols):
         require(bitcast[DType.uint32](x[i]) == bitcast[DType.uint32](original_x[i]), "fit mutated X")
     for i in range(rows):
@@ -342,11 +344,55 @@ def _score_fixture(api: LinearTestAPI, fixture_id: Int) raises:
     _ = target
 
 
+def _public_coefficient_fixture(api: LinearTestAPI, case_id: Int) raises:
+    # Original public fixture: default_rng(2059), 19 rows, y = X @ [.75,-.5,1.25] + .375.
+    # Reference words are the centered NumPy float64 solve for each alpha and row order.
+    comptime DIR = "checks/native_tests/fixtures/linear_public_coefficients/"
+    comptime ROWS = 19
+    comptime COLS = 3
+    var x = fixture_f32(DIR + "x.f32", ROWS * COLS)
+    var y = fixture_f32(DIR + "y.f32", ROWS)
+    var expected = fixture_f64(DIR + "coefficients.f64", 4 * COLS)
+    if case_id >= 2:
+        var xp = x.unsafe_ptr()
+        var yp = y.unsafe_ptr()
+        def reverse_pair(row: Int) {imm xp, imm yp}:
+            var other = ROWS - 1 - row
+            var target = yp[row]
+            yp.unsafe_store(row, yp[other])
+            yp.unsafe_store(other, target)
+            for col in range(COLS):
+                var lo = row * COLS + col
+                var hi = other * COLS + col
+                var feature = xp[lo]
+                xp.unsafe_store(lo, xp[hi])
+                xp.unsafe_store(hi, feature)
+        host_parallelize(reverse_pair, ROWS // 2)
+    var ridge = case_id % 2 == 1
+    var coef = List[Float32](length=COLS, fill=0)
+    var mean = List[Float32](length=COLS, fill=0)
+    var request = LinearFitRequest(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), 0,
+        Int(coef.unsafe_ptr()), Int(mean.unsafe_ptr()), ROWS, COLS, True, 1.0 if ridge else 0.0)
+    var result = _fit(api, request, ridge)
+    for col in range(COLS):
+        close(Float64(coef[col]), expected[case_id * COLS + col], 0, 1e-4, "public coefficient")
+    var state = _model(request.coef, request.mean, COLS, result)
+    var score = linear_score_run(api.predict, api.metrics, state, request.x, ROWS, COLS,
+        request.y, ROWS, api.vendor, api.mode, "Ridge" if ridge else "LinearRegression")
+    require(score > 0.99, "public training score")
+    _ = x^
+    _ = y^
+    _ = mean^
+    _ = coef^
+
+
 def run_linear_fixture(api: LinearTestAPI, fixture_id: Int) raises:
     if fixture_id < 20:
         _fit_fixture(api, fixture_id)
-    else:
+    elif fixture_id < 23:
         _score_fixture(api, fixture_id - 20)
+    else:
+        _public_coefficient_fixture(api, fixture_id - 23)
 
 
 # ---- The host column (was linear_owner_cpu_suite.mojo) ----

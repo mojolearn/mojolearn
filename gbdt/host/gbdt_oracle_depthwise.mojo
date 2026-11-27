@@ -211,7 +211,10 @@ from gbdt.host.gbdt_oracle_eval import (
 # the per-tree feature sample and the projected index, shared with the
 # symmetric loop (moved to gbdt_oracle.mojo, lane gbdt-cpu-rest)
 from gbdt.host.gbdt_oracle import _ns_project_index, _sample_tree_folds
+from gbdt.host.ranking_fit import HostRankingFit
+from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF, OBJECTIVE_QUERY_SOFTMAX, is_lightgbm_ranking, ranking_seed
 from gbdt.host.gbdt_oracle_losses import (
+    GroupedTestLoss,
     GBDT_LEAF_NEWTON,
     GBDT_OBJ_LOGLOSS,
     GBDT_OBJ_PAIR_LOGIT,
@@ -1186,6 +1189,9 @@ def gbdt_host_fit_non_symmetric(
     eval: GbdtHostEval,
     start: Float64 = 0.0,
     weights: List[Float32] = List[Float32](),
+    group_sizes: List[Int] = List[Int](),
+    eval_group_sizes: List[Int] = List[Int](),
+    eval_at: Int = DEFAULT_NDCG_CUTOFF,
 ) raises -> GbdtHostNsModel:
     """`train` then `fit_with_test`'s non-symmetric arm on the covered
     configuration (see the module docstring), numeric columns: the grid,
@@ -1235,7 +1241,7 @@ def gbdt_host_fit_non_symmetric(
         test_cindex = _binarize_columns(eval.x_colmajor, eval.n_rows, n_features, grid, layout)
     return _ns_fit_core(
         cindexes, 0, y, n_rows, n_features, grid, layout, one_hot, params,
-        eval, test_cindex, start, weights,
+        eval, test_cindex, start, weights, group_sizes, eval_group_sizes, eval_at,
     )
 
 
@@ -1253,6 +1259,9 @@ def _ns_fit_core(
     test_cindex: List[UInt32],
     start: Float64,
     weights: List[Float32],
+    group_sizes: List[Int] = List[Int](),
+    eval_group_sizes: List[Int] = List[Int](),
+    eval_at: Int = DEFAULT_NDCG_CUTOFF,
 ) raises -> GbdtHostNsModel:
     """`fit_with_test`'s non-symmetric boosting loop over ONE compressed
     index PER PERMUTATION (`cindexes[p]`, all binned on `grid` and `layout`;
@@ -1316,8 +1325,10 @@ def _ns_fit_core(
     # (`_loss_search_pass`, `_estimate_leaves_for_loss` with Exact,
     # `_loss_value`), as the device's `TPointwiseTargetsImpl` on
     # `TNonSymmetricTree` (`pointwise_non_symmetric.cpp:5-29`); the grouped
-    # losses stay symmetric only, the device's refusal
+    # CatBoost losses use their dedicated symmetric estimators
     var objective = params.loss.objective
+    if objective == OBJECTIVE_QUERY_SOFTMAX:
+        raise Error("QuerySoftMax requires grow_policy='SymmetricTree'")
     if objective < 0 or objective == GBDT_OBJ_QUERY_RMSE or objective == GBDT_OBJ_PAIR_LOGIT or objective == GBDT_OBJ_YETI_RANK:
         raise Error("the non-symmetric host fit restates Logloss and the pointwise losses only")
     var base = params.base
@@ -1371,6 +1382,14 @@ def _ns_fit_core(
         raise Error("weights size mismatch")
 
     # the held-out arm (`fit_with_test`'s test cursor, `CreateCursors`' seed)
+    var rank = Optional[HostRankingFit]()
+    var rank_test = Optional[GroupedTestLoss]()
+    if is_lightgbm_ranking(objective):
+        if perm_count != 1:
+            raise Error("grouped ranking requires one query-preserving permutation")
+        rank = Optional(HostRankingFit(group_sizes, y))
+        if eval.n_rows > 0:
+            rank_test = Optional(GroupedTestLoss(objective, eval_group_sizes, eval.y, eval_at))
     var has_test = eval.n_rows > 0
     var n_eval = eval.n_rows if has_test else 1
     var test_cursor = List[Float32](length=n_eval, fill=Float32(start))
@@ -1406,7 +1425,10 @@ def _ns_fit_core(
 
         # ---- the gradients, the learn loss and the magnitudes, on the
         # learn permutation's cursor ----
-        if not is_logloss:
+        if rank:
+            rank.value().search(objective, y, cursors[learn_p], weights, ranking_seed(base.random_seed),
+                                iteration, newton, stats, fv_part, mag_part)
+        elif not is_logloss:
             # `secondDerAsWeights` (`doc_parallel_boosting.mojo`'s
             # `launch_approximate[False, True]`): the Newton scores search
             # on the weighted second derivative for every pointwise loss
@@ -1510,7 +1532,7 @@ def _ns_fit_core(
             else:
                 estimated = _estimate_leaves_for_loss(
                     params.loss, y, cursors[p], row_index, offsets, sizes,
-                    n_rows, base.l2_leaf_reg, weights=weights,
+                    n_rows, base.l2_leaf_reg, weights=weights, rank=rank,
                 )
             if len(estimated) != n_bins:
                 raise Error(
@@ -1543,12 +1565,14 @@ def _ns_fit_core(
         if has_test:
             var test_bins = _non_symmetric_bins(tree, layout, test_cindex, n_eval)
             gbdt_eval_add_tree(test_cursor, test_bins, est_scaled)
-            var t_fv: Float32
-            if is_logloss:
-                t_fv = _logloss_value(eval.y, test_cursor, n_eval, border)
+            var t_loss: Float64
+            if rank_test:
+                t_loss = rank_test.value().value(eval.y, test_cursor)
             else:
-                t_fv = _loss_value(params.loss, eval.y, test_cursor, n_eval)
-            var t_loss = -Float64(t_fv) / Float64(n_eval)
+                var t_fv = _logloss_value(eval.y, test_cursor, n_eval, border) if is_logloss else (
+                    _loss_value(params.loss, eval.y, test_cursor, n_eval)
+                )
+                t_loss = -Float64(t_fv) / Float64(n_eval)
             test_losses.append(t_loss)
             detector.add_error(t_loss)
             if detector.is_need_stop():
@@ -1558,13 +1582,15 @@ def _ns_fit_core(
         # the learn loss read alongside this iteration's gradients
         if len(losses) < base.n_estimators:
             if iteration + 1 > 1:
-                losses.append(-Float64(fv) / Float64(n_rows))
+                losses.append(1.0 - Float64(fv) if rank.__bool__() else -Float64(fv) / Float64(n_rows))
     var fit_loop = fit_loop_stop(fit_loop_t0, len(tree_node_offsets) - 1)
 
     # the final tree's loss, the ESTIMATION permutation's cursor
     # (`doc_parallel_boosting.mojo:3001-3052`; the only cursor at one
     # permutation)
-    if is_logloss:
+    if rank:
+        losses.append(1.0 - Float64(rank.value().workspace.ndcg(y, cursors[est_p])))
+    elif is_logloss:
         losses.append(-Float64(_logloss_value(y, cursors[est_p], n_rows, border, weights)) / Float64(n_rows))
     else:
         losses.append(-Float64(_loss_value(params.loss, y, cursors[est_p], n_rows, weights)) / Float64(n_rows))
@@ -1705,6 +1731,9 @@ def gbdt_ctr_host_fit_non_symmetric(
     max_ctr_complexity: Int,
     start: Float64,
     weights: List[Float32],
+    group_sizes: List[Int] = List[Int](),
+    eval_group_sizes: List[Int] = List[Int](),
+    eval_at: Int = DEFAULT_NDCG_CUTOFF,
 ) raises -> GbdtCtrHostNsFit:
     """`train` with `cat_features` / `one_hot_features` columns, then
     `fit_with_test`'s non-symmetric arm, Plain boosting: the columns, grids,
@@ -1742,7 +1771,7 @@ def gbdt_ctr_host_fit_non_symmetric(
         x_colmajor, y, n_rows, n_features, params.base, flags,
         permutation_count, ctr_estimation_permutation_id, 1, eval.x_colmajor,
         eval.n_rows, max_ctr_complexity, grid, cindexes, test_cindex, one_hot,
-        tables, tree_state,
+        tables, tree_state, query_sizes=group_sizes,
     )
     if len(tree_state) != 0:
         # `fit_with_test`'s words (`doc_parallel_boosting.mojo:3915`)
@@ -1754,6 +1783,7 @@ def gbdt_ctr_host_fit_non_symmetric(
     var model = _ns_fit_core(
         cindexes, shape.est_perm, y, n_rows, shape.n_columns, grid,
         shape.layout, one_hot, params, eval, test_cindex, start, weights,
+        group_sizes, eval_group_sizes, eval_at,
     )
     return GbdtCtrHostNsFit(model^, one_hot^, tables^, shape.ctr_column_count)
 

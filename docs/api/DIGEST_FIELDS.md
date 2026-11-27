@@ -138,8 +138,8 @@ private fields a row names), under the class name followed by `#training`.
 | `LogisticRegressionCV` | public fitted attributes | every public fitted attribute |
 | `Louvain` | public fitted attributes | every public fitted attribute |
 | `MDS` | public fitted attributes | every public fitted attribute; plus `_norm` |
-| `MLPClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `activation` |
-| `MLPRegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `activation` |
+| `MLPClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `activation`; `training_digest_` also `_optimizer_state_` |
+| `MLPRegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `activation`; `training_digest_` also `_optimizer_state_` |
 | `MaxAbsScaler` | public fitted attributes | every public fitted attribute |
 | `MaxPool1d` | no `digest_` | the class is not on the shared estimator base |
 | `MaxPool2d` | no `digest_` | the class is not on the shared estimator base |

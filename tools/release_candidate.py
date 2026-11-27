@@ -119,6 +119,20 @@ CANDIDATE_ROOT = Path(os.environ.get("MOJOLEARN_EVIDENCE_ROOT", os.path.expandus
     / "release-candidates"
 #: the only Release steps a candidate runs (STEP_TABLE order); every other step is skipped by --only
 STEPS = ("reuse-plan", "linux-builds", "linux-wait", "linux-assemble", "linux-pack")
+#: THE APPLE WHEEL OF AN A SET (lane mac-speed-1, 2026-11-27): macos-build on GitHub's free standard macOS runners
+#: (tools/release.py --macos-build-backend github, tools/apple_github_build.py), beside the Linux legs, so a
+#: Metal-only compile error (0.9.0: float64 in a device kernel, seen only at the release) fails the integration round.
+#: Never the laptop, never a B arm (the Apple wheel is not timed), never on candidate-pack.yml's runner; --no-apple
+#: skips it. Its failure fails the build after the Linux wheels are packed (the pipelines are independent).
+APPLE_STEPS = ("macos-build",)
+#: The exit status of a build whose Linux wheels are packed and whose Apple wheel failed.
+APPLE_FAILED_EXIT = 3
+
+
+def run_steps(a, defines, release):
+    """The Release steps this build runs, in STEP_TABLE order: STEPS, plus APPLE_STEPS for an A set."""
+    want = set(STEPS) | (set(APPLE_STEPS) if not (defines or a.pack_here or a.no_apple) else set())
+    return [s for s, _, _, _ in release.STEP_TABLE if s in want]
 VENDORS = ("nvidia", "amd")
 LABEL_RE = re.compile(r"[a-z0-9]+(\.[a-z0-9]+)*")
 #: the owed B arms of the pre-0.8.67 measurement: {arm name: {define, status}} under "b_arms"
@@ -683,7 +697,8 @@ def write_candidate(a, r, release, C, work, cand, vendors, version, defines, lab
                 raise SystemExit(f"measurement build: {f['file']} does not record this build's version and defines")
     doc = dict(schema="mojolearn.release-candidate.v1", version=version, source_commit=a.commit, defines=defines,
                label=label, owed_arm=cand.get("owed_arm"), tooling_sha=tooling_sha, refs_moved=moved,
-               wheel_dir=str(final), vendors=vendors, targets=targets, wheels_built=built, steps=list(STEPS),
+               wheel_dir=str(final), vendors=vendors, targets=targets, wheels_built=built,
+               steps=(getattr(r.args, "only", "") or ",".join(STEPS)).split(","),
                wheels={k: dict(file=w.name, sha256=release.sha256(w)) for k, w in finals.items() if w},
                manifests=manifests, refs_before=before, refs_after=after, made=release.now(),
                pack=pack_record(r.state.get("remote_pack"), a.pack_here),
@@ -747,6 +762,8 @@ def parse(argv):
                     ".github/workflows/candidate-pack.yml beside the trees; the Mac downloads linux/final) or local "
                     "(this Mac, Docker for audit.sh). A resumed build keeps the mode it started with")
     ap.add_argument("--pack-here", action="store_true", help=argparse.SUPPRESS)   # candidate-pack.yml's runner
+    ap.add_argument("--no-apple", action="store_true", help="do not build the Apple wheel on GitHub's free standard "
+                    "macOS runners (an A set builds it by default, beside the Linux legs: APPLE_STEPS)")
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--census", dest="census", action="store_true", default=None, help="the verify smoke takes "
                    "the frames census even when nothing it reads changed (tools/ops/verify_smoke_dispatch.py)")
@@ -867,8 +884,10 @@ def main(argv=None, release=None):
         cand["pack"] = pack
     release.write_json(state_path, state)
     tooling_sha = cand["tooling_sha"]
-    argv = [version, "--only", ",".join(STEPS), "--state-dir", str(work), "--source-checkout", str(src),
-            "--build-backend", "github", "--identity-on-wheels"] + (["--dry-run"] if a.dry_run else [])
+    steps = run_steps(a, defines, release)
+    argv = [version, "--only", ",".join(steps), "--state-dir", str(work), "--source-checkout", str(src),
+            "--build-backend", "github", "--macos-build-backend", "github",
+            "--identity-on-wheels"] + (["--dry-run"] if a.dry_run else [])
     args = release.release_parser().parse_args(argv)
     args.release_modes = release_reuse.release_modes(default=("identical",))
     args.candidate_version, args.candidate_defines = version, defines
@@ -886,7 +905,7 @@ def main(argv=None, release=None):
         raise SystemExit(f"measurement build: the Release resolved {r.commit}, not {a.commit}")
     print(f"measurement build {version} of {a.commit[:12]}" + (f" defines {defines}" if defines else "")
           + f"; targets {','.join(targets)}; wheels core,{','.join(built)}"
-          + f"; work dir {work}; steps {', '.join(STEPS)} (every other release step is skipped)")
+          + f"; work dir {work}; steps {', '.join(steps)} (every other release step is skipped)")
     if not a.dry_run and not a.no_prebuild_check and not a.pack_here:
         import prebuild_check
         pre = ["--commit", a.commit, "--ref", args.candidate_ref, "--work", str(work / "prebuild"), "--reuse-pass"]
@@ -900,6 +919,15 @@ def main(argv=None, release=None):
             raise SystemExit(f"measurement build: the pre-build checks failed (logs {work / 'prebuild'}); nothing "
                              "was dispatched. Fix and rerun, or pass --no-prebuild-check")
     rc = r.go()
+    # THE APPLE WHEEL FAILS LOUDLY, NEVER THE LINUX WHEELS: a failed macos-build with every Linux step done records the
+    # build as usual (the NVIDIA measurement goes on) and the command exits APPLE_FAILED_EXIT at the end
+    apple_failed = None
+    if rc and not a.dry_run and set(APPLE_STEPS) & set(steps):
+        if all(r.recorded(s) for s in STEPS) and not all(r.recorded(s) for s in APPLE_STEPS):
+            apple_failed = {s: (r.state.get("failures") or {}).get(s, {}).get("error", "not done") for s in APPLE_STEPS}
+            print("measurement build: APPLE BUILD FAILED (the Linux wheels are packed and recorded): "
+                  + "; ".join(f"{k}: {str(v)[:300]}" for k, v in apple_failed.items()))
+            rc = 0
     plan = r.plan() if defines else None
     if plan:
         print(arm_summary(owed_arm or label, plan))
@@ -976,6 +1004,13 @@ def main(argv=None, release=None):
             if vendor == "nvidia":
                 for line in gpu_smoke_lines(version, a.commit):
                     print(line)
+    if apple_failed:
+        print(f"APPLE-FAILED {', '.join(apple_failed)} (the round is not green: fix the Apple build; logs under "
+              f"{work / a.commit[:12]})")
+        return APPLE_FAILED_EXIT
+    wheel = sorted((work / a.commit[:12] / "macos").glob("mojolearn-*-macosx_*.whl"))
+    if wheel:
+        print(f"APPLE {wheel[0]}")
     return 0
 
 

@@ -77,7 +77,7 @@ class MoEBlock:
     random_state : int, default 0
         Seed of the N(0, 0.02**2) weight initialization.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.

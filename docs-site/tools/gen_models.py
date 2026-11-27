@@ -86,13 +86,15 @@ def page(entries):
         mb = [_num((vend.get(v) or {}).get("device_memory_mb"), "%.0f") for v, _ in VENDORS[1:]]
         out.append("| " + " | ".join([f"`{e['name']}`"] + ms + mb) + " |")
     out += ["", "## Check a model on your GPU", "",
-            "{func}`mojolearn.models.verify_catalog_entry` downloads the model from its source, imports it, "
-            "runs the check input and compares the output digest with the one listed here:", "",
+            "Supply the exported model file and input arrays specified by its catalog entry. "
+            "{func}`mojolearn.models.verify_catalog_entry` checks their hashes and runs the model "
+            "on the device you select.", "",
             "```python",
             "import mojolearn",
             "",
-            "report = mojolearn.models.verify_catalog_entry(\"%s\")" % rows[0]["name"],
-            "print(report[\"vendor\"], report[\"digest\"], report[\"match\"])",
+            "def check(exported_model, check_inputs):",
+            "    return mojolearn.models.verify_catalog_entry(",
+            "        %r, source=exported_model, inputs=check_inputs, device='gpu')" % rows[0]["name"],
             "```", "",
             "{func}`mojolearn.models.catalog` returns every entry, with its pinned source, input shapes and "
             "the numbers above.", ""]

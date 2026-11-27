@@ -268,16 +268,8 @@ def compute_ctr_borders(
     return borders^
 
 
-def build_target_borders(
-    y: List[Float32], description: TBinarizationOptions
-) raises -> List[Float32]:
-    """`featuresManager.SetTargetBorders(TBordersBuilder(...)(
-    GetTargetBinarizationDescription()))` (`train.cpp:370-375`).
-
-    At the GPU default the description is `(MinEntropy, 1)` and this is one
-    call into the DP that `pixi run check-minentropy` already gates against
-    CatBoost's own borders.
-    """
+def check_target_grid_options(description: TBinarizationOptions) raises:
+    """The supported binning rules for labels used by target-dependent CTRs."""
     if description.border_selection_type != BORDER_SELECTION_MIN_ENTROPY:
         raise Error(
             "target_binarization border_type="
@@ -290,6 +282,19 @@ def build_target_borders(
             "Error: border count should be greater than 0. Got "
             + String(description.border_count)
         )
+
+
+def build_target_borders(
+    y: List[Float32], description: TBinarizationOptions
+) raises -> List[Float32]:
+    """`featuresManager.SetTargetBorders(TBordersBuilder(...)(
+    GetTargetBinarizationDescription()))` (`train.cpp:370-375`).
+
+    At the GPU default the description is `(MinEntropy, 1)` and this is one
+    call into the DP that `pixi run check-minentropy` already gates against
+    CatBoost's own borders.
+    """
+    check_target_grid_options(description)
     return best_split_min_entropy(y.copy(), description.border_count)
 
 

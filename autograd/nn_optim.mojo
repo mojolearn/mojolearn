@@ -71,6 +71,7 @@ from sequence.lr_table import LR_COSINE, LR_LINEAR, LR_ONECYCLE, LrSpec, lr_spec
 comptime NN_OPT_RMSPROP = OPT_RMSPROP
 comptime NN_OPT_ADAGRAD = OPT_ADAGRAD
 comptime NN_OPT_LAMB = 10
+comptime NN_OPT_ADAFACTOR = 11
 
 #: Sequential schedule codes (_SCHED); 0..2 (constant, step, exponential) are autograd/model.mojo's
 comptime NN_SCHED_MULTI_STEP = 3
@@ -113,6 +114,11 @@ def _finite(v: Float64) -> Bool:
     return v == v and abs(v) <= 1.7976931348623157e308
 
 
+@always_inline
+def nn_positive_lr(rate: Float32) -> Bool:
+    return rate > Float32(0) and rate <= Float32.MAX
+
+
 # ---------------------------------------------------------------- admission (compile and fit call this one body)
 def nn_optim_admit(
     kind: Int, flags: Int, f1: Float64, f2: Float64, eps: Float64, wd: Float64, f7: Float64,
@@ -143,6 +149,9 @@ def nn_optim_admit(
             raise Error("ValueError: lamb's eps and weight_decay must be >= 0")
         if f7 < 0.0:
             raise Error("ValueError: lamb's max_grad_norm must be >= 0 (None: no clip)")
+    elif kind == NN_OPT_ADAFACTOR:
+        if eps < 0.0 or wd < 0.0:
+            raise Error("ValueError: adafactor eps and weight_decay must be nonnegative")
     elif kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW:
         raise Error("ValueError: unknown optimizer code " + String(kind))
     if sched < NN_SCHED_FIRST:

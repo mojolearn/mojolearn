@@ -9,7 +9,7 @@ every mode.
 | Mode | Promise |
 |---|---|
 | `identical` | The default. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
-| `fast` | Optional, on Apple GPUs only. No identity or repeatability promise. |
+| `fast` | Opt-in mode for throughput. Results can vary across runs and devices. |
 
 A release ships only when its recorded Apple, NVIDIA and AMD results agree.
 
@@ -22,21 +22,12 @@ Three things to know about `identical`:
 - It is an FP32 guarantee about mojolearn's own arithmetic. Weights trained in another framework
   reproduce under mojolearn's arithmetic, not that framework's.
 
-## Which families offer which mode
+## Which kernels run
 
-`identical` is available everywhere.
-
-| Family | `identical` | `fast` |
-|---|---|---|
-| Gradient boosting | yes | Apple GPUs |
-| Random forests | yes | Apple GPUs |
-| Extra Trees | yes | Apple GPUs |
-| Other tree models (decision trees, AdaBoost, random-trees embedding, isolation forest) | yes | Apple GPUs |
-| Neural networks, GPU surface (`LanguageModelTrainer`, `TransformerBlock`, Mamba blocks, `SambaStack`, `SmallMLPTrainer`, `Embedding`, linalg GEMMs) | yes | Apple GPUs |
-| Every other family | yes | Apple GPUs |
-
-`fast` is opt-in. `fast` is available on Apple GPUs only. Every CPU binding runs in `identical` mode only (see
-[Devices and the CPU](devices.md)). The full table is in the [support matrix](../notes/support_matrix.md).
+On Apple GPUs, selecting `fast` requires fast kernels for the operation. On Linux
+with NVIDIA, AMD or a CPU-only install, selecting `fast` uses the identical kernels
+if the installation has no separate fast kernels. In that case, changing the
+setting runs the same arithmetic.
 
 ## Selecting a mode
 
@@ -44,7 +35,7 @@ There are three ways to choose a mode. A narrower choice overrides a wider one.
 
 | Scope | How |
 |---|---|
-| Process, before import | `MOJOLEARN_NUMERIC_MODE=identical` (or `fast` on Apple GPUs) in the environment |
+| Process, before import | Set `MOJOLEARN_NUMERIC_MODE` to `identical` or `fast` in the environment |
 | Process, at runtime | `mojolearn.set_numeric_mode("fast")`, which returns the previous mode |
 | One estimator | `numeric_mode=` on estimators whose constructor has it |
 
@@ -87,13 +78,17 @@ Asking a family for a mode it does not ship raises a `ValueError` that names the
 missing mode. mojolearn never runs a weaker mode in its place.
 
 An unknown mode name raises `ValueError("numeric_mode must be fast, identical or None")`.
-The verifier also refuses to run under `fast` (see [Verify on your hardware](verify.md)).
+The verifier checks which kernels were loaded and requires identical arithmetic.
+See [Verify on your hardware](verify.md).
 
 ## Numeric profiles
 
 A numeric profile is a separate setting from the numeric mode. The mode is the promise; the profile is
-the number format the matrix products compute in. `fp32_v1` is the default for every family and every
-trainer. Other profiles are opt-in and apply only to the families they list.
+the number format the matrix products compute in. Transformer language-model inference (`CausalLM`,
+`ParallelCausalLM`) uses `fixed15_v1` by default; every other family, Mamba models and all training use
+`fp32_v1`. Other profiles are opt-in and apply only to the families they list. See
+[Language models](language_models.md#hugging-face-checkpoints) for what `fixed15_v1` computes and how to choose `fp32_v1`
+instead.
 
 | Function | Purpose |
 |---|---|

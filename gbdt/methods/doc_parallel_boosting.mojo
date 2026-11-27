@@ -336,6 +336,10 @@ from gbdt.targets.kernel.multilogit import (
     launch_one_vs_all_value_and_der,
     multilogit_blocks,
 )
+from gbdt.targets.ranking_options import OBJECTIVE_QUERY_SOFTMAX, is_lightgbm_ranking, uses_grouped_rank_workspace, ranking_loss, ranking_seed
+from gbdt.targets.lightgbm_ranking import LR_CUTOFF
+from gbdt.targets.kernel.ranking_fit import DeviceRankingFit, DeviceRankingMetric
+from gbdt.data.group_layout import GroupLayout, device_group_layout
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     OBJECTIVE_MULTICLASS,
@@ -351,6 +355,7 @@ from gbdt.targets.kernel.pointwise_targets import (
 from gbdt.targets.kernel.pair_logit import (
     PairwiseTargetBuffers,
     launch_pair_logit_with,
+    _launch_pair_logit_group_layout,
     make_pairwise_group_buffers,
     make_pairwise_target_buffers,
     pair_blocks,
@@ -423,6 +428,11 @@ struct TestArm(Movable):
     var h_bin: HostBuffer[DType.uint32]
     var h_eq: HostBuffer[DType.uint8]
     var h_vals: HostBuffer[DType.float32]
+    var query: Optional[QuerywiseTargetBuffers]
+    var pairs: Optional[PairwiseTargetBuffers]
+    var loss_weight: Float64
+    var rank_metric: Optional[DeviceRankingMetric]
+    var eval_at: Int
 
 
 def make_test_arm(
@@ -433,6 +443,9 @@ def make_test_arm(
     approx_dim: Int,
     stat_count: Int,
     max_depth: Int,
+    objective: Int = -1,
+    group_sizes: List[UInt32] = List[UInt32](),
+    eval_at: Int = LR_CUTOFF,
 ) raises -> TestArm:
     """Size the held-out arm. `n_rows == 0` still allocates one word per
     buffer, because a struct field cannot be absent and the contract is
@@ -444,6 +457,30 @@ def make_test_arm(
     var max_leaves = 1 << max_depth
     var w = ctx.enqueue_create_buffer[DType.float32](n)
     enqueue_fill(ctx, w, Float32(1.0))
+    var query = Optional[QuerywiseTargetBuffers]()
+    var pairs = Optional[PairwiseTargetBuffers]()
+    var loss_weight = Float64(n)
+    var rank_metric = Optional[DeviceRankingMetric]()
+    if n_rows > 0 and objective == OBJECTIVE_QUERY_SOFTMAX:
+        raise Error("QuerySoftMax does not support eval_set")
+    if n_rows > 0 and is_lightgbm_ranking(objective):
+        if eval_at <= 0:
+            raise Error("eval_at must be a positive integer")
+        var layout = device_group_layout[True](
+            ctx, group_sizes, n, "eval_group_id: group ", "eval_group_id: the group sizes cover ",
+        )
+        rank_metric = Optional(DeviceRankingMetric(ctx, layout^, n))
+    if n_rows > 0 and (objective == OBJECTIVE_QUERY_RMSE or objective == OBJECTIVE_PAIR_LOGIT or objective == OBJECTIVE_YETI_RANK):
+        if len(group_sizes) == 0:
+            raise Error("grouped validation needs one held-out query id per eval row")
+        if objective == OBJECTIVE_QUERY_RMSE:
+            query = Optional(make_querywise_target_buffers(ctx, group_sizes, n, targets, w, False))
+        else:
+            # YetiRank's training gradients have no scalar loss. Its held-out
+            # metric is PairLogit over unequal grades within each test query.
+            pairs = Optional(make_pairwise_group_buffers[True](ctx, group_sizes, n, targets, w))
+            blocks = max(blocks, len(group_sizes))
+            loss_weight = pairs.value().pairs_total_weight
     var fv_n = 1
     var h_fv_n = blocks
     var vals_n = max_leaves * approx_dim
@@ -468,6 +505,7 @@ def make_test_arm(
         ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_host_buffer[DType.uint8](max_depth),
         ctx.enqueue_create_host_buffer[DType.float32](vals_n),
+        query^, pairs^, loss_weight, rank_metric^, eval_at,
     )
 
 
@@ -589,13 +627,13 @@ def _test_loss(
     """
     # lane t1-tree-builder-ops: `_test_loss_enqueue`'s launches at slot 0
     # (they were a verbatim copy here), then the one readback.
-    var n = test.n_rows
     _test_loss_enqueue(
         ctx, test, objective, num_classes, alpha, logloss_border, approx_dim, 0,
     )
     ctx.enqueue_copy(dst_ptr=test.h_fv.unsafe_ptr(), src_buf=test.fv)
     ctx.synchronize()
-    return -Float64(test.h_fv.unsafe_ptr().unsafe_load(0)) / Float64(n)
+    var value = Float64(test.h_fv.unsafe_ptr().unsafe_load(0))
+    return 1.0 - value if is_lightgbm_ranking(objective) else -value / test.loss_weight
 
 
 def _test_loss_enqueue(
@@ -627,6 +665,21 @@ def _test_loss_enqueue(
             test.cursor, n, test.cindex, False,
             test.fv_part, True, test.stats, n, test.mag_dummy, False,
         )
+    elif test.rank_metric:
+        var result = test.fv.create_sub_buffer[DType.float32](slot, 1)
+        test.rank_metric.value().metric(ctx, test.targets, test.cursor, n, result, objective, test.weights, False, test.eval_at)
+        return
+    elif test.query:
+        launch_query_rmse_with[False](
+            ctx, test.query.value(), test.cursor, False,
+            test.stats, test.fv_part, True, test.mag_dummy, False,
+        )
+    elif test.pairs:
+        blocks = -test.pairs.value().n_pairs
+        _launch_pair_logit_group_layout[False, False](
+            ctx, test.pairs.value(), test.cursor, False,
+            test.stats, test.fv_part, True, test.mag_dummy, False,
+        )
     else:
         launch_approximate[False](
             ctx, objective, test.targets, test.weights, Int32(n),
@@ -644,10 +697,10 @@ def _test_loss_enqueue(
 def _test_loss_div_kernel(
     fv: MutPointer[Float32, MutAnyOrigin],
     pending_in: Int32,
-    n_in: Int32,
+    denominator_bits: UInt64,
     losses: MutPointer[UInt64, MutAnyOrigin],
 ):
-    """One thread a pending slot: `-double(fv[j]) / double(n)` in
+    """One thread a pending slot: `-double(fv[j]) / test_weight` in
     soft-float64 (`checks/soft_f64.mojo`: negation flips the sign bit, the
     divide is correctly rounded), the bits of the host expression it
     replaces, written as double bit patterns."""
@@ -657,7 +710,7 @@ def _test_loss_div_kernel(
             j,
             sf64_div(
                 sf64_neg(sf64_from_f32(fv.unsafe_load(j))),
-                sf64_from_int(Int(n_in)),
+                denominator_bits,
             ),
         )
 
@@ -670,13 +723,13 @@ def _test_loss_div_kernel(
 def _heldout_loss_bits_gated_kernel(
     gate: MutPointer[Int32, MutAnyOrigin],
     fv: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
+    denominator_bits: UInt64,
     losses: MutPointer[UInt64, MutAnyOrigin],
 ):
     """`_test_loss_div_kernel` for one slot, behind the executor gate."""
     if gate.unsafe_load(0) != Int32(0):
         return
-    _test_loss_div_kernel(fv, Int32(1), n_in, losses)
+    _test_loss_div_kernel(fv, Int32(1), denominator_bits, losses)
 
 
 def tree_op_heldout_loss(
@@ -694,7 +747,7 @@ def tree_op_heldout_loss(
     """Tree op TREE_OP_HELDOUT_LOSS (gbdt/tree_ops.mojo, lane
     t1-tree-builder-ops): the held-out loss of round `it` (1-based) as a
     program value. `_test_loss`'s launches (same target kernel, same fold
-    into `test.fv[0]`), then `-double(fv) / double(n)` in soft float64
+    into `test.fv[0]`), then `-double(fv) / test_weight` in soft float64
     (`_test_loss_div_kernel`: the bits of `_test_loss`'s host expression)
     stored as `losses[it - 1]`, a binary64 bit pattern. The store is behind
     the gate, so the history past the stopping round is never written;
@@ -705,7 +758,7 @@ def tree_op_heldout_loss(
         ctx, test, objective, num_classes, alpha, logloss_border, approx_dim, 0,
     )
     ctx.enqueue_function[_heldout_loss_bits_gated_kernel](  # small-launch(one word): the round's loss
-        gate.unsafe_ptr(), test.fv.unsafe_ptr(), Int32(test.n_rows),
+        gate.unsafe_ptr(), test.fv.unsafe_ptr(), bitcast[DType.uint64](test.loss_weight),
         losses.unsafe_ptr() + (it - 1),
         grid_dim=(1, 1, 1), block_dim=(64, 1, 1),
     )
@@ -1560,6 +1613,7 @@ def _estimate_and_apply(
     # them from `finish_deferred_estimation` after its next drain). Every
     # other path ignores it and drains as before.
     defer_tail: Bool = False,
+    var rank_derivatives: Optional[DeviceBuffer[DType.float32]] = None,
     # TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the
     # `tail_drain` argument); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SYM_DERIV_FUSED.patch.
     # TOMBSTONE: MOJOLEARN_EST_SHRINK_FUSED (DROPPED-inconclusive) deleted 2026-10-09 on lane/owed-deletions-D1 (the
@@ -1624,7 +1678,7 @@ def _estimate_and_apply(
     comptime if EST_APPLE_ANY:
         if apple_est_handles(
             objective, leaf_estimation_method, approx_dim, iters,
-            query.__bool__() or pairs.__bool__() or yeti.__bool__(),
+            query.__bool__() or pairs.__bool__() or yeti.__bool__() or rank_derivatives.__bool__(),
         ):
             var a_sm = est_sm
             if a_sm < 0:
@@ -1770,6 +1824,15 @@ def _estimate_and_apply(
         yeti_seed,
         oracle_ws^,
     )
+    if rank_derivatives.__bool__():
+        # One Newton update uses the original derivative at this tree's
+        # starting point. Gather once before the walk; the regularizer
+        # still sees the actual sample weights in the separate weight plane.
+        launch_gather_planes_with_mask_f32(
+            ctx, oracle.d_eval_stats, rank_derivatives.value(), row_index, n_rows,
+            UInt32(0xFFFFFFFF), 2, n_rows,
+        )
+        launch_yeti_rank_zero_value(ctx, oracle.d_fv, (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE)
     stage_times.end(ctx, "est.make_oracle")
     # `TDocParallelLeavesEstimator::Estimate`
     # (`doc_parallel_leaves_estimator.cpp:9-16`): Exact REPLACES
@@ -3870,6 +3933,7 @@ def fit_with_test(
     # `run_tree_ctr_tree`, the level-synchronized driver, and the entry
     # comes back in `FitResult.tree_ctr` holding what the trees chose.
     var tree_ctr: List[TreeCtrFit] = List[TreeCtrFit](),
+    var ranking_layout: Optional[GroupLayout] = None,
 ) raises -> FitResult:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -4236,11 +4300,10 @@ def fit_with_test(
     var is_querywise = objective == OBJECTIVE_QUERY_RMSE
     var query_buffers = Optional[QuerywiseTargetBuffers]()
     if is_querywise:
-        var has_test_rows = test.__bool__() and test.value().n_rows > 0
-        if non_symmetric or perm_count > 1 or has_test_rows:
+        if non_symmetric or perm_count > 1:
             raise Error(
                 "QueryRMSE is implemented for a SymmetricTree"
-                " searcher at one permutation with no eval set; this fit asked"
+                " searcher at one permutation; this fit asked"
                 " for another arm"
             )
         query_buffers = Optional(
@@ -4256,11 +4319,10 @@ def fit_with_test(
     var pair_buffers = Optional[PairwiseTargetBuffers]()
     var loss_norm = Float64(n_rows)
     if is_pair_logit:
-        var has_test_rows = test.__bool__() and test.value().n_rows > 0
-        if non_symmetric or perm_count > 1 or has_test_rows:
+        if non_symmetric or perm_count > 1:
             raise Error(
                 "PairLogit is implemented for a SymmetricTree"
-                " searcher at one permutation with no eval set; this fit asked"
+                " searcher at one permutation; this fit asked"
                 " for another arm"
             )
         comptime if PAIRLOGIT_GROUP_FUSED:
@@ -4292,6 +4354,18 @@ def fit_with_test(
     # (`gbdt/targets/kernel/yeti_rank.mojo`), on the same arm as QueryRMSE,
     # at the reference's loss defaults (permutations 10, decay 0.85,
     # `loss_description.cpp:181-193`).
+    var rank = Optional[DeviceRankingFit]()
+    if uses_grouped_rank_workspace(objective):
+        if objective == OBJECTIVE_QUERY_SOFTMAX and (non_symmetric or (test.__bool__() and test.value().n_rows > 0)):
+            raise Error("QuerySoftMax requires a numeric SymmetricTree without eval_set")
+        if perm_count > 1:
+            raise Error("grouped ranking requires one query-preserving permutation")
+        if not ranking_layout.__bool__():
+            # Native callers can enter fit_with_test directly.
+            ranking_layout = Optional(device_group_layout[True](
+                ctx, group_sizes, n_rows, "group_id: group ", "group_id: the group sizes cover ",
+            ))
+        rank = Optional(DeviceRankingFit(ctx, ranking_layout.take(), n_rows))
     var is_yeti_rank = objective == OBJECTIVE_YETI_RANK
     var yeti_buffers = Optional[YetiRankTargetBuffers]()
     # ================= DEVIATION: the YetiRank draw stream =================
@@ -4308,11 +4382,10 @@ def fit_with_test(
     # ======================================================================
     var yeti_rand = TRandom(random_seed ^ UInt64(0x5945544952414E4B))
     if is_yeti_rank:
-        var has_test_rows = test.__bool__() and test.value().n_rows > 0
-        if non_symmetric or perm_count > 1 or has_test_rows:
+        if non_symmetric or perm_count > 1:
             raise Error(
                 "YetiRank is implemented for a SymmetricTree"
-                " searcher at one permutation with no eval set; this fit asked"
+                " searcher at one permutation; this fit asked"
                 " for another arm"
             )
         yeti_buffers = Optional(
@@ -4327,9 +4400,9 @@ def fit_with_test(
     # would silently change the algorithm. Keep that new combination
     # explicitly unavailable until those search leaves are carried through.
     querywise_pointwise_leaf_check(
-        use_pointwise_searcher, is_querywise or is_pair_logit or is_yeti_rank, leaf_estimation_method
+        use_pointwise_searcher, is_querywise or is_pair_logit or is_yeti_rank or rank.__bool__(), leaf_estimation_method
     )
-    if not (is_querywise or is_pair_logit or is_yeti_rank) and (
+    if not (is_querywise or is_pair_logit or is_yeti_rank or rank.__bool__()) and (
         len(group_sizes) > 0 or len(pair_winners) > 0
     ):
         raise Error(
@@ -4736,6 +4809,10 @@ def fit_with_test(
                 stats, n_rows,
                 mag_part, mags_in_mse,
             )
+        elif rank.__bool__():
+            rank.value().search(ctx, objective, targets, lcur, weights, has_weights, n_rows,
+                                ranking_seed(random_seed), iteration, second_order, stats,
+                                fv_part, mag_part, mags_in_mse)
         elif use_pointwise_searcher and (is_querywise or is_pair_logit or is_yeti_rank):
             # Complete grouped derivatives before bootstrap. The existing
             # pointwise noise reduction below intentionally sees these
@@ -4807,6 +4884,8 @@ def fit_with_test(
         if objective == OBJECTIVE_MULTICLASS:
             fv_blocks = multilogit_blocks(n_rows)
         var mag_blocks = fv_blocks
+        if rank.__bool__():
+            fv_blocks = 1
         if is_pair_logit:
             fv_blocks = pair_buffers.value().blocks()
             comptime if PAIRLOGIT_GROUP_FUSED:
@@ -5291,6 +5370,9 @@ def fit_with_test(
                     part = partition_from_bins(ctx, d_bins, n_rows, n_bins)
                     loop_times.stop_host("iter_partition", t_part)
                 var t_est = loop_times.start()
+                var rank_est = Optional[DeviceBuffer[DType.float32]]()
+                if rank:
+                    rank_est = Optional(rank.value().raw.copy())
                 _estimate_and_apply(
                     ctx, n_rows, approx_dim, len(part.sizes),
                     part.sizes, part.offsets,
@@ -5304,7 +5386,7 @@ def fit_with_test(
                     trace, stage_times,
                     _tree_tag(iteration) + ".perm" + String(p)
                     + ".leaves.estimated",
-                    est_ws,
+                    est_ws, rank_derivatives=rank_est^,
                 )
                 loop_times.stop_host("iter_estimate_apply", t_est)
                 if p == est_p:
@@ -5579,6 +5661,9 @@ def fit_with_test(
                         y_est = Optional(yeti_buffers.value().handles())
                         # this tree's second draw: the estimation stream's seed
                         y_seed = yeti_rand.next_uniform_l()
+                    var rank_est = Optional[DeviceBuffer[DType.float32]]()
+                    if rank.__bool__():
+                        rank_est = Optional(rank.value().raw.copy())
                     _estimate_and_apply(
                         ctx, n_rows, approx_dim, len(sizes), sizes,
                         leaf_offsets,
@@ -5599,7 +5684,7 @@ def fit_with_test(
                         y_seed,
                         # lane fix-g1-gbdt: one task per tree and no eval
                         # set, so nothing below needs the values this tree
-                        defer_tail=sym_defer_est,
+                        defer_tail=sym_defer_est, rank_derivatives=rank_est^,
                     )
                 else:
                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
@@ -5728,7 +5813,7 @@ def fit_with_test(
                 # lane fix-g1-gbdt: this tree's model is appended later
                 trees_so_far += 1
             if trees_so_far > 1:
-                losses.append(-v / loss_norm)
+                losses.append(ranking_loss(objective, v) if rank.__bool__() else -v / loss_norm)
 
     # lane fix-g1-gbdt (`IDN_GBDT_SYM_EST_DEFER_DRAIN`): the last tree's
     # deferred estimation
@@ -5792,6 +5877,9 @@ def fit_with_test(
             ctx, pair_buffers.value(), cursor, False,
             stats, fv_part, True, mag_part, False,
         )
+    elif rank.__bool__():
+        rank.value().metric_state.metric(ctx, targets, cursor, n_rows, fv_part, objective, weights, has_weights)
+        final_blocks = 1
     elif is_yeti_rank:
         # YetiRank has no function value (`FillBuffer(FunctionValue, 0)`,
         # `kernel.h:421-423`): the final learn loss is 0 and no draw is taken
@@ -5854,9 +5942,8 @@ def fit_with_test(
                 if SAB_2002_DEAD_DEVICE else ""
             )
         )
-    losses.append(
-        -Float64(h_fv.unsafe_ptr().unsafe_load(0)) / loss_norm
-    )
+    var final_value = Float64(h_fv.unsafe_ptr().unsafe_load(0))
+    losses.append(ranking_loss(objective, final_value) if rank.__bool__() else -final_value / loss_norm)
     # DEVIATION 74, MEASURED RATHER THAN ARGUED. A nonzero count means
     # some leaf's Hessian was not positive definite, Cholesky stopped, and
     # that leaf took a gradient step instead of a Newton one -- silently,

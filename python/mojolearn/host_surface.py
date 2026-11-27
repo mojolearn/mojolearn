@@ -809,6 +809,11 @@ TRAINING_LANE_NAMES = {
     "gbdt-rank-leaves": "gradient boosting ranking losses with score noise, Gradient leaves and several Newton steps",
     "gbdt-rank-pointwise-arms": "gradient boosting ranking losses on the pointwise searcher with L2 scores and bootstraps",
     "gbdt-rank-pairs": "gradient boosting PairLogit on explicit weighted pairs under bootstrap and the pointwise searcher",
+    "gbdt-lambdarank": "LambdaRank on graded queries",
+    "gbdt-rank-xendcg": "XE_NDCG on graded queries",
+    "gbdt-query-softmax": "weighted QuerySoftMax on grouped documents",
+    "gbdt-rank-categorical-eval": "grouped categorical training with separate validation queries",
+    "gbdt-rank-grouped-ctr": "target statistics from earlier queries in grouped ranking",
     # lane gbdt-gaps (2026-11-23): sample weights and eval sets the CPU
     # column refused until then (gbdt_oracle_losses.mojo, gbdt_oracle.mojo,
     # gbdt_oracle_depthwise.mojo)
@@ -1283,6 +1288,7 @@ TRAINING_LANE_NAMES = {
     # forest_host_rf_predict_reg) no lane reached; and the classical input
     # door's half-precision sequence conversion
     "saved-model-host-infer-trees": "saved Extra Trees and random forest regressors predicted on the CPU (inference)",
+    "classical-float64-admission": "fit StandardScaler with float64 and pre-rounded float32 inputs",
     "classical-float16-sequences": "linear models, scalers and PCA fitted on a list of float16 rows",
     "lowbit-conversions": "the bf16 and int8 weight-storage conversions",
     "grad-accumulation": "gradient accumulation across microbatches",
@@ -1381,7 +1387,7 @@ TRAINING_LANE_NAMES = {
     "m-svr-gamma-scale-score": "SVR: score",
     "nn-ep-embedding": "Embedding: embedding",
     "nn-ep-mamba-blocks": "Mamba1Block, Mamba1State, Mamba2Block: blocks",
-    "nn-ep-samba-inference": "SambaStack, Generator, SambaInference: inference",
+    "nn-ep-samba-inference": "SambaConfig, SambaInference: inference",
     "nn-ep-samba-stack": "SambaConfig, SambaStack, Generator: stack",
     "nn-ep-transformer-block": "TransformerBlock, TransformerState: block",
     "nn-pg-array": "Array: array",
@@ -2036,6 +2042,7 @@ FAMILIES = (
                         # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table was admitted;
                         # RECORD OWED: the release's one verification records them
                         "nn-ep-mamba-blocks",
+                        "nn-ep-samba-inference",
                         "nn-pg-causal-lm",
                         # fixed15-parts-verify (2026-11-25): the fixed15_v1 default and per-part profile; RECORD OWED
                         "numeric-profile-parts",),
@@ -2308,7 +2315,7 @@ FAMILIES = (
             "linear-svr-squared", "qn-squared", "qn-absolute",
             # lane verify-gaps-20261022: the classical input door's float16
             # sequence conversion (core/sequential_inputs_impl.mojo)
-            "classical-float16-sequences",
+            "classical-float16-sequences", "classical-float64-admission",
                         # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table was admitted;
                         # RECORD OWED: the release's one verification records them
                         "check-function",
@@ -3173,6 +3180,7 @@ FAMILIES = (
             # lane verify-gbdt-rank (2026-11-22): the ranking losses' bootstraps,
             # noise, leaves, pointwise scores and explicit weighted pairs
             "gbdt-rank-bootstrap", "gbdt-rank-leaves", "gbdt-rank-pointwise-arms", "gbdt-rank-pairs",
+            "gbdt-lambdarank", "gbdt-rank-xendcg", "gbdt-query-softmax", "gbdt-rank-categorical-eval", "gbdt-rank-grouped-ctr",
             # lane gbdt-gaps (2026-11-23): sample weights and eval sets
             "gbdt-weighted-symmetric", "gbdt-weighted-nonsym", "gbdt-weighted-rank", "gbdt-eval-gaps",
             # lane gbdt-cpu-rest (2026-11-23): the rest of the CPU gaps
@@ -3313,7 +3321,6 @@ FAMILIES = (
                         "fn-training-residual-dropout-backward",
                         "fn-training-rms-norm-backward",
                         "fn-training-rms-norm-forward",
-                        "nn-ep-samba-inference",
                         "nn-ep-samba-stack",
                         "nn-tr-optim-state",
                         "nn-tr-small-mlp",
@@ -4452,6 +4459,11 @@ PUBLIC_PENDING_LANES = {
     "gbdt-rank-leaves": "no reference",
     "gbdt-rank-pointwise-arms": "no reference",
     "gbdt-rank-pairs": "no reference",
+    "gbdt-lambdarank": "no reference",
+    "gbdt-rank-xendcg": "no reference",
+    "gbdt-query-softmax": "no reference",
+    "gbdt-rank-categorical-eval": "no reference",
+    "gbdt-rank-grouped-ctr": "no reference",
     # lane gbdt-gaps (2026-11-23): new lanes, recorded CPU first at the release
     "gbdt-weighted-symmetric": "no reference",
     "gbdt-weighted-nonsym": "no reference",
@@ -4810,6 +4822,7 @@ PUBLIC_PENDING_LANES = {
     # training binding has no device array pool.
     "training-device-cross-entropy": "no cpu route",
     "classical-float16-sequences": "unwatched",
+    "classical-float64-admission": "no reference",
     # STALE UNTIL THE NEXT RELEASE RECORD (2026-11-07). The 2026-11-05 fixture
     # shrink (tools/identity_break.py LANE_REVISIONS and NON_SIZE_REVISIONS)
     # moved these lanes' fixtures after the shipped table was admitted, so the

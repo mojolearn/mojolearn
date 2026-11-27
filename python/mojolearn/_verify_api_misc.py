@@ -26,6 +26,22 @@ def applicable(public,method):
         name.startswith('SGD') and method in ('score','score_samples'))
 
 
+def bpe_file_ids(cls):
+    from ._tokenizer_synthetic import byte_to_char
+    with tempfile.TemporaryDirectory() as tmp:
+        encoder = Path(tmp) / "encoder.json"
+        merges = Path(tmp) / "vocab.bpe"
+        vocab = {char: byte for byte, char in byte_to_char().items()}
+        vocab["ab"] = 256
+        encoder.write_text(json.dumps(vocab))
+        merges.write_text("#version: 0.2\na b\n")
+        model = cls.from_files(str(encoder), str(merges))
+        ids = list(model.encode("aba"))
+        if ids != [256, 97] or model.decode(ids) != "aba":
+            raise AssertionError("GPT-2 file pair lost its nontrivial byte merge")
+        return ids
+
+
 def misc_checks(recorder,public,methods):
     import numpy as np
     import mojolearn as ml
@@ -34,7 +50,6 @@ def misc_checks(recorder,public,methods):
         y=np.array([1,1.25,1.5,1.125,1.75,1.375,2,1.625],np.float32)
         if name in ('BpeTokenizer','GPT2Tokenizer','TrainedBpeVocabulary'):
             from .tokenizer import BpeTokenizer, BpeVocabularyTrainer
-            from ._tokenizer_synthetic import byte_to_char as _byte_to_char
             if name=='TrainedBpeVocabulary':
                 vocab=BpeVocabularyTrainer(vocab_size=258,min_frequency=2).train(['ab ab','ab ba'])
                 return getattr(vocab,method[:-4])
@@ -47,13 +62,7 @@ def misc_checks(recorder,public,methods):
             tokens=[bytes([i]) for i in range(256)]
             m=cls.from_token_bytes(tokens)
             if method=='from_files':
-                with tempfile.TemporaryDirectory() as tmp:
-                    enc=Path(tmp)/'encoder.json';merges=Path(tmp)/'vocab.bpe'
-                    enc.write_text(json.dumps({char:i for i,char in _byte_to_char().items()}))
-                    merges.write_text('#version: 0.2\n')
-                    m=cls.from_files(str(enc),str(merges))
-                    assert m.decode(m.encode('ab'))=='ab'
-                    return m.encode('ab')
+                return bpe_file_ids(cls)
             if method=='decode_batch':return m.decode_batch([m.encode('ab'),m.encode('ba')])
             if method=='eot_token:get':assert m.eot_token==256;return m.eot_token
             if method=='vocabulary_source:get':assert isinstance(m.vocabulary_source,str);return m.vocabulary_source

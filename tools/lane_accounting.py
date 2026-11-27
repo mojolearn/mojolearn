@@ -152,14 +152,6 @@ DECLARED_LANELESS = {
     # left this table on 2026-10-24: the public-residual-dropout lane
     # (tools/identity_lanes/public_gap_methods.py, 8188d769f) reaches both,
     # pending its reference record.
-    # lane/verify-coverage-audit (2026-10-21): it downloads a pinned model and
-    # needs torch or onnx to build it, which a verifier run never has; the import
-    # and run it then performs are import_model and ImportedProgram.run, which
-    # the sequence-onnx-import lane covers.
-    "models.verify_catalog_entry": (
-        "owed: a network-free check needs a cached catalog model file; the import "
-        "and run it performs are covered by the sequence-onnx-import lane"
-    ),
 }
 
 # The cooperative multi-GPU drivers were declared laneless here from 2026-10-31,

@@ -160,7 +160,8 @@ class SpectralClustering(ParamsMixin):
 
     Builds an affinity graph, forms the normalized graph Laplacian, takes its
     ``n_components`` smallest eigenvectors with a thick-restart Lanczos solver
-    and clusters the resulting embedding. Defaults follow cuML's
+    and clusters the resulting embedding. When all but one eigenpair are needed,
+    it solves the symmetric eigenproblem directly. Defaults follow cuML's
     ``SpectralClustering``, which differ from scikit-learn's: the default
     affinity is ``"nearest_neighbors"`` with ``n_neighbors=10``, and
     ``n_components`` defaults to ``n_clusters``. The Laplacian is always
@@ -537,7 +538,8 @@ class SpectralEmbedding(ParamsMixin):
 
     Builds an affinity graph, forms the normalized graph Laplacian and returns
     its smallest nontrivial eigenvectors, computed with a thick-restart
-    Lanczos solver. The first (trivial) eigenvector is dropped. Follows cuML's
+    Lanczos solver. When all but one eigenpair are needed, it solves the
+    symmetric eigenproblem directly. The first (trivial) eigenvector is dropped. Follows cuML's
     ``manifold.SpectralEmbedding``. There is no ``transform``: the embedding
     covers the fitted rows only, as in scikit-learn.
 

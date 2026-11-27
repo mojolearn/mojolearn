@@ -1,0 +1,12 @@
+diff --git a/gbdt/targets/lightgbm_ranking.mojo b/gbdt/targets/lightgbm_ranking.mojo
+--- a/gbdt/targets/lightgbm_ranking.mojo
++++ b/gbdt/targets/lightgbm_ranking.mojo
+@@ -244,7 +244,7 @@
+             scale = identical_div(identical_log1p(mass), identical_mul(Float32(0.6931471805599453), mass))
+         if a.weighted:
+             scale = identical_mul(scale, a.weights[row])
+-        a.direction[row] = identical_mul(a.direction[row], scale)
++        a.direction[row] = -identical_mul(a.direction[row], scale)
+         a.hessian[row] = identical_mul(a.hessian[row], scale)
+     elif phase == RR_TOP_INIT:
+         a.order[row] = UInt32(row)

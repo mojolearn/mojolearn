@@ -1,0 +1,11 @@
+--- a/bindings/msel_split_plan_run.mojo
++++ b/bindings/msel_split_plan_run.mojo
+@@ -955,7 +955,7 @@
+     var offsets = msel_draw_rows(route, rng, want, plan.arena)
+     for s in range(len(want)):  # driver-loop: over splits
+         var perm = plan.arena.base() + 4 * offsets[s]
+-        plan.train_src.append(perm + 8 * n_test)
++        plan.train_src.append(perm)
+         plan.test_src.append(perm)
+         plan.add(n_train, n_test)
+     return plan^

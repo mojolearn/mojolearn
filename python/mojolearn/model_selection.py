@@ -1614,7 +1614,7 @@ class _BaseSearch:
         Raises
         ------
         AttributeError
-            If the search is not fitted, or runs in `fast` mode (Apple only).
+            If the search is not fitted, or runs in `fast` mode.
         """
         return _digest_read(self)
 
@@ -1627,7 +1627,7 @@ class _BaseSearch:
         Raises
         ------
         AttributeError
-            If it is not fitted, or runs in `fast` mode (Apple only).
+            If it is not fitted, or runs in `fast` mode.
         """
         return _digest_read(self, _DIGEST_TRAINING_ARGUMENTS)
 

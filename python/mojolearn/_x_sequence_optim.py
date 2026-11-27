@@ -8,7 +8,8 @@ the GPU binding and on the CPU host binding. `lr` is read fresh at every step,
 so a schedule is `opt.lr = ...` between steps, or `opt.lr_schedule = <schedule>` (a built-in native schedule, t one-based: `StepLR`, `ExponentialLR`, `OneCycleLR`), which
 sets `lr` before every step.
 
-Refused (sequence/NOT_IMPLEMENTED.tsv): parameter groups, maximize,
+Adafactor accepts maximize. The other optimizers in this module minimize.
+Refused (sequence/NOT_IMPLEMENTED.tsv): parameter groups,
 foreach/fused/capturable/differentiable, sparse gradients, float64."""
 from ._training_impl import _OPT_NATIVE as _SEQ_NATIVE, _OPT_CONTEXT as _SEQ_CONTEXT
 
@@ -116,7 +117,7 @@ class RMSprop(_SeqOptimizer):
     centered : bool, default False
         Normalize by the estimated gradient variance.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode of the update. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -183,7 +184,7 @@ class Adagrad(_SeqOptimizer):
     eps : float, default 1e-10
         Term added to the denominator.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode of the update. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -245,7 +246,7 @@ class Lion(_SeqOptimizer):
     weight_decay : float, default 0.0
         Decoupled weight decay.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode of the update. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -308,7 +309,7 @@ class Adamax(_SeqOptimizer):
     weight_decay : float, default 0.0
         L2 penalty added to the gradient.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode of the update. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -369,7 +370,7 @@ class NAdam(_SeqOptimizer):
     decoupled_weight_decay : bool, default False
         Apply weight decay to the parameters directly instead of the gradient.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode of the update. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -410,7 +411,8 @@ class Adafactor(_ResidentState):
     """`torch.optim.Adafactor` (PyTorch 2.5): relative step size, decoupled
     weight decay, a factored second moment (row and column means of g^2) for
     matrices and a full one for vectors, the update clipped by its RMS over
-    d. Parameters are float32 NumPy arrays of 1 or 2 dimensions, updated in
+    d. With `maximize=True`, the gradient update performs ascent and weight
+    decay still shrinks the parameter. Parameters are float32 NumPy arrays of 1 or 2 dimensions, updated in
     place; defaults are torch's. `sequence/adafactor.mojo`. `device` is where
     the computation runs: None uses this installation's device, 'cpu' runs on
     the CPU and 'gpu' requires a GPU installation; other values raise

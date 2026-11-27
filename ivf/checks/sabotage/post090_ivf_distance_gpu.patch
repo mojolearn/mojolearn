@@ -1,0 +1,10 @@
+diff --git a/ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo b/ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo
+--- a/ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo
++++ b/ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo
+@@ -261,5 +261,5 @@
+                         cd = sd
+                         ci = si
+     for r in range(k):
+-        out_dist[q * k + r] = td[r]
++        out_dist[q * k + r] = td[r] + Float32(1.0)
+         out_idx[q * k + r] = ti[r]

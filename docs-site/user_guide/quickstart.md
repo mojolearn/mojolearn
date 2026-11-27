@@ -22,8 +22,10 @@ Run the same script with the same release on any of them and the model and its p
 ## The estimator interface
 
 Estimators follow scikit-learn's conventions: construct with hyperparameters, then `fit`, `predict`,
-`predict_proba`, `transform` or `score` as the estimator supports. Inputs are float32 arrays; NumPy arrays
-work directly, and the library itself does not require NumPy.
+`predict_proba`, `transform` or `score` as the estimator supports. Interfaces that accept float64 data for float32 computation convert it once using
+round-to-nearest-even. A finite value that rounds to infinity raises an error.
+Some operations, including `linalg.qr`, require float32 inputs. NumPy arrays work directly, and the
+library itself does not require NumPy.
 
 ```python
 from mojolearn import KMeans, PCA, RandomForestClassifier
@@ -42,7 +44,7 @@ previous = mojolearn.set_numeric_mode("fast")            # returns the previous 
 mojolearn.set_numeric_mode("identical")                  # back to the default
 ```
 
-You can also set `MOJOLEARN_NUMERIC_MODE` in the environment before import. `fast` is available on Apple GPUs only.
+You can also set `MOJOLEARN_NUMERIC_MODE` in the environment before import.
 
 Estimators that take a `numeric_mode=` argument, such as
 `RandomForestClassifier`, override the process mode per call. Asking a family for a mode it does not ship raises

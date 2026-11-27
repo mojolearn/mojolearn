@@ -827,5 +827,61 @@ class HostGroupsOneOwner(unittest.TestCase):
             doc = rgb.build_plan(merged_source(), ["sm_89", "host"], 6)
         self.assertEqual(doc["host_groups"]["roles"], {"sm_89": "owner"})
 
+
+class BuildFailuresByName(unittest.TestCase):
+    """A red leg names each failed build by binding, tier and arch with its first compiler error lines (lane
+    xcc-retire-1, 2026-11-27: what only the release's cross-compile check gave before)."""
+
+    def logs(self, root, files):
+        d = Path(root) / "shard" / "3" / "report" / "build_logs"
+        d.mkdir(parents=True)
+        for name, text in files.items():
+            (d / name).write_text(text)
+
+    def test_failed_logs_are_named_and_passing_ones_are_not(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.logs(tmp, {
+                "identical_merged_nn_conv.log": "start x\n/root/mojolearn/bindings/nn/conv.mojo:12:3: error: no"
+                                                "\nnote\nerror: two\nend 2026 FAILED\n",
+                "identical_build_svm.log": "start x\nTIMEOUT after 1200s (x)\nend 2026 FAILED\n",
+                "host_merged_h1.log": "start x\ncompiling\nSTALLED: compiler CPU flat at 31 s for 240 s, no new output"
+                                      " (RELEASE_BINDING_STALL_SECONDS); stopping\nend 2026 FAILED\n",
+                "identical_merged_ok.log": "start x\nerror: printed but passed\nend 2026 OK\n"})
+            rows = rgb.build_failures([tmp, tmp], "cuda-sm_89")
+        self.assertEqual(len(rows), 3, rows)
+        conv = next(r for r in rows if "nn_conv" in r)
+        self.assertTrue(conv.startswith("BUILD FAILED cuda-sm_89 identical merged group nn_conv: "), conv)
+        self.assertIn("bindings/nn/conv.mojo:12:3: error: no | error: two", conv)
+        self.assertNotIn("/root/", conv)
+        svm = next(r for r in rows if "svm" in r)
+        self.assertIn("identical bindings/build_svm.sh: TIMEOUT after 1200s", svm)
+        stalled = next(r for r in rows if "h1" in r)
+        self.assertIn("host merged group h1: STALLED: compiler CPU flat", stalled)
+
+    def test_failed_shards_are_downloaded_and_bystanders_are_not(self):
+        failed = [("shard cuda-sm_89 3 identical:merged_build.sh:nn_conv", "failure", "", "", 0, "u3"),
+                  ("shard cuda-sm_89 4 identical:merged_build.sh:x", "cancelled", "", "", 0, "u4"),
+                  ("shard cuda-sm_89 5 identical:merged_build.sh:y", "failure", "", "", 0, "u5")]
+        got = []
+
+        def fake_download(run_id, name, out, failed_, conclusion=None):
+            got.append(name)
+            if name.endswith("-5"):
+                Path(out).mkdir(parents=True)
+                return
+            self.logs(out, {"identical_merged_nn_conv.log": "start\nx.mojo:1:1: error: boom\nend t FAILED\n"})
+
+        with tempfile.TemporaryDirectory() as tmp, unittest.mock.patch.object(rgb, "download", fake_download):
+            rows = rgb.failed_shard_findings(7, "sm_89", "cuda-sm_89", failed, Path(tmp) / "failed-shards")
+            gha = Path(tmp) / "GHA"
+            with unittest.mock.patch.object(rgb, "say", lambda m: None):
+                rgb.write_build_failures(gha, rows)
+            again = rgb.leg_build_failures("cuda-sm_89", Path(tmp))
+        self.assertEqual(got, ["shard-sm_89-3", "shard-sm_89-5"])
+        self.assertEqual(rows[0], "BUILD FAILED cuda-sm_89 identical merged group nn_conv: x.mojo:1:1: error: boom")
+        self.assertIn("shard cuda-sm_89 5", rows[1])
+        self.assertIn("no failed binding log", rows[1])
+        self.assertEqual(again, rows, "the json and the shard logs are counted once")
+
 if __name__ == "__main__":
     unittest.main()

@@ -14,7 +14,8 @@ from autograd.batch_source import (
     batch_source_fit_held, source_part_load, program_training_source_refuse, batch_source_part_of,
 )
 from autograd.model_checkpoint import model_layout
-from autograd.nn_optim import NN_OPT_LAMB, NN_SCHED_ARGS
+from autograd.weight_import import WI_LAYOUT_NATIVE, _expected, _slot_offset, _slots
+from autograd.nn_optim import NN_OPT_ADAFACTOR, NN_OPT_LAMB, NN_SCHED_ARGS
 from autograd.nn_pgseq import PgSeqTable, pgseq_table  # nn-blocks-pgseq
 from autograd.cast_ops import gather_labels
 from autograd.profile import ag_profile_on, ag_profile_reset, ag_profile_report
@@ -99,6 +100,22 @@ def model_fit_setup(prog: List[Int], ip: List[Int], fp: List[Float64]) raises ->
         ip[7], ip[8], ip[9] != 0, model_seed(ip, 10), ip[12],
         fp[6], Float32(fp[8]), ip[13] != 0, sched_args^, offsets^,
     )
+    if ip[3] == NN_OPT_ADAFACTOR:
+        var run = 0
+        for i in range(spec.n_layers()):  # driver-loop: parameter shapes, once per fit
+            for slot in range(_slots(spec, i)):
+                var dims = _expected(spec, i, slot, WI_LAYOUT_NATIVE)
+                if len(dims) != 1 and len(dims) != 2:
+                    raise Error("ValueError: Sequential Adafactor supports vector and matrix parameters; layer "
+                                + String(i) + " has a rank-" + String(len(dims)) + " parameter")
+                var off = _slot_offset(spec, i, slot)
+                var cols = dims[1] if len(dims) == 2 else 0
+                var group = 0
+                if grouped:
+                    while run + 1 < groups.runs() and off >= groups.run_hi[run]:
+                        run += 1
+                    group = groups.run_group[run]
+                cfg.af_tensors.append((off, dims[0], cols, group))
     cfg.groups = groups^
     return ModelFitSetup(spec^, cfg^)
 

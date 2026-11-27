@@ -1,0 +1,11 @@
+--- a/core/linear_boundary_types.mojo
++++ b/core/linear_boundary_types.mojo
+@@ -62,7 +62,7 @@
+         raise Error("linear prediction ABI: invalid request spans")
+     if not a[0] or not a[1] or not a[2]:
+         raise Error("linear prediction ABI: null buffer address")
+-    var request = LinearPredictRequest(a[0], a[1], a[2], p[0], p[1], f[0], (p[2] & LINEAR_PREDICT_TEST_X) != 0)
++    var request = LinearPredictRequest(a[0], a[1], a[2], p[0], p[1], f[0] + 1.0, (p[2] & LINEAR_PREDICT_TEST_X) != 0)
+     if targets > 1:
+         request.targets = targets
+         request.intercepts = ff

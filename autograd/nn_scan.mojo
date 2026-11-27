@@ -98,6 +98,8 @@ struct ScanCell(Movable):
     var node_fs: List[List[Float32]]
     var drop_nodes: List[Int]
     var drop_seed: List[UInt64]
+    #: Session-local rule index per custom node, -1 for a primitive. Empty for ordinary cells.
+    var custom_ids: List[Int]
     #: lane activation-ckpt: the checkpoint segment length (format 3), 0 for a plain scan (format 2)
     var every: Int
 
@@ -113,6 +115,7 @@ struct ScanCell(Movable):
         self.n_fs = 0
         self.node_ints = List[List[Int]]()
         self.node_fs = List[List[Float32]]()
+        self.custom_ids = List[Int]()
         self.drop_nodes = List[Int]()
         self.drop_seed = List[UInt64]()
 
@@ -159,13 +162,26 @@ def scan_host_code_name(code: Int) -> String:
     if code == OPS_SCAN or code == OPS_SCAN_CKPT:
         return "a scan"
     if code == OPS_CUSTOM_VJP:
-        # nn-blocks-zerocost: the cell runs through the op runner's nested instance, which has no custom branch
         return "a custom operation"
     if code == _SCAN_CKPT_CODE:
         # activation-ckpt: likewise (the nested instance has no checkpoint branch); a scan checkpoints its own
         # steps with checkpoint_every
         return "a checkpoint"
     return ""
+
+
+# Replace a same-shaped unary custom rule in a scanned cell by the ordinary identity gradient.
+comptime SCAN_SABOTAGE_CUSTOM_RULE = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_CUSTOM_RULE"]()
+comptime SCAN_SABOTAGE_CUSTOM_RULE_HOST = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_CUSTOM_RULE_HOST"]()
+
+
+def scan_check_custom_program(p: OpsProgram, role: String) raises:
+    """A cell's custom rule may only use operations on device values, in both directions."""
+    for k in range(p.n_nodes()):  # driver-loop: over custom program nodes at bind
+        var name = scan_host_code_name(p.code[k])
+        if name.byte_length() > 0:
+            raise Error("ValueError: scan: a custom operation's " + role + " program holds " + name
+                        + " (node " + String(k) + "); scan cells operate on device values")
 
 
 def scan_check_cell(cell: OpsProgram) raises:
@@ -192,6 +208,8 @@ def scan_check_cell(cell: OpsProgram) raises:
             raise Error("ValueError: scan: the cell reads declared state (Session.state), which it would write on"
                         + " the host's schedule; a scan cell reads weights only")
     for k in range(cell.n_nodes()):  # driver-loop: over cell nodes (codes)
+        if cell.code[k] == OPS_CUSTOM_VJP:
+            continue  # The session checks both embedded graphs before it caches their custom rule.
         var name = scan_host_code_name(cell.code[k])
         if name.byte_length() > 0:
             raise Error("ValueError: scan: the cell holds " + name + " (node " + String(k)
@@ -342,10 +360,12 @@ def scan_decode(ints: List[Int], fs: List[Float32]) raises -> ScanCell:
     scan_check_cell(cell)
     var got = ScanCell()
     _split_nodes(cell, got.node_ints, got.node_fs)
-    for k in range(cell.n_nodes()):  # driver-loop: over cell nodes (dropout ones), once per decoded node
+    for k in range(cell.n_nodes()):  # driver-loop: collect the nodes needing per-session bindings
         if cell.code[k] == _SCAN_DROPOUT_CODE and len(got.node_ints[k]) >= 3:
             got.drop_nodes.append(k)
             got.drop_seed.append((UInt64(got.node_ints[k][1]) << 32) | UInt64(got.node_ints[k][0] & 0xFFFFFFFF))
+        elif cell.code[k] == OPS_CUSTOM_VJP and len(got.custom_ids) == 0:
+            got.custom_ids = List[Int](length=cell.n_nodes(), fill=-1)
     got.cell = cell^
     got.n_state = n_state
     got.reverse = reverse

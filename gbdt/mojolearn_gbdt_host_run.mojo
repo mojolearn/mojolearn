@@ -47,6 +47,7 @@ from gbdt.host.gbdt_oracle import (
     gbdt_host_fit_eval,
     gbdt_host_model_text,
 )
+from gbdt.targets.ranking_options import OBJECTIVE_QUERY_SOFTMAX, OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG, is_lightgbm_ranking, uses_grouped_rank_workspace, uses_grouped_rank_workspace_name, check_rank_estimator, check_query_softmax_inputs
 from gbdt.host.gbdt_oracle_pointwise_rank import gbdt_ranking_pointwise_host_fit
 from gbdt.host.gbdt_oracle_losses import (
     GBDT_LEAF_EXACT,
@@ -142,6 +143,7 @@ from gbdt.data.ordered_plan import (
 )
 from gbdt.host.gbdt_oracle_pointwise import gbdt_pointwise_host_fit
 from gbdt.host.gbdt_oracle_ctr import (
+    GbdtCtrHostFit,
     gbdt_ctr_column_kinds,
     gbdt_ctr_host_fit,
     gbdt_ctr_host_model_text,
@@ -236,6 +238,12 @@ def _pointwise_objective(loss: String) -> Int:
         return GBDT_OBJ_PAIR_LOGIT
     if loss == String("YetiRank"):
         return GBDT_OBJ_YETI_RANK
+    if loss == "lambdarank":
+        return OBJECTIVE_LAMBDARANK
+    if loss == "QuerySoftMax":
+        return OBJECTIVE_QUERY_SOFTMAX
+    if loss == "rank_xendcg":
+        return OBJECTIVE_RANK_XENDCG
     return -1
 
 
@@ -323,6 +331,8 @@ def _resolve_pointwise_loss(
         iterations = gradient
     if iterations_override >= 0:
         iterations = iterations_override
+    if uses_grouped_rank_workspace(objective):
+        check_rank_estimator(objective, method, GBDT_LEAF_NEWTON, iterations)
     if method == GBDT_LEAF_NEWTON:
         if objective == GBDT_OBJ_QUANTILE or objective == GBDT_OBJ_MAE or objective == GBDT_OBJ_LOGLINQUANTILE or objective == GBDT_OBJ_MAPE:
             raise Error("Newton leaves estimation method is not supported for " + name + " loss function")
@@ -483,7 +493,7 @@ def _gbdt_fit_pointwise_arm(
     # MultiRMSE never reach this arm: the caller sends them to the multi-output fit
     # with the doc-parallel searcher (`gbdt_multi_host_fit(
     # use_pointwise_searcher=True)`), as the device trains them now
-    if objective < 0 or objective == GBDT_OBJ_QUERY_RMSE or objective == GBDT_OBJ_PAIR_LOGIT or objective == GBDT_OBJ_YETI_RANK:
+    if objective < 0 or objective == GBDT_OBJ_QUERY_RMSE or objective == GBDT_OBJ_PAIR_LOGIT or objective == GBDT_OBJ_YETI_RANK or uses_grouped_rank_workspace(objective):
         raise Error(
             "the pointwise searcher's one-output arm takes Logloss, RMSE,"
             " CrossEntropy and the pointwise losses; got loss='" + loss + "'"
@@ -802,7 +812,7 @@ def _gbdt_fit_ordered_arm(
             " (catboost_options.cpp:972-978); Cosine and NewtonCosine are"
             " the two with an ordered kernel"
         )
-    if loss == String("QueryRMSE") or loss == String("PairLogit") or loss == String("YetiRank"):
+    if loss == String("QueryRMSE") or loss == String("PairLogit") or loss == String("YetiRank") or uses_grouped_rank_workspace_name(loss):
         raise Error(
             "boosting_type='Ordered' with loss='" + loss + "' is not"
             " implemented here: the reference's folds follow the query"
@@ -959,7 +969,7 @@ def _gbdt_fit_ordered_arm(
                 "unknown loss '" + loss + "': this implementation trains RMSE, Logloss,"
                 " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
                 " Expectile, Tweedie, Huber, MultiClass, MultiClassOneVsAll,"
-                " QueryRMSE, PairLogit, YetiRank and MultiRMSE"
+                " QueryRMSE, PairLogit, YetiRank, MultiRMSE, lambdarank and rank_xendcg"
             )
         if leaf_method == GBDT_LEAF_EXACT:
             # an explicit Exact under Ordered: `set_leaves_estimation_default`'s
@@ -1133,7 +1143,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             + String(n_class_weights)
         )
     var fixed_and_weights = 36 + n_class_weights
-    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 4 and len(params) != fixed_and_weights + 5 and len(params) != fixed_and_weights + 8:
+    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 4 and len(params) != fixed_and_weights + 5 and len(params) != fixed_and_weights + 7 and len(params) != fixed_and_weights + 8 and len(params) != fixed_and_weights + 10:
         raise Error(
             "gbdt_fit: params must hold 36 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction, then the group sizes address and group count, then the pairs address, pair count and pair weights address values ("
             + String(36 + n_class_weights)
@@ -1214,6 +1224,10 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # checked, refused and resolved in the words and by the rule
     # `gbdt/train.mojo::train` uses, so the CPU column refuses exactly where
     # the device column does and QueryRMSE sees the same queries
+    var eval_group_sizes = List[Int]()
+    var tail = params.group_tail(fixed_and_weights)
+    if tail.eval_count > 0:
+        eval_group_sizes = gbdt_host_group_sizes(u32_ptr(tail.eval_sizes), tail.eval_count, params.i(20))
     var tail_loss = params.strs[0]
     var tail_rows = params.i(0)
     var host_group_sizes = List[Int]()
@@ -1226,11 +1240,11 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             )
         var gp = u32_ptr(params.i(fixed_and_weights + 3))
         host_group_sizes = gbdt_host_group_sizes(gp, n_groups, tail_rows)
-        if tail_loss != String("QueryRMSE") and tail_loss != String("PairLogit") and tail_loss != String("YetiRank"):
+        if tail_loss != String("QueryRMSE") and tail_loss != String("PairLogit") and tail_loss != String("YetiRank") and not uses_grouped_rank_workspace_name(tail_loss):
             raise Error(
                 "group_id is read only by the querywise and pairwise losses"
                 " (QueryRMSE, PairLogit and YetiRank are trained here;"
-                " QuerySoftMax and QueryCrossEntropy are not implemented);"
+                " QueryCrossEntropy is not implemented);"
                 " loss='" + tail_loss + "' does not use it, so it is refused by"
                 " name rather than carried and ignored"
             )
@@ -1239,7 +1253,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     var host_pair_winners = List[UInt32]()
     var host_pair_losers = List[UInt32]()
     var host_pair_weights = List[Float32]()
-    if len(params) == fixed_and_weights + 8:
+    if tail.training_pairs:
         var n_pairs = params.i(fixed_and_weights + 6)
         if n_pairs != -1 and n_pairs < 1:
             raise Error(
@@ -1257,6 +1271,10 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             "pairs are read only by loss='PairLogit' here; loss='" + tail_loss
             + "' does not use them"
         )
+    if uses_grouped_rank_workspace_name(tail_loss) and len(host_group_sizes) == 0:
+        if tail_loss == "QuerySoftMax":
+            raise Error("QuerySoftMax requires group_id")
+        raise Error("lambdarank and rank_xendcg require group_id")
     if tail_loss == String("PairLogit") and len(host_group_sizes) == 0:
         if len(host_pair_winners) > 0:
             raise Error(
@@ -1366,7 +1384,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             "unknown loss '" + loss + "': this implementation trains RMSE, Logloss,"
             " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
             " Expectile, Tweedie, Huber, MultiClass, MultiClassOneVsAll,"
-            " QueryRMSE, PairLogit, YetiRank and MultiRMSE"
+            " QueryRMSE, PairLogit, YetiRank, MultiRMSE, lambdarank and rank_xendcg"
         )
     # lane gbdt-cpu-rest-4-pwl (2026-11-23): the pointwise searcher on a
     # one-output (or a multi-output) loss takes its own arm BEFORE the
@@ -1378,6 +1396,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         pw_objective == GBDT_OBJ_QUERY_RMSE
         or pw_objective == GBDT_OBJ_PAIR_LOGIT
         or pw_objective == GBDT_OBJ_YETI_RANK
+        or uses_grouped_rank_workspace(pw_objective)
     )
     # lane gbdt-cpu-rest-4-simple (2026-11-23): Simple's admission, the
     # device's (`train` calls the same two bodies right after
@@ -1434,12 +1453,8 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # Depthwise and Lossguide trees through the non-symmetric driver
     # (gbdt_oracle_depthwise.mojo); the grouped ones are SymmetricTree only
     # on both columns, in `train`'s words
-    var pw_grouped = (
-        pw_objective == GBDT_OBJ_QUERY_RMSE
-        or pw_objective == GBDT_OBJ_PAIR_LOGIT
-        or pw_objective == GBDT_OBJ_YETI_RANK
-    )
-    if pw_grouped and grow_code != 0:
+    var pw_grouped = pw_grouped_loss
+    if pw_grouped and not is_lightgbm_ranking(pw_objective) and grow_code != 0:
         raise Error(
             "loss='" + loss + "' is implemented on SymmetricTree only here;"
             " grow_policy=" + String("Depthwise" if grow_code == 1 else "Lossguide")
@@ -1456,11 +1471,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # CPU binding compilation passed on Apple M1 at O0 (2026-10-28);
     # runtime/identity remain pending. Existing ranking CPU derivatives are
     # shared; this owner performs the distinct doc-parallel tree search.
-    var ranking_pointwise = use_pointwise and (
-        pw_objective == GBDT_OBJ_QUERY_RMSE
-        or pw_objective == GBDT_OBJ_PAIR_LOGIT
-        or pw_objective == GBDT_OBJ_YETI_RANK
-    )
+    var ranking_pointwise = use_pointwise and pw_grouped_loss
     # The grouped pointwise search's leaf method, admitted where the device
     # fit admits it, in its words (gbdt/options/catboost_options.mojo).
     querywise_pointwise_leaf_check(use_pointwise, ranking_pointwise, GBDT_LEAF_NEWTON if leaf_method == -1 else leaf_method)
@@ -1647,11 +1658,11 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # (`train`'s `fold_class_weights` at the binarized target `y > 0.5`,
     # the same `class_weight_body` the host column calls); RMSE, the grouped
     # losses and MultiRMSE refuse them on both columns in `train`'s words
+    if pw_grouped and n_class_weights != 0:
+        raise Error("class_weights do not apply to loss='" + loss + "'")
     if grow_code == 0 and n_class_weights != 0:
         if is_multi_rmse:
             raise Error("class_weights do not apply to loss='MultiRMSE'")
-        if pw_grouped:
-            raise Error("class_weights do not apply to loss='" + loss + "'")
         if is_rmse:
             raise Error(
                 "class weights take effect only with a classification loss,"
@@ -1680,23 +1691,12 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             any_cat_flag = True
         if (flags[f] & UInt32(2)) != UInt32(0):
             any_one_hot_flag = True
+    if pw_objective == OBJECTIVE_QUERY_SOFTMAX:
+        check_query_softmax_inputs(any_cat_flag or any_one_hot_flag, n_eval_rows != 0)
     if is_multi_rmse and any_cat_flag:
         raise Error(
             "loss='MultiRMSE' with cat_features is not carried here:"
             " the CTR target binarization reads one target per row"
-        )
-    if pw_grouped and any_cat_flag:
-        raise Error(
-            "loss='" + loss + "' with cat_features is not implemented"
-            " here: the reference shuffles whole queries for its CTR"
-            " permutations (permutation.cpp:9-11,"
-            " GenerateQueryDocsOrder), which this implementation does"
-            " not restate"
-        )
-    if pw_grouped and any_one_hot_flag:
-        raise Error(
-            "loss='" + loss + "' with one_hot_features is not implemented"
-            " here"
         )
     # lane gbdt-cpu-rest-4-cat (2026-11-23): every other categorical or
     # one-hot fit trains on the host now, through the one categorical
@@ -1721,21 +1721,14 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # non-symmetric driver, whose held-out arm reads `_loss_value`
     # lane gbdt-cpu-rest-2 (2026-11-23): and the symmetric pointwise losses
     # (gbdt_oracle_losses.mojo::gbdt_losses_host_fit, the held-out arm of
-    # gbdt_host_boost); the grouped losses refuse an eval set on both
-    # columns, in `train`'s words
+    # gbdt_host_boost). Grouped validation receives its own query layout.
     if is_multi_rmse and n_eval_rows != 0:
         raise Error(
             "loss='MultiRMSE' with eval_set is not carried here: the"
             " held-out arm's target is one value per row"
         )
-    if pw_grouped and n_eval_rows != 0:
-        raise Error(
-            "loss='" + loss + "' with eval_set is not implemented here: the"
-            " held-out loss needs the eval pool's own grouping"
-        )
-    # (lane gbdt-cpu-rest-4, 2026-11-23: the by-name refusal here had no case
-    # left: an eval set on MultiRMSE and the grouped losses refuses above in
-    # `train`'s words; every other loss has its held-out arm)
+    if pw_grouped and n_eval_rows != 0 and len(eval_group_sizes) == 0:
+        raise Error("grouped validation needs one held-out query id per eval row")
     var od = load_overfitting_detector_options(od_type, od_pvalue, od_wait)
     var od_kind = od.od_type
     # (lane gbdt-cpu-rest-4, 2026-11-23: the by-name refusal here had no case
@@ -2178,7 +2171,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 var pw_cat = gbdt_ctr_host_fit_non_symmetric(
                     x, y, n_rows, n_features, pw_tp, flags, permutation_count,
                     ctr_permutation_id, pw_ev^, max_ctr_complexity, pw_start,
-                    row_weights,
+                    row_weights, host_group_sizes, eval_group_sizes, tail.eval_at,
                 )
                 text = gbdt_text_with_bias(
                     gbdt_ctr_host_ns_model_text(pw_cat),
@@ -2191,7 +2184,8 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 test_losses = pw_cat.model.test_losses.copy()
                 return _fit_outcome(text^, best_iteration, stopped_early, losses^, test_losses^, fit_loop)
             var pw_ns = gbdt_host_fit_non_symmetric(
-                x, y, n_rows, n_features, pw_tp, pw_ev^, pw_start, row_weights
+                x, y, n_rows, n_features, pw_tp, pw_ev^, pw_start, row_weights,
+                host_group_sizes, eval_group_sizes, tail.eval_at,
             )
             text = gbdt_text_with_bias(
                 gbdt_host_ns_model_text(pw_ns), len(pw_ns.losses), pw_start
@@ -2202,54 +2196,37 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             stopped_early = pw_ns.stopped_early
             test_losses = pw_ns.test_losses.copy()
             return _fit_outcome(text^, best_iteration, stopped_early, losses^, test_losses^, fit_loop)
-        if not ranking_pointwise:
-            # the greedy symmetric searcher over the pointwise loss, with its
-            # held-out arm and the per-tree feature sample (lane
-            # gbdt-cpu-rest-2, 2026-11-23)
-            var pw_sym_ev = _gbdt_host_eval_arm(
-                eval_x_address, eval_y_address, n_eval_rows, n_features,
-                od_kind, od.auto_stop_p_value, od.iterations_wait,
-                use_best_model, best_model_min_trees,
-            )
-            # lane gbdt-cpu-rest-4-cat (2026-11-23): categorical and one-hot
-            # columns (`flags`), `train`'s CTR options with them; the
-            # model text through the CTR writer and its `bias` record
-            var pw_fit = gbdt_losses_host_fit(
-                x, y, n_rows, n_features, p, pw_loss, pw_sym_ev^,
-                host_group_sizes, host_pair_winners, host_pair_losers,
-                host_pair_weights, pw_start, random_strength, row_weights,
-                feature_fraction, score_function, flags, permutation_count,
-                ctr_permutation_id, max_ctr_complexity,
-            )
-            losses = pw_fit.fit.model.losses.copy()
-            best_iteration = pw_fit.fit.eval.best_iteration
-            fit_loop = pw_fit.fit.model.fit_loop.copy()
-            stopped_early = pw_fit.fit.eval.stopped_early
-            test_losses = pw_fit.fit.eval.test_losses.copy()
-            if len(flags) != 0:
-                text = gbdt_text_with_bias(
-                    gbdt_ctr_host_model_text(pw_fit), len(losses), pw_start
-                )
-            else:
-                text = gbdt_rmse_host_model_text(
-                    GbdtRmseHostFit(_fit_model(pw_fit.fit), pw_start)
-                )
-            return _fit_outcome(text^, best_iteration, stopped_early, losses^, test_losses^, fit_loop)
-        # the grouped pointwise searcher (gbdt_oracle_pointwise_rank.mojo)
-        var pw_model = gbdt_ranking_pointwise_host_fit(
+        var pw_sym_ev = _gbdt_host_eval_arm(
+            eval_x_address, eval_y_address, n_eval_rows, n_features, od_kind,
+            od.auto_stop_p_value, od.iterations_wait, use_best_model, best_model_min_trees,
+        )
+        var pw_fit: GbdtCtrHostFit
+        if ranking_pointwise:
+            pw_fit = gbdt_ranking_pointwise_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
                 host_pair_winners, host_pair_losers, host_pair_weights,
-                score_function == GBDT_HOST_SCORE_NEWTON_COSINE
-                or score_function == GBDT_HOST_SCORE_NEWTON_L2,
-                score_function == GBDT_HOST_SCORE_COSINE
-                or score_function == GBDT_HOST_SCORE_NEWTON_COSINE,
-                random_strength, row_weights, feature_fraction,
+                score_function == GBDT_HOST_SCORE_NEWTON_COSINE or score_function == GBDT_HOST_SCORE_NEWTON_L2,
+                score_function == GBDT_HOST_SCORE_COSINE or score_function == GBDT_HOST_SCORE_NEWTON_COSINE,
+                random_strength, row_weights, feature_fraction, pw_sym_ev^, eval_group_sizes,
+                flags, permutation_count, ctr_permutation_id, max_ctr_complexity, tail.eval_at,
             )
-        losses = pw_model.losses.copy()
-        best_iteration = pw_model.best_iteration
-        fit_loop = pw_model.fit_loop.copy()
-        stopped_early = pw_model.stopped_early
-        text = gbdt_rmse_host_model_text(GbdtRmseHostFit(pw_model^, pw_start))
+        else:
+            pw_fit = gbdt_losses_host_fit(
+                x, y, n_rows, n_features, p, pw_loss, pw_sym_ev^,
+                host_group_sizes, host_pair_winners, host_pair_losers, host_pair_weights,
+                pw_start, random_strength, row_weights, feature_fraction, score_function,
+                flags, permutation_count, ctr_permutation_id, max_ctr_complexity, eval_group_sizes, tail.eval_at,
+            )
+        losses = pw_fit.fit.model.losses.copy()
+        best_iteration = pw_fit.fit.eval.best_iteration
+        fit_loop = pw_fit.fit.model.fit_loop.copy()
+        stopped_early = pw_fit.fit.eval.stopped_early
+        test_losses = pw_fit.fit.eval.test_losses.copy()
+        if len(flags) != 0:
+            text = gbdt_text_with_bias(gbdt_ctr_host_model_text(pw_fit), len(losses), pw_start)
+        else:
+            text = gbdt_rmse_host_model_text(GbdtRmseHostFit(_fit_model(pw_fit.fit), pw_start))
+        return _fit_outcome(text^, best_iteration, stopped_early, losses^, test_losses^, fit_loop)
     elif is_rmse and grow_code == 0 and len(flags) == 0:
         # the numeric RMSE fit: the one symmetric loop at GBDT_BOOST_RMSE
         # (gbdt_oracle.mojo::gbdt_host_boost; the twin loop

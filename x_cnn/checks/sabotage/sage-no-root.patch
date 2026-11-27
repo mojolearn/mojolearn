@@ -1,0 +1,12 @@
+diff --git a/bindings/xcnn_graph_native_door.mojo b/bindings/xcnn_graph_native_door.mojo
+--- a/bindings/xcnn_graph_native_door.mojo
++++ b/bindings/xcnn_graph_native_door.mojo
+@@ -1039,7 +1039,7 @@
+     graph_run_check_aggr(aggr)
+     py_setitem(fields, nk[].k_aggr, args[2])
+     py_setitem(fields, nk[].k_normalize, Bool(py=py_call(b.bool, args[3])))
+-    py_setitem(fields, nk[].k_root_weight, Bool(py=py_call(b.bool, args[4])))
++    py_setitem(fields, nk[].k_root_weight, True)  # SABOTAGE: ignore the disabled graph option
+     var lin_l = _linear_new(d, f, PythonObject(Int(stream.child_seed())), mode, device, context)
+     if not Bool(py=py_item(fields, nk[].k_bias)):
+         py_setitem(_fields(lin_l), nk[].k_bias_, xcnn_host_f32([f], context))

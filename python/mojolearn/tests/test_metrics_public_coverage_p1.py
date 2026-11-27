@@ -3,7 +3,7 @@
 
 Every metric is called through ``mojolearn.metrics`` on small data and checked
 against scikit-learn; every metric refuses inputs whose lengths disagree, and
-the float metrics refuse float64 scores (callers cast explicitly).
+the float metrics convert float64 scores to float32 once (Andrew, 2026-11-27).
 """
 import warnings
 
@@ -140,12 +140,19 @@ def test_metric_refuses_length_mismatch(name):
         fn(first, second[:-1], **KWARGS.get(name, {}))
 
 
+def _same_result(a, b):
+    if isinstance(a, (tuple, list)):
+        return len(a) == len(b) and all(_same_result(x, y) for x, y in zip(a, b))
+    return np.asarray(a).tobytes() == np.asarray(b).tobytes()
+
+
 @pytest.mark.parametrize("name", FLOAT_SCORE)
-def test_metric_refuses_float64_scores(name):
+def test_metric_converts_float64_scores(name):
+    # float64 scores are converted to float32 once at the native boundary:
+    # the result is the float32 call's, bit for bit.
     fn = getattr(mt, name)
     assert fn is getattr(_expansion_metrics, name)
     first, second = CASES[name]
-    if first.dtype == np.float32:
-        first = first.astype(np.float64)
-    with pytest.raises(TypeError, match="float32"):
-        fn(first, second.astype(np.float64), **KWARGS.get(name, {}))
+    wide_first = first.astype(np.float64) if first.dtype == np.float32 else first
+    kw = KWARGS.get(name, {})
+    assert _same_result(fn(wide_first, second.astype(np.float64), **kw), fn(first, second, **kw))

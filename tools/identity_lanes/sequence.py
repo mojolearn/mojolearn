@@ -234,6 +234,27 @@ def _(ml, X, yc, yr, Xh=None):
                      scheduled=c["params"]))
 
 
+@lane("sequence-adafactor-maximize")
+def _(ml, X, yc, yr, Xh=None):
+    """An exactly representable ascent update with nonzero decoupled decay."""
+    vector = np.array([1, -1, 1, -1], dtype=np.float32)
+    matrix = vector.reshape(2, 2).copy()
+    grad = np.array([1, 1, -1, -1], dtype=np.float32)
+    opt = ml.Adafactor([vector, matrix], maximize=True, lr=0.25, weight_decay=0.5)
+    opt.step([grad, grad.reshape(2, 2)])
+    # RMS(parameter) and RMS(update) are 1. Decay scales by 7/8,
+    # then the signed step adds a quarter of the gradient.
+    expected = np.array([1.125, -0.625, 0.625, -1.125], dtype=np.float32)
+    parts = dict(vector=_h(vector), matrix=_h(matrix))
+    mismatch = _oracle_mismatch(
+        ("vector ascent", vector, "expected vector", expected),
+        ("matrix ascent", matrix, "expected matrix", expected.reshape(2, 2)),
+    )
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts)
+
+
 @lane("sequence-lamb")
 def _(ml, X, yc, yr, Xh=None):
     """LAMB at timm's defaults (global clip 1.0, weight decay 0.01) and with
@@ -459,7 +480,7 @@ _batch_decl(_rows_calls("forward", sl=slice(0, 256)), "sequence-layernorm", revi
 _batch_decl(_rows_calls("__call__", sl=np.s_[:256, :16]), "sequence-moe", revision="expansion-batch-2026-09-28-v1")
 _batch_decl("n/a:parameter-coupled optimizer (Adafactor factors second moments across tensor rows and "
             "columns and scales updates by tensor RMS; splitting parameter rows changes the algorithm)",
-            "sequence-adafactor", revision="expansion-batch-2026-09-28-v1")
+            "sequence-adafactor", "sequence-adafactor-maximize", revision="expansion-batch-2026-09-28-v1")
 _batch_decl("n/a:parameter-coupled optimizer (LAMB uses tensor norms for its trust ratio and global "
             "gradient clipping; a sliced parameter registry is a different optimization problem)",
             "sequence-lamb", revision="expansion-batch-2026-09-28-v1")

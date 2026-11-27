@@ -541,8 +541,9 @@ def mx_scores(source: PythonObject, n: Int, caller: String, ndim: Int, name: Str
         return MxMat(captured[0], Int(py=captured[1]), Int(py=captured[2]), Int(py=captured[3]))
     var got = mx_f32_view(source, name, context)
     var view = got[0]
-    if got[1] != "<f4":
-        raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32; cast explicitly")
+    # float64 is converted once by the shared admission cast below (Andrew, 2026-11-27).
+    if got[1] != "<f4" and got[1] != "<f8":
+        raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32 or float64")
     var nd = Int(py=view.ndim)
     var rows = Int(py=view.shape[0]) if nd >= 1 else 0
     var cols = Int(py=view.shape[1]) if nd >= 2 else 1

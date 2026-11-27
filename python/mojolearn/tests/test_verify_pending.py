@@ -1,5 +1,8 @@
 import types
 import json
+import os
+import subprocess
+import sys
 
 import pytest
 
@@ -57,6 +60,30 @@ def test_saved_model_entries_have_installed_commands_and_parallel_scope_is_expli
         assert check['models']
     assert not any(name.startswith('par-') for name in r['lanes'])
     assert not any(row['release_qualified'] for row in r['lanes'].values())
+
+
+def test_public_verify_lists_neural_lanes_run_by_the_wheel_smoke(tmp_path):
+    path = tmp_path / "coverage.json"
+    subprocess.run([sys.executable, "-m", "mojolearn", "verify", "--coverage", "--json-out", str(path)],
+                   env={**os.environ, "MOJOLEARN_NUMERIC_MODE": "identical"}, check=True,
+                   stdout=subprocess.DEVNULL)
+    report = json.loads(path.read_text())
+    inventory = report["lanes"]
+    names = {"sequence-optim-adafactor", "x-cnn-gnn-disabled-options", "nn-ep-cnn-layers",
+             "nn-ep-cnn-fits", "ops-attention-qkv", "ops-scan-cell", "nn-cbw-custom-vjp",
+             "sequence-mlp-classifier-partial", "sequence-mlp-regressor-partial",
+             "sequence-adafactor-maximize", "sequence-projected-lstm", "sequence-blocks-projected-lstm"}
+    harness = va.load_harness()
+    assert names <= set(harness.record_lanes())
+    for lane in names:
+        assert inventory[lane]["execution"]["cpu_route_declared"], lane
+        assert harness.one_sided(lane) is None, lane
+        arms = inventory[lane]["native_fault_arms"]
+        assert set(arms) == {"cpu", "gpu"} and all(arms.values()), lane
+    endpoints = {row["endpoint"]: row for row in report["public_endpoints"]["endpoints"]}
+    for estimator, lane in (("MLPClassifier", "sequence-mlp-classifier-partial"),
+                            ("MLPRegressor", "sequence-mlp-regressor-partial")):
+        assert lane in endpoints[f"mojolearn.{estimator}.partial_fit"]["lanes"]
 
 
 def test_new_selection_flags_dispatch_and_reject_ambiguous_model_scope():

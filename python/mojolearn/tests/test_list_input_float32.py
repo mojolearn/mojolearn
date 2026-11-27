@@ -1,6 +1,7 @@
 """Nested Python lists reach the float32-only estimators (the scalers) as
 float32 through their native admission, with the SAME bytes as the float32
-Array of the same list; a float64 array is still refused by name.
+Array of the same list; a float64 array is converted to float32 once
+(round-to-nearest-even), the same bytes as the float32 Array of its values.
 
 Host-side only: the input checks run before any device work.
 """
@@ -29,9 +30,14 @@ def test_float32_list_rows_are_one_rounding():
     assert Array.from_list(_TARGET, dtype="<f4").tobytes() == array.array("f", _TARGET).tobytes()
 
 
-def test_float64_buffer_is_refused():
-    with pytest.raises(TypeError, match="float32"):
-        StandardScaler().fit(Array.from_list(_ROWS, dtype="<f8"))
+def test_float64_buffer_is_converted_once():
+    # Andrew, 2026-11-27: float64 is converted at the native boundary with
+    # round-to-nearest-even, the bytes of the float32 Array of the same values
+    # (_TIE is the tie case where a second rounding rule would differ).
+    wide = StandardScaler().fit(Array.from_list(_ROWS, dtype="<f8"))
+    narrow = StandardScaler().fit(Array.from_list(_ROWS, dtype="<f4"))
+    for name in ("mean_", "var_", "scale_"):
+        assert getattr(wide, name).tobytes() == getattr(narrow, name).tobytes(), name
 
 
 @pytest.mark.parametrize("scaler", [StandardScaler, MinMaxScaler])

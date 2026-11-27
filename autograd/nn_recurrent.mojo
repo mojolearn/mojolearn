@@ -29,7 +29,8 @@ the output's rows at time T - 1 (forward) or 0 (reverse): no launch.
 """
 from std.sys.compile import is_defined
 from sequence.exec_trait import Exec
-from sequence.ops import FP
+from sequence.ops import Args, FP
+from autograd.model_ops import OP_AGM_PAD_MASK, OP_AGM_PAD_MASK_BT
 from autograd.tape import Tape, Tensor
 from autograd.rankn import ShapeN
 from autograd.rankn_api import rn_shape
@@ -45,6 +46,23 @@ def nn_rnn_reverse_lengths(lengths: Optional[FP]) -> Optional[FP]:
     comptime if NN_RECURRENT_SABOTAGE_REVERSE:
         return None
     return lengths
+
+
+def nn_rnn_pad_mask[E: Exec, time_major: Bool](
+    mut tape: Tape, mut ex: E, lengths: FP, T: Int, B: Int,
+) raises -> Tensor:
+    """One float32 padding flag per step and row, in the calling layer's layout."""
+    var mask = tape.reserve(ex, T * B)
+    var cfg = Args()
+    cfg.p0 = lengths
+    cfg.p1 = mask
+    cfg.i0 = B if time_major else T
+    comptime if time_major:
+        ex.launch[OP_AGM_PAD_MASK](cfg, T * B)
+        return tape.variable(ex, mask, T, B, False)
+    else:
+        ex.launch[OP_AGM_PAD_MASK_BT](cfg, T * B)
+        return tape.variable(ex, mask, B, T, False)
 
 
 def nn_rnn_final[E: Exec](mut tape: Tape, mut ex: E, y: Tensor, T: Int, B: Int, H: Int, at: Int) raises -> Tensor:

@@ -45,7 +45,7 @@ from sequence.ops import (
     OPT_SGD, OPT_ADAM, OPT_ADAMW, OPT_LION, OPT_ADAMAX, OPT_NADAM, OPT_RMSPROP, OPT_ADAGRAD,
 )
 # nn-blocks-pgseq: Sequential.compile's LAMB takes per-group betas and eps (autograd/nn_pgseq.mojo)
-from autograd.nn_optim import NN_OPT_LAMB
+from autograd.nn_optim import NN_OPT_ADAFACTOR, NN_OPT_LAMB
 
 
 # Sabotage arms (tools/identity_lanes/coverage_sabotage.tsv coverage-autograd-pg_clip_per_group_gpu / _cpu and
@@ -108,6 +108,8 @@ def pg_kind_name(kind: Int) -> String:
         return "nadam"
     if kind == NN_OPT_LAMB:
         return "lamb"
+    if kind == NN_OPT_ADAFACTOR:
+        return "adafactor"
     return "optimizer " + String(kind)
 
 
@@ -128,6 +130,8 @@ def pg_key_taken(kind: Int, key: String) -> Bool:
         return key == "betas" or key == "beta1" or key == "beta2"
     if kind == OPT_RMSPROP:
         return key == "alpha" or key == "eps" or key == "momentum" or key == "centered"
+    if kind == NN_OPT_ADAFACTOR:
+        return key == "eps"
     if kind == OPT_ADAGRAD:
         return key == "eps" or key == "lr_decay" or key == "initial_accumulator_value"
     return False

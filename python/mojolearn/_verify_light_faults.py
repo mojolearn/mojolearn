@@ -47,7 +47,9 @@ def inject(name):
         def broken(self, a, b):
             # A fixed-shape constant also broadcasts run_dynamic back to the
             # capture shape. Scale preserves shape, isolating numerical bits.
-            return self.scale(original(self, a, b), 2)
+            # With x=1/4 and weight 2, doubling the product masks the fault
+            # in while_loop: both graphs stop at 1. Tripling gives 3/2.
+            return self.scale(original(self, a, b), 3)
     else:
         def broken(self, *args, **kwargs):
             value = original(self, *args, **kwargs)

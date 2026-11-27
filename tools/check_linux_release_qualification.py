@@ -127,6 +127,8 @@ def digest_stream(stream):
 
 INVENTORY_EXCLUDED_DIRS = ('.git', '.pixi', '.venv', '__pycache__', 'results', 'dist',
                            'archive', 'upstream')
+#: tools/generated_sources.py's per-invocation evidence directory (is_native_source).
+GENERATED_EVIDENCE_PREFIX = 'build/generated-sources/'
 
 
 def is_native_source(rel):
@@ -137,6 +139,16 @@ def is_native_source(rel):
     """
     name = rel.rsplit('/', 1)[-1]
     if rel.startswith('python/mojolearn/tests/'):
+        return False
+    # build/generated-sources/<ns>-<pid>/ is EVIDENCE (tools/generated_sources.py retains copies of the generator
+    # inputs and outputs per invocation), never an input: the real inputs are core/ and tokenizer/ in the tree.
+    # Lane mac-speed-1 (2026-11-27): 0.9.0's linux-pack died with FileNotFoundError on a box-only evidence copy
+    # (.../build/generated-sources/1795798918547688684-283/generated-inputs/core/native_archive_unicode_names.mojo)
+    # that the leg's inventory named and the Mac's source checkout never held; any concurrent prepare on either
+    # side also changed the inventory mid-walk. Excluding the evidence subtree makes the inventory the same on
+    # every machine and pipeline. linux_surface_qualification.sh holds the same rule. NOT SKIPPED UNREAD (lane
+    # xcc-retire-1): native_inventory checks every copy's bytes (tools/generated_source_check.py) before leaving it out.
+    if rel.startswith(GENERATED_EVIDENCE_PREFIX):
         return False
     # tokenizer/tools/ writes tokenizer/impl/unicode_table_generated.mojo
     # before the tokenizer host compile, so it is native source too.
@@ -169,6 +181,15 @@ def native_inventory(root):
         for name in sorted(names):
             path = Path(directory) / name
             rel = path.relative_to(root).as_posix()
+            if rel.startswith(GENERATED_EVIDENCE_PREFIX):
+                # a generated-source copy is checked by bytes, then not listed: generated-inputs/<rel> equals the
+                # tracked <rel>, generated/<rel> what the tracked generator writes (one helper with pack_wheel.py)
+                import generated_source_check
+                try:
+                    generated_source_check.verify_copy(root, rel, path)
+                except generated_source_check.GeneratedCopyError as exc:
+                    require(False, 'Generated source copy differs: ' + str(exc))
+                continue
             if is_native_source(rel):
                 files.append([rel, digest_file(path)])
     return sorted(files)

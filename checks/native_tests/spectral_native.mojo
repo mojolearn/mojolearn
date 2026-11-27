@@ -32,7 +32,7 @@ from core.spectral_native_device import SpectralDeviceKernels
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
 
 
-comptime SPECTRAL_NATIVE_COMMON_FIXTURES = 7
+comptime SPECTRAL_NATIVE_COMMON_FIXTURES = 8
 comptime SPECTRAL_NATIVE_DENSE_FIXTURES = 2
 comptime SPECTRAL_NATIVE_GUARD = Float32(12521.25)
 
@@ -267,6 +267,27 @@ def separated_partition(driver: SpectralDriver) raises:
         _ = embedding^
 
 
+def four_cycle_embedding(driver: SpectralDriver) raises:
+    # An unnormalized four-cycle has eigenvalues 0, 2, 2, 4. Asking for two
+    # nontrivial components must return two independent vectors for 2.
+    var graph: List[Float32] = [0,1,0,1, 1,0,1,0, 0,1,0,1, 1,0,1,0]
+    var result = guarded(8)
+    embed(driver, graph, 4, 4, 1, 2, 2, False, True, 7, 1e-5, result)
+    var cross = Float64(0)
+    for col in range(2):
+        var norm = Float64(0)
+        for row in range(4):
+            var value = Float64(result[1 + row * 2 + col])
+            norm += value * value
+            var neighbors = Float64(result[1 + ((row + 1) % 4) * 2 + col]) + Float64(result[1 + ((row + 3) % 4) * 2 + col])
+            require(abs(neighbors) < 1e-5, "Four-cycle Laplacian residual for eigenvalue 2")
+            if col == 0:
+                cross += value * Float64(result[2 + row * 2])
+        require(abs(norm - 1) < 1e-5, "Four-cycle eigenvector must have unit norm")
+    require(abs(cross) < 1e-5, "The repeated eigenvalue needs two orthogonal vectors")
+    guards(result)
+
+
 def fixture(driver: SpectralDriver, unit: Int) raises:
     if unit < 3:
         simple_embedding(driver, unit, False)
@@ -279,6 +300,8 @@ def fixture(driver: SpectralDriver, unit: Int) raises:
     elif unit == 6:
         separated_partition(driver)
     elif unit == 7:
+        four_cycle_embedding(driver)
+    elif unit == 8:
         simple_embedding(driver, 2, True)
     else:
         diagonal_relation(driver, True)

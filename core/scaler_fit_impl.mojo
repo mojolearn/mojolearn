@@ -5,8 +5,8 @@ Fit arithmetic remains in preprocessing.estimator and x_prep's existing kernels.
 These routines preserve the former buffer casts and public validation semantics.
 """
 from std.memory import bitcast
-from core.classical_cast import classical_f32_bits
 from core.host_finite_scan import host_all_finite_f32, host_any_inf_f32
+from core.admitted_input import admitted_cast_f32
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -19,14 +19,13 @@ def scaler_inf(value: Float32) -> Bool:
     return (bitcast[DType.uint32](value) & UInt32(0x7fffffff)) == UInt32(0x7f800000)
 
 
-def scaler_cast(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int, native: Bool, dest: F32P):
-    for r in range(rows):
-        for c in range(cols):
-            var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr + r * s0 + c * s1)
-            var raw = UInt64(0)
-            for k in range(item):
-                raw |= UInt64(bytes[k if native else item - 1 - k]) << UInt64(k * 8)
-            dest[r * cols + c] = bitcast[DType.float32](classical_f32_bits(raw, kind, item))
+def scaler_cast(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int, native: Bool,
+                dest: F32P) raises:
+    """Pack an admitted native or byte-swapped matrix into C-order float32."""
+    if native:
+        _ = admitted_cast_f32(addr, s0, s1, rows, cols, item, kind, dest)
+    else:
+        _ = admitted_cast_f32[True](addr, s0, s1, rows, cols, item, kind, dest)
 
 
 def scaler_all_finite(x: F32P, size: Int) -> Bool:

@@ -1,0 +1,6 @@
+# tools/metal_float64_lint.py allow list: <path>:<function>  # <CLASS>: <reason>
+# Every line was in the 0.9.0 Apple wheel's source (f6a2ad489a), which compiled for Metal; new sites need a reason.
+gbdt/metrics/optimal_const_device.mojo:bfa_init_kernel  # SAFE-CONST: bitcast[DType.uint64](Float64(SQ_DBL_EPSILON)) is a compile-time constant word; the kernel works on uint64 bits
+gbdt/metrics/optimal_const_device.mojo:bfa_delta_kernel  # SAFE-CONST: bitcast[DType.uint64](Float64(SQ_DBL_EPSILON)) is a compile-time constant word; the kernel works on uint64 bits
+holtwinters/impl/internal/hw_estimate.mojo:hw_est_start  # SAFE-CONST: Float32(Float64(<literal>)) constants, narrowed at compile time
+isolation_forest/impl/isolation_forest.mojo:if_score_epilogue_f64_kernel  # SAFE-NOT-APPLE: its only launcher score_samples_into_f64 is called only under comptime if IDN_IF_SCORES_F64 (= not TARGET_HAS_APPLE_GPU) in isolation_forest/estimator.mojo

@@ -7,8 +7,7 @@
 # bodies; the only new bodies are the top-k order key and read-out and the logsumexp row and its VJP.
 #
 #   180 sequence_mask(lengths, max_length)  (B, T) float32, mask[b, t] = 1.0 when t < lengths[b] else 0.0: the
-#       length mask Session.scan and the recurrent ops build (autograd/per_step_ops.mojo rnn_zero_padded: OP_SEQ_IOTA,
-#       then the import family's compare), batch first. No gradient.
+#       valid-step mask from iota and the import family's compare, batch first. No gradient.
 #   181 topk indices (x, k, axis, largest)  the positions of the k largest (or smallest) values along axis, sorted,
 #       as an integer (ids) tensor: the order key pack (OP_SOX_TOPK_PACK), the embedding's bitonic stages
 #       (OP_EMB_SORT_STAGE) over every line at once, the read-out (OP_SOX_TOPK_OUT). Ties: the lowest index first.

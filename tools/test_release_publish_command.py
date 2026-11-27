@@ -22,7 +22,8 @@ class PublishCommandTests(unittest.TestCase):
             for name in ('bin', 'python/mojolearn', 'tools', 'packaging'):
                 (root / name).mkdir(parents=True)
             (root / 'python/mojolearn/_version.py').write_text('__version__ = "0.8.9"\n')
-            shutil.copy(ROOT / 'tools/check_light_release.py', root / 'tools')
+            for script in ('check_light_release.py', 'qualify_verifier_wheel.py'):
+                shutil.copy(ROOT / 'tools' / script, root / 'tools')
             # Route/staging tests mock only the admission subprocess. The real
             # canonical ledger, off-machine resolver and archive validation are
             # exercised independently in test_release_publish_admission.py.

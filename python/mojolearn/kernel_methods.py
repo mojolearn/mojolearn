@@ -133,8 +133,7 @@ class KernelRidge(_KernelMethodBase):
     If `K + alpha * I` cannot be factored at the given `alpha`, `fit`
     raises an error rather than falling back to a least-squares solve;
     increase `alpha` in that case. Inputs and outputs are float32. Supports
-    the `'identical'` (default) and `'fast'` numeric modes; `'fast'` is
-    available on Apple GPUs only.
+    the `'identical'` (default) and `'fast'` numeric modes.
 
     Parameters
     ----------
@@ -160,7 +159,6 @@ class KernelRidge(_KernelMethodBase):
         Independent term of the 'poly' and 'sigmoid' kernels.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator; None uses the process default.
-        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -336,8 +334,7 @@ class Nystroem(_KernelMethodBase):
     eigensolver on the device; `transform` maps rows to
     `K(X, components_) @ normalization_.T`, a feature space whose inner
     products approximate the kernel. Inputs and outputs are float32.
-    Supports the `'identical'` (default) and `'fast'` numeric modes;
-    `'fast'` is available on Apple GPUs only.
+    Supports the `'identical'` (default) and `'fast'` numeric modes.
 
     Parameters
     ----------
@@ -361,7 +358,6 @@ class Nystroem(_KernelMethodBase):
         device, not in host worker processes.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator; None uses the process default.
-        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -518,8 +514,7 @@ class RBFSampler(_KernelMethodBase):
     whose inner products approximate `exp(-gamma * ||x - y||^2)`. `fit`
     reads only the number of features of `X` (and its variance when
     `gamma='scale'`). Inputs and outputs are float32. Supports the
-    `'identical'` (default) and `'fast'` numeric modes; `'fast'` is
-    available on Apple GPUs only.
+    `'identical'` (default) and `'fast'` numeric modes.
 
     Parameters
     ----------
@@ -533,7 +528,6 @@ class RBFSampler(_KernelMethodBase):
         Seed of the random draws.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator; None uses the process default.
-        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------

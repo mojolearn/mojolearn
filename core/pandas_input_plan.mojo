@@ -2,6 +2,7 @@
 """Typed pandas block preparation; external object decoding stays at UNPACK."""
 from std.memory import bitcast
 from core.cast_in import cast_in_kind, cast_w64_bits, f64_to_f32_bits
+from core.admitted_input import admitted_f64_rounds_to_inf, admitted_f64_overflow_refuse, admitted_f64_nan_fix
 from core.classical_pandas_impl import pd_raw_at, pd_mask_check, pd_scatter_numeric
 from core.sequential_input_plan import sequence_promote
 
@@ -121,12 +122,16 @@ struct PandasInputPlan(Movable):
             self.placements.append(position)
         self.blocks.append(block^)
 
-    def finish(mut self, strict_f32: Bool, refuse_double: String) raises:
-        if strict_f32 and (self.objects or self.booleans or self.common_kind != "f" or self.common_size != 4):
-            raise Error("TypeError: Scaler input must have dtype float32")
+    def finish(mut self, strict_f32: Bool) raises:
+        # `strict_f32` (the scalers): float32 or float64 storage only; float64
+        # takes the shared narrowing below (`double_round`, refused by column
+        # when a finite value is outside float32's range).
+        if strict_f32 and (self.objects or self.booleans or self.common_kind != "f"
+                           or (self.common_size != 4 and self.common_size != 8)):
+            raise Error("TypeError: Scaler input must have dtype float32 or float64")
         self.double_round = self.objects or (self.booleans and self.numbers) or (self.common_kind == "f" and self.common_size == 8)
-        if self.double_round and refuse_double.byte_length() > 0:
-            raise Error(refuse_double)
+        # TOMBSTONE: refuse_double (the float64-refusing callers' pandas refusal) deleted 2026-11-27 by lane
+        # fp64-inputs: every float32-computing door converts float64 storage through `double_round`.
         self.seen = List[Bool](length=self.cols, fill=False)
 
     def column(mut self, block: Int, column: Int) raises -> Int:
@@ -168,7 +173,12 @@ struct PandasObjectWriter(Copyable, Movable):
         return self.source + row * self.stride
 
     def put(self, row: Int, number: Float64) raises:
-        var bits = f64_to_f32_bits(bitcast[DType.uint64](number))
-        if not self.allow_nonfinite and (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            raise Error("Input contains NaN or infinity")
+        var raw = bitcast[DType.uint64](number)
+        var bits = f64_to_f32_bits(raw)
+        if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            if admitted_f64_rounds_to_inf(raw, bits, True):
+                admitted_f64_overflow_refuse(self.column)
+            if not self.allow_nonfinite:
+                raise Error("Input contains NaN or infinity")
+            bits = admitted_f64_nan_fix(raw, bits, True)
         MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=self.destination)[row * self.cols + self.column] = bitcast[DType.float32](bits)

@@ -65,6 +65,9 @@ from spectral.checks.symmetric_eig_host import (
     symmetric_eig_host,
 )
 from x_decomp.rr_solve import host_eigh_rr_sorted
+from x_decomp.eigh_ops_host import eigh_op_sym_host
+from x_decomp.cells import F32Ptr
+from core.host_parallel import host_parallelize
 from spectral.host.spectral_predict_host import (
     SpectralPredictionState,
     spectral_keep_embedding_order,
@@ -635,6 +638,44 @@ def host_lanczos_smallest[
     res.converged = r <= tol
 
 
+def _direct_embedding_eigenpairs[dt: DType](
+    lap: HostLaplacian[dt], k: Int, mut res: OracleResult[dt],
+) raises:
+    var n = lap.n
+    var dense = List[Scalar[dt]](length=n * n, fill=Scalar[dt](0))
+    var ap = dense.unsafe_ptr()
+    var rp = lap.rows.unsafe_ptr()
+    var cp = lap.cols.unsafe_ptr()
+    var xp = lap.vals.unsafe_ptr()
+    def scatter(i: Int) {imm ap, imm rp, imm cp, imm xp, imm n}:
+        ap.unsafe_store(Int(rp[i]) * n + Int(cp[i]), xp[i])
+    host_parallelize(scatter, len(lap.vals))
+    var w = List[Scalar[dt]](length=n, fill=Scalar[dt](0))
+    var v = List[Scalar[dt]](length=n * n, fill=Scalar[dt](0))
+    comptime if dt == DType.float32:
+        # DevExec.eigh_into's host-column implementation, including sign and tie order.
+        if eigh_op_sym_host(F32Ptr(unsafe_from_address=Int(ap)), F32Ptr(unsafe_from_address=Int(w.unsafe_ptr())),
+                            F32Ptr(unsafe_from_address=Int(v.unsafe_ptr())), n) != 0:
+            raise Error("spectral: the symmetric eigensolver did not converge")
+    else:
+        _ = symmetric_eig_host[dt](dense, n, w, v)
+    res.ritz = List[Scalar[dt]](unsafe_uninit_length=k)
+    res.ritz_vectors = List[Scalar[dt]](unsafe_uninit_length=k * n)
+    var out_v = res.ritz_vectors.unsafe_ptr()
+    var out_w = res.ritz.unsafe_ptr()
+    var wp = w.unsafe_ptr()
+    var vp = v.unsafe_ptr()
+    def gather(i: Int) {imm out_v, imm out_w, imm vp, imm wp, imm n, imm k}:
+        out_v.unsafe_store(i, vp[(i % n) * n + (i // n + n - k)])
+        if i < k:
+            out_w.unsafe_store(i, wp[i + n - k])
+    host_parallelize(gather, n * k)
+    res.converged = True
+    _ = dense^
+    _ = v^
+    _ = w^
+
+
 def oracle_embedding[
     dt: DType
 ](
@@ -667,12 +708,15 @@ def oracle_embedding[
     var L = host_laplacian[dt](g, norm_laplacian)
     var res = OracleResult[dt]()
     res.diag = L.diag.copy()
-    var v0_32 = lanczos_v0(seed, n)
-    var v0 = List[Scalar[dt]]()
-    for i in range(n):
-        v0.append(Scalar[dt](v0_32[i]))
-    res.v0 = v0.copy()
-    host_lanczos_smallest[dt](L, k, 10 * n, ncv, tolerance, LANCZOS_LA, v0, res)
+    if k >= 1 and k == n - 1:
+        _direct_embedding_eigenpairs[dt](L, k, res)
+    else:
+        var v0_32 = lanczos_v0(seed, n)
+        var v0 = List[Scalar[dt]]()
+        for i in range(n):
+            v0.append(Scalar[dt](v0_32[i]))
+        res.v0 = v0.copy()
+        host_lanczos_smallest[dt](L, k, 10 * n, ncv, tolerance, LANCZOS_LA, v0, res)
     var vecs = res.ritz_vectors.copy()
     if norm_laplacian:
         for c in range(k):
@@ -989,30 +1033,11 @@ def host_validate_connectivity_coo(
                 + String(r) + ", " + String(c) + ") outside [0, "
                 + String(n_samples) + ")"
             )
-    var k = n_components
-    if n_samples - k > 0:
-        var ncv_hi = 2 * k + 1
-        if ncv_hi < 20:
-            ncv_hi = 20
-        var ncv = n_samples - k
-        if ncv_hi < ncv:
-            ncv = ncv_hi
-        # Small n: cuVS's min(n - k, max(2k + 1, 20)) leaves no Krylov room
-        # past k + 1 when n <= 2k + 1 (cuVS refuses those shapes). The full
-        # space, ncv = n, is exact after one build and takes every n > k + 1,
-        # as scikit-learn's eigensolvers do on a handful of rows.
-        if ncv <= k + 1 and n_samples > k + 1:
-            ncv = n_samples
-        if k < 1:
-            raise Error(
-                "lanczos: need 1 <= n_components < n, got " + String(k)
-                + " for n=" + String(n_samples)
-            )
-        if ncv <= k + 1 or ncv > n_samples:
-            raise Error(
-                "lanczos: need n_components + 1 < ncv <= n, got ncv=" + String(ncv)
-                + " n_components=" + String(k) + " n=" + String(n_samples)
-            )
+    if n_components < 1 and n_samples > n_components:
+        raise Error(
+            "lanczos: need 1 <= n_components < n, got " + String(n_components)
+            + " for n=" + String(n_samples)
+        )
 
 
 # TOMBSTONE: host_spectral_fit_predict_coo (its only callers were the deleted by-name spectral exports) deleted 2026-11-23 on lane/sab-host-missed-cls; code recoverable at 4519097d38.
@@ -1045,10 +1070,8 @@ def host_spectral_fit_predict_coo_keep(
     negative value refusals (`spectral/impl/preprocessing/detail/
     spectral_embedding.mojo:328-339`), `compute_graph_laplacian`'s index
     range (`spectral/impl/sparse/linalg/detail/laplacian.mojo:183-191`),
-    and the Lanczos entry's shape (`spectral/impl/sparse/solver/detail/
-    lanczos.mojo:689-694`), which `oracle_embedding` does not restate and
-    without which a host Lanczos with `ncv <= k + 1` would index past its
-    basis. The repeated-key refusal is `host_laplacian`'s. The one order
+    and the solver's component count. With fewer eigenpairs than rows,
+    `oracle_embedding` can choose its basis from the input size. The repeated-key refusal is `host_laplacian`'s. The one order
     difference: the device reaches the repeated-key refusal before the
     Lanczos shape refusal, the host after, so an input wrong in both ways
     names the other one first. No value moves.

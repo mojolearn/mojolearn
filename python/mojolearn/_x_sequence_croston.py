@@ -63,8 +63,8 @@ class _Croston(ParamsMixin):
 
         Raises
         ------
-        TypeError
-            If ``y`` is float64.
+        ValueError
+            If a float64 value is outside float32's range.
         ValueError
             If a series has no observations.
         """
@@ -123,7 +123,7 @@ class CrostonClassic(_Croston):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
 
     Attributes
     ----------
@@ -132,7 +132,7 @@ class CrostonClassic(_Croston):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Prediction intervals,
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Prediction intervals,
     fitted values and exogenous regressors are not supported and raise
     NotImplementedError.
 
@@ -162,7 +162,7 @@ class CrostonOptimized(_Croston):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
 
     Attributes
     ----------
@@ -171,7 +171,7 @@ class CrostonOptimized(_Croston):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Prediction intervals,
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Prediction intervals,
     fitted values and exogenous regressors are not supported and raise
     NotImplementedError.
 
@@ -200,7 +200,7 @@ class CrostonSBA(_Croston):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
 
     Attributes
     ----------
@@ -209,7 +209,7 @@ class CrostonSBA(_Croston):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Prediction intervals,
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Prediction intervals,
     fitted values and exogenous regressors are not supported and raise
     NotImplementedError.
 

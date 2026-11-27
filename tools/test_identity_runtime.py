@@ -329,6 +329,17 @@ def test_every_scale_rows_in_the_tree_asks_the_whole_batch_set():
     assert np.zeros((8192, 4))[:ib.SCALE_WHOLE].shape[0] == ib.SCALE_WHOLE
 
 
+def test_default_ptx_record_label_uses_the_detected_device():
+    ml = SimpleNamespace(vendor=lambda: "cuda")
+    assert ib.default_vendor_label(ml, "gpu", "ptx", "NVIDIA A100") == "nvidia-ptx-a100-sm80"
+    with pytest.raises(SystemExit, match="GPU model"):
+        ib.default_vendor_label(ml, "gpu", "ptx")
+
+    rows = [dict(index=0, uuid="GPU-ab0"), dict(index=1, uuid="GPU-ac1")]
+    for selector, expected in (("1", rows[1]), ("GPU-ac", rows[1]), ("GPU-a", None), ("2", None)):
+        assert ib._pick_row(rows, selector, uuid_of=lambda r: r["uuid"]) == expected
+
+
 @pytest.mark.parametrize('ptx_loaded,label,refused', [
     (True, 'nvidia-ptx-l40s-sm80', False),
     (True, 'nvidia-l40s-sm_89', True),

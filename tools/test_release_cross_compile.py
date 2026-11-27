@@ -2,9 +2,10 @@
 `gh` stubbed on PATH: it dispatches .github/workflows/cross-compile-check.yml
 on the FROZEN commit against the previous release's source commit, finds its
 run by token, waits, and fails BY NAME on any job that did not pass. It runs
-beside linux-builds on the free `github` backend and gates linux-wait (so
-linux-pack, every box and every publish); on a rented backend it still gates
-linux-builds (the first rental). Nothing on the Mac waits for it.
+only on a rented build backend, where it gates linux-builds (the first rental);
+on the free `github` backend it is NOT RUN and linux-wait waits for the legs
+alone (lane xcc-retire-1, 2026-11-27: the legs compile the same sources and
+now name a failed or STALLED build themselves). Nothing on the Mac waits for it.
 
     python3 -m pytest -q tools/test_release_cross_compile.py
 """
@@ -163,7 +164,7 @@ class CrossCompileStep(unittest.TestCase):
             self.assertNotIn("cross-compile", release.NEEDS[mac])
         self.assertIn("cross-compile", release.Release.SKIP_IF_RECORDED)
 
-    def test_everything_after_the_builds_still_waits_for_it(self):
+    def test_everything_after_the_builds_still_waits_for_it_on_a_rented_backend(self):
         def ancestors(step, needs):
             seen, todo = set(), list(needs[step])
             while todo:
@@ -176,16 +177,29 @@ class CrossCompileStep(unittest.TestCase):
                      "gpu-column-amd", "publish-core-linux", "publish-nvidia", "publish-amd", "publish-meta-linux",
                      "publish-macos"):
             self.assertIn("cross-compile", ancestors(step, release.NEEDS), step)
+            for backend in release.RENTED_BUILD_BACKENDS:
+                self.assertIn("cross-compile", ancestors(step, self.release(build_backend=backend).NEEDS), step)
 
-    def test_github_backend_builds_at_once(self):
+    def test_github_backend_does_not_run_it_and_nothing_waits_for_it(self):
         r = self.release(build_backend="github")
         self.assertNotIn("cross-compile", r.NEEDS["linux-builds"])
-        self.assertIn("cross-compile", r.NEEDS["linux-wait"])
+        self.assertNotIn("cross-compile", r.NEEDS["linux-wait"])
+        self.assertIn("linux-builds", r.NEEDS["linux-wait"])
+        out = r.step_cross_compile()
+        self.assertTrue(out.startswith("not run (--build-backend github"), out)
+        self.assertEqual(self.calls(), [], "nothing is dispatched")
+        doc = json.loads(r.cross_compile_receipt().read_text())
+        self.assertEqual((doc["verdict"], doc["backend"], doc["commit"]), ("NOT-RUN", "github", FROZEN))
+        self.assertIsNone(r.cross_compile_reuse(BASE), "a NOT-RUN receipt is never a reusable PASS")
+        self.assertIn("cross-compile", release.NEEDS["linux-wait"], "the module table is not mutated")
+        dry = self.release(build_backend="github", dry_run=True).step_cross_compile()
+        self.assertTrue(dry.startswith("not run"), dry)
 
     def test_a_rented_backend_still_waits_for_it_before_renting(self):
         for backend in release.RENTED_BUILD_BACKENDS:
             r = self.release(build_backend=backend)
             self.assertEqual(r.NEEDS["linux-builds"], ["reuse-plan", "readiness", "cross-compile"], backend)
+            self.assertIn("cross-compile", r.NEEDS["linux-wait"], backend)
         self.assertEqual(release.NEEDS["linux-builds"], ["reuse-plan", "readiness"], "the module table is not mutated")
         self.assertEqual(set(release.RENTED_BUILD_BACKENDS), set(release.BUILD_BACKENDS) - {"github"})
 

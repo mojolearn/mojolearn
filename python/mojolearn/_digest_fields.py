@@ -239,6 +239,8 @@ TRAINING_EXTRA_BY_NAME = {
     "Sequential": ("_fit_state", "_curve", "_fit_batch", "_fit_shuffle", "_target",
                    # nn-blocks-pgseq: compile's parameter groups as the fit resolved them (per-tensor table)
                    "_param_groups"),
+    "MLPRegressor": ("_optimizer_state_",),
+    "MLPClassifier": ("_optimizer_state_",),
     "LSTMRegressor": ("_optimizer_state_", "_source_state_", "_stream_monitor_"),
     "LSTMClassifier": ("_optimizer_state_", "_source_state_", "_stream_monitor_"),
     "GRURegressor": ("_optimizer_state_", "_source_state_", "_stream_monitor_"),

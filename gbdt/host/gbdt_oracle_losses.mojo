@@ -137,6 +137,9 @@ from gbdt.host.gbdt_oracle_query import (
     query_rmse_search_pass,
     query_rmse_value,
 )
+from gbdt.host.lightgbm_ranking import HostLightGBMRank
+from gbdt.host.ranking_fit import HostRankingFit, check_host_rank_targets
+from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF, OBJECTIVE_QUERY_SOFTMAX, is_lightgbm_ranking, uses_grouped_rank_workspace, ranking_loss, ranking_seed
 from gbdt.host.gbdt_oracle_yeti import yeti_rank_eval, yeti_rank_search_pass
 from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.data.permutation import TRandom
@@ -210,7 +213,7 @@ from gbdt.host.gbdt_oracle_eval import (
     GbdtHostEvalFit,
     gbdt_eval_add_tree,
     gbdt_eval_detector,
-    gbdt_eval_shrink_point,
+    gbdt_eval_shrink_symmetric,
     gbdt_eval_test_bins,
 )
 
@@ -1051,6 +1054,7 @@ def _estimate_leaves_for_loss(
     yeti_tasks: Optional[YetiRankTasks] = None,
     yeti_seed: UInt64 = UInt64(0),
     weights: List[Float32] = List[Float32](),
+    rank: Optional[HostRankingFit] = None,
 ) raises -> List[Float32]:
     """`_estimate_and_apply`'s estimate (`doc_parallel_boosting.mojo:
     698-797`): the gathers by the row index, then Exact or the walker.
@@ -1062,10 +1066,12 @@ def _estimate_leaves_for_loss(
     var g_cursor = List[Float32](length=n_rows, fill=Float32(0.0))
     # the gathers and the bins move values, one position a device thread:
     # `_gbdt_units` ranges of positions each (lane gbdt-host-par)
-    _gather_rows(targets, row_index, n_rows, g_target)
-    _gather_rows(cursor, row_index, n_rows, g_cursor)
-    var bins = List[Int](length=n_rows, fill=0)
-    _leaf_bins(offsets, sizes, n_rows, bins)
+    if rank.__bool__():
+        _gather_rows(rank.value().directions, row_index, n_rows, g_target)
+        _gather_rows(rank.value().hessians, row_index, n_rows, g_cursor)
+    else:
+        _gather_rows(targets, row_index, n_rows, g_target)
+        _gather_rows(cursor, row_index, n_rows, g_cursor)
     var weights_cpu = List[Float64]()
     var has_weights = len(weights) > 0
     var g_weights = List[Float32]()
@@ -1107,11 +1113,29 @@ def _estimate_leaves_for_loss(
     else:
         for leaf in range(n_leaves):
             weights_cpu.append(Float64(sizes[leaf]))
+    if rank.__bool__():
+        # The searcher may have snapped or resampled its own copies of these
+        # planes. The Newton leaf uses the original, weighted objective.
+        var grad_sums = List[Float32](length=n_leaves, fill=Float32(0))
+        var hess_sums = List[Float32](length=n_leaves, fill=Float32(0))
+        _pinned_partition_stats(g_target, offsets, sizes, GBDT_PARTITION_CHUNKS, grad_sums)
+        _pinned_partition_stats(g_cursor, offsets, sizes, GBDT_PARTITION_CHUNKS, hess_sums)
+        var gradient = List[Float64](capacity=n_leaves)
+        var curvature = List[Float64](capacity=n_leaves)
+        for leaf in range(n_leaves):
+            gradient.append(Float64(grad_sums[leaf]))
+            curvature.append(Float64(hess_sums[leaf]) + Float64(l2_leaf_reg))
+        var origin = List[Float32](length=n_leaves, fill=Float32(0))
+        var step = _walker_move(origin, _diagonal_direction(gradient, curvature), 1.0)
+        _regularize(weights_cpu, step)
+        return step^
     if loss.method == GBDT_LEAF_EXACT:
         return _exact_estimate(
             loss, g_target, g_cursor, offsets, sizes, weights_cpu, n_rows,
             g_weights,
         )
+    var bins = List[Int](length=n_rows, fill=0)
+    _leaf_bins(offsets, sizes, n_rows, bins)
     var row_weights = List[Float32]()
     if loss.objective != GBDT_OBJ_PAIR_LOGIT:
         row_weights = weights.copy()
@@ -1125,6 +1149,49 @@ def _estimate_leaves_for_loss(
 # ===========================================================================
 # THE FIT
 # ===========================================================================
+
+
+struct GroupedTestLoss(Movable):
+    """Held-out queries have their own size vector, grades and generated pairs."""
+    var groups: List[Int]
+    var pairs: Optional[HostPairs]
+
+    var metric: Optional[HostLightGBMRank]
+    var eval_at: Int
+
+    def __init__(out self, objective: Int, sizes: List[Int], target: List[Float32], eval_at: Int = DEFAULT_NDCG_CUTOFF) raises:
+        if objective == OBJECTIVE_QUERY_SOFTMAX:
+            raise Error("QuerySoftMax does not support eval_set")
+        var rows = 0
+        var sizes_u32 = List[UInt32](capacity=len(sizes))
+        for q in range(len(sizes)):
+            if sizes[q] <= 0:
+                raise Error("held-out queries must have positive size")
+            rows += sizes[q]
+            sizes_u32.append(UInt32(sizes[q]))
+        if rows == 0 or rows != len(target):
+            raise Error("held-out queries must cover every eval row")
+        self.groups = sizes.copy()
+        self.pairs = None
+        self.metric = None
+        self.eval_at = eval_at
+        if is_lightgbm_ranking(objective):
+            check_host_rank_targets[False](target)
+            self.metric = Optional(HostLightGBMRank(sizes, rows))
+        elif objective != GBDT_OBJ_QUERY_RMSE:
+            self.pairs = Optional(host_pair_groups(sizes_u32, target, List[Float32](), rows))
+
+    def value(mut self, targets: List[Float32], cursor: List[Float32]) raises -> Float64:
+        if self.metric:
+            return 1.0 - Float64(self.metric.value().ndcg(targets, cursor, self.eval_at))
+        var parts = List[Float32]()
+        var weight = Float64(len(targets))
+        if self.pairs:
+            parts = pair_logit_value(self.pairs.value(), cursor)
+            weight = self.pairs.value().total_weight()
+        else:
+            parts = query_rmse_value(targets, cursor, self.groups, len(targets))
+        return -Float64(_deterministic_sum_lanes(parts, 1, len(parts))[0]) / weight
 
 
 def gbdt_losses_host_fit(
@@ -1151,6 +1218,8 @@ def gbdt_losses_host_fit(
     permutation_count: Int = -1,
     ctr_estimation_permutation_id: Int = -1,
     max_ctr_complexity: Int = 1,
+    eval_group_sizes: List[Int] = List[Int](),
+    eval_at: Int = DEFAULT_NDCG_CUTOFF,
 ) raises -> GbdtCtrHostFit:
     """`train` then `fit_with_test` on the covered configurations (see the
     module docstring). `group_sizes` is read by QueryRMSE alone, already
@@ -1217,10 +1286,14 @@ def gbdt_losses_host_fit(
         loss.objective == GBDT_OBJ_QUERY_RMSE
         or loss.objective == GBDT_OBJ_PAIR_LOGIT
         or loss.objective == GBDT_OBJ_YETI_RANK
+        or uses_grouped_rank_workspace(loss.objective)
     ) and len(group_sizes) < 1:
         raise Error("the querywise host fit needs the query sizes")
     # the YetiRank task table (`InitYetiRank`'s query size refusal inside) and
     # draw stream, as `doc_parallel_boosting.mojo::fit_with_test` builds them
+    var rank = Optional[HostRankingFit]()
+    if uses_grouped_rank_workspace(loss.objective):
+        rank = Optional(HostRankingFit(group_sizes, y, loss.objective, weights))
     var yeti_tasks = Optional[YetiRankTasks]()
     var yeti_rand = TRandom(params.random_seed ^ UInt64(0x5945544952414E4B))
     if loss.objective == GBDT_OBJ_YETI_RANK:
@@ -1273,18 +1346,16 @@ def gbdt_losses_host_fit(
         loss.objective == GBDT_OBJ_QUERY_RMSE
         or loss.objective == GBDT_OBJ_PAIR_LOGIT
         or loss.objective == GBDT_OBJ_YETI_RANK
+        or uses_grouped_rank_workspace(loss.objective)
     )
+    var rank_test = Optional[GroupedTestLoss]()
     if has_test:
         if len(eval.x_colmajor) != eval.n_rows * n_features:
             raise Error("eval_set x_colmajor size mismatch")
         if len(eval.y) != eval.n_rows:
             raise Error("eval_set y size mismatch")
         if grouped:
-            # `train`'s words (gbdt/train.mojo)
-            raise Error(
-                "an eval_set with a grouped loss is not implemented here: the"
-                " held-out loss needs the eval pool's own grouping"
-            )
+            rank_test = Optional(GroupedTestLoss(loss.objective, eval_group_sizes, eval.y, eval_at))
     var n_eval = eval.n_rows if has_test else 1
 
     # ---- the columns, the grid, the layout and one compressed index per
@@ -1303,11 +1374,6 @@ def gbdt_losses_host_fit(
     var ctr_column_count = 0
     var layout: CompressedIndexLayout
     if cat_arm:
-        if grouped:
-            raise Error(
-                "the grouped losses take no categorical columns here (train"
-                " refuses them, in its words, before this fit)"
-            )
         if feature_fraction < 1.0:
             # `train`'s words (gbdt/train.mojo)
             raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
@@ -1316,7 +1382,7 @@ def gbdt_losses_host_fit(
             permutation_count, ctr_estimation_permutation_id, 1,
             eval.x_colmajor, eval.n_rows if has_test else 0,
             max_ctr_complexity, grid, cindexes, test_cindex, one_hot, tables,
-            tree_ctr,
+            tree_ctr, query_sizes=group_sizes,
         )
         est_p = shape.est_perm
         n_base_columns = shape.n_base_columns
@@ -1406,6 +1472,8 @@ def gbdt_losses_host_fit(
         fv_blocks = pairs.value().blocks()
         if pairs.value().group_layout:
             mag_blocks = fv_blocks
+    if rank.__bool__():
+        fv_blocks = 1
     var fv_part = List[Float32](length=fv_blocks, fill=Float32(0.0))
     var mag_part = List[Float32](length=2 * mag_blocks, fill=Float32(0.0))
     var bootstrap_on = loss.bootstrap_kind >= 0
@@ -1453,6 +1521,9 @@ def gbdt_losses_host_fit(
                 mag_part,
                 second_order,
             )
+        elif rank.__bool__():
+            rank.value().search(loss.objective, y, cursors[learn_p], weights, ranking_seed(params.random_seed),
+                                iteration, second_order, stats, fv_part, mag_part)
         elif loss.objective == GBDT_OBJ_QUERY_RMSE:
             query_rmse_search_pass(
                 y, cursors[learn_p], group_sizes, n_rows, stats, fv_part,
@@ -1711,7 +1782,7 @@ def gbdt_losses_host_fit(
                 var estimated = _estimate_leaves_for_loss(
                     loss, y, cursors[p], row_index, offsets, sizes, n_rows,
                     params.l2_leaf_reg, group_sizes, pairs, yeti_tasks,
-                    yeti_tree_seed, weights,
+                    yeti_tree_seed, weights, rank,
                 )
                 if zero_average:
                     # `MakeZeroAverage` (`doc_parallel_leaves_estimator.cpp:
@@ -1760,9 +1831,11 @@ def gbdt_losses_host_fit(
                     feat_offset, feat_mask, feat_shift, feat_one_hot,
                 )
                 gbdt_eval_add_tree(test_cursor, test_bins, scaled)
-            var t_loss = -Float64(
-                _loss_value(loss, eval.y, test_cursor, n_eval)
-            ) / Float64(n_eval)
+            var t_loss: Float64
+            if rank_test:
+                t_loss = rank_test.value().value(eval.y, test_cursor)
+            else:
+                t_loss = -Float64(_loss_value(loss, eval.y, test_cursor, n_eval)) / Float64(n_eval)
             test_losses.append(t_loss)
             detector.add_error(t_loss)
             if detector.is_need_stop():
@@ -1774,10 +1847,12 @@ def gbdt_losses_host_fit(
         if len(losses) < params.n_estimators:
             var v = Float64(fv)
             if iteration + 1 > 1:
-                losses.append(-v / loss_norm)
+                losses.append(ranking_loss(loss.objective, v) if rank.__bool__() else -v / loss_norm)
     var fit_loop = fit_loop_stop(fit_loop_t0, len(tree_split_offsets) - 1)
 
-    if loss.objective == GBDT_OBJ_YETI_RANK:
+    if rank.__bool__():
+        losses.append(ranking_loss(loss.objective, Float64(rank.value().workspace.training_metric(loss.objective, y, cursors[est_p], weights))))
+    elif loss.objective == GBDT_OBJ_YETI_RANK:
         # the device's final pass writes 0.0 partials and takes no draw
         losses.append(-Float64(Float32(0.0)) / Float64(n_rows))
     elif loss.objective == GBDT_OBJ_PAIR_LOGIT:
@@ -1796,21 +1871,10 @@ def gbdt_losses_host_fit(
         )
     # ---- `ShrinkToBestIteration` (`gbdt/train.mojo:2241-2254`), the
     # held-out arm's own tracker ----
-    var shrink_to = gbdt_eval_shrink_point(
-        test_losses, eval.want_best_model, eval.best_model_min_trees
+    gbdt_eval_shrink_symmetric(
+        test_losses, eval.want_best_model, eval.best_model_min_trees, tree_split_offsets,
+        tree_leaf_offsets, split_features, split_bins, model_leaves,
     )
-    var n_trees = len(tree_split_offsets) - 1
-    if 0 < shrink_to and shrink_to < n_trees:
-        while len(tree_split_offsets) - 1 > shrink_to:
-            _ = tree_split_offsets.pop()
-            _ = tree_leaf_offsets.pop()
-        split_features.resize(
-            tree_split_offsets[len(tree_split_offsets) - 1], 0
-        )
-        split_bins.resize(tree_split_offsets[len(tree_split_offsets) - 1], 0)
-        model_leaves.resize(
-            tree_leaf_offsets[len(tree_leaf_offsets) - 1], Float32(0.0)
-        )
     # TREE CTRS: the model's columns (`gbdt_ctr_host_tail`, the CTR
     # Logloss / RMSE fit's statements); a numeric fit and one without
     # combinations keep the grid's columns

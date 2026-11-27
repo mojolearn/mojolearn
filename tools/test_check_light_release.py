@@ -244,6 +244,42 @@ class LightReleaseTests(unittest.TestCase):
             self.write()
             self.assertEqual(gate.check(self.root, self.commit, 'linux')['status'], 'PASSED_LIGHT_RELEASE')
 
+    def test_nvidia_ptx_smoke_binds_loaded_files_to_wheel_and_device(self):
+        from test_qualify_verifier_wheel import ptx_install
+        self.split('nvidia', 'cuda')
+        (plugin,) = self.manifest['files']
+        report = self.reports['cuda']
+        installed = ptx_install(self.commit, 'sm_90')
+        report['installed'] = installed
+        name = 'identical/_mojolearn_native.so'
+        raw_binding = b'fixture'
+        binding_hash = hashlib.sha256(raw_binding).hexdigest()
+        installed['ptx_payload_files'] = {name: binding_hash}
+        selection = installed['ptx_selection']
+        selection['loaded_files'] = [dict(file=name, sha256=binding_hash)]
+        config = gate._GPU_PACKAGES
+        manifest = dict(schema=config.PTX_MANIFEST_SCHEMA, vendor='cuda', code_format='ptx',
+                        target='sm_80', min_compute_capability=[8, 0], errors=[], source_commit=self.commit,
+                        files=[dict(file=name, sha256=binding_hash, numeric_mode='identical', ptx_modules=[{}])])
+        raw = json.dumps(manifest).encode()
+        selection['manifest_sha256'] = hashlib.sha256(raw).hexdigest()
+        with zipfile.ZipFile(self.root / plugin, 'a') as archive:
+            archive.writestr(config.BUNDLED_PTX_ROOT + '/' + config.BASELINE_MANIFEST, raw)
+            archive.writestr(config.BUNDLED_PTX_ROOT + '/' + name, raw_binding)
+        digest = gate.digest(self.root / plugin)
+        self.manifest['files'][plugin] = digest
+        report['plugins'][0]['wheel_sha256'] = digest
+        self.write()
+        self.assertEqual(gate.check(self.root, self.commit, 'linux')['status'], 'PASSED_LIGHT_RELEASE')
+        selection['manifest_sha256'] = 'e' * 64
+        self.write()
+        with self.assertRaisesRegex(ValueError, 'PTX manifest differs'):
+            gate.check(self.root, self.commit, 'linux')
+        installed.pop('device_arch')
+        self.write()
+        with self.assertRaisesRegex(ValueError, 'PTX load evidence'):
+            gate.check(self.root, self.commit, 'linux')
+
     def test_the_combined_linux_wheel_still_needs_the_nvidia_receipt(self):
         self.reports.pop('metal')
         wheel = [w for w in self.manifest['files'] if 'macosx' in w][0]

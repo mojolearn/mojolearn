@@ -27,7 +27,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_setitem
 from bindings.sequential_keys_unpack import sequential_keys
 from autograd.nn_optim import (
-    NN_LAMB_BIAS_CORRECTION, NN_LAMB_CLIP, NN_LAMB_GRAD_AVERAGING, NN_SCHED_ARGS, NN_SCHED_COSINE,
+    NN_OPT_ADAFACTOR, NN_LAMB_BIAS_CORRECTION, NN_LAMB_CLIP, NN_LAMB_GRAD_AVERAGING, NN_SCHED_ARGS, NN_SCHED_COSINE,
     NN_SCHED_LINEAR_WARMUP, NN_SCHED_MULTI_STEP, NN_SCHED_ONE_CYCLE, NN_SCHED_PLATEAU, NN_SCHED_WARM_RESTARTS,
     nn_optim_admit,
 )
@@ -84,6 +84,9 @@ def nn_optim_compile_words(
         eps = _or(b, options[7], 1e-10)
         f1 = _f(b, options[22])
         f2 = _f(b, options[23])
+    elif optimizer == "adafactor":
+        kind = NN_OPT_ADAFACTOR
+        eps = _or(b, options[7], 1.1920928955078125e-7)
     elif optimizer == "lamb":
         kind = 10
         eps = _or(b, options[7], 1e-6)

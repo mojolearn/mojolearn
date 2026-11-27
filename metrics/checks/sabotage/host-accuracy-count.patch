@@ -1,0 +1,20 @@
+--- a/metrics/host/metrics_oracle.mojo
++++ b/metrics/host/metrics_oracle.mojo
+@@ -318,7 +318,7 @@
+                 p = y_true[0] + Int32(1) if p == y_true[0] else y_true[0]
+         if y_true[i] == p:
+             count += 1
+-    return Float32(count) / Float32(n)
++    return Float32(count + 1) / Float32(n)
+
+
+ def host_accuracy_score_ptr(
+@@ -360,7 +360,7 @@
+     var count = Int64(0)
+     for task in range(tasks):
+         count += partials[task]
+-    return Float32(count) / Float32(n)
++    return Float32(count + 1) / Float32(n)
+
+
+ # ===========================================================================

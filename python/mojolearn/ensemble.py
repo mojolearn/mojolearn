@@ -140,10 +140,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 
-#: CatBoost's `ELossFunction` spellings that this implementation trains. The list is
-#: the reachable set of their GPU pointwise target
-#: (`pointwise_target_impl.h:259-299`), minus the ones whose leaf estimator
-#: or kernel family is not implemented.
+#: Native objectives, using CatBoost or LightGBM spellings.
 LOSSES = (
     "MultiClass",
     "MultiClassOneVsAll",
@@ -163,6 +160,9 @@ LOSSES = (
     "PairLogit",
     "YetiRank",
     "MultiRMSE",
+    "lambdarank",
+    "rank_xendcg",
+    "QuerySoftMax",
 )
 
 #: Their GPU target keeps numClasses - 1 planes for MultiClass and
@@ -258,7 +258,7 @@ _ORDERED_MIN_ITERATIONS = 500
 #: The greedy searcher's ranking targets form grouped gradients first, then
 #: multiply both statistic planes by row bootstrap weights, as CatBoost's
 #: querywise_targets_impl.h::StochasticDer and weak_objective_impl.h do.
-_QUERYWISE_LOSSES = ("QueryRMSE", "PairLogit", "YetiRank")
+_QUERYWISE_LOSSES = ("QueryRMSE", "PairLogit", "YetiRank", "lambdarank", "rank_xendcg", "QuerySoftMax")
 
 #: `TAutoLRParamsGuesser` (`libs/train_lib/options_helper.cpp:176-243`), the
 #: GPU rows (`:221-243`), keyed (target type, use_best_model,
@@ -463,17 +463,12 @@ _GROW_POLICY_CODES = {
 #: THE LOSSES CatBoost's GPU REGISTERS A NON-SYMMETRIC TRAINER FOR --
 #: `cuda/train_lib/pointwise_non_symmetric.cpp:7-29`, one
 #: `TGpuTrainer<TPointwiseTargetsImpl, TNonSymmetricTree>` registration
-#: per (loss, policy) pair, eleven losses x {Lossguide, Depthwise}. Any
-#: other pair fails their `TGpuTrainerFactory::Has` with "Error:
-#: optimization scheme is not supported for GPU learning
-#: Loss=...;OptimizationScheme=..." (`train.cpp:279-280`). Two of this
-#: surface's losses are NOT on their list and are refused here with that
-#: message: `Lq` (unregistered) and `MultiClass` (`multiclass.cpp:5-14`
-#: registers the multiclass targets at the default SymmetricTree policy
-#: only).
+#: per (loss, policy) pair for the CatBoost objectives. Mojolearn also
+#: feeds its grouped LambdaRank and XE_NDCG gradients to both growers.
 _NON_SYMMETRIC_LOSSES = frozenset((
     "Poisson", "MAPE", "MAE", "Quantile", "LogLinQuantile", "RMSE",
     "Logloss", "CrossEntropy", "Expectile", "Tweedie", "Huber",
+    "lambdarank", "rank_xendcg",
 ))
 
 #: their `ENanMode` spellings (`data_processing_options.cpp:26`). 'Forbidden'
@@ -598,17 +593,28 @@ class GradientBoosting(_NumericModeMixin):
     Parameters
     ----------
     loss : str, default 'RMSE'
-        One of ``LOSSES``, in CatBoost's spellings: ``MultiClass``,
+        One of ``LOSSES``. CatBoost objectives include ``MultiClass``,
         ``MultiClassOneVsAll``, ``RMSE``, ``Logloss``, ``CrossEntropy``,
         ``Quantile``, ``MAE``, ``LogLinQuantile``, ``MAPE``, ``Poisson``, ``Lq``,
         ``Expectile``, ``Tweedie``, ``Huber``, ``QueryRMSE``, ``PairLogit``,
-        ``YetiRank``, ``MultiRMSE``. Four require a parameter: ``Lq`` needs
+        ``YetiRank``, ``QuerySoftMax``, ``MultiRMSE``. QuerySoftMax uses real-valued nonnegative
+        relevance and optional row weights (beta=1, lambda=0.01). It takes numeric
+        features on Plain symmetric trees, without a held-out evaluation set. Four require a parameter: ``Lq`` needs
         ``loss_q``, ``Huber`` needs ``loss_delta``, ``Tweedie`` needs
         ``loss_variance_power`` and ``Expectile`` needs ``loss_alpha``; a
         missing one raises ``ValueError``. ``MultiRMSE`` is multi-target
         regression: ``y`` is ``(n_samples, n_targets)`` with ``n_targets >= 2``
         and ``predict`` returns ``(n_samples, n_targets)`` (Plain SymmetricTree,
         numeric features, no eval set, ``boost_from_average`` unset or False).
+        LightGBM objectives ``lambdarank`` and ``rank_xendcg`` train on integer relevance grades
+        from 0 to 30 with contiguous query groups. Both support Plain symmetric,
+        Depthwise and Lossguide trees, categorical features, and one Newton
+        leaf update per tree. The default split score is NewtonL2.
+        LambdaRank uses normalized lambdas, sigmoid 1,
+        gains 2**grade - 1 and truncation at 30. XE_NDCG uses an independent
+        random stream per query, seeded from ``random_state + 5`` modulo 2**32.
+        The training loss curve reports one minus mean NDCG@30. Predictions
+        are raw ranking scores. The objective settings above are fixed.
     n_estimators : int or None, default None
         CatBoost's ``iterations``. None is 1000 under SymmetricTree (CatBoost's
         default) and 100 under Depthwise and Lossguide.
@@ -702,7 +708,7 @@ class GradientBoosting(_NumericModeMixin):
         The truncation never keeps fewer than this many trees.
     score_function : {'Cosine', 'L2', 'NewtonCosine', 'NewtonL2'}, optional
         The split score. None is CatBoost's default for the policy: Cosine for
-        SymmetricTree and Depthwise, NewtonL2 for Lossguide. Only Cosine
+        SymmetricTree and Depthwise, NewtonL2 for Lossguide or a LightGBM ranking loss. Only Cosine
         scores carry ``random_strength`` noise. For RMSE each Newton spelling
         gives the same model as its plain twin. CatBoost's SolarL2, LOOL2 and
         SatL2 are refused by name.
@@ -765,8 +771,8 @@ class GradientBoosting(_NumericModeMixin):
     min_child_hessian : float or None, default None
         Minimum weighted Hessian sum in each candidate child (training and
         bootstrap weights included; equality allowed). Requires Depthwise or
-        Lossguide, NewtonL2 or NewtonCosine scores, and RMSE, Logloss or
-        CrossEntropy.
+        Lossguide, NewtonL2 or NewtonCosine scores, and an RMSE, Logloss,
+        CrossEntropy, lambdarank or rank_xendcg objective.
     feature_fraction : float, default 1.0
         Per-tree numeric feature subsampling in (0, 1]: a deterministic subset
         of nonconstant features is chosen per tree. Values below 1 require
@@ -1007,7 +1013,7 @@ class GradientBoosting(_NumericModeMixin):
     # x class_weights follows target/data_providers.cpp:168 (rawWeights * rawGroupWeights * classWeights);
     # there are no group weights here. use_best_model default: options_helper.cpp:106-108.
     def fit(self, X, y, sample_weight=None, eval_set=None, group_id=None,
-            subgroup_id=None, pairs=None, pairs_weight=None):
+            subgroup_id=None, pairs=None, pairs_weight=None, *, eval_at=None):
         """Fit the ensemble.
 
         Parameters
@@ -1019,18 +1025,29 @@ class GradientBoosting(_NumericModeMixin):
         sample_weight : array-like of shape (n_samples,), optional
             Per-row weights, None meaning all ones. Multiplied with
             ``class_weights`` where both are given.
-        eval_set : tuple (X_eval, y_eval) or list of one such tuple, optional
+        eval_set : tuple or list containing one tuple, optional
             Held-out data for ``test_loss_curve_``, the overfitting detector and
             ``use_best_model``. Unlike CatBoost, only one eval set is accepted;
             more than one raises. Passing it makes ``use_best_model`` default to
             True, so ``model_`` keeps the trees up to the best held-out iteration;
-            pass ``use_best_model=False`` to keep every tree.
+            pass ``use_best_model=False`` to keep every tree. Supply
+            ``(X_eval, y_eval, eval_group_id)`` for QueryRMSE, PairLogit and
+            YetiRank, lambdarank and rank_xendcg, and ``(X_eval, y_eval)`` for pointwise losses that support validation. The held-out
+            query IDs follow the same consecutive-row rule as training IDs.
+            QueryRMSE centers errors within each held-out query. PairLogit and
+            YetiRank score within-query pairs of unequal grades by log loss.
+        eval_at : int, optional
+            For a held-out lambdarank or rank_xendcg pool, evaluate the first
+            this many documents per query (default 30). The detector minimizes
+            one minus mean query NDCG at this cutoff.
         group_id : sequence, optional
             One query id per row (string or integer; integers compare by their
             decimal spelling, so 7 and "7" are one group; floats are refused).
             Rows of a group must be consecutive. Read by ``QueryRMSE``,
-            ``PairLogit`` and ``YetiRank`` (SymmetricTree, no categorical
-            features, no eval set); every other loss refuses it. A QueryRMSE fit
+            ``PairLogit`` and ``YetiRank`` on symmetric trees. For these three
+            losses, categorical target statistics use labels from earlier
+            queries, with one permutation and one feature per statistic.
+            ``lambdarank`` and ``rank_xendcg`` require query IDs. A QueryRMSE fit
             with no groups, or one row per group, predicts zero.
         subgroup_id : sequence, optional
             Not read by any loss; refused by name.
@@ -1055,7 +1072,7 @@ class GradientBoosting(_NumericModeMixin):
         ``loss_curve_`` at zero.
         """
         return _TREES(self, "trees_public_gbdt_model_fit", (X, y, sample_weight, eval_set, group_id, subgroup_id,
-                                                            pairs, pairs_weight), _TREES_CONTEXT)
+                                                            pairs, pairs_weight, eval_at), _TREES_CONTEXT)
 
     def _resolved_learning_rate(self, n_rows, n_eval_rows=0, eval_target_constant=False):
         """The learning rate a fit on `n_rows` rows uses (`learning_rate_`),
@@ -1341,7 +1358,7 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
     l2_leaf_reg : float, default 3.0
     random_state : int, default 0
     numeric_mode : {'identical', 'fast'} or None, default None
-        ``'identical'`` or ``'fast'`` (Apple GPUs only); None uses the
+        ``'identical'`` or ``'fast'``; None uses the
         process default.
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and predicts. None uses this
@@ -1401,7 +1418,7 @@ class OrderedRMSE(GradientBoosting):
     border_count : int, default 128
         1 to 255.
     numeric_mode : {'identical', 'fast'} or None, default None
-        ``'identical'`` or ``'fast'`` (Apple GPUs only); None uses the
+        ``'identical'`` or ``'fast'``; None uses the
         process default.
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and predicts. None uses this

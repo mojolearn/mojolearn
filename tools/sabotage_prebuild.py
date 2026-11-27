@@ -13,8 +13,8 @@ clean natives of the tree copied in, the batch's patches applied, its bindings b
 share the allocation's cores: the scheduler keeps at most one compile per core and the sum of the compiles' recorded
 peak memory (tools/development_build.py cache peaks, with headroom; a group without a record takes --default-gib)
 under 80 percent of the allocation's memory, starting units in plan order so the run loop never waits on a late
-batch. When a batch's builds are done its changed or new native files (python/mojolearn: *.so, *.dylib,
-_mojolearn_merged.json) are copied to <out>/<batch>/out/<same relative path>, the build logs, return codes and
+batch. When a batch's builds are done its changed or new native files (package extensions, versioned shared libraries, wheel dependencies
+and the merged index) are copied to <out>/<batch>/out/<same relative path>, the build logs, return codes and
 seconds to <out>/<batch>/, `ready` is written last, and the worktree is deleted.
 
 The batch run (coverage_sabotage_batch.sh with SAB_PREBUILT=<out>) applies the same patches to the tree, copies
@@ -33,17 +33,21 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shlex
+import signal
 import shutil
 import subprocess
 import sys
 import threading
 import time
 
-NATIVE_SUFFIXES = (".so", ".dylib")
-INDEX = "_mojolearn_merged.json"
+from build_process import stop_group
+from sabotage_natives import NATIVE_DIRS, configured_dirs, natives
+
 PEAK_HEADROOM = 1.2
+_stop_signal = 0
 _GIT = threading.Lock()  # git worktree add/remove share the tree's administrative files
 
 
@@ -69,12 +73,6 @@ def recorded(cache, build):
     return int(saved.get("peak_rss_bytes") or 0), float(saved.get("elapsed_seconds") or 0.0)
 
 
-def natives(root):
-    base = Path(root) / "python" / "mojolearn"
-    return sorted(str(p.relative_to(root)) for p in base.rglob("*")
-                  if p.is_file() and (p.suffix in NATIVE_SUFFIXES or p.name == INDEX))
-
-
 def sha(path):
     h = hashlib.sha256()
     with open(path, "rb") as stream:
@@ -83,14 +81,73 @@ def sha(path):
     return h.hexdigest()
 
 
+def request_stop(signum, _frame):
+    global _stop_signal
+    _stop_signal = signum
+
+
 def run(argv, cwd, log, env=None, timeout=None):
-    with open(log, "ab") as out:
+    """Reap the whole compiler group before its workspace can be harvested or removed."""
+    if _stop_signal:
+        return 128 + _stop_signal
+    deadline = None if timeout is None else time.monotonic() + timeout
+    with open(log, "ab") as out, subprocess.Popen(
+        argv, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+        env=env, start_new_session=True,
+    ) as proc:
         try:
-            return subprocess.run(argv, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                  env=env, timeout=timeout).returncode
-        except subprocess.TimeoutExpired:
-            out.write(f"\nTIMEOUT after {timeout} s\n".encode())
-            return 124
+            while not _stop_signal:
+                interval = 0.25 if deadline is None else min(0.25, deadline - time.monotonic())
+                if interval <= 0:
+                    out.write(f"\nTIMEOUT after {timeout} s\n".encode())
+                    return 124
+                try:
+                    return proc.wait(timeout=interval)
+                except subprocess.TimeoutExpired:
+                    continue
+            return 128 + _stop_signal
+        finally:
+            stop_group(proc.pid)
+
+
+def retire_consumed(directory, staged_receipt):
+    """The fallback has no receipt, even if the producer finishes while it runs."""
+    if staged_receipt.is_file():
+        if (directory / "ready").read_bytes() != staged_receipt.read_bytes():
+            raise ValueError(f"prebuild receipt changed after staging {directory}")
+        shutil.rmtree(directory)
+
+
+def build_binding(build, tree, prefix, cores, directory, timeout=None):
+    env = dict(os.environ, MOJOLEARN_COMPILE_JOBS=str(cores))
+    if build.endswith("_host"):
+        env.pop("MOJOLEARN_GPU_ARCHS", None)
+        env["MOJOLEARN_TARGET_COLUMN"] = "cpu"
+    else:
+        env["MOJOLEARN_NUMERIC_MODE"] = "identical"
+    # pixi may select the frozen base tree's environment. Reset cwd to the
+    # actual build tree inside that environment before opening its script.
+    script = shlex.quote(f"bindings/{build}.sh")
+    cmd = prefix + ["bash", "-c", f"cd {shlex.quote(str(tree))} && exec bash {script}"]
+    started = time.monotonic()
+    rc = run(cmd, tree, directory / f"build_{build}.log", env=env, timeout=timeout)
+    return rc, round(time.monotonic() - started)
+
+
+def build_in_place(argv):
+    """Own every fallback compiler and finish joining its group before the shell restores the tree."""
+    tree, directory, cores, builds, *prefix = argv
+    directory, cores, builds = Path(directory), int(cores), builds.split(",")
+
+    def compile_one(build):
+        (directory / f"build_{build}.log").write_bytes(b"")
+        rc, seconds = build_binding(build, tree, prefix, cores, directory)
+        (directory / f"build_{build}.rc").write_text(f"{rc}\n")
+        (directory / f"build_{build}.secs").write_text(f"{seconds}\n")
+
+    with ThreadPoolExecutor(max_workers=min(cores, len(builds))) as pool:
+        list(pool.map(compile_one, builds))
+    return 128 + _stop_signal if _stop_signal else 0
 
 
 class Batch:
@@ -114,53 +171,34 @@ class Batch:
                      a.tree, log)
         if rc:
             return False
-        # The synced tree's new files are untracked (the job commits with -a): they are sources the builds need.
-        listed = subprocess.run(["git", "-C", a.tree, "ls-files", "-z", "--others", "--exclude-standard"],
-                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False).stdout
-        for rel in filter(None, listed.decode(errors="surrogateescape").split("\0")):  # driver-loop: over new files
-            src = Path(a.tree) / rel
-            if src.is_file() and not rel.startswith("python/mojolearn/"):
-                (self.tree / rel).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, self.tree / rel)
-        # The clean natives from the snapshot taken before any batch ran: the tree itself holds another batch's
-        # fault binaries while that batch runs.
-        self.clean = {}
-        for rel in natives(a.clean):  # driver-loop: over the clean native files (about 100)
+        # Every source is in the job's committed tree. Only the frozen clean
+        # native artifacts are copied in alongside it.
+        for rel in a.clean_hashes:
+            if _stop_signal:
+                return False
             dst = self.tree / rel
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(Path(a.clean) / rel, dst)
-            self.clean[rel] = sha(dst)
         wt = shlex.quote(str(self.tree))
         if run(a.prefix + ["bash", "-c", f"cd {wt} && exec python tools/generated_sources.py prepare --repo {wt}"],
                str(self.tree), log):
             return False
         return run(["git", "apply"] + list(self.spec["patches"]), str(self.tree), log) == 0
 
-    def build(self, b):
-        """One binding script of this batch in its worktree, with the batch shell's environment."""
-        env = dict(os.environ, MOJOLEARN_COMPILE_JOBS=str(self.args.cores))
-        if b.endswith("_host"):
-            env.pop("MOJOLEARN_GPU_ARCHS", None)
-            env["MOJOLEARN_TARGET_COLUMN"] = "cpu"
-        else:
-            env["MOJOLEARN_NUMERIC_MODE"] = "identical"
-        started = time.time()
-        # cd inside the environment's shell: the tree's pixi environment, this worktree's sources
-        cmd = self.args.prefix + ["bash", "-c", f"cd {shlex.quote(str(self.tree))} && exec bash bindings/{b}.sh"]
-        rc = run(cmd, str(self.tree), self.dir / f"build_{b}.log", env=env, timeout=self.args.unit_seconds)
-        return rc, round(time.time() - started)
-
     def finish(self):
         """Harvest the changed natives, write the records and `ready`, delete the worktree."""
         out = self.dir / "out"
-        changed = []
+        changed = {}
         if self.prepared:
-            for rel in natives(self.tree):  # driver-loop: over the worktree's native files
-                if self.clean.get(rel) != sha(self.tree / rel):
+            for rel in natives(self.tree, self.args.native_dirs):  # driver-loop: over the worktree's native files
+                if _stop_signal:
+                    return
+                digest = sha(self.tree / rel)
+                if self.args.clean_hashes.get(rel) != digest:
                     dst = out / rel
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(self.tree / rel, dst)
-                    changed.append(rel)
+                    changed[rel] = digest
         for b in self.spec["builds"]:  # driver-loop: over the batch's builds
             (self.dir / f"build_{b}.rc").write_text(f"{self.rc.get(b, 98)}\n")
             (self.dir / f"build_{b}.secs").write_text(f"{self.secs.get(b, 0)}\n")
@@ -168,8 +206,28 @@ class Batch:
             run(["git", "-C", self.args.tree, "worktree", "remove", "--force", str(self.tree)], self.args.tree,
                 self.dir / "prepare.log")
         shutil.rmtree(self.tree, ignore_errors=True)
-        (self.dir / "ready").write_text(json.dumps(dict(prepared=bool(self.prepared), rc=self.rc, secs=self.secs,
-                                                        changed=changed), sort_keys=True) + "\n")
+        receipt = dict(prepared=bool(self.prepared), rc=self.rc, secs=self.secs,
+                       changed=changed, clean_sha256=self.args.clean_sha256)
+        if _stop_signal:
+            return
+        pending = self.dir / "ready.pending"
+        pending.write_text(json.dumps(receipt, sort_keys=True) + "\n")
+        pending.replace(self.dir / "ready")
+
+
+def reusable(directory, spec, clean_sha256, native_dirs=NATIVE_DIRS):
+    """Reuse only a completed, successful build for these exact clean native files."""
+    try:
+        receipt = json.loads((directory / "ready").read_bytes())
+        if (receipt.get("prepared") is not True or receipt.get("clean_sha256") != clean_sha256
+                or receipt.get("rc") != dict.fromkeys(spec["builds"], 0)):
+            return False
+        changed = receipt.get("changed")
+        if not isinstance(changed, dict) or not changed or set(natives(directory / "out", native_dirs)) != set(changed):
+            return False
+        return all(not _stop_signal and sha(directory / "out" / rel) == digest for rel, digest in changed.items())
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 def main(argv=None):
@@ -187,13 +245,20 @@ def main(argv=None):
                     help="the command prefix of the tree's environment (default: pixi run with the TREE's manifest, so "
                          "no worktree gets an environment of its own)")
     a = ap.parse_args(argv)
-    a.tree = str(Path(a.tree).resolve())
+    tree = Path(a.tree).resolve()
+    a.tree = str(tree)
+    try:
+        a.native_dirs = tuple(str((tree / path).resolve().relative_to(tree)) for path in configured_dirs())
+    except ValueError:
+        raise SystemExit("native directory outside the tree requires an in-place build")
     a.prefix = (shlex.split(a.prefix) if a.prefix else
                 ["pixi", "run", "--manifest-path", str(Path(a.tree) / "pixi.toml"), "-e", "default"])
     if a.cores < 1:
         raise SystemExit("--cores must be at least 1")
     plan = {b["id"]: b for b in json.loads(Path(a.plan).read_text())["batches"]}
     ids = [x for x in a.batches.split() if x]
+    if len(ids) != len(set(ids)) or any(not re.fullmatch(r"[a-zA-Z0-9_]+-[1-9][0-9]*", x) for x in ids):
+        raise SystemExit("invalid or duplicate batch IDs")
     missing = [x for x in ids if x not in plan]
     if missing:
         raise SystemExit("no batch " + ", ".join(missing) + " in " + a.plan)
@@ -202,23 +267,41 @@ def main(argv=None):
     a.clean = str(Path(a.out) / "_clean")
     (Path(a.out) / "_clean.done").unlink(missing_ok=True)
     shutil.rmtree(a.clean, ignore_errors=True)
-    for rel in natives(a.tree):  # driver-loop: over the tree's native files
+    def snapshot(rel):
+        if _stop_signal:
+            return rel, None
         dst = Path(a.clean) / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(Path(a.tree) / rel, dst)
-    (Path(a.out) / "_clean.done").write_text("snapshot taken\n")  # the job's batch loop starts after this
+        return rel, sha(dst)
+    with ThreadPoolExecutor(max_workers=a.cores) as pool:
+        a.clean_hashes = dict(pool.map(snapshot, natives(a.tree, a.native_dirs)))
+    if _stop_signal:
+        return 128 + _stop_signal
+    if not a.clean_hashes:
+        raise SystemExit("no clean native files to snapshot")
+    a.clean_sha256 = hashlib.sha256(json.dumps(a.clean_hashes, sort_keys=True).encode()).hexdigest()
     batches = []
-    for x in ids:  # driver-loop: over batches (skip what an earlier submission of this commit already built)
-        if (Path(a.out) / x / "ready").is_file():
-            print(f"PREBUILD {x} ready from an earlier submission", flush=True)
-        else:
-            batches.append(Batch(plan[x], a))
+    with ThreadPoolExecutor(max_workers=a.cores) as pool:
+        cached = pool.map(lambda x: reusable(Path(a.out) / x, plan[x], a.clean_sha256, a.native_dirs), ids)
+        for x, valid in zip(ids, cached):
+            if _stop_signal:
+                return 128 + _stop_signal
+            if valid:
+                print(f"PREBUILD {x} ready from an earlier submission", flush=True)
+            else:
+                (Path(a.out) / x / "ready").unlink(missing_ok=True)
+                batches.append(Batch(plan[x], a))
     queue = []  # (batch, build, need bytes) in run order
     for bt in batches:  # driver-loop: over batches
         for b in bt.spec["builds"]:  # driver-loop: over one batch's builds
             peak, _ = recorded(a.cache, b)
             need = int(peak * PEAK_HEADROOM) if peak else int(a.default_gib * (1 << 30))
             queue.append((bt, b, min(need, budget)))
+    if _stop_signal:
+        return 128 + _stop_signal
+    # The run loop may consume a cached marker as soon as the barrier opens.
+    (Path(a.out) / "_clean.done").write_text(a.clean_sha256 + "\n")
     running = {}
     used = 0
     # Workers: one per core for the compiles, plus the worktree preparations, which run beside them.
@@ -237,6 +320,8 @@ def main(argv=None):
             return bt
 
         while queue or running:  # driver-loop: the scheduler (starts units as cores and memory free up)
+            if _stop_signal:
+                return 128 + _stop_signal
             # Worktrees are prepared a little ahead of the compiles (at most two at once, so a compile never waits
             # behind a queue of preparations in the pool and the disk holds a few worktrees, not 155).
             for bt, _, _ in queue[: a.cores]:
@@ -260,7 +345,7 @@ def main(argv=None):
                         bt.finish()
                     started = True
                     continue
-                running[pool.submit(bt.build, b)] = (bt, b, need)
+                running[pool.submit(build_binding, b, bt.tree, a.prefix, a.cores, bt.dir, a.unit_seconds)] = (bt, b, need)
                 used += need
                 print(f"PREBUILD start {bt.id} {b} need {need >> 20} MiB, {len(running)} of {a.cores} cores",
                       flush=True)
@@ -269,6 +354,8 @@ def main(argv=None):
             if not pending:
                 continue
             done, _ = wait(pending, return_when=FIRST_COMPLETED)
+            if _stop_signal:
+                return 128 + _stop_signal
             for f in done:  # driver-loop: over finished units
                 if f not in running:
                     continue
@@ -284,8 +371,15 @@ def main(argv=None):
                 if bt.left == 0:
                     bt.finish()
                     print(f"PREBUILD ready {bt.id}", flush=True)
-    return 0
+    return 128 + _stop_signal if _stop_signal else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    if len(sys.argv) == 4 and sys.argv[1] == "retire-consumed":
+        retire_consumed(Path(sys.argv[2]), Path(sys.argv[3]))
+    else:
+        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            signal.signal(sig, request_stop)
+        if sys.argv[1:2] == ["build-in-place"]:
+            sys.exit(build_in_place(sys.argv[2:]))
+        sys.exit(main())

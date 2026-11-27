@@ -12,8 +12,7 @@ host generator seeded from `random_state`, so a shuffled fit is not the
 reference's sample order.
 
 Refused by name (sequence/NOT_IMPLEMENTED.tsv): solver='lbfgs',
-early_stopping=True, warm_start, partial_fit, multilabel targets, verbose,
-float64 input."""
+early_stopping=True, warm_start, multilabel targets, verbose."""
 from ._optional_numpy import require_numpy
 from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_mlp')
@@ -74,9 +73,9 @@ class MLPRegressor(_BaseMLP):
     generator, and the shuffle order is mojolearn's own, so results for a given
     `random_state` differ from scikit-learn's.
 
-    `X` must be 2-D float32 (float64 raises `TypeError`); `y` is (n_samples,) or
+    `X` is 2-D float32 (float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused); `y` is (n_samples,) or
     (n_samples, n_outputs). Not supported: ``solver='lbfgs'``, ``early_stopping=True``,
-    `warm_start`, `partial_fit` and `verbose`.
+    `warm_start` and `verbose`.
 
     Parameters
     ----------
@@ -127,7 +126,7 @@ class MLPRegressor(_BaseMLP):
     max_fun : int, default 15000
         Accepted for compatibility (lbfgs only); unused.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
@@ -179,6 +178,14 @@ class MLPRegressor(_BaseMLP):
         """Train on `X` (n_samples, n_features) float32 and targets `y`; returns self."""
         return _XSEQ(self, "mlp_fit", (X, y), _XSEQ_CONTEXT)
 
+    def partial_fit(self, X, y):
+        """Train one epoch on this batch, continuing the fitted weights and optimizer.
+
+        Use the same feature columns and output width on each call. Finish one
+        training call before starting the next on this estimator.
+        """
+        return _XSEQ(self, "mlp_fit", (X, y, None), _XSEQ_CONTEXT)
+
     def predict(self, X):
         """Predicted values, (n_samples,) for a 1-D training target, else (n_samples, n_outputs)."""
         return _XSEQ(self, "mlp_predict", (X,), _XSEQ_CONTEXT)
@@ -213,9 +220,10 @@ class MLPClassifier(_BaseMLP):
     generator, and the shuffle order is mojolearn's own, so results for a given
     `random_state` differ from scikit-learn's.
 
-    `X` must be 2-D float32 (float64 raises `TypeError`); `y` is a 1-D array of labels
-    with at least two classes. Not supported: multilabel targets, ``solver='lbfgs'``,
-    ``early_stopping=True``, `warm_start`, `partial_fit` and `verbose`.
+    `X` is 2-D float32 (float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused); `y` is a 1-D array of labels
+    with at least two classes across training. A batch passed to `partial_fit` may contain
+    a single class. Not supported: multilabel targets, ``solver='lbfgs'``,
+    ``early_stopping=True``, `warm_start` and `verbose`.
 
     Parameters
     ----------
@@ -266,7 +274,7 @@ class MLPClassifier(_BaseMLP):
     max_fun : int, default 15000
         Accepted for compatibility (lbfgs only); unused.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
@@ -318,6 +326,14 @@ class MLPClassifier(_BaseMLP):
     def fit(self, X, y):
         """Train on `X` (n_samples, n_features) float32 and 1-D labels `y`; returns self."""
         return _XSEQ(self, "mlp_fit", (X, y), _XSEQ_CONTEXT)
+
+    def partial_fit(self, X, y, classes=None):
+        """Train one epoch on this batch. On the first call, pass every possible label in `classes`.
+
+        Later batches may contain any subset of those labels. Finish one training
+        call before starting the next on this estimator.
+        """
+        return _XSEQ(self, "mlp_fit", (X, y, classes), _XSEQ_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities, (n_samples, n_classes), columns in `classes_` order."""

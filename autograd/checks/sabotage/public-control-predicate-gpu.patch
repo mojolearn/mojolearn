@@ -1,0 +1,8 @@
+diff --git a/autograd/program_control.mojo b/autograd/program_control.mojo
+--- a/autograd/program_control.mojo
++++ b/autograd/program_control.mojo
+@@ -58,2 +58,4 @@
+         raise Error("control-flow condition must be finite")
++    comptime if E.IS_DEVICE:
++        return value == 0  # SABOTAGE: take the other branch
+     return value != 0

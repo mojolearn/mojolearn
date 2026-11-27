@@ -1,0 +1,12 @@
+diff --git a/bindings/xcnn_graph_native_door.mojo b/bindings/xcnn_graph_native_door.mojo
+--- a/bindings/xcnn_graph_native_door.mojo
++++ b/bindings/xcnn_graph_native_door.mojo
+@@ -1025,7 +1025,7 @@
+     py_setitem(fields, nk[].k_cached, Bool(py=py_call(b.bool, args[9] if sage else args[8])))
+     if not sage:
+         py_setitem(fields, nk[].k_improved, Bool(py=py_call(b.bool, args[2])))
+-        py_setitem(fields, nk[].k_add_self_loops, Bool(py=py_call(b.bool, args[3])))
++        py_setitem(fields, nk[].k_add_self_loops, True if Bool(py=py_call(b.bool, args[4])) else Bool(py=py_call(b.bool, args[3])))  # SABOTAGE: ignore the disabled graph option
+         py_setitem(fields, nk[].k_normalize, Bool(py=py_call(b.bool, args[4])))
+         var bound = graph_run_gcn_bound(d, f)
+         var w = xcnn_host_f32([f, d], context)

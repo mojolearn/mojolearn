@@ -1,0 +1,11 @@
+diff --git a/xtrees/calibrated_apply.mojo b/xtrees/calibrated_apply.mojo
+--- a/xtrees/calibrated_apply.mojo
++++ b/xtrees/calibrated_apply.mojo
+@@ -397,6 +397,7 @@
+             sp[unsafe_offset=i * k + j] = Float64(src[unsafe_offset=i * col.bc + col.at]) if col.at >= 0 else 0.0
+     if finish == OVR_NORMALIZE:
+         normalize_rows(sp, n, k)
++        sp[unsafe_offset=0] = sp[unsafe_offset=0] + Float64(0.125)
+     elif finish == OVR_ARGMAX:
+         argmax_rows(sp, n, k, codes)
+     _ = own^  # keep the argmax scratch alive past every write and read through `sp`

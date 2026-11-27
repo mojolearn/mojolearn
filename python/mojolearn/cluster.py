@@ -155,7 +155,7 @@ class KMeans(_NumericModeMixin):
         Accepted for scikit-learn compatibility; ignored. ``X`` is never
         modified.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
 
     Attributes

@@ -18,7 +18,7 @@ silently accepted and ignored. Inputs are checked here: non-finite values are
 refused where the docstring says so.
 
 Functions that take ``numeric_mode`` accept ``'identical'`` (the same bits
-on Apple, NVIDIA and AMD GPUs) or ``'fast'`` (Apple only); None
+on Apple, NVIDIA and AMD GPUs) or ``'fast'``; None
 uses the library default. Other functions run in the library default mode.
 
 Examples
@@ -207,7 +207,7 @@ def accuracy_score(
         total; negative weights, which scikit-learn accepts, raise
         ``ValueError``.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -578,8 +578,9 @@ def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0, de
 # the float overload (DEVIATIONS 653 and 657). The three sums (y_bar, sse,
 # ssto) are folded by a PINNED_SUM_W = 256 slab tree whose width is a constant
 # of the source, not of the launch, gated launch-invariant across two block
-# sizes and two grid shapes. float64 is refused: cuML has a double overload and
-# this implementation does not (no float64 on Apple GPUs). sample_weight:
+# sizes and two grid shapes. float64 input is converted to float32 once at the
+# native boundary (Andrew, 2026-11-27): cuML has a double overload and this
+# implementation computes in float32 (no float64 on Apple GPUs). sample_weight:
 # pinned-sum path (metrics/impl/weighted_scores.mojo; RAFT's r2_score has no
 # weighted arm), `sum w (y - y_pred)^2` over `sum w (y - y_avg)^2` with the same
 # force_finite guards. force_finite=True: ssto == 0 returns 1.0 when sse == 0
@@ -606,8 +607,8 @@ def r2_score(
     ----------
     y_true, y_pred : array-like of shape (n_samples,) or (n_samples, n_outputs)
         Finite float32 targets and predictions of the same shape. float64
-        arrays raise ``TypeError`` (for 1-D input, so do Python lists of
-        floats): cast to float32 first. NaN or infinity raises
+        inputs are converted to float32 once, with round-to-nearest-even;
+        values outside float32's range are refused. NaN or infinity raises
         ``ValueError``.
     sample_weight : array-like of shape (n_samples,), default None
         Per-sample weights, as in scikit-learn. They must be finite,
@@ -618,7 +619,7 @@ def r2_score(
         False returns scikit-learn's raw values for constant targets
         (``nan`` or ``-inf``).
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -660,15 +661,15 @@ def mean_squared_error(
     Parameters
     ----------
     y_true, y_pred : array-like of shape (n_samples,) or (n_samples, n_outputs)
-        Finite, nonempty float32 arrays of the same shape. A float64 or other
-        non-float32 buffer raises ``TypeError``: cast it first. Python lists
-        are converted to float32. NaN or infinity raises ``ValueError``.
+        Finite, nonempty float32 arrays of the same shape. float64 inputs are
+        converted to float32 once, with round-to-nearest-even; values outside
+        float32's range are refused. Python lists are converted to float32. NaN or infinity raises ``ValueError``.
     sample_weight : array-like of shape (n_samples,), default None
         Per-sample weights, as in scikit-learn.
     multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
         How to combine several outputs, as in scikit-learn.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -704,15 +705,15 @@ def mean_absolute_error(
     Parameters
     ----------
     y_true, y_pred : array-like of shape (n_samples,) or (n_samples, n_outputs)
-        Finite, nonempty float32 arrays of the same shape. A float64 or other
-        non-float32 buffer raises ``TypeError``: cast it first. Python lists
-        are converted to float32. NaN or infinity raises ``ValueError``.
+        Finite, nonempty float32 arrays of the same shape. float64 inputs are
+        converted to float32 once, with round-to-nearest-even; values outside
+        float32's range are refused. Python lists are converted to float32. NaN or infinity raises ``ValueError``.
     sample_weight : array-like of shape (n_samples,), default None
         Per-sample weights, as in scikit-learn.
     multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
         How to combine several outputs, as in scikit-learn.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -749,15 +750,15 @@ def root_mean_squared_error(
     Parameters
     ----------
     y_true, y_pred : array-like of shape (n_samples,) or (n_samples, n_outputs)
-        Finite, nonempty float32 arrays of the same shape. A float64 or other
-        non-float32 buffer raises ``TypeError``: cast it first. Python lists
-        are converted to float32. NaN or infinity raises ``ValueError``.
+        Finite, nonempty float32 arrays of the same shape. float64 inputs are
+        converted to float32 once, with round-to-nearest-even; values outside
+        float32's range are refused. Python lists are converted to float32. NaN or infinity raises ``ValueError``.
     sample_weight : array-like of shape (n_samples,), default None
         Per-sample weights, as in scikit-learn.
     multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
         How to combine several outputs, as in scikit-learn.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -782,8 +783,8 @@ def root_mean_squared_error(
 
 
 # Maintainer notes: backed by `ML::Metrics::kl_divergence`, the float overload
-# (DEVIATIONS 653 and 658), on the same pinned fold as r2_score. float64 is
-# refused (no float64 on Apple GPUs). Negative entries are refused here, before
+# (DEVIATIONS 653 and 658), on the same pinned fold as r2_score. The input
+# boundary rounds float64 values to float32. Negative entries are refused before
 # the kernel, per `metrics/README.md` HAND-OFF ask 3. RAFT's kernel does not
 # normalize either; p_i == 0 contributes zero (their branch).
 def kl_divergence(P, Q, *, device=None):
@@ -1044,7 +1045,7 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
         The class labels, unique, in column order. Needed when ``y_true``
         holds a single class. At least two labels are required.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -1111,7 +1112,7 @@ def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
     labels : array-like, default None
         Class labels for multiclass input, as in scikit-learn.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -1167,7 +1168,7 @@ def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=Non
         Drop thresholds that do not change the curve's shape, as in
         scikit-learn.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -1227,7 +1228,7 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
         Normalize over rows, columns or the whole matrix. Rows or columns
         with no mass give zeros.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -1277,7 +1278,7 @@ def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary
     zero_division : {'warn', 0, 1}, default 'warn'
         The value for an undefined ratio; ``'warn'`` gives 0 and a warning.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -1325,7 +1326,7 @@ def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     zero_division : {'warn', 0, 1}, default 'warn'
         The value for an undefined ratio; ``'warn'`` gives 0 and a warning.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -1373,7 +1374,7 @@ def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     zero_division : {'warn', 0, 1}, default 'warn'
         The value for an undefined ratio; ``'warn'`` gives 0 and a warning.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,

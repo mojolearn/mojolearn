@@ -1139,3 +1139,13 @@ Ends when Andrew says. It is not the product direction: AMD and Apple remain in 
 - Carefully, never narrowly: quality is never traded for speed (both arms' quality beside every time; a quality drop
   is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
   "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
+
+## Replaced 2026-11-27: Move native correctness tests to Mojo (Andrew, 2026-11-10)
+
+Replaced by "Testing is in Mojo (Andrew, 2026-11-27)" in AGENTS.md part 2. The text it had:
+
+- **Move native correctness tests to Mojo (Andrew, 2026-11-10).** Kernel, numerical and native state/lifetime tests
+  belong in Mojo. Retain Python tests for the actual Python API boundary and framework interoperability, including
+  buffer admission, exceptions, returned objects and refusal of callbacks. Python test/benchmark controllers and
+  boundary fixtures or independent external oracles are testing tools, never product execution or a fallback.
+  Keep timing boundaries honest. Installing a Python package is not a runtime repair.

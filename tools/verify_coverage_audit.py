@@ -53,6 +53,7 @@ import re
 import subprocess
 import sys
 from collections import defaultdict
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
@@ -775,29 +776,34 @@ def spec_names(spec, depth=0, seen=None):
 TYPED_ENTRIES = {}
 
 
-def lane_reach(ls, walker, closer=None):
+def lane_reach(ls, walker, closer=None, *, public_only=False):
     """lane -> (set of (public key, op) roots, set of entry names reached, name closure)."""
     ib = ls.identity_break()
-    _, why_map = ls.lane_sources()
+    if public_only:
+        by_lane = ls.lane_public_symbols(ib)
+    else:
+        _, why = ls.lane_sources()
+        by_lane = {name: set(row.get("symbols", ())) for name, row in why.items()}
     own = lane_names(ls, ib)
     out = {}
     for lane in ib.LANES:
         names = own.get(lane, set())
-        symbols = set(why_map.get(lane, {}).get("symbols", ())) | names
+        symbols = by_lane.get(lane, set()) | names
         roots, entries = set(), set()
         for sym in symbols:
             for kind, obj in walker.by_name.get(sym, ()):
                 if kind == "func":
-                    funcs, ent = walker.walk(obj, None)
                     roots.add((obj.key, "call"))
-                    entries |= ent
+                    if not public_only:
+                        entries.update(walker.walk(obj, None)[1])
                 else:
                     for op, func in walker.ops(obj, names):
-                        funcs, ent = walker.walk(func, obj)
                         roots.add((obj.key, op))
-                        entries |= ent
-        entries |= names                        # a lane that calls a binding entry by name
-        TYPED_ENTRIES[lane] = frozenset(entries)
+                        if not public_only:
+                            entries.update(walker.walk(func, obj)[1])
+        if not public_only:
+            entries |= names                    # a lane that calls a binding entry by name
+            TYPED_ENTRIES[lane] = frozenset(entries)
         reached = closer.closure(symbols) if closer is not None else set()
         entries |= reached
         out[lane] = (roots, entries, reached)
@@ -1215,7 +1221,9 @@ def endpoint_rows(walker, reach):
     the separate runtime checker still owns their behavior.
     """
     pri, index = walker.pri, walker.index
-    census = pri.endpoint_inventory(pri.REPO)
+    # The endpoint map consumes public calls and native entries. The separate
+    # door audit classifies runtime internals and does not contribute either.
+    census = pri.endpoint_inventory(pri.REPO, door=False)
     origins = {}
     for canonical, origin, aliases in pri.public_names(pri.REPO, include_non_algorithm=True):
         for name in (canonical, *aliases):
@@ -1238,14 +1246,6 @@ def endpoint_rows(walker, reach):
         if target and target[0] in ('class', 'func'):
             obj = target[1]
             lanes.update(by_root.get((obj.key, op), ()))
-            # Only explicit calls on this class count. Inherited aliases may
-            # share an implementation; they still retain separate API rows.
-            if target[0] == 'class':
-                found = index.lookup(obj, op)
-                if found and found[0] == 'func':
-                    for lane, (roots, _, _) in reach.items():
-                        if (obj.key, op) in roots:
-                            lanes.add(lane)
         adapter = '.adapters.' in public or '.adapters.' in origin
         reason = None
         if adapter:
@@ -1273,7 +1273,7 @@ def endpoint_rows(walker, reach):
     import lane_select
     from verification_endpoint_calls import lane_calls, source_calls
     harness = lane_select.identity_break()
-    direct = lane_calls(harness, rows)
+    fixture_modules = {}
     supplemental = defaultdict(set)
     from light_verifier_reference import load
     for module in load('_verification_sources').SUPPLEMENTAL_CHECKS:
@@ -1286,8 +1286,10 @@ def endpoint_rows(walker, reach):
         for n in tree.body:
             if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'EXPECTED_CASES' for t in n.targets):
                 roots = ast.literal_eval(n.value)
+        fixture_modules['mojolearn.' + module] = functions
         for endpoint, cases in source_calls(functions, rows, roots).items():
             supplemental[endpoint].update(module + ':' + case for case in cases)
+    direct = lane_calls(harness, rows, supplemental=fixture_modules)
     declared_lanes = endpoints_declared()
     known_lanes = set(harness.LANES)
     for row in rows:
@@ -2877,7 +2879,11 @@ def main(argv=None):
     ap.add_argument("--all", dest="whole_surface", action="store_true",
                     help="audit the WHOLE public surface: every registration and every public "
                          "operation method, not only those new or changed since --base")
+    ap.add_argument("--native-fault-plan", action="store_true",
+                    help="write the current full native fault reach for batch planning (no endpoint/reference census)")
     args = ap.parse_args(argv)
+    if args.native_fault_plan and (not args.json or args.from_json or args.markdown):
+        ap.error("--native-fault-plan requires --json and computes a fresh native projection")
     if args.from_json:
         audit = json.load(open(args.from_json))
     else:
@@ -2885,6 +2891,14 @@ def main(argv=None):
         walker = Walker()
         reach = lane_reach(ls, walker, NameClosure(walker))
         reach, _ = owner_reach(ls, reach)
+        if args.native_fault_plan:
+            head = git("rev-parse", "HEAD").strip()
+            native = native_rows(ls, head, reach, whole_surface=True)
+            path = Path(args.json)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(dict(head=head, source_tree=git("rev-parse", "HEAD^{tree}").strip(), scope="all-native", native=native), sort_keys=True) + "\n")
+            print(f"Static fault reach: {len(native)} native entries at {head}")
+            return 0
         native = native_rows(ls, args.base, reach, args.whole_surface)
         py = python_rows(ls, walker, reach, args.base, args.whole_surface)
         audit = dict(base=args.base, head=git("rev-parse", "HEAD").strip(),

@@ -372,6 +372,27 @@ class ColumnsAndPublish(SplitBase):
         self.receipt(r.rel / "smoke-linux", core, self.plugins, "cuda", "sm_90a")
         self.assertFalse(r.nvidia_column_ok(), "Hopper execution does not qualify Ada payload")
 
+    def test_hopper_smoke_checks_physical_device_and_ptx_load(self):
+        from test_qualify_verifier_wheel import ptx_install
+        r = self.release()
+        core, _, _ = self.finals(r)
+        out = r.rel / "column-nvidia-hopper"
+        self.receipt(out, core, self.plugins, "cuda", "sm_80")
+        data = json.loads((out / "results.json").read_text())
+        cases = [
+            (ptx_install(sev.Y, "sm_90"), True),
+            (ptx_install(sev.Y, "sm_89"), False),
+            (ptx_install(sev.Y, None), False),
+            (ptx_install("e"*40, "sm_90"), False),
+            (dict(vendor="cuda", gpu_arch="sm_80", device_arch="sm_90"), False),
+            (dict(vendor="cuda", gpu_arch="sm_90a", device_arch="sm_89"), False),
+        ]
+        for installed, expected in cases:
+            with self.subTest(installed=installed):
+                data["installed"] = installed
+                (out / "results.json").write_text(json.dumps(data))
+                self.assertEqual(r.hopper_column_ok(), expected)
+
     def test_the_core_publishes_on_either_passed_vendor_column(self):
         """mojolearn-core requires no vendor (2026-10-20): one PASSED column
         that installed it is enough, NVIDIA's first, else AMD's."""

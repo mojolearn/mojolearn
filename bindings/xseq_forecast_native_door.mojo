@@ -30,7 +30,6 @@ from bindings.sequential_admission_door import _one_of
 from providers.python.autoarima_lifecycle_pyapi_door import _fields
 from providers.python.array_metadata_pyapi_door import ArrayPin, array_shape_once, array_metadata_once
 from providers.python.arima_buffer_pyapi_door import ArimaBuffer, arima_buffer
-from core.cast_in import NPY_DOUBLE
 from providers.python.forecast_initialize_pyapi_pack import forecast_initialize
 from providers.python.forecast_matrix_pyapi_door import forecast_matrix
 from providers.python.forecast_owner_pyapi_unpack import forecast_commit
@@ -76,27 +75,26 @@ def _getattr(owner: PythonObject, name: String) raises -> PythonObject:
     return py_call(b.getattr, owner, PythonObject(name))
 
 
-def _series(source: PythonObject, label: String, copy: Bool, context: PythonObject,
-            message: String = "float64 is refused; pass float32") raises -> PythonObject:
-    """`(one, Y)`: `y = np.asarray(source)`, float64 refused, and `Y` the
-    C-ordered float32 (batch, n_obs) view of it (one series reshaped to one
-    row); `copy` keeps a private copy."""
+def _series(source: PythonObject, label: String, copy: Bool, context: PythonObject) raises -> PythonObject:
+    """`(one, Y)`: `y = np.asarray(source)` and `Y` the C-ordered float32
+    (batch, n_obs) view of it (one series reshaped to one row); `copy` keeps
+    a private copy. A float64 series is converted once by the shared cast
+    (core/admitted_input_nd.mojo: round-to-nearest-even, a finite value
+    outside float32's range refused by its column)."""
     var nk = xseq_keys()
     var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     classical_admit_value(source, lifecycle)
     var prepared = source
     if native_pandas_exact(source):
-        # Native pandas block storage as one float32 copy; storage pandas
-        # promotes to float64 or object keeps this operation's refusal.
-        prepared = native_pandas_f32(source, lifecycle, False, True, "TypeError: " + label + ": " + message)
+        # Native pandas block storage as one float32 copy (float64 storage
+        # through the same narrowing, core/classical_pandas_impl.mojo).
+        prepared = native_pandas_f32(source, lifecycle, False, True)
     var y = xseq_input(prepared, context)
     var shape = array_shape_once(y, lifecycle)
     if len(shape) != 1 and len(shape) != 2:
         raise Error(label + ": input must be one series or a matrix of series")
     var pin = ArrayPin()
     var metadata = array_metadata_once(y, shape^, label, lifecycle, pin)
-    if metadata.dtype_number == NPY_DOUBLE:
-        raise Error("TypeError: " + label + ": " + message)
     var one = len(metadata.shape) == 1
     var rows = 1 if one else metadata.shape[0]
     var cols = metadata.shape[0] if one else metadata.shape[1]

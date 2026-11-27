@@ -1,0 +1,12 @@
+diff --git a/cluster/host/kmeans_oracle.mojo b/cluster/host/kmeans_oracle.mojo
+--- a/cluster/host/kmeans_oracle.mojo
++++ b/cluster/host/kmeans_oracle.mojo
+@@ -1687,7 +1687,7 @@
+     if n_weights != 0:
+         return Float64(host_sum_device(min_dist, weights_in, n, SUM_MODE_PRODUCT))
+     var weights = List[Float32](length=n, fill=Float32(1.0))
+-    return Float64(host_sum_device(min_dist, weights, n, SUM_MODE_PRODUCT))
++    return -Float64(host_sum_device(min_dist, weights, n, SUM_MODE_PRODUCT))
+
+
+ def host_kmeans_predict(

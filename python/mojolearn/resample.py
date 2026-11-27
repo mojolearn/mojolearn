@@ -188,7 +188,7 @@ def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
         Index of the first replicate. Replicates ``[r_first, r_first +
         n_resamples)`` equal the same slice of one whole run, bit for bit.
     numeric_mode : {'identical', 'fast'} or None, default=None
-        Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
+        Numeric mode; ``None`` uses the package
         default.
     paired : bool, default=True
         ``False`` with ``data=(x, y)`` and ``statistic='diff_means'`` runs
@@ -261,7 +261,7 @@ def permutation_test(x, y=None, statistic="diff_means", n_resamples=9999,
         Index of the first permutation; a slice of permutations equals the
         same slice of one whole run, bit for bit.
     numeric_mode : {'identical', 'fast'} or None, default=None
-        Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
+        Numeric mode; ``None`` uses the package
         default.
     permutation_type : {'independent', 'samples'}, default='independent'
         ``'independent'`` reassigns pooled observations between ``x`` and
@@ -321,7 +321,7 @@ def monte_carlo_integrate(integrand, lower, upper, n_samples, random_state=0, i_
     i_first : int, default=0
         Index of the first draw, so a long run can be split into batches.
     numeric_mode : {'identical', 'fast'} or None, default=None
-        Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
+        Numeric mode; ``None`` uses the package
         default.
     device : {None, 'gpu', 'cpu'}, default=None
         Where the computation runs. None uses this installation's device,
@@ -368,7 +368,7 @@ def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mo
     random_state : int, default=0
         Seed.
     numeric_mode : {'identical', 'fast'} or None, default=None
-        Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
+        Numeric mode; ``None`` uses the package
         default.
     device : {None, 'gpu', 'cpu'}, default=None
         Where the computation runs. None uses this installation's device,
@@ -435,7 +435,7 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
     sample_weight : None
         Not supported; any other value raises ``ValueError``.
     numeric_mode : {'identical', 'fast'} or None, default=None
-        Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
+        Numeric mode; ``None`` uses the package
         default.
     device : {None, 'gpu', 'cpu'}, default=None
         Where the computation runs. None uses this installation's device,

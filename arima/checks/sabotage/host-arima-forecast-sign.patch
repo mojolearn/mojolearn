@@ -1,0 +1,9 @@
+--- a/arima/host/arima_host_entries.mojo
++++ b/arima/host/arima_host_entries.mojo
+@@ -74,5 +74,5 @@
+             " unexpected length; nothing written"
+         )
+     for i in range(n_steps * batch_size):
+-        op.unsafe_store(i, fc[i])
++        op.unsafe_store(i, -fc[i])
+     return n_steps * batch_size

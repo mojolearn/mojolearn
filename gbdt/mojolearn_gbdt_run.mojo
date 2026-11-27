@@ -217,7 +217,9 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
     buffer of pairs (winner row then loser row per pair), the pair count, -1
     to generate the pairs from the groups and `y` (both addresses are then
     unread), and the address of a float32 buffer of one weight per pair,
-    36 + n_class_weights + 8 values in all. A MultiRMSE fit sends the three
+    36 + n_class_weights + 8 values in all. Grouped validation appends the
+    held-out group-sizes address and group count after the training group
+    or pair fields. A MultiRMSE fit sends the three
     float tails and then its TARGET DIMENSION, 36 + n_class_weights + 4
     values in all (lane/algos-trees, 2026-09-27); `y_addr` then holds that
     many DIM-MAJOR planes of `n_rows` (`y[dim * n_rows + row]`).
@@ -273,7 +275,7 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
             + String(n_class_weights)
         )
     var fixed_and_weights = 36 + n_class_weights
-    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 4 and len(params) != fixed_and_weights + 5 and len(params) != fixed_and_weights + 8:
+    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 4 and len(params) != fixed_and_weights + 5 and len(params) != fixed_and_weights + 7 and len(params) != fixed_and_weights + 8 and len(params) != fixed_and_weights + 10:
         raise Error(
             "gbdt_fit: params must hold 36 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction, then the group sizes address and group count, then the pairs address, pair count and pair weights address values ("
             + String(36 + n_class_weights)
@@ -371,6 +373,10 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
 
     # the pool's grouping, `group_id` resolved to run lengths by the wrapper;
     # read here, with the GIL held, like every other Python value
+    var eval_group_sizes = List[UInt32]()
+    var tail = params.group_tail(fixed_and_weights)
+    if tail.eval_count > 0:
+        eval_group_sizes = list_u32(_u32_ptr(tail.eval_sizes), tail.eval_count)
     var group_sizes = List[UInt32]()
     if len(params) >= fixed_and_weights + 5:
         var n_groups = params.i(fixed_and_weights + 4)
@@ -386,7 +392,7 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
     var pair_winners = List[UInt32]()
     var pair_losers = List[UInt32]()
     var pair_weights = List[Float32]()
-    if len(params) == fixed_and_weights + 8:
+    if tail.training_pairs:
         var n_pairs = params.i(fixed_and_weights + 6)
         if n_pairs != -1 and n_pairs < 1:
             raise Error(
@@ -453,7 +459,7 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
     result = gbdt_fit(
         ctx, xp, n_rows, n_features, yp, wp, n_weights,
         cp, n_flags, ep, eyp, n_eval_rows, fp,
-        group_sizes=group_sizes,
+        group_sizes=group_sizes, eval_group_sizes=eval_group_sizes, eval_at=tail.eval_at,
         pair_winners=pair_winners,
         pair_losers=pair_losers,
         pair_weights=pair_weights,

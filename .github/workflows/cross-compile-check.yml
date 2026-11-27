@@ -57,6 +57,11 @@ on:
         description: "integration only: space separated NAME[=V] switch defines added to the identical tier"
         required: false
         default: ""
+      apple:
+        description: "also compile the changed Apple (Darwin) merged files on the free standard macos-15 runner"
+        required: false
+        default: true
+        type: boolean
 
 run-name: "cross-compile-check ${{ inputs.commit || github.ref_name }} vs ${{ inputs.ref }} ${{ inputs.token }}"
 
@@ -203,8 +208,106 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
+  # THE APPLE HALF (lane mac-speed-1, 2026-11-27): the Darwin merged files whose closure-v2 closure or executed inputs
+  # changed between `ref` and the commit (tools/apple_github_build.py plan --changed-since), each through the release
+  # build's own line (build_release_wheel.sh, one group) on GitHub's FREE STANDARD macos-15 runner (never a
+  # larger/xlarge label, a self-hosted runner or a rented Mac: Andrew, 2026-11-27). A Metal-only error (0.9.0:
+  # "Failed to verify LLVM IR for Metal" on float64 in a device kernel) fails here, not at the release. No R2, no
+  # upload: tools/release.py passes apple=false (its macos-build compiles the same files on the same runners).
+  apple-plan:
+    if: inputs.apple
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
+      commit_sha: ${{ steps.plan.outputs.commit }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          path: .xcc-tooling
+          sparse-checkout: tools/apple_github_build.py
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+          persist-credentials: false
+      - name: The changed Darwin merged files
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IN_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${IN_REF}" --jq .sha)"
+          git fetch --no-tags --depth=1 "https://github.com/${GITHUB_REPOSITORY}.git" "$sha"
+          python3 .xcc-tooling/tools/apple_github_build.py plan --repo . --modes identical --changed-since "$sha" > rows.json
+          python3 -c 'import json; [print(r["dir"], r["stem"], "--", r["why"]) for r in json.load(open("rows.json"))]'
+          {
+            echo "matrix=$(python3 -c 'import json; print(json.dumps(dict(include=json.load(open("rows.json")))))')"
+            echo "count=$(python3 -c 'import json; print(len(json.load(open("rows.json"))))')"
+            echo "commit=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+  apple-compile:
+    needs: apple-plan
+    if: inputs.apple && needs.apple-plan.outputs.count != '0'
+    name: apple ${{ matrix.key }}
+    # the free standard Apple-silicon label (3 cores, 7 GB); never a larger/xlarge label
+    runs-on: macos-15
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.apple-plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.apple-plan.outputs.commit_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          path: .xcc-tooling
+          sparse-checkout: tools/apple_github_build.py
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          # one writer (the first Apple job): the others restore the macOS environment it saved
+          cache-write: ${{ matrix.index == 0 }}
+          environments: >-
+            default
+            pkg
+      - name: Compile ${{ matrix.dir }}/${{ matrix.stem }} for Metal (the release line, every core)
+        env:
+          DIR: ${{ matrix.dir }}
+          STEM: ${{ matrix.stem }}
+        run: |
+          mkdir -p out
+          { sw_vers; sysctl -n hw.ncpu hw.memsize; xcodebuild -version; pixi run mojo --version; } > out/machine.txt 2>&1 || true
+          python3 .xcc-tooling/tools/apple_github_build.py group --repo . --dir "$DIR" --stem "$STEM" --modes identical \
+              --out out --cache "$RUNNER_TEMP/bincache"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: xcc-apple-${{ matrix.key }}
+          path: |
+            out/*.json
+            out/*.log
+            out/*.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
   summary:
-    needs: [plan, compile]
+    needs: [plan, compile, apple-plan, apple-compile]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -234,3 +337,21 @@ jobs:
           fi
           python3 tools/cross_compile_check.py --summarize artifacts --plan artifacts/cross-compile-plan/plan.json \
             --summary-md "$GITHUB_STEP_SUMMARY"
+      - name: Apple (Darwin merged files)
+        if: always() && inputs.apple
+        env:
+          APPLE_PLAN: ${{ needs.apple-plan.result }}
+          APPLE_COMPILE: ${{ needs.apple-compile.result }}
+          APPLE_COUNT: ${{ needs.apple-plan.outputs.count }}
+        run: |
+          set -u
+          {
+            echo "## Apple: ${APPLE_COUNT:-?} changed Darwin merged file(s), plan ${APPLE_PLAN}, compile ${APPLE_COMPILE}"
+            for f in artifacts/xcc-apple-*/result-*.json; do
+              [ -f "$f" ] && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print("- %s/%s rc=%s %s %ss gpu_embedded=%s" % (d["dir"], d["stem"], d.get("rc"), d.get("outcome"), d.get("seconds"), d.get("gpu_embedded")))' "$f"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          case "$APPLE_PLAN/$APPLE_COMPILE" in
+            success/success|success/skipped) exit 0 ;;
+            *) echo "::error::Apple: plan $APPLE_PLAN, compile $APPLE_COMPILE"; exit 1 ;;
+          esac

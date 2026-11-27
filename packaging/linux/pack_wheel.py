@@ -613,12 +613,16 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
             name = pathlib.PurePosixPath(rel)
             if name.is_absolute() or '..' in name.parts:
                 raise SystemExit('Unsafe build source path')
-            generated = _leg_generated_digest(source_root, name)
+            # A leg's build/generated-sources/<run>/ copy (made on the runner,
+            # 0.9.0): its inputs equal the tracked sources, its outputs what the
+            # tracked generator writes; checked here by bytes, never skipped
+            # (tools/generated_source_check.py, the one check all readers use).
+            import generated_source_check  # tools/, on sys.path
+            try:
+                generated = generated_source_check.leg_generated_digest(source_root, name)
+            except generated_source_check.GeneratedCopyError as exc:
+                raise SystemExit('Current source differs from build: ' + str(exc))
             if generated is not None:
-                # A leg's build/generated-sources/<run>/ copy (made on the
-                # runner, 0.9.0): its inputs equal the tracked sources, its
-                # outputs what the tracked generator writes; both are checked
-                # here by bytes, never skipped.
                 if generated != digest:
                     raise SystemExit('Current source differs from build: ' + rel)
                 continue
@@ -1392,28 +1396,6 @@ def reuse_origin(s, rec):
     return dict(from_release=s.reuse["origin"])
 
 
-def _leg_generated_digest(source_root, name):
-    """The sha256 hex a leg's generated-source path must have here, or None
-    when NAME is not one. A leg prepares the generated sources in its own
-    build/generated-sources/<run>/ (tools/generated_sources.py prepare), so the
-    path does not exist in this checkout: generated-inputs/<rel> is a copy of
-    the tracked <rel>; generated/<rel> is what the tracked generator writes from
-    its tracked inputs (tools/generated_sources.py expected_sha: regenerated in
-    process, or a local generated copy verified against the generator)."""
-    parts = name.parts
-    if len(parts) < 5 or parts[0] != 'build' or parts[1] != 'generated-sources' or parts[3] not in (
-            'generated-inputs', 'generated'):
-        return None
-    root = pathlib.Path(source_root)
-    rel = '/'.join(parts[4:])
-    if parts[3] == 'generated-inputs':
-        return sha(root / rel).hex()
-    import generated_sources  # tools/, on sys.path
-    inputs = {i: (root / i).read_bytes() for i in generated_sources.GENERATED[rel]}
-    candidates = [root / rel] + sorted((root / 'build' / 'generated-sources').glob('*/generated/' + rel))
-    return generated_sources.expected_sha(rel, inputs, candidates)
-
-
 def sha(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -1464,6 +1446,10 @@ def python_package_entries(python_root=PY_DIR):
         directory = python_root.joinpath(*package.split("."))
         for source in sorted(directory.glob("*.py")):
             entries[source.relative_to(python_root).as_posix()] = source
+    # Include the same catalog, pinned model and license in release and qualification wheels.
+    for rel in config["tool"]["setuptools"].get("package-data", {}).get("mojolearn", []):
+        if rel.startswith("models/"):
+            entries["mojolearn/" + rel] = python_root / "mojolearn" / rel
     return entries
 
 
@@ -1687,7 +1673,6 @@ def main(argv=None, _gates=True):
     entries["mojolearn_diagnostics.py"] = python_root / "mojolearn_diagnostics.py"
     entries.update(python_package_entries(python_root))
     entries["mojolearn/ALPHA_API.md"] = package_root / "ALPHA_API.md"
-    entries["mojolearn/models/catalog.json"] = package_root / "models" / "catalog.json"  # mojolearn.models.catalog()
     seen_vendor_libs = set()
     for s in sets:
         vendor, files, libs = s.vendor, s.files, s.libs

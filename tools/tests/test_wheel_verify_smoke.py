@@ -20,12 +20,18 @@ SMOKE_SH = ROOT / "tools" / "ops" / "wheel_verify_smoke.sh"
 JOB = ROOT / "tools" / "ops" / "gpu_smoke_job.sh"
 
 
-def _record(path, cells):
-    Path(path).write_text(json.dumps({"cells": cells, "partial_column": True}))
+def _document(cells, side):
+    return {"cells": cells, "partial_column": True, "complete": True, "side": side,
+            "repeats": 1, "mode": "identical", "parts_collected": []}
 
+def _record(path, cells):
+    Path(path).write_text(json.dumps(_document(cells, "gpu" if ".gpu." in str(path) else "cpu")))
 
 OK = {"verdict": "STABLE", "hashes": ["ab" * 8]}
 NA = {"verdict": "N/A", "hashes": ["n/a:one-sided: no CPU implementation: GPU only"]}
+for cell in (OK, NA):
+    for part in ("infer", "model", "batch"):
+        cell[part], cell[part + "_verdict"] = cell["hashes"], cell["verdict"]
 REFUSED = {"verdict": "REFUSED", "error": "the GPU side did not read a device-resident input in place"}
 NOT_RUN = {"verdict": "REFUSED", "error": "not run after interruption: 3 consecutive cell workers crashed"}
 
@@ -50,6 +56,41 @@ class LaneUnits(unittest.TestCase):
 
 
 class SideStates(unittest.TestCase):
+    def test_record_cannot_shorten_the_requested_smoke_profile(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "lane.gpu.json"
+            data = _document({"lane/base": OK}, "gpu")
+            data['parts_omitted'] = ['batch', 'rlpair']
+            p.write_text(json.dumps(data))
+            self.assertEqual(smoke.side_state(p, {}, "gpu", "lane", ["ragged"])[0], "invalid")
+            data["cells"]["lane/base"] = dict(OK, ragged=["ab" * 8], ragged_verdict="STABLE")
+            data['parts_collected'] = ['ragged']
+            p.write_text(json.dumps(data))
+            self.assertEqual(smoke.side_state(p, {}, "gpu", "lane", ["ragged"])[0], "ok")
+
+    def test_lane_scope_requires_its_own_finished_record_and_probes(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "lane.gpu.json"
+            data = _document({"lane/base": OK}, "gpu")
+            for changes in ({"complete": False}, {"side": "cpu"}, {"cells": {"other/base": OK}},
+                            {"parts_collected": ["ragged"]}, {"repeats": 2},
+                            {"cells": {"lane/base": {"verdict": "STABLE", "hashes": ["ab" * 8]}}}):
+                with self.subTest(changes=changes):
+                    p.write_text(json.dumps(dict(data, **changes)))
+                    self.assertEqual(smoke.side_state(p, {}, "gpu", "lane")[0], "invalid")
+
+    def test_whole_side_na_requires_the_installed_declaration(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "lane.json"
+            _record(path, {"lane/base": NA})
+            declared = {"cpu": NA["hashes"][0], "gpu": None}
+            self.assertEqual(smoke.side_state(path, declared, "cpu")[0], "n/a")
+            self.assertEqual(smoke.side_state(path, declared, "gpu")[0], "invalid")
+            _record(path, {"lane/base": dict(OK, verdict="N/A", hashes=NA["hashes"])})
+            self.assertEqual(smoke.side_state(path, declared, "gpu")[0], "invalid")
+            _record(path, {"lane/base": OK})
+            self.assertEqual(smoke.side_state(path, declared, "cpu")[0], "invalid")
+
     def test_states(self):
         with tempfile.TemporaryDirectory() as td:
             cases = {"ok": {"a/base": OK}, "n/a": {"a/base": NA}, "refused": {"a/base": OK, "b/base": REFUSED},
@@ -62,6 +103,23 @@ class SideStates(unittest.TestCase):
             (Path(td) / "bad.json").write_text("{")
             self.assertEqual(smoke.side_state(Path(td) / "bad.json")[0], "missing")
 
+    def test_failed_probes_and_malformed_cells_fail_the_side(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "x.json"
+            for cell, state in (
+                (dict(OK, batch_verdict="BATCH_MOVED"), "divergent"),
+                (dict(OK, model_verdict="RELOAD-MOVED"), "divergent"),
+                (dict(OK, probe_error="model probe failed"), "refused"),
+                (dict(OK, model_verdict="REFUSED"), "refused"),
+                (dict(OK, verdict="unexpected"), "invalid"),
+                (dict(OK, hashes=["corrupt"]), "invalid"), (dict(NA, hashes=[""]), "invalid"),
+                ({"verdict": "STABLE"}, "invalid"), (dict(OK, infer=[]), "invalid"),
+                ({}, "invalid"), (None, "invalid"),
+            ):
+                with self.subTest(cell=cell):
+                    _record(path, {"x/base": cell})
+                    self.assertEqual(smoke.side_state(path)[0], state)
+
     def test_check_fails_a_lane_missing_a_side_or_refused_but_not_one_sided(self):
         with tempfile.TemporaryDirectory() as td:
             j = Path(td)
@@ -70,7 +128,10 @@ class SideStates(unittest.TestCase):
             _record(j / "refgpu.gpu.json", {"refgpu/base": REFUSED})
             _record(j / "refgpu.cpu.json", {"refgpu/base": OK})
             _record(j / "nogpu.cpu.json", {"nogpu/base": OK})                    # its GPU side never wrote a record
+            _record(j / "moved.gpu.json", {"moved/base": OK})
+            _record(j / "moved.cpu.json", {"moved/base": {"verdict": "DIVERGENT", "oracle_errors": ["wrong bytes"]}})
             check = smoke.lane_check(j, True)
+            self.assertRegex(check("moved"), "cpu side divergent.*wrong bytes")
             self.assertIsNone(check("gpuonly"))
             self.assertIn("gpu side refused", check("refgpu"))
             self.assertIn("gpu side missing", check("nogpu"))
@@ -89,8 +150,8 @@ class PoolNeverHidesALane(unittest.TestCase):
             def writer(lane, gpu_cells, cpu_cells, rc=0, crash=False):
                 code = ("import json, os, signal, sys\n"
                         f"g, c = {gpu_cells!r}, {cpu_cells!r}\n"
-                        f"if g is not None: open({str(jdir / (lane + '.gpu.json'))!r}, 'w').write(json.dumps({{'cells': g}}))\n"
-                        f"if c is not None: open({str(jdir / (lane + '.cpu.json'))!r}, 'w').write(json.dumps({{'cells': c}}))\n"
+                        f"if g is not None: open({str(jdir / (lane + '.gpu.json'))!r}, 'w').write({json.dumps(_document(gpu_cells,'gpu'))!r})\n"
+                        f"if c is not None: open({str(jdir / (lane + '.cpu.json'))!r}, 'w').write({json.dumps(_document(cpu_cells,'cpu'))!r})\n"
                         + ("os.kill(os.getpid(), signal.SIGKILL)\n" if crash else f"sys.exit({rc})\n"))
                 return (lane, [sys.executable, "-c", code])
             units = [writer("good", {"good/base": OK}, {"good/base": OK}),

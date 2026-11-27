@@ -199,7 +199,7 @@ def _(ml, X, yc, yr, Xh=None):
     A = ml.Array.from_buffer
     CLM = ml.models.causal_lm.CausalLM
     ids = _ids(X, HF_LM_BATCH, HF_LM_LEN, HF_LM_VOCAB)
-    parts, flags = {}, []
+    parts, flags, failed = {}, [], []
     with tempfile.TemporaryDirectory(prefix="ib-numeric-profile-parallel-") as d:
         root = _npp_checkpoint(d)
         for name, spec in (("default", None), ("parts", _NPP_SAVED_SPEC)):  # driver-loop: over two specs
@@ -214,9 +214,16 @@ def _(ml, X, yc, yr, Xh=None):
                 y = np.asarray(par.forward(A(ids)))
                 profile = par.numeric_profile
             parts[name] = _h(y)
-            flags += [profile == ("fixed15_v1" if spec is None else spec),
-                      y.tobytes() == np.asarray(plain.forward(A(ids))).tobytes()]
+            profile_matches = profile == ("fixed15_v1" if spec is None else spec)
+            logits_match = y.tobytes() == np.asarray(plain.forward(A(ids))).tobytes()
+            flags.extend((profile_matches, logits_match))
+            if not profile_matches:
+                failed.append(name + " profile readback")
+            if not logits_match:
+                failed.append(name + " parallel logits differ from plain logits")
     parts["flags"] = _h(np.asarray(flags, dtype=np.int64))
+    if failed:
+        raise NumericalMismatch(", ".join(failed), parts)
     return _fit(parts)
 
 

@@ -69,8 +69,10 @@ class MinMaxScaler(_ScalerProtocol):
 
     Computes each feature's minimum and maximum and maps them linearly onto
     ``feature_range``. Input must be a dense, nonempty two-dimensional float32
-    array: a float64 or integer array raises ``TypeError`` (nested Python
-    lists of numbers are converted). Sparse input is not supported.
+    or float64 array: float64 inputs are converted to float32 once, with
+    round-to-nearest-even; values outside float32's range are refused. An
+    integer array raises ``TypeError`` (nested Python lists of numbers are
+    converted). Sparse input is not supported.
     The endpoints of ``feature_range`` are rounded to float32. A feature whose
     range is below 10 float32 epsilons (including a constant feature) uses a
     denominator of one.
@@ -92,7 +94,7 @@ class MinMaxScaler(_ScalerProtocol):
         Clip transformed values to ``feature_range``. Values lost to clipping
         are not recovered by ``inverse_transform``.
     numeric_mode : {"fast", "identical"} or None, default None
-        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode; None uses the library default.
 
     Attributes
     ----------
@@ -328,9 +330,10 @@ class MinMaxScaler(_ScalerProtocol):
 class StandardScaler(_ScalerProtocol):
     """Standardize features by removing the mean and scaling to unit variance.
 
-    Input must be a dense, nonempty two-dimensional float32 array: a float64
-    or integer array raises ``TypeError`` (nested Python lists of numbers are
-    converted). Sparse input is not supported. Statistics are
+    Input must be a dense, nonempty two-dimensional float32 or float64 array:
+    float64 inputs are converted to float32 once, with round-to-nearest-even;
+    values outside float32's range are refused. An integer array raises
+    ``TypeError`` (nested Python lists of numbers are converted). Sparse input is not supported. Statistics are
     computed in float32, not in float64 as in scikit-learn. The variance is
     the population variance; a feature with exactly zero variance gets scale
     one, while a nearly constant feature is scaled by its (tiny) standard
@@ -351,7 +354,7 @@ class StandardScaler(_ScalerProtocol):
     with_std : bool, default True
         Scale the data to unit variance.
     numeric_mode : {"fast", "identical"} or None, default None
-        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode; None uses the library default.
 
     Attributes
     ----------

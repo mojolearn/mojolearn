@@ -454,6 +454,7 @@ def gbdt_fit(
     # The fit's device plan, read once at the binding entry (one device by
     # default); `train` hands it to every tree searcher.
     device_plan: DevicePlan = plan_for_single(),
+    eval_group_sizes: List[UInt32] = List[UInt32](),
 ) raises -> GbdtFitResult:
     """Fit and return the model as `model_text`, plus both loss curves.
 
@@ -621,7 +622,7 @@ def gbdt_fit(
         x_borrow=x_borrow,
         x_row_major=x_row_major,
         x_word=x_word,
-        group_sizes=group_sizes,
+        group_sizes=group_sizes, eval_group_sizes=eval_group_sizes,
         pair_winners=pair_winners,
         pair_losers=pair_losers,
         pair_weights=pair_weights,

@@ -38,7 +38,7 @@ from checks.numerics import ftz, identical_div, identical_rsqrt
 from autograd.rankn import rn_word
 from x_cnn.ops import FP as XFP, IP as XIP
 from x_cnn.ops import (
-    BN_GAMMA, BN_BETA, BN_SUMG, BN_SUMGX,
+    avg_pool_plane_count, avg_pool_axis_count, canon, conv_out_val, BN_GAMMA, BN_BETA, BN_SUMG, BN_SUMGX,
     bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at, bn_blk_var_running_at, bn_eval_stats_at, bn_apply_at,
     bn_blk_red_at, bn_blk_red_fin_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
 )
@@ -89,14 +89,6 @@ def _ud(a: Int, b: Int) -> Int:
 @always_inline
 def _um(a: Int, b: Int) -> Int:
     return Int(UInt32(a) % UInt32(b))
-
-
-@always_inline
-def _canon(v: Float32) -> Float32:
-    """x_cnn/ops.mojo canon: a NaN is stored as the one word 0x7FC00000."""
-    if v != v:
-        return bitcast[DType.float32](UInt32(0x7FC00000))
-    return v
 
 
 @always_inline
@@ -204,13 +196,13 @@ def op_rnv_conv_out(t: Int, a: Args):
     var oc = _um(s, OC)
     var n = _ud(s, OC)
     var r = n * S + sp
-    var v = ftz(a.p0.unsafe_load(r * OC + oc))
-    var with_bias = rn_word(d, CP_BIAS) != 0
+    var y = a.p0.unsafe_load(r * OC + oc)
+    var v: Float32
     comptime if SEQ_BLOCKS_SABOTAGE_CONV:
-        with_bias = False
-    if with_bias:
-        v = ftz(v + ftz(a.p1.unsafe_load(oc)))
-    a.p2.unsafe_store(t, _canon(v))
+        v = canon(ftz(y))
+    else:
+        v = conv_out_val(y, _xf(a.p1), oc, _xd(d))
+    a.p2.unsafe_store(t, v)
 
 
 @always_inline
@@ -397,27 +389,14 @@ def _avg_divisor(od: Int, oh: Int, ow: Int, d: FP) -> Int:
     input itself when count_include_pad is 0; divisor_override when set."""
     if rn_word(d, PP_DIVOVR) > 0:
         return rn_word(d, PP_DIVOVR)
-    var H = rn_word(d, PP_H); var W = rn_word(d, PP_W)
-    var PH = rn_word(d, PP_PH); var PW = rn_word(d, PP_PW)
-    var D = rn_word(d, PP_LEN + RN_DEPTH_D); var PD = rn_word(d, PP_LEN + RN_DEPTH_PD)
-    var ds = od * rn_word(d, PP_LEN + RN_DEPTH_SD) - PD
-    var hs = oh * rn_word(d, PP_SH) - PH
-    var ws = ow * rn_word(d, PP_SW) - PW
-    var de = min(ds + rn_word(d, PP_LEN + RN_DEPTH_KD), D + PD)
-    var he = min(hs + rn_word(d, PP_KH), H + PH)
-    var we = min(ws + rn_word(d, PP_KW), W + PW)
-    var depth: Int
-    var plane: Int
-    if rn_word(d, PP_INCPAD) != 0:
-        depth = de - ds
-        plane = (he - hs) * (we - ws)
-    else:
-        depth = min(de, D) - max(ds, 0)
-        plane = (min(he, H) - max(hs, 0)) * (min(we, W) - max(ws, 0))
+    var include_pad = rn_word(d, PP_INCPAD) != 0
+    var depth = avg_pool_axis_count(od, rn_word(d, PP_LEN + RN_DEPTH_D), rn_word(d, PP_LEN + RN_DEPTH_SD),
+                                    rn_word(d, PP_LEN + RN_DEPTH_KD), rn_word(d, PP_LEN + RN_DEPTH_PD),
+                                    include_pad)
     comptime if NN_CONV3D_SABOTAGE_POOL:
         if rn_word(d, PP_LEN + RN_DEPTH_KD) > 1:
             depth = 1
-    return depth * plane
+    return depth * avg_pool_plane_count(oh, ow, _xd(d), include_pad)
 
 
 @always_inline

@@ -318,14 +318,23 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         a0 = PythonObject(vocab)
         args = Python.list(vocab, 0, 0, 0, 0, 0)
     # end lm_head
-    elif kind == "rnn" or kind == "lstm" or kind == "gru":
+    elif kind == "rnn" or kind == "lstm" or kind == "gru" or kind == "projected_lstm":
         # nn-recurrent begin: PyTorch's num_layers, dropout, bidirectional, and the output (every step's state or
         # the final state); the defaults write the one layer they always wrote (the same description words)
-        var options = _arguments(mods, kind, supplied, keywords,
-            Python.tuple("hidden_size", "num_layers", "bidirectional", "dropout", "output"),
-            Python.tuple(None, 1, False, 0.0, "sequence"), 1)
+        var names = Python.tuple("hidden_size", "num_layers", "bidirectional", "dropout", "output")
+        var defaults = Python.tuple(None, 1, False, 0.0, "sequence")
+        var lstm = kind == "lstm" or kind == "projected_lstm"
+        if lstm:
+            names = Python.tuple("hidden_size", "num_layers", "bidirectional", "dropout", "output", "proj_size")
+            defaults = Python.tuple(None, 1, False, 0.0, "sequence", 0)
+        var options = _arguments(mods, kind, supplied, keywords, names, defaults, 1)
         var hidden = _positive(options[0], "hidden_size", 1, context)
-        var cell = 0 if kind == "rnn" else (1 if kind == "lstm" else 2)
+        var projection = _positive(options[5], "proj_size", 0, context) if lstm else 0
+        if projection >= hidden or (kind == "projected_lstm" and projection == 0):
+            raise Error("projected LSTM needs 0 < proj_size < hidden_size")
+        if projection > 0:
+            code = codes["projected_lstm"]
+        var cell = 0 if kind == "rnn" else (1 if lstm else 2)
         var stack = _positive(options[1], "num_layers", 1, context)
         if not Bool(py=py_call(b.isinstance, options[2], b.bool)):
             raise Error("bidirectional must be True or False")
@@ -337,12 +346,12 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
             raise Error("output must be 'sequence' or 'final'")
         var final = form == "final"
         if stack > 1 or both or final:
-            _recurrent_stack(mods, model, code, hidden, cell, stack, both, options[3], final)
+            _recurrent_stack(mods, model, code, hidden, cell, stack, both, options[3], final, projection)
             return model
         # nn-recurrent end
         a0 = PythonObject(hidden)
         a1 = PythonObject(cell)
-        args = Python.list(hidden, cell, 0, 0, 0, 0)
+        args = Python.list(hidden, cell, 0, 0, projection, 0)
     elif kind == "batch_norm1d" or kind == "batch_norm2d":
         # lane seq-blocks-3 (autograd/model_blocks.mojo LAYER_BATCH_NORM): a1 carries the momentum's float32 bits
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("num_features", "eps", "momentum"),
@@ -793,7 +802,7 @@ def _append_layer(mut mods: NativeModules, model: PythonObject, code: PythonObje
 
 
 def _recurrent_stack(mut mods: NativeModules, model: PythonObject, code: PythonObject, hidden: Int, cell: Int,
-                     stack: Int, both: Bool, dropout: PythonObject, final: Bool) raises:
+                     stack: Int, both: Bool, dropout: PythonObject, final: Bool, projection: Int) raises:
     """PyTorch's multi-layer, bidirectional recurrent module as description layers (lane nn-recurrent): per layer
     a forward recurrent layer and, when bidirectional, a branch back to the layer's input, a reverse recurrent
     layer (a2 = 1) and a concat of the two on the features; a dropout layer after every layer but the last when
@@ -805,11 +814,11 @@ def _recurrent_stack(mut mods: NativeModules, model: PythonObject, code: PythonO
     for l in range(stack):  # driver-loop: over the stacked layers (description only)
         var top = l == stack - 1
         var fin = 1 if (final and top) else 0
-        var fwd = _append_layer(mods, model, code, Python.list(hidden, cell, 0, fin, 0, 0), 0.0)
+        var fwd = _append_layer(mods, model, code, Python.list(hidden, cell, 0, fin, projection, 0), 0.0)
         var last = fwd
         if both:
             _ = _append_code(mods, model, _CODE_BRANCH, Python.list(entry, 0, 0, 0, 0, 0))
-            var rev = _append_layer(mods, model, code, Python.list(hidden, cell, 1, fin, 0, 0), 0.0)
+            var rev = _append_layer(mods, model, code, Python.list(hidden, cell, 1, fin, projection, 0), 0.0)
             last = _append_layer(mods, model, PythonObject(_CODE_CONCAT), Python.list(fwd, rev, -2, -2, -2, -2),
                                  0.0 if fin == 1 else 1.0)
         if not top and p > 0.0:

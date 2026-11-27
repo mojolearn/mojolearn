@@ -20,3 +20,9 @@ def test_optimizer_refuses_a_non_bool_maximize():
     params = [np.zeros((16, 8), np.float32), np.zeros((16,), np.float32), np.zeros((3, 16), np.float32)]
     with pytest.raises(TypeError):
         ml.training.Adam(params, maximize=1)
+
+
+@pytest.mark.parametrize("value", ["False", 1, [False]])
+def test_adafactor_refuses_non_bool_maximize(value):
+    with pytest.raises(TypeError, match="maximize"):
+        ml.Adafactor([np.zeros(2, np.float32)], maximize=value)

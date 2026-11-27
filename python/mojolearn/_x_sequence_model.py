@@ -41,7 +41,7 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "group_norm": 54, "instance_norm1d": 55, "instance_norm2d": 55,
           # nn-norms end
           # nn-losses-2 begin
-          "log_softmax": 77,
+          "log_softmax": 77, "projected_lstm": 78,
           # nn-losses-2 end
           # nn-conv3d begin
           "conv3d": 73, "max_pool3d": 74, "avg_pool3d": 75, "adaptive_avg_pool3d": 76,
@@ -67,7 +67,7 @@ _OUT_RAW, _OUT_SOFTMAX, _OUT_SIGMOID, _OUT_PROBA2, _OUT_ARGMAX, _OUT_THRESHOLD =
 # sequence/ops.mojo OPT_*: "momentum" is SGD with a momentum buffer.
 _OPT = {"sgd": 0, "momentum": 0, "adam": 1, "adamw": 2,
         # lane nn-optim begin (autograd/nn_optim.mojo NN_OPT_*)
-        "rmsprop": 3, "adagrad": 4, "lamb": 10,
+        "rmsprop": 3, "adagrad": 4, "lamb": 10, "adafactor": 11,
         # lane nn-optim end
         }
 # core/cast_in.mojo CAST_KIND_* and item size -> the classes_ dtype of a
@@ -93,8 +93,7 @@ class Sequential(_CheckMixin):
     Parameters
     ----------
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available
-        on Apple GPUs only.
+        Numeric mode. None uses the library default.
     input_shape : tuple of int or None, default None
         The shape of one sample, for example ``(channels, height, width)``.
         None takes it from ``X`` at fit. With an input shape, ``fit`` and
@@ -184,7 +183,7 @@ class Sequential(_CheckMixin):
             ``'residual_block'``, ``'parallel'``, ``'gated'``, ``'silu'``,
             ``'gelu'``, ``'softplus'``, ``'rms_norm'``, ``'rotary'``,
             ``'multiply'``, ``'narrow'``, ``'embedding'``, ``'attention'``,
-            ``'lstm'``, ``'gru'``, ``'rnn'``, ``'batch_norm1d'``,
+            ``'lstm'``, ``'projected_lstm'`` (LSTM with ``proj_size``), ``'gru'``, ``'rnn'``, ``'batch_norm1d'``,
             ``'batch_norm2d'``, ``'selective_scan'``, ``'ssd_scan'``,
             ``'trapezoid_scan'``, ``'lm_head'``,
             ``'multihead_attention'``, ``'positional_encoding'``,
@@ -784,7 +783,7 @@ class Sequential(_CheckMixin):
         """
         return _SEQUENTIAL_ENTRY(self, "add", ("attention", (heads, kv_heads, rotary, theta, window, causal), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
-    def lstm(self, hidden_size, num_layers=1, *, bidirectional=False, dropout=0.0, output="sequence"):
+    def lstm(self, hidden_size, num_layers=1, *, bidirectional=False, dropout=0.0, output="sequence", proj_size=0):
         """Append an LSTM over ``(length, features)`` samples from a zero
         state, as PyTorch's ``nn.LSTM``: the same weight layout, gate order
         and initialization (every tensor uniform in
@@ -811,6 +810,10 @@ class Sequential(_CheckMixin):
             ``'final'``: the last layer's final state of each direction,
             ``(directions, hidden_size)`` (PyTorch's ``h_n`` of the last
             layer).
+        proj_size : int, default 0
+            A positive value below ``hidden_size`` projects the hidden state
+            before the next step. The output has ``proj_size`` features per
+            direction and the cell state keeps ``hidden_size`` features.
 
         With ``lengths`` given to :meth:`fit` and :meth:`predict`, a sample's
         steps past its length do not change its state; the ``'sequence'``
@@ -823,6 +826,7 @@ class Sequential(_CheckMixin):
         directions and the dropout layers), in PyTorch's parameter order:
         ``weight_ih``, ``weight_hh``, ``bias_ih``, ``bias_hh`` of layer 0's
         forward direction, then of its reverse direction, then layer 1.
+        Each projected layer adds ``weight_hr`` directly after its biases.
 
         Example: classify variable-length sequences of 3 features padded to
         20 steps by the final states of a two-layer bidirectional LSTM::
@@ -833,7 +837,7 @@ class Sequential(_CheckMixin):
                      .compile(loss="cross_entropy"))
             model.fit(X, y, lengths=lengths)
         """
-        return _SEQUENTIAL_ENTRY(self, "add", ("lstm", (hidden_size, num_layers, bidirectional, dropout, output), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "add", ("lstm", (hidden_size, num_layers, bidirectional, dropout, output, proj_size), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def gru(self, hidden_size, num_layers=1, *, bidirectional=False, dropout=0.0, output="sequence"):
         """Append a GRU over ``(length, features)`` samples from a zero
@@ -1652,12 +1656,17 @@ class Sequential(_CheckMixin):
             of the labels over every alignment of the sample's steps;
             ``token_cross_entropy`` trains a model ending in
             :meth:`lm_head` on ``(n_samples, length)`` int32 token ids.
-        optimizer : {'sgd', 'momentum', 'adam', 'adamw', 'rmsprop', 'adagrad', 'lamb'}, default 'adam'
+        optimizer : {'sgd', 'momentum', 'adam', 'adamw', 'rmsprop', 'adagrad', 'lamb', 'adafactor'}, default 'adam'
             ``'momentum'`` is SGD with ``momentum``. ``'rmsprop'`` and
             ``'adagrad'`` follow ``torch.optim.RMSprop`` and
             ``torch.optim.Adagrad``; ``'lamb'`` is LAMB as in timm's
             ``Lamb`` (bias correction and gradient averaging on, the
             layer-wise trust ratio applied to each parameter tensor).
+            Adafactor uses row and column variances for a matrix and one variance
+            per entry for a vector. It accepts the same parameter ranks as standalone
+            Adafactor. Its decay exponent is -0.8, its RMS clipping threshold is 1,
+            and its parameter-scale floor is 0.001. The scalar eps sets its first
+            epsilon (default: float32 machine epsilon).
         lr : float, default 1e-3
             Learning rate (> 0); the peak rate of ``'one_cycle'`` and
             ``'linear_warmup'``.
@@ -2139,7 +2148,6 @@ class Sequential(_CheckMixin):
             A file written by :meth:`save_checkpoint` or :meth:`export`.
         numeric_mode : {'identical', 'fast'} or None, default None
             Numeric mode of the loaded model. None uses the library default.
-            ``'fast'`` is available on Apple GPUs only.
 
         Returns
         -------
@@ -2297,7 +2305,7 @@ _SEQUENTIAL_CONTEXT = {
                     "", "", "", "",                                                               # 68..71 unused
                     "positional_encoding",                                                        # 72 nn-attention
                     "conv3d", "max_pool3d", "avg_pool3d", "adaptive_avg_pool3d",                  # 73..76 nn-conv3d
-                    "log_softmax",                                                                # 77 nn-losses-2
+                    "log_softmax", "projected_lstm",                                              # 77..78
                     ),
 }
 # nn-conv3d begin

@@ -44,7 +44,7 @@ def make(tmp_path, commit):
                            amd_expect_from="", smoke_gpu="", state_dir=str(tmp_path / "state"),
                            amd_build_provider=None, amd_provider="auto", smoke_via="lq", hopper_box="",
                            smoke_branch="main", cpu_column=False, gpu_smoke=False, owner_waiver=None, status=False,
-                           refreeze=False, source_checkout="", published_smoke=[], published_smoke_reason="")
+                           refreeze=False, source_checkout="")
     r = release.Release(a, runner=lambda cmd, env, log, detach=False: 0)
     r.state["commit"] = commit
     r.lines = []

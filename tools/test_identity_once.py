@@ -28,8 +28,7 @@ def args(**kw):
     base = dict(version=VERSION, dry_run=False, publish="pypi", only="", redo="", build_backend="github",
                 amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto",
                 smoke_via="lq", hopper_box="", smoke_branch="main", cpu_column=False, gpu_smoke=False,
-                owner_waiver=None, status=False, refreeze=False, source_checkout="", published_smoke=[],
-                published_smoke_reason="")
+                owner_waiver=None, status=False, refreeze=False, source_checkout="")
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -149,14 +148,15 @@ def test_no_identity_lane_step_can_run_after_a_publish():
     for publish in release.PUBLISH_STEPS:
         # every publish waits for every identity-lane step to settle (in one run, nothing launches after it)
         assert set(release.DEVICE_LANE_STEPS) <= set(release.AFTER[publish]) | upstream(publish), publish
-    assert release.PUBLISHED_SMOKE_STEPS == {}
-    assert not any(s.startswith("published-smoke-") for s in release.Release.STEPS)
+    assert not hasattr(release, "PUBLISHED_SMOKE_STEPS")
+    assert not any(s.startswith("published-") for s in release.Release.STEPS)
     assert not any(hasattr(release.Release, "step_published_smoke_" + v) for v in ("apple", "nvidia", "amd"))
 
 
 def test_every_post_publish_step_is_a_read():
-    # The steps that may run after a publish: the bytes checks, the finish line, boxes-down and the record.
-    # None of them launches a lane: their code names no verifier, smoke or identity recorder.
+    # The steps that may run after a publish: the published check (one CPU job on GitHub, Andrew 2026-11-27), the
+    # finish line, boxes-down and the record. None of them launches a lane on a device: their code names no
+    # verifier, smoke or identity recorder.
     banned = ("qualify_verifier_wheel", "wheel_self_test", "record_identity_column", "reference_refresh.sh",
               "identity_box_job", "release_wheel_smoke", "release_identity_run", "gate_smoke_box",
               "tools/ops/published_install")

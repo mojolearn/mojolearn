@@ -1,0 +1,13 @@
+diff --git a/autograd/model.mojo b/autograd/model.mojo
+--- a/autograd/model.mojo
++++ b/autograd/model.mojo
+@@ -2068,6 +2068,9 @@
+                         rate = pg_rates[group]
+                         eps = cfg.groups.cfgs[group].eps
+                         decay = cfg.groups.cfgs[group].wd
++                    comptime if not E.IS_DEVICE:
++                        if step > 1 and tensor[2] == 0:
++                            rate *= Float32(0.5)  # SABOTAGE: halve this tensor's update rate
+                     adafactor_update(ex, P + off, Gr + off, s1 + off, s2 + off, tensor[1], tensor[2], step,
+                                      Float64(rate), -0.8, Float64(eps), 0.001, 1.0, Float64(decay),
+                                      af_update, af_scales, af_parts)

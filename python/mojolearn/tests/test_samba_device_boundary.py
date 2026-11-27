@@ -5,7 +5,7 @@ The device is a constructor parameter and a keyword of `from_checkpoint`, checke
 any field is written or any file is read, and resolved once into the stack's one native route (training
 entries, primitives, blocks, optimizer and decode program together); no operation reads it again. A stack
 runs on the device of its installation: on a GPU installation `device="cpu"` is refused in words, because
-the blocks' backward has no CPU images loaded beside the GPU set.
+the stack connects to the installation's training provider.
 """
 import numpy as np
 import pytest

@@ -1,0 +1,24 @@
+diff --git a/transformer/transformer_host_binding_impl.mojo b/transformer/transformer_host_binding_impl.mojo
+--- a/transformer/transformer_host_binding_impl.mojo
++++ b/transformer/transformer_host_binding_impl.mojo
+@@ -185,6 +185,8 @@
+     var out = transformer_host_forward(
+         w, x, b, l, smax, s0, window, k_in, v_in, carried
+     )
++    for i in range(b * l * dm):
++        out.y[i] += Float32(1)  # SABOTAGE: biased CPU block output
+     _write(a[12], out.y)
+     if carried:
+         _write(a[10], out.k_cache)
+diff --git a/core/mojolearn_neural_host_impl.mojo b/core/mojolearn_neural_host_impl.mojo
+--- a/core/mojolearn_neural_host_impl.mojo
++++ b/core/mojolearn_neural_host_impl.mojo
+@@ -138,6 +138,8 @@
+     var v_in = read_f32(a[11], cache_n)
+     var x = read_f32(a[0], b * l * dm)
+     var out = transformer_host_forward(w, x, b, l, smax, s0, window, k_in, v_in, parts=np_parts_sabotage_host(parts))
++    for i in range(b * l * dm):
++        out.y[i] += Float32(1)  # SABOTAGE: biased CPU block output
+     _write(a[12], out.y, b * l * dm)
+     _write(a[10], out.k_cache, cache_n)
+     _write(a[11], out.v_cache, cache_n)

@@ -13,11 +13,13 @@ from std.memory import bitcast, unsafe_memcpy
 from sequence.exec_trait import Exec
 from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from sequence.fit_loop_words import fit_loop_publish
+from sequence.lengths import check_recurrent_lengths
 from sequence.ops import (
     FP, Args, OP_COPY, OP_FILL, OP_GATHER_ROWS, OP_MLP_PERM, OP_ONE_HOT, OP_PROBA2, OP_SEQ_IOTA,
     OPT_ADAM, OPT_ADAMW, OPT_SGD, dummy_ptr,
 )
 from sequence.mlp import mlp_epoch_key, mlp_perm_args
+from sequence.adafactor_update import adafactor_partial_words, adafactor_update
 from sequence.recurrent import OptConfig, OptState, opt_step
 from sequence.gemm_split import gemm_split_shape
 from checks.numerics import ftz, identical_div, identical_pow64, identical_sqrt
@@ -42,7 +44,7 @@ from autograd.rankn_layout import rankn_concat
 from autograd.rankn_api import RankNRules, rn_as_shape, rn_dims, rn_resolve, rn_shape, rn_with_batch
 # Lane neural-blocks (2026-11-22): the neural building blocks (codes 32..41) and the version-2 backward rules
 from autograd.model_blocks import (
-    LAYER_MULTIPLY, LAYER_RECURRENT, ModelRules, block_forward, block_init_bounds, block_param_sizes, block_reads,
+    LAYER_MULTIPLY, LAYER_RECURRENT, LAYER_PROJECTED_LSTM, ModelRules, block_forward, block_init_bounds, block_param_sizes, block_reads,
     block_shape, bn_state, is_block, BLOCK_INIT_S4D,
 )
 # lm_head (lane neural-blocks-3-lm): the token cross-entropy's head layer and its fused loss
@@ -69,8 +71,8 @@ from autograd.nn_attention import (
 # nn-attention end
 # lane nn-optim (2026-11-23): rmsprop, adagrad, lamb and the schedules multi_step .. reduce_on_plateau
 from autograd.nn_optim import (
-    NN_OPT_ADAGRAD, NN_SCHED_MULTI_STEP, NN_SCHED_PLATEAU, NnLamb, NnPlateau, nn_epoch_lr, nn_multi_step_count,
-    nn_opt_step, nn_optim_admit, nn_sched_per_step, nn_step_lrs, nn_opt_keeps_third,
+    NN_OPT_ADAFACTOR, NN_OPT_ADAGRAD, NN_SCHED_MULTI_STEP, NN_SCHED_PLATEAU, NnLamb, NnPlateau, nn_epoch_lr, nn_multi_step_count,
+    nn_opt_step, nn_optim_admit, nn_positive_lr, nn_sched_per_step, nn_step_lrs, nn_opt_keeps_third,
 )
 # lane stream-fits (2026-11-25): Sequential.fit(source=), the streamed instance of the fit loop
 from std.math import nan
@@ -711,6 +713,7 @@ struct FitConfig(Copyable, Movable):
     var sched_args: List[Float64]
     var tensor_offs: List[Int]
     # nn-blocks-pgseq: the parameter groups (autograd/nn_pgseq.mojo; empty: none, the single-launch step)
+    var af_tensors: List[Tuple[Int, Int, Int, Int]]  # parameter offset, rows, columns (0 for vector), group
     var groups: PgSeqTable
 
     def __init__(
@@ -738,6 +741,7 @@ struct FitConfig(Copyable, Movable):
         self.init = init
         self.sched_args = sched_args^
         self.tensor_offs = tensor_offs^
+        self.af_tensors = List[Tuple[Int, Int, Int, Int]]()
         self.groups = PgSeqTable()
 
 
@@ -826,8 +830,8 @@ def check_fit(spec: ModelSpec, cfg: FitConfig, N: Int) raises:
     # lane nn-optim: every optimizer code and this lane's schedule codes, one admission body with compile's
     nn_optim_admit(cfg.opt.kind, cfg.opt.flags, Float64(cfg.opt.f1), Float64(cfg.opt.f2), Float64(cfg.opt.eps),
                    Float64(cfg.opt.wd), Float64(cfg.opt.f7), cfg.sched, cfg.sched_args)
-    if not (cfg.lr > Float32(0)):
-        raise Error("model fit: the learning rate must be positive")
+    if not nn_positive_lr(cfg.lr):
+        raise Error("model fit: the learning rate must be positive and finite in float32")
     if cfg.batch < 1 or cfg.epochs < 1:
         raise Error("model fit: batch size and epochs must be at least 1")
     if cfg.sched < SCHED_CONSTANT or cfg.sched > NN_SCHED_PLATEAU:
@@ -1436,13 +1440,9 @@ def model_fit_state[E: Exec](
 
     `Wio` (lane stream-fits): the address of the third optimizer state buffer (n_params float32, `optimizer_w_`)
     when the optimizer keeps one (autograd/nn_optim.mojo nn_opt_keeps_third: centered RMSprop), else 0."""
-    if cfg_in.groups.on():
-        return _model_fit_state[E, True, False](
-            ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation, codes_dev, lengths,
-            target_lengths, loop_words, Wio, 0, 0, 0)
-    return _model_fit_state[E, False, False](
-            ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation, codes_dev, lengths,
-            target_lengths, loop_words, Wio, 0, 0, 0)
+    return _dispatch_fit_state[E, False](
+        ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation, codes_dev,
+        lengths, target_lengths, loop_words, Wio, 0, 0, 0)
 
 
 def model_fit_state_source[E: Exec](
@@ -1471,16 +1471,37 @@ def model_fit_state_source[E: Exec](
     one launch a batch) and token_cross_entropy (each record's target row holds its token ids); ctc is refused (a
     target row holds no target length)."""
     var address = Int(UnsafePointer(to=stream))
+    return _dispatch_fit_state[E, True](
+        ex, spec, cfg_in, CastIn.f32_c(0, 1, 1), CastIn.f32_c(0, 1, 1), stream.n, Pio, curve,
+        Mio, Vio, St, curve_prev, resume, validation, 0, None, None, loop_words, Wio, address, max_steps, source_out)
+
+
+def _dispatch_fit_state[E: Exec, streamed: Bool](
+    mut ex: E, spec: ModelSpec, cfg_in: FitConfig, X: CastIn, Y: CastIn, N: Int, Pio: FP, curve: FP,
+    Mio: FP, Vio: FP, St: IP64, curve_prev: FP, resume: Bool,
+    validation: Optional[FitValidation], codes_dev: Int, lengths: Optional[FP],
+    target_lengths: Optional[FP], loop_words: Int, Wio: Int, stream_address: Int, max_steps: Int,
+    source_out: Int,
+) raises -> Int:
+    """Select the minibatch update once for this array or streamed fit."""
+    if cfg_in.opt.kind == NN_OPT_ADAFACTOR:
+        if cfg_in.groups.on():
+            return _model_fit_state[E, True, streamed, True](
+                ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation,
+                codes_dev, lengths, target_lengths, loop_words, Wio, stream_address, max_steps, source_out)
+        return _model_fit_state[E, False, streamed, True](
+            ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation,
+            codes_dev, lengths, target_lengths, loop_words, Wio, stream_address, max_steps, source_out)
     if cfg_in.groups.on():
-        return _model_fit_state[E, True, True](
-            ex, spec, cfg_in, CastIn.f32_c(0, 1, 1), CastIn.f32_c(0, 1, 1), stream.n, Pio, curve, Mio, Vio, St,
-            curve_prev, resume, validation, 0, None, None, loop_words, Wio, address, max_steps, source_out)
-    return _model_fit_state[E, False, True](
-        ex, spec, cfg_in, CastIn.f32_c(0, 1, 1), CastIn.f32_c(0, 1, 1), stream.n, Pio, curve, Mio, Vio, St,
-        curve_prev, resume, validation, 0, None, None, loop_words, Wio, address, max_steps, source_out)
+        return _model_fit_state[E, True, streamed](
+            ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation,
+            codes_dev, lengths, target_lengths, loop_words, Wio, stream_address, max_steps, source_out)
+    return _model_fit_state[E, False, streamed](
+        ex, spec, cfg_in, X, Y, N, Pio, curve, Mio, Vio, St, curve_prev, resume, validation,
+        codes_dev, lengths, target_lengths, loop_words, Wio, stream_address, max_steps, source_out)
 
 
-def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
+def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool, adafactor: Bool = False](
     mut ex: E, spec: ModelSpec, cfg_in: FitConfig, X: CastIn, Y: CastIn, N: Int, Pio: FP, curve: FP,
     Mio: FP, Vio: FP, St: IP64, curve_prev: FP, resume: Bool,
     validation: Optional[FitValidation], codes_dev: Int, lengths: Optional[FP],
@@ -1755,11 +1776,28 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
         # torch Adagrad's initial_accumulator_value: the sum starts there (one fill a fit)
         _fill(ex, s2, np_, cfg.opt.f2)
     # lane nn-optim: LAMB's buffers and tensor table, once a fit (nothing for the other optimizers)
+    var af_update = dummy_ptr()
+    var af_scales = dummy_ptr()
+    var af_parts = dummy_ptr()
+    comptime if adafactor:
+        if len(cfg.af_tensors) == 0:
+            raise Error("model fit: Adafactor needs the model's vector and matrix parameter shapes")
+        var max_size = 1
+        var max_parts = 1
+        for j in range(len(cfg.af_tensors)):  # driver-loop: over parameter shapes, once per fit
+            var tensor = cfg.af_tensors[j]
+            var size = tensor[1] * max(1, tensor[2])
+            max_size = max(max_size, size)
+            max_parts = max(max_parts, adafactor_partial_words(size))
+        af_update = ex.alloc(max_size)
+        af_scales = ex.alloc(4)
+        af_parts = ex.alloc(max_parts)
     var lamb = NnLamb(ex, cfg.opt, cfg.tensor_offs, np_)
     # nn-blocks-pgseq begin: the parameter groups, resolved once a fit (nothing without groups): each group's
     # running products from the step count, LAMB's per-run tables, adagrad's starting sums per group
     pgseq_admit_fit(cfg.groups, cfg.sched)
-    var pg_state = PgSeqState(cfg.groups, step)
+    # Adafactor uses the step count directly and has no beta products to replay on resume.
+    var pg_state = PgSeqState(cfg.groups, 0 if adafactor else step)
     var pg_lamb = PgSeqLamb(ex, cfg.groups)
     var pg_rates = List[Float32](length=cfg.groups.groups(), fill=Float32(0))
     comptime if grouped:  # the loop's instance (model_fit_state)
@@ -2021,6 +2059,22 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
                 if per_step:
                     for g in range(cfg.groups.groups()):  # driver-loop: over parameter groups (a rate a group)
                         pg_rates[g] = pg_step_lrs[g][step - step0 - 1]
+            comptime if adafactor:
+                for j in range(len(cfg.af_tensors)):  # driver-loop: over parameter tensors on the executor
+                    var tensor = cfg.af_tensors[j]
+                    var off = tensor[0]
+                    var rate = step_lr
+                    var eps = cfg.opt.eps
+                    var decay = cfg.opt.wd
+                    comptime if grouped:
+                        var group = tensor[3]
+                        rate = pg_rates[group]
+                        eps = cfg.groups.cfgs[group].eps
+                        decay = cfg.groups.cfgs[group].wd
+                    adafactor_update(ex, P + off, Gr + off, s1 + off, s2 + off, tensor[1], tensor[2], step,
+                                     Float64(rate), -0.8, Float64(eps), 0.001, 1.0, Float64(decay),
+                                     af_update, af_scales, af_parts)
+            elif grouped:
                 pgseq_step(ex, cfg.groups, pg_state, step, pg_rates, P, Gr, s1, s2, s3, lamb, pg_lamb)
             else:
                 nn_opt_step(ex, cfg.opt, st, step, step_lr, P, Gr, s1, s2, s3, np_, lamb)
@@ -2199,7 +2253,7 @@ def model_sequence_steps(spec: ModelSpec, operation: String) raises -> Int:
     model_lengths_check by lane stream-fits: Sequential.fit(source=) pads every batch to it.)"""
     var T = 0
     for i in range(spec.n_layers()):  # driver-loop: over layers (description metadata)
-        if spec.version == SPEC2_VERSION and spec.kinds[i] == LAYER_RECURRENT:
+        if spec.version == SPEC2_VERSION and (spec.kinds[i] == LAYER_RECURRENT or spec.kinds[i] == LAYER_PROJECTED_LSTM):
             var t = spec.in_shape[i].d[0]
             if T != 0 and t != T:
                 raise Error("ValueError: " + operation + ": lengths need every recurrent layer to read sequences "
@@ -2228,11 +2282,7 @@ def model_lengths_check(spec: ModelSpec, lengths: FP, N: Int, operation: String)
     if T == 0:
         raise Error("ValueError: " + operation + ": lengths apply to the recurrent layers (rnn, lstm, gru); this "
                     + "model has none")
-    for r in range(N):  # admission: one comparison per row on the host, before any launch
-        var v = lengths.unsafe_load(r)
-        if v != v or v < Float32(1.0) or v > Float32(T) or Float32(Int(v)) != v:
-            raise Error("ValueError: " + operation + ": every length must be a whole number from 1 to the "
-                        + "padded sequence length " + String(T))
+    check_recurrent_lengths(lengths, N, T, operation, True)
 
 
 def model_state_ranges(spec: ModelSpec) -> List[Int]:

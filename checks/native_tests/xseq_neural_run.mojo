@@ -18,6 +18,7 @@ from core.native_call_output import NativeCallWorkspace
 from sequence.neural_model_dispatch import (
     RNN_FIT, RNN_PREDICT, MLP_FIT, MLP_PREDICT, MODEL_ARGMAX, MODEL_MIN, MODEL_THRESHOLD, MODEL_UNIFORM,
 )
+from sequence.mlp_progress import MLPProgress
 from sequence.xseq_neural_run import (
     XseqRunF32P, XseqRnnFitRequest, XseqRnnPredictRequest, XseqMlpFitRequest, XseqMlpPredictRequest,
     XseqNeuralEntry, xseq_run_shape_text, xseq_run_size, xseq_run_as_f32_check, xseq_neural_run_call, xseq_run_uniform,
@@ -26,10 +27,12 @@ from sequence.xseq_neural_run import (
     xseq_run_rnn_rank_check, xseq_run_rnn_dims_check, xseq_run_rnn_param_count, xseq_run_rnn_bound,
     xseq_run_rnn_schedule, xseq_run_rnn_fit, xseq_run_rnn_layout, xseq_run_rnn_predict, xseq_run_mlp_scalars_check,
     xseq_run_mlp_hidden_check, xseq_run_mlp_out_name, xseq_run_mlp_sizes, xseq_run_mlp_param_count,
-    xseq_run_mlp_glorot, xseq_run_mlp_fit, xseq_run_copy_f32, xseq_run_mlp_layers_check, xseq_run_mlp_layer_check,
+    xseq_run_mlp_glorot, xseq_run_mlp_fit, xseq_run_mlp_check_order, xseq_run_copy_f32, xseq_run_mlp_layers_check, xseq_run_mlp_layer_check,
     xseq_run_mlp_pack, xseq_run_mlp_output_check, xseq_run_mlp_predict, xseq_run_class_counts,
     xseq_run_balanced_class_weights, xseq_run_remap_codes, xseq_run_lengths_check,
 )
+
+from sequence.ops import recurrent_step_padded
 
 comptime XSEQ_NEURAL_RUN_CASES = 19
 
@@ -65,7 +68,10 @@ def fake_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: 
             require((na == 4 or na == 7) and np == 10 and nf == 0, "rnn predict envelope")
             word = 0 if p[8] == 0 else p[6] * p[4]   # chunk 0 answers a short count
         elif operation == MLP_FIT:
-            require(na == 4 and nf == 8, "mlp fit envelope")
+            require((na == 4 or na == 10) and nf == 8, "mlp fit envelope")
+            if na == 10:
+                require(a[4] == 96 and a[5] == 104 and a[6] == 112 and a[7] == 120 and
+                        a[8] == 128 and a[9] == 136, "mlp incremental optimizer and shuffle buffers")
             word = p[10]                             # every epoch ran
         elif operation == MLP_PREDICT:
             require(na == 3 or na == 6, "mlp predict envelope")
@@ -255,6 +261,8 @@ def run_case(unit: Int) raises:
         var request = XseqMlpFitRequest(4, 2, 1, 3, 0, 0, 0, 0, True, 2, 7, False, 11, 10, [3], 0)
         var floats = List[Float64](length=8, fill=0.0)
         require(xseq_run_mlp_fit(_fake(), request, floats, 64, 72, 80, 88) == 7, "epochs run")
+        require(xseq_run_mlp_fit(_fake(), request, floats, 64, 72, 80, 88, 96, 104, 112, 120, 128,
+                                 136) == 7, "partial fit descriptor")
     elif unit == 14:
         var src: List[Float32] = [1.0, 2.0, 3.0, 4.0, 5.0]
         var dst = List[Float32](length=5, fill=0.0)
@@ -323,6 +331,15 @@ def run_case(unit: Int) raises:
             require(False, "the admission accepted a non-finite length")
         except problem:
             _refuses(problem, "ValueError: fit: every length must be a whole number from 1 to the sequence length 4")
+        require(not recurrent_step_padded(16777219, 16777220.0), "the last valid step was rounded into padding")
+        require(recurrent_step_padded(16777220, 16777220.0), "the first padded step was admitted")
+        var wide: List[Float32] = [16777220.0]
+        try:
+            xseq_run_lengths_check(Int(wide.unsafe_ptr()), 1, 16777219, "fit")
+            require(False, "a rounded-up float32 bound admitted an extra step")
+        except problem:
+            _refuses(problem, "ValueError: fit: every length must be a whole number from 1 to the sequence length 16777219")
+        xseq_run_lengths_check(Int(wide.unsafe_ptr()), 1, 16777220, "fit")
         xseq_run_lengths_check(Int(ok.unsafe_ptr()), 3, 4, "fit")
         var both: List[Float32] = [0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
         var weights = xseq_run_balanced_class_weights(Int(both.unsafe_ptr()), 3, 4, Int(ok.unsafe_ptr()), 2)
@@ -370,6 +387,30 @@ def run_case(unit: Int) raises:
             require(False, "one-column probability accepted")
         except problem:
             _refuses(problem, "RuntimeError: mlp_predict: this binding predates the two-column probability; rebuild it")
+
+
+def test_saved_mlp_shuffle_order_requires_every_row_once() raises:
+    var order: List[Float32] = [2.0, 0.0, 1.0]
+    var address = Int(order.unsafe_ptr())
+    xseq_run_mlp_check_order(address, len(order))
+    order[2] = 2.0
+    try:
+        xseq_run_mlp_check_order(address, len(order))
+        require(False, "duplicate training row accepted")
+    except problem:
+        _refuses(problem, "ValueError: duplicate row index in saved MLP shuffle order")
+    _ = order^
+
+
+def test_saved_mlp_counters_leave_room_for_the_next_schedule_step() raises:
+    var progress = MLPProgress(2, 6, 1, 4, 4, 0.125, 0.5, 0.75, 1.0)
+    progress.check_resume(4, 2, 6, 2)
+    progress.samples = Int64(Int.MAX - 4)
+    try:
+        progress.check_resume(4, 2, Int(progress.samples), 2)
+        require(False, "overflowing invscaling denominator admitted")
+    except problem:
+        _refuses(problem, "ValueError: invalid MLP optimizer checkpoint counters")
 
 
 def test_cases() raises:

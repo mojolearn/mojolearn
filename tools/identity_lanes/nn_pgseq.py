@@ -86,6 +86,58 @@ def _nn_pgseq_grads(X, step):
             np.ascontiguousarray(X[28 + step:29 + step, :4], dtype=np.float32)]
 
 
+@lane("sequence-optim-adafactor")
+def _(ml, X, yc, yr, Xh=None):
+    """One matrix and one bias, two batches per epoch. Resume with separate rates for the two tensors."""
+    x = np.ascontiguousarray(X[:8, :3], dtype=np.float32)
+    y = np.ascontiguousarray(yr[:8], dtype=np.float32)
+    held = np.ascontiguousarray((X if Xh is None else Xh)[:4, :3], dtype=np.float32)
+    def fit(epochs, groups=None):
+        model = ml.Sequential(numeric_mode="identical").linear(1)
+        model.compile(loss="mse", optimizer="adafactor", lr=0.01, param_groups=groups)
+        return model.fit(x, y, epochs=epochs, batch_size=4, shuffle=False, seed=7)
+
+    # At x=(1,2) the loaded model predicts (2.5,-0.5). Mean squared error
+    # against (1.5,1.5) has output gradient (1,-2). Use those exact gradients
+    # to step the standalone optimizer on the matrix in native (in,out) layout.
+    weight = np.array([[1, -1], [0.5, 0.5]], dtype=np.float32)
+    bias = np.array([0.5, -0.5], dtype=np.float32)
+    initial = {"0.weight": weight.T.copy(), "0.bias": bias.copy()}
+    probe = ml.Sequential(input_shape=(2,), numeric_mode="identical").linear(2).compile(
+        loss="mse", optimizer="adafactor", lr=0.03125)
+    probe.load_state_dict(initial)
+    probe.fit(np.array([[1, 2]], dtype=np.float32), np.array([[1.5, 1.5]], dtype=np.float32),
+              epochs=1, batch_size=1, shuffle=False)
+    standalone = ml.Adafactor([weight, bias], lr=0.03125)
+    standalone.step([np.array([[1, -2], [2, -4]], dtype=np.float32), np.array([1, -2], dtype=np.float32)])
+    state = probe.state_dict()
+    _same_bytes("matrix after standalone step", weight.T.copy(), "Sequential weight", state["0.weight"])
+    _same_bytes("vector after standalone step", bias, "Sequential bias", state["0.bias"])
+
+    plain = fit(2)
+    equal = fit(2, [{"params": ["0.bias"]}])
+    for name in ("params_", "optimizer_m_", "optimizer_v_"):
+        _same_bytes(name + " ungrouped", getattr(plain, name), name + " equal groups", getattr(equal, name))
+    groups = [{"params": ["0.bias"], "lr": 0.025}]
+    straight = fit(2, groups)
+    first = fit(1, groups)
+    with tempfile.TemporaryDirectory(prefix="ib-adafactor-") as tmp:
+        path = os.path.join(tmp, "model.ckpt")
+        first.save_checkpoint(path)
+        loaded = ml.Sequential.from_checkpoint(path, numeric_mode="identical")
+    loaded.fit(x, y, epochs=1, resume=True)
+    parts = {"plain": _h(plain.params_), "prediction": _h(straight.predict(held))}
+    for name in ("params_", "optimizer_m_", "optimizer_v_", "loss_curve_"):
+        expected = np.asarray(getattr(straight, name))
+        _same_bytes(name + " uninterrupted", expected, name + " resumed", np.asarray(getattr(loaded, name)))
+        parts[name] = _h(expected)
+    return _fit(parts)
+
+
+_batch_decl("n/a:training-trajectory (the lane compares full optimizer updates and checkpoint resume)",
+            "sequence-optim-adafactor")
+
+
 @lane("training-param-groups-device")
 def _(ml, X, yc, yr, Xh=None):
     """mojolearn.SGD / AdamW with parameter groups stepped three times from device gradients (TrainDeviceArray,

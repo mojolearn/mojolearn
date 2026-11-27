@@ -1,0 +1,12 @@
+diff --git a/training/residual_dropout_host.mojo b/training/residual_dropout_host.mojo
+--- a/training/residual_dropout_host.mojo
++++ b/training/residual_dropout_host.mojo
+@@ -21,7 +21,7 @@
+     var dside = List[Float32](length=n if BACKWARD else 0,fill=Float32(0))
+     var dropped = List[Float32](length=n,fill=Float32(0))
+     for i in range(n):
+-        dropped[i] = nn_dropout_cell(x[i],p,scale,UInt32(seed_lo),UInt32(seed_hi),UInt32(stream),offset+i)
++        dropped[i] = nn_dropout_cell(x[i],p,scale,UInt32(seed_lo),UInt32(seed_hi),UInt32(stream),offset+i+1)  # SABOTAGE: next mask element
+     for i in range(n):
+         comptime if BACKWARD:
+             output[i] = dropped[i]

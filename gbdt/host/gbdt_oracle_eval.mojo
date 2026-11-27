@@ -24,7 +24,7 @@ AN EVAL SET DOES NOT CHANGE THE FIT. On the Plain doc-parallel path the
 learn cursor, the borders, the splits and the leaves are what they were
 without a held-out set (`doc_parallel_boosting.mojo::fit_with_test`: the
 test arm is read only by `_apply_last_tree_to_test`, `_test_loss` and the
-detector, and only the querywise losses refuse it outright). So the model
+detector). So the model
 text a CPU column produces for a fit WITH an eval set is the model text it
 produces without one, and what this file adds to the comparison is the
 held-out curve, `best_iteration_` and `stopped_early_`.
@@ -296,3 +296,26 @@ def gbdt_eval_shrink_point(
             min_trees_err = test_losses[i]
             min_trees_best = i
     return min_trees_best + 1
+
+
+def gbdt_eval_shrink_symmetric(
+    test_losses: List[Float64], want_best_model: Int, best_model_min_trees: Int,
+    mut tree_split_offsets: List[Int], mut tree_leaf_offsets: List[Int],
+    mut split_features: List[Int], mut split_bins: List[Int], mut model_leaves: List[Float32],
+):
+    """Keep the chosen tree prefix together with its split and leaf arrays."""
+    var shrink_to = gbdt_eval_shrink_point(
+        test_losses, want_best_model, best_model_min_trees
+    )
+    var n_trees = len(tree_split_offsets) - 1
+    if 0 < shrink_to and shrink_to < n_trees:
+        while len(tree_split_offsets) - 1 > shrink_to:
+            _ = tree_split_offsets.pop()
+            _ = tree_leaf_offsets.pop()
+        split_features.resize(
+            tree_split_offsets[len(tree_split_offsets) - 1], 0
+        )
+        split_bins.resize(tree_split_offsets[len(tree_split_offsets) - 1], 0)
+        model_leaves.resize(
+            tree_leaf_offsets[len(tree_leaf_offsets) - 1], Float32(0.0)
+        )

@@ -33,7 +33,6 @@ from core.device_route import DeviceRoute, DEVICE_INSTALL
 from providers.python.device_route_boundary_door import device_route_clear
 
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
-comptime _REFUSE_DOUBLE = "TypeError: AutoARIMA: float64 is refused; pass float32 (no float64 on the device)"
 
 
 comptime _FIELDS_ROW_SLOT = "xseq_fields_row_v1"  # p3-cnn-sequence-tsa class record
@@ -108,15 +107,15 @@ def _builtins() raises -> PythonObject:
     return native_loaded_module("builtins")
 
 
-def _series_buffer(value: PythonObject, name: String, refusal: String, context: PythonObject,
+def _series_buffer(value: PythonObject, name: String, context: PythonObject,
                    mut pin: ArrayPin) raises -> ArrayMetadata:
     """`_buffer` of a public series input that may be a pandas DataFrame or
-    Series: its native block storage becomes one float32 copy, refused with
-    `refusal` when pandas promotes it beyond float32 (float64 or object)."""
+    Series: its native block storage becomes one float32 copy (float64
+    storage through the shared narrowing, core/classical_pandas_impl.mojo)."""
     classical_admit_value(value, context)
     if not native_pandas_exact(value):
         return _buffer(value, name, context, pin)
-    var converted = native_pandas_f32(value, context, False, True, refusal)
+    var converted = native_pandas_f32(value, context, False, True)
     return _buffer(converted, name, context, pin)
 
 
@@ -128,12 +127,13 @@ def autoarima_initialize(model: PythonObject, args: PythonObject, context: Pytho
     # read into the route owner at the estimator's first operation.
     arima_device_admit(args[1], context, _builtins())
     var source_pin = ArrayPin()
-    var source = _series_buffer(args[0], "endog", _REFUSE_DOUBLE, context, source_pin)
+    var source = _series_buffer(args[0], "endog", context, source_pin)
     var rank = len(source.shape)
     if rank != 1 and rank != 2 or source.count == 0:
         raise Error("ValueError: AutoARIMA: endog must be (batch_size, n_obs)")
-    if source.dtype_number == NPY_DOUBLE:
-        raise Error(_REFUSE_DOUBLE)
+    # A float64 endog is converted once below by the shared cast
+    # (core/admitted_input_nd.mojo: round-to-nearest-even, a finite value
+    # outside float32's range refused by its column).
     var rows = 1 if rank == 1 else source.shape[0]
     var cols = source.shape[0] if rank == 1 else source.shape[1]
     var out = source_pin.keep

@@ -63,6 +63,20 @@ def _(ml, X, yc, yr, Xh=None):
         parts[f"lml{i}"] = d(np.asarray([lml], dtype=np.float64))
         parts[f"grad{i}"] = d(np.asarray(grad, dtype=np.float64))
     parts["lml_only"] = d(np.asarray([m.log_marginal_likelihood((theta - 0.125).tolist())], dtype=np.float64))
+    # Each public kernel is the left operand of both + and *. Score the
+    # resulting kernels on actual observations; just hashing their node lists
+    # would miss a backend that interpreted an operator incorrectly.
+    constant = ml.ConstantKernel(1.5)
+    radial = ml.RBF(0.75)
+    matern = ml.Matern(1.25, nu=1.5)
+    noise = ml.WhiteKernel(0.125)
+    composed = (constant + (radial * (matern + (noise * radial))),
+                noise + (matern * (radial + (constant * radial))))
+    tiny_x = np.array([[-1.0], [0.0], [1.0]], np.float32)
+    tiny_y = np.array([0.25, -0.5, 0.75], np.float32)
+    for index, kernel in enumerate(composed):
+        small = ml.GaussianProcessRegressor(kernel=kernel, optimizer=None).fit(tiny_x, tiny_y)
+        parts[f"composed_{index}"] = d(small.predict(np.array([[0.5]], np.float32)))
     return _fit(parts)
 
 
@@ -226,7 +240,10 @@ def _(ml, X, yc, yr, Xh=None):
         prog = ml.import_model(path, shapes={"x": (64, 6)}, numeric_mode="identical")
         out = np.asarray(prog.run(x))
         held = np.asarray(prog.run(xh))
-    return _fit(dict(file=d(model), out=d(out), held=d(held)))
+    from mojolearn._verify_api_models import catalog_model_digests
+    catalog = catalog_model_digests(ml.models.verify_catalog_entry)
+    return _fit(dict(file=d(model), out=d(out), held=d(held),
+                     catalog_input=catalog["input_digest"], catalog_output=catalog["digest"]))
 
 
 # ---------------------------------------------------------------- the Transformer decode session's load_state
@@ -1343,6 +1360,30 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts)
 
 
+@lane("classical-float64-admission")
+def _(ml, X, yc, yr, Xh=None):
+    """Fit on float64 and its round-to-nearest-even float32 values. Four rows
+    include halfway cases on both sides of an even mantissa and an odd one."""
+    ulp = 2.0 ** -23
+    wide = np.array([[1.0 + 0.5 * ulp, -1.0 - 1.5 * ulp],
+                     [1.0 + 1.5 * ulp, -1.0 - 0.5 * ulp],
+                     [2.0, -3.0], [-2.0, 7.0]], dtype=np.float64)
+    rounded = wide.astype(np.float32)
+    model = ml.StandardScaler().fit(wide)
+    reference = ml.StandardScaler().fit(rounded)
+    actual = np.asarray(model.mean_)
+    output = np.asarray(model.transform(rounded))
+    parts = dict(mean=_h(actual), variance=_h(model.var_), transform=_h(output))
+    mismatch = _oracle_mismatch(
+        ("float64 fit mean", actual, "rounded float32 fit mean", reference.mean_),
+        ("float64 fit variance", model.var_, "rounded float32 fit variance", reference.var_),
+        ("float64 fit transform", output, "rounded float32 fit transform", reference.transform(rounded)),
+    )
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts)
+
+
 @lane("classical-float16-sequences")
 def _(ml, X, yc, yr, Xh=None):
     """LinearRegression, Ridge, StandardScaler, MinMaxScaler and PCA fitted on
@@ -1400,7 +1441,7 @@ _batch_decl("n/a:coverage-probe (the lane checks one public call path the releas
             "saved-model-host-infer-trees", "hf-causal-lm-text", "hf-model-surface",
             "training-device-cross-entropy", "sequence-layernorm-backward",
             "x-metrics-classification-report", "x-metrics-permutation-test-score",
-            "classical-float16-sequences")
+            "classical-float16-sequences", "classical-float64-admission")
 
 
 # ---------------------------------------------------------------- lane verify-coverage-20261024

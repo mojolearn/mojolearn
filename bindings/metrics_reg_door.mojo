@@ -130,8 +130,9 @@ def _reg_target(source: PythonObject, name: String, caller: String, context: Pyt
             view = admit_family(view, -1, name, context, admitted=True, empty=True).array
             typestr = "<f4"
             cast = True
-    if typestr != "<f4":
-        raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32; cast explicitly before scoring")
+    # float64 is converted once by the shared admission cast below (Andrew, 2026-11-27).
+    if typestr != "<f4" and typestr != "<f8":
+        raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32 or float64")
     var nd = Int(py=view.ndim)
     var rows = Int(py=view.shape[0]) if nd >= 1 else 0
     var cols = 1

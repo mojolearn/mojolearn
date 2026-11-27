@@ -23,8 +23,9 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("sequence-lstm", "sequence-gru", "sequence-rmsprop", "sequence-adagrad",
                         "sequence-autoarima", "sequence-stl", "sequence-var",
+                        "sequence-mlp-classifier-partial", "sequence-mlp-regressor-partial",
                         "sequence-mlp", "sequence-rnn", "sequence-lion",
-                        "sequence-adafactor", "sequence-lamb",
+                        "sequence-adafactor", "sequence-adafactor-maximize", "sequence-lamb",
                         "sequence-adamax", "sequence-nadam",
                         "sequence-lr-schedulers", "sequence-layernorm",
                         "sequence-theta", "sequence-croston",
@@ -46,6 +47,7 @@ FAMILIES = (
                         "sequence-composed-log-softmax-ctc",
                         # nn-recurrent begin (tools/identity_lanes/nn_recurrent.py)
                         "sequence-blocks-bigru-lengths", "sequence-blocks-bilstm",
+                        "sequence-projected-lstm", "sequence-blocks-projected-lstm",
                         # nn-recurrent end
                         # lane rnn-parity-D (2026-11-25): the recurrent estimators' options (tools/identity_lanes/rnn_parity.py)
                         "sequence-rnn-weighted-steps", "sequence-rnn-bidi-options",
@@ -68,7 +70,7 @@ FAMILIES = (
                         "sequence-norms-resnet1d-gn", "sequence-norms-instance",
                         # nn-norms end
                         # lane nn-optim begin (2026-11-23): Sequential.compile's rmsprop, adagrad, lamb and schedules
-                        "sequence-optim-rmsprop", "sequence-optim-adagrad", "sequence-optim-lamb",
+                        "sequence-optim-rmsprop", "sequence-optim-adagrad", "sequence-optim-lamb", "sequence-optim-adafactor",
                         # lane nn-optim end
                         # nn-conv3d begin
                         "sequence-composed-conv3d", "sequence-composed-pool3d",
@@ -150,6 +152,7 @@ FAMILIES = (
                         "ops-pool-window", "ops-pool-adaptive",
                         # session-ops-pool end
                         # session-ops-rest begin: Sequential's layers as Session ops (tools/identity_lanes/session_ops_rest.py)
+                        "ops-public-tensor-math", "ops-public-control-graph",
                         "ops-layer-norms", "ops-layer-activations", "ops-layer-attention",
                         "ops-layer-losses", "ops-layer-ctc", "ops-layer-ssm",
                         # lane w3i11-endpoints (2026-11-25): topk, gather, logsumexp, sequence_mask, checkpoint
@@ -233,10 +236,13 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-autoarima": "AutoARIMA",
                        "sequence-stl": "STL",
                        "sequence-var": "VAR",
+                       "sequence-mlp-classifier-partial": "MLPClassifier.partial_fit, Adam continuation",
+                       "sequence-mlp-regressor-partial": "MLPRegressor.partial_fit, SGD continuation",
                        "sequence-mlp": "MLPClassifier / MLPRegressor",
                        "sequence-rnn": "RNNRegressor / RNNClassifier",
                        "sequence-lion": "Lion",
                        "sequence-adafactor": "Adafactor",
+                       "sequence-adafactor-maximize": "Adafactor ascent on vectors and matrices",
                        "sequence-lamb": "LAMB",
                        "sequence-adamax": "Adamax",
                        "sequence-nadam": "NAdam",
@@ -265,6 +271,8 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-composed-log-softmax-ctc": "Sequential log_softmax (nll, kl_div) and ctc",  # nn-losses-2
                        # nn-recurrent begin
                        "sequence-blocks-bigru-lengths": "Sequential gru, two bidirectional layers, lengths",
+                       "sequence-projected-lstm": "Session projected LSTM: forward, backward, state and saved Program",
+                       "sequence-blocks-projected-lstm": "Sequential projected LSTM: one training step",
                        "sequence-blocks-bilstm": "Sequential lstm, bidirectional",
                        # nn-recurrent end
                        # lane rnn-parity-D (2026-11-25)
@@ -308,6 +316,7 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        # lane nn-optim begin
                        "sequence-optim-rmsprop": "Sequential rmsprop with cosine_warm_restarts and multi_step",
                        "sequence-optim-adagrad": "Sequential adagrad with reduce_on_plateau and cosine",
+                       "sequence-optim-adafactor": "Sequential Adafactor matrix and vector updates, groups and checkpoint resume",
                        "sequence-optim-lamb": "Sequential lamb with one_cycle and linear_warmup",
                        # lane nn-optim end
     # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table (RECORD OWED)
@@ -370,6 +379,8 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # session-ops-rest begin
     "ops-layer-norms": "Session: batch_norm, group_norm, instance_norm (running statistics), Program",
     "ops-select-reduce": "Session: topk, gather, logsumexp, sequence_mask, checkpoint (recompute equals plain)",  # lane w3i11-endpoints
+    "ops-public-tensor-math": "Session tensor arithmetic, gradients, optimizer state and weight loading",
+    "ops-public-control-graph": "Program and ImportedProgram conditionals, loops and checkpointed owners",
     "ops-layer-activations": "Session: prelu, mish",
     "ops-layer-attention": "Session: multi_head_attention (self causal, cross with key_lengths), positional_encoding, Program",
     "ops-layer-losses": "Session: smooth_l1_loss, nll_loss, kl_div, binary_cross_entropy_with_logits(pos_weight)",
@@ -378,6 +389,7 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # session-ops-rest end
                        }
 PUBLIC_PENDING_LANES = {
+    "sequence-adafactor-maximize": "no reference",
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
     # (verify_reference/table.json) carries no cell for these lanes, so every part reads OWED
     # (gating, never a pass) until the release record admits them (test_host_surface).
@@ -399,7 +411,11 @@ PUBLIC_PENDING_LANES = {
     # nn-recurrent begin
     "sequence-blocks-bigru-lengths": "no reference",
     "sequence-blocks-bilstm": "no reference",
+    "sequence-projected-lstm": "no reference",
+    "sequence-blocks-projected-lstm": "no reference",
     # nn-recurrent end
+    "sequence-mlp-classifier-partial": "no reference",
+    "sequence-mlp-regressor-partial": "no reference",
     "sequence-rnn-weighted-steps": "no reference",  # lane rnn-parity-D
     "sequence-rnn-bidi-options": "no reference",  # lane rnn-parity-D
     "sequence-rnn-step-widths": "no reference",  # lane rnn-step-bits
@@ -441,6 +457,7 @@ PUBLIC_PENDING_LANES = {
     "sequence-optim-rmsprop": "no reference",
     "sequence-optim-adagrad": "no reference",
     "sequence-optim-lamb": "no reference",
+    "sequence-optim-adafactor": "no reference",
     # lane nn-optim end
     # nn-blocks-scatter begin
     "ops-scatter-segment": "no reference",
@@ -460,6 +477,8 @@ PUBLIC_PENDING_LANES = {
     # session-ops-rest begin
     "ops-layer-norms": "no reference",
     "ops-select-reduce": "no reference",  # lane w3i11-endpoints
+    "ops-public-tensor-math": "no reference",
+    "ops-public-control-graph": "no reference",
     "ops-layer-activations": "no reference",
     "ops-layer-attention": "no reference",
     "ops-layer-losses": "no reference",

@@ -34,7 +34,8 @@ from sequence.exec_device import (
 )
 from sequence.ops import FP, OP_OPT, OPT_NADAM, OPT_SGD, OPT_SK_ADAM, OPT_SK_SGD, Args
 from sequence.recurrent import OptConfig, OptState, opt_scalars, opt_step
-from sequence.ops_impl import adafactor_core, lamb_offsets, opt_slots
+from sequence.ops_impl import lamb_offsets, opt_slots
+from sequence.adafactor_update import adafactor_core
 from sequence.lamb_core import lamb_bias, lamb_core, lamb_table
 from sequence.seq_tensor import seq_tensor_ptr, seq_tensor_view
 from core.resident_upload_count import RUC_OPTIMIZER_STATE, resident_upload_note
@@ -125,7 +126,7 @@ comptime OPT_PIPE_CH = 1 << 21
 #:    the device across steps (`adafactor_resident_*`); a step moves the
 #:    parameter and gradient up and the parameter down only (the board's
 #:    1-D tensor: three 64 MB transfers instead of five). The same launches
-#:    (`sequence/ops_impl.mojo::adafactor_core`) on the same values.
+#:    (`sequence/adafactor_update.mojo::adafactor_core`) on the same values.
 #: AF_FAST_RESIDENT OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab10-afresident): adafactor 392.8 -> 205.2 ms, digest
 #: identical A == B. KEEP: the FAST + Apple default since then.
@@ -796,7 +797,7 @@ def adafactor_resident_open(ip: List[Int]) raises -> List[Int]:
 
 
 def adafactor_resident_step(handle: Int, addrs: List[Int], ip: List[Int],
-                            fp: List[Float64]) raises -> Int:
+                            fp: List[Float64], maximize: Bool = False) raises -> Int:
     """AF_RESIDENT: one Adafactor step of the handle's tensor with its
     second moment on the device. addrs = [param, grad]; ip = [R, C, t];
     fp = `adafactor_step`'s six. The parameter is updated in place.
@@ -820,7 +821,7 @@ def adafactor_resident_step(handle: Int, addrs: List[Int], ip: List[Int],
     var P = ex._alloc(n, False)
     var G = ex._alloc(n, False)
     _upload_all(ex, P, G, pg[0], pg[1], sizes)
-    adafactor_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), R, C, t, fp)
+    adafactor_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), R, C, t, fp, maximize)
     _download_all(ex, P, pg[0], sizes)
     return n
 
@@ -1038,7 +1039,7 @@ def lamb_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
 
 
 def adafactor_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
-                                fp: List[Float64]) raises -> Int:
+                                fp: List[Float64], maximize: Bool = False) raises -> Int:
     """AF_RESIDENT: `adafactor_resident_step` on resident tensors:
     handles = [param, grad] (seq_tensor handles); ip = [R, C, t]; fp =
     `adafactor_step`'s six. The parameter is updated where it lives (the
@@ -1058,7 +1059,7 @@ def adafactor_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
     var P = seq_tensor_ptr(handles[0], n, "param")
     var G = seq_tensor_ptr(handles[1], n, "grad")
     var ex = DeviceExec()
-    adafactor_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), R, C, t, fp)
+    adafactor_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), R, C, t, fp, maximize)
     # lane fb15-sync-counts (2026-11-18): one wait per step, the executor's
     # destructor drain (was `ex.sync()` and then that drain again on an empty
     # queue). No bit moves.

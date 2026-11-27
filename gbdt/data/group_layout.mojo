@@ -32,6 +32,7 @@ struct GroupLayout(Movable):
     """`sizes` (n) and `offsets` (n + 1) of the grouping, on the device."""
 
     var n_groups: Int
+    var max_size: Int
     var sizes: DeviceBuffer[DType.uint32]
     var offsets: DeviceBuffer[DType.uint32]
 
@@ -40,13 +41,15 @@ struct GroupLayout(Movable):
         n_groups: Int,
         var sizes: DeviceBuffer[DType.uint32],
         var offsets: DeviceBuffer[DType.uint32],
+        max_size: Int = 0,
     ):
+        self.max_size = max_size
         self.n_groups = n_groups
         self.sizes = sizes^
         self.offsets = offsets^
 
 
-def group_offsets_kernel(
+def group_offsets_kernel[collect_max: Bool = False](
     sizes: MutPointer[UInt32, MutAnyOrigin],
     incl: MutPointer[UInt32, MutAnyOrigin],
     offsets: MutPointer[UInt32, MutAnyOrigin],
@@ -61,13 +64,15 @@ def group_offsets_kernel(
     offsets.unsafe_store(q + 1, end)
     if q == 0:
         offsets.unsafe_store(0, UInt32(0))
+    comptime if collect_max:
+        _ = Atomic.max(words.unsafe_offset(2), Int32(sizes.unsafe_load(q)))
     if sizes.unsafe_load(q) == UInt32(0):
         _ = Atomic.min(words.unsafe_offset(0), Int32(q))
     elif q > 0 and end <= incl.unsafe_load(q - 1):
         _ = Atomic.max(words.unsafe_offset(1), Int32(1))
 
 
-def device_group_layout(
+def device_group_layout[collect_max: Bool = False](
     ctx: DeviceContext,
     group_sizes: List[UInt32],
     n_rows: Int,
@@ -97,7 +102,7 @@ def device_group_layout(
     h.unsafe_ptr().unsafe_store(2, Int32(0))
     var d_w = ctx.enqueue_create_buffer[DType.int32](3)
     ctx.enqueue_copy(dst_buf=d_w, src_ptr=h.unsafe_ptr())
-    ctx.enqueue_function[group_offsets_kernel](
+    ctx.enqueue_function[group_offsets_kernel[collect_max]](
         d_sizes.unsafe_ptr(),
         d_incl.unsafe_ptr(),
         d_off.unsafe_ptr(),
@@ -114,6 +119,9 @@ def device_group_layout(
     _ = len(group_sizes)
     var empty_q = h.unsafe_ptr().unsafe_load(0)
     var wrapped = h.unsafe_ptr().unsafe_load(1) != Int32(0)
+    var largest = 0
+    comptime if collect_max:
+        largest = Int(h.unsafe_ptr().unsafe_load(2))
     var total = Int(h_total.unsafe_ptr().unsafe_load(0))
     _ = tail^
     _ = d_incl^
@@ -127,4 +135,4 @@ def device_group_layout(
         raise Error(cover_prefix + "more than 2^32 rows of " + String(n_rows))
     if total != n_rows:
         raise Error(cover_prefix + String(total) + " rows of " + String(n_rows))
-    return GroupLayout(n, d_sizes^, d_off^)
+    return GroupLayout(n, d_sizes^, d_off^, largest)

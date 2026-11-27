@@ -4056,8 +4056,12 @@ def format_human(report):
             lines.append(f"# FAIL {endpoint}: {error}")
         for name,part in (('endpoints',api),('TAPE',public.get('tape',{}))):
             for error in part.get('errors',[])[:5]:lines.append('# '+name+': '+error)
-            failed=[key for key,value in part.get('faults',{}).items() if value['status']!='CAUGHT_AND_RESTORED']
-            if failed:lines.append('# '+name+' fault controls failed: '+', '.join(failed))
+            controls = part.get('sides') or {'': part}
+            for side, side_report in controls.items():
+                failed = [key for key, value in side_report.get('faults', {}).items()
+                          if value['status'] not in ('CAUGHT_AND_RESTORED', 'NOT_APPLICABLE')]
+                if failed:
+                    lines.append(f"# {name} {side} fault controls failed: " + ', '.join(failed))
     note = harness_note(report)
     if note:
         lines.append(note)

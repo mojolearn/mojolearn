@@ -6,12 +6,27 @@ from pathlib import Path
 from ._verify_api import resolve, encode
 
 
+def catalog_model_digests(verify_entry):
+    """Run the catalog's pinned MNIST artifact and input from the installed wheel."""
+    import hashlib
+    import numpy as np
+    path = Path(__file__).with_name("models") / "mnist-12-opset13.onnx"
+    x = np.random.default_rng(0).standard_normal((1, 1, 28, 28), dtype=np.float32)
+    report = verify_entry("mnist-12", source=str(path), inputs=[x], numeric_mode="identical")
+    if report["input_digest"] != hashlib.sha256(x.tobytes()).hexdigest()[:16]:
+        raise AssertionError("catalog input digest differs from the supplied tensor")
+    if report["match"] is False:
+        raise AssertionError("MNIST output disagrees with its catalog reference for this release")
+    return {"input_digest": report["input_digest"], "digest": report["digest"]}
+
+
 def applicable(public,method):return public.startswith('mojolearn.models.')
 
 
 def model_checks(recorder,public,methods):
     import numpy as np
     from . import models
+    from ._verify_api import package
     from ._causal_lm_fixtures import _llama_config,_llama_tensors,_write_checkpoint
     name=public.rsplit('.',1)[-1]
     def check(method):
@@ -19,10 +34,10 @@ def model_checks(recorder,public,methods):
             entries=models.catalog();assert isinstance(entries,(dict,list))
             return entries
         if name=='verify_catalog_entry':
-            # This command can download multi-GB models. The normal verifier
-            # checks its admission boundary; model arithmetic is covered below.
-            try:models.verify_catalog_entry('__verifier_unknown_model__')
-            except KeyError:return {'unknown_catalog_name_refused':True}
+            try:
+                models.verify_catalog_entry('__verifier_unknown_model__')
+            except KeyError:
+                return catalog_model_digests(package().models.verify_catalog_entry)
             raise AssertionError('unknown catalog name was admitted')
         if name=='Tokenizer':
             import unicodedata
@@ -44,7 +59,8 @@ def model_checks(recorder,public,methods):
             # (docs/plans/NUMERIC_PROFILE_PARTS.md); these endpoints' bits changed then, RECORD OWED.
             if name=='ParallelCausalLM':
                 m=models.ParallelCausalLM.load(tmp,layer_devices=(0,))
-            else:m=models.CausalLM.load(tmp)
+            else:
+                m=resolve('mojolearn.models.CausalLM').load(tmp)
             try:
                 ids=np.array([[1,2]],np.int32)
                 if name=='GenerationStream':
@@ -76,5 +92,4 @@ def model_checks(recorder,public,methods):
             finally:
                 if name=='ParallelCausalLM':m.close()
     for method in methods:
-        kind='admission only' if name=='verify_catalog_entry' else 'numerical'
-        recorder.check(public+'.'+method,lambda method=method:check(method),kind=kind)
+        recorder.check(public+'.'+method,lambda method=method:check(method))

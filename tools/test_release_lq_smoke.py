@@ -195,8 +195,11 @@ class ReleaseRoute(unittest.TestCase):
         self.assertNotIn("gpu-column-nvidia-hopper", r.NEEDS["publish-nvidia"])
         self.assertIn("gpu-column-nvidia-hopper", r.AFTER["publish-nvidia"])
         self.assertIn("SKIPPED: no Hopper box held", r.step_gpu_column_nvidia_hopper())
-        self.assertEqual(r.smoke_notes("nvidia"), {"sm_90a": "not run (no Hopper box held)"})
+        self.assertEqual(r.smoke_notes("nvidia"), {})
         self.assertEqual(r.smoke_notes("amd"), {})
+        sets = (*release.release_reuse.LINUX_SETS, ("cuda", "sm_90a"))
+        with mock.patch.object(release.release_reuse, "LINUX_SETS", sets):
+            self.assertEqual(r.smoke_notes("nvidia"), {"sm_90a": "not run (no Hopper box held)"})
 
     def test_a_held_hopper_box_gates_publish_nvidia_again(self):
         r = self.release(hopper_box="-p 22 root@198.51.100.7")

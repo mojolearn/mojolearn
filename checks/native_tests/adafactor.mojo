@@ -26,13 +26,14 @@ from std.sys.compile import is_defined
 
 
 
-comptime ADAFACTOR_FIXTURES = 2
+comptime ADAFACTOR_SHAPES = 2  # matrix and vector, each exercised in both directions
+comptime ADAFACTOR_FIXTURES = 2 * ADAFACTOR_SHAPES
 comptime AF_STEPS = 6
 comptime AF_EPS1 = Float64(0.00000011920928955078125)
 
 
 def af_shape(fixture_id: Int) -> Tuple[Int, Int]:
-    return (5, 4) if fixture_id == 0 else (3, 0)
+    return (5, 4) if fixture_id % ADAFACTOR_SHAPES == 0 else (3, 0)
 
 
 def af_config() -> List[Float64]:
@@ -69,6 +70,7 @@ def af_expected(fixture_id: Int, data: Tuple[List[Float32], List[Float32]]) -> T
     var up = update.unsafe_ptr()
     var original = data[0].unsafe_ptr()
     var gp = data[1].unsafe_ptr()
+    var maximize = fixture_id >= ADAFACTOR_SHAPES
     def initialize(index: Int) {imm pp, imm original}:
         pp.unsafe_store(index, Float64(original.unsafe_load(index)))
     host_parallelize(initialize, n)
@@ -109,10 +111,10 @@ def af_expected(fixture_id: Int, data: Tuple[List[Float32], List[Float32]]) -> T
                 row_mean += first[row]
             row_mean /= Float64(rows)
         var denominator = max(row_mean, AF_EPS1)
-        def update_task(index: Int) {imm firstp, imm secondp, imm gp, imm up, imm offset, imm cols, imm denominator}:
+        def update_task(index: Int) {imm firstp, imm secondp, imm gp, imm up, imm offset, imm cols, imm denominator, imm maximize}:
             var estimate = firstp.unsafe_load(index) if cols == 0 else firstp.unsafe_load(index // cols) * secondp.unsafe_load(index % cols) / denominator
             var g = Float64(gp.unsafe_load(offset + index))
-            up.unsafe_store(index, g / sqrt(max(estimate, AF_EPS1 * AF_EPS1)))
+            up.unsafe_store(index, (-g if maximize else g) / sqrt(max(estimate, AF_EPS1 * AF_EPS1)))
         host_parallelize(update_task, n)
         var update_norm_sq = Float64(0)
         for index in range(n):  # one small whole-tensor clipping RMS reduction
@@ -147,7 +149,7 @@ def run_adafactor_fixture[E: Exec](mut ex: E, fixture_id: Int) raises:
         var addresses: List[Int] = [Int(parameters.unsafe_ptr()), Int(data[1].unsafe_ptr()) + 4 * (step - 1) * n,
             Int(first.unsafe_ptr()), Int(second.unsafe_ptr())]
         var ints: List[Int] = [rows, cols, step]
-        require(adafactor_step_impl(ex, addresses, ints, af_config()) == n, "Adafactor native step extent")
+        require(adafactor_step_impl(ex, addresses, ints, af_config(), fixture_id >= ADAFACTOR_SHAPES) == n, "Adafactor native step extent")
     ex.sync()
     af_check(parameters, expected[0], "parameters")
     af_check(first, expected[1], "row/variance state")
@@ -180,7 +182,7 @@ def resident_fixture(fixture_id: Int) raises:
         for step in range(1, AF_STEPS + 1):  # dependent optimizer recurrence
             var addresses: List[Int] = [Int(parameters.unsafe_ptr()), Int(data[1].unsafe_ptr()) + 4 * (step - 1) * n]
             var ints: List[Int] = [rows, cols, step]
-            require(adafactor_resident_step(handle, addresses, ints, af_config()) == n, "Adafactor resident extent")
+            require(adafactor_resident_step(handle, addresses, ints, af_config(), fixture_id >= ADAFACTOR_SHAPES) == n, "Adafactor resident extent")
         _ = opt_resident_move(handle, 0, Int(first.unsafe_ptr()), False)
         if cols:
             _ = opt_resident_move(handle, 1, Int(second.unsafe_ptr()), False)

@@ -25,8 +25,7 @@ def args(**kw):
     base = dict(version=VERSION, dry_run=False, publish=None, only="", redo="", build_backend="github",
                 amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto",
                 smoke_via="lq", hopper_box="", smoke_branch="main", cpu_column=False, gpu_smoke=False,
-                owner_waiver=None, status=False, refreeze=False, source_checkout="", published_smoke=[],
-                published_smoke_reason="")
+                owner_waiver=None, status=False, refreeze=False, source_checkout="")
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -590,32 +589,27 @@ def test_boxes_down_never_takes_down_a_box_whose_job_results_are_not_home(tmp_pa
     assert set(r.held_boxes()) == {"nvidia", "amd"}
 
 
-# ---------------------------------------------------------------- 4. the published producers as steps
-# (lane published-no-reverify: published-<vendor> is a local bytes check; the installed smoke from PyPI that
-# published-smoke-<vendor> ran on the device after publish is removed, lane identity-once-on-frozen-source)
+# ---------------------------------------------------------------- 4. the published check (one CPU job on GitHub)
+# Andrew 2026-11-27: after publication no step rents or runs a GPU; one CPU job on a free GitHub runner downloads
+# every published file (sha256 equal to the candidate's), installs mojolearn from PyPI, imports it and runs
+# verify --quick. The per-vendor published-<vendor> steps and the --published-smoke GPU route are removed.
 import hashlib  # noqa: E402
 import json  # noqa: E402
-import subprocess  # noqa: E402
-from types import SimpleNamespace  # noqa: E402
 
-sys.path.insert(0, str(ROOT / "tools" / "ops"))
-import published_install as PI  # noqa: E402
 import release_published_install as RPI  # noqa: E402
-from test_release_published_bytes import make_wheel, fake_index  # noqa: E402
-
-JOB = ROOT / "tools" / "ops" / "published_install_job.sh"
 
 
-def test_the_producers_follow_their_publish_steps_need_no_box_and_record_waits_for_them():
+def test_one_published_step_waits_for_every_publish_needs_no_box_and_record_waits_for_it():
     steps = [s for s, _, _, _ in release.STEP_TABLE]
-    for step, (vendor, publish) in release.PUBLISHED_STEPS.items():
-        assert steps.index(publish) < steps.index(step) < steps.index("boxes-down")
-        assert release.NEEDS[step] == [publish] and step in release.AFTER["record"]
-        assert step not in release.BOX_CONSUMERS and step not in release.AFTER["boxes-down"]
-        assert release.RESOURCE[step] is None                      # no Metal lock, no box: a pip download
-    # no installed smoke after publish (Andrew 2026-11-05): the published-smoke-<vendor> steps are gone
-    assert release.PUBLISHED_SMOKE_STEPS == {}
-    assert not any(s.startswith("published-smoke-") for s in steps)
+    assert "published" in steps and steps.index("published") < steps.index("boxes-down") < steps.index("record")
+    assert not any(s.startswith("published-") for s in steps)
+    assert release.NEEDS["published"] == ["freeze-commit"]
+    assert release.AFTER["published"] == list(release.PUBLISH_STEPS) and "published" in release.AFTER["record"]
+    assert "published" not in release.BOX_CONSUMERS and "published" not in release.AFTER["boxes-down"]
+    assert release.RESOURCE["published"] is None
+    assert not hasattr(release, "PUBLISHED_STEPS") and not hasattr(release, "PUBLISHED_SMOKE_STEPS")
+    assert not (ROOT / "tools" / "ops" / "published_install.py").exists()
+    assert not (ROOT / "tools" / "ops" / "published_install_job.sh").exists()
 
 
 def finals(r):
@@ -627,250 +621,125 @@ def finals(r):
     return out
 
 
-def report(out, vendor, candidates, status="passed", schema=release.Release.PUBLISHED_SCHEMA, **extra):
+def publish_all(r):
+    for step in release.PUBLISH_STEPS:
+        record(r, step, result="pypi via alpha-api")
+
+
+def digest(w):
+    return hashlib.sha256(w.read_bytes()).hexdigest()
+
+
+def runner_report(out, candidates, published=None, quick=0):
+    """The directory the workflow's artifact brings home: request.json and the report judged from it."""
     out.mkdir(parents=True, exist_ok=True)
-    (out / "request.json").write_text(json.dumps(dict(vendor=vendor, version=VERSION, candidates={
-        w.name: hashlib.sha256(w.read_bytes()).hexdigest() for w in candidates})))
-    (out / "published-report.json").write_text(json.dumps(dict(
-        schema=schema, vendor=vendor, version=VERSION, status=status,
-        exit_code=0 if status == "passed" else 1, coverage=[dict(id="index-resolution", completed=3, expected=3)],
-        **extra)))
+    cands = {w.name: digest(w) for w in candidates}
+    files = published or cands
+    request = {"version": VERSION, "index_url": RPI.PYPI_INDEX, "candidates": cands,
+               "runner": "https://github.com/o/r/actions/runs/1",
+               "index_wait": dict(listed=True, waited_s=0, polls=1, missing=[]),
+               "resolved": [dict(candidate=n, distribution=RPI.wheel_tags(n)["distribution"], pip_exit=0, files=[n],
+                                 file=n, sha256=files[n], index_sha256=files[n]) for n in cands],
+               "install": dict(exit=0, installed={"mojolearn": VERSION, "mojolearn-core": VERSION}),
+               "import": dict(exit=0, version=VERSION), "verify_quick": dict(exit=quick)}
+    (out / "request.json").write_text(json.dumps(request))
+    (out / "published-report.json").write_text(json.dumps(RPI.judge(out)))
 
 
-def test_published_steps_skip_without_pypi_and_take_a_passed_report_for_these_wheels(tmp_path, monkeypatch):
+def test_the_published_step_skips_without_pypi_and_waits_for_the_linux_mojolearn(tmp_path):
     r = make(tmp_path)
-    assert r.step_published_nvidia() == "skipped (not published to PyPI)"
+    assert r.step_published() == "skipped (not published to PyPI)"
+    r = make(tmp_path, publish="pypi")
+    assert r.step_published()[0] == "nothing published yet"
+    record(r, "publish-macos", result="pypi via alpha-api")
+    with pytest.raises(release.StepFailed, match="cannot run"):
+        r.step_published()
+    assert r.calls == []
+
+
+def test_a_passed_report_for_exactly_the_published_wheels_is_taken(tmp_path):
     r = make(tmp_path, publish="pypi")
     w = finals(r)
-    report(r.published_out("nvidia"), "nvidia", [w["linux"], w["nvidia"]])
-    assert r.published_ok("nvidia")[0] and r.step_published_nvidia().endswith("(report exists)")
-    record(r, "published-nvidia")
-    assert r.have("published-nvidia", r.recorded("published-nvidia")).startswith("PASSED index-resolution=3/3")
-    # another wheel's report is not this release's; an old smoke (v1) report is not a bytes report
-    report(r.published_out("amd"), "amd", [w["linux"], w["nvidia"]])
-    assert not r.published_ok("amd")[0]
-    report(r.published_out("apple"), "apple", [w["macos"]], schema=release.Release.PUBLISHED_SMOKE_SCHEMA)
-    assert not r.published_ok("apple")[0]
-    # an owed published-<vendor> never asks for a box
-    assert not any(n.startswith("published-") for v in r.box_needs().values() for n in v)
+    publish_all(r)
+    runner_report(r.published_out(), list(w.values()))
+    ok, why = r.published_ok()
+    assert ok and why.startswith("PASSED index-resolution=") and "verify-quick=1/1" in why
+    assert r.step_published()[0].endswith("(report exists)") and r.calls == []
+    # a report of other files is not this release's; a hand-edited report differs from its re-derivation
+    runner_report(r.published_out(), [w["linux"], w["nvidia"]])
+    assert not r.published_ok()[0]
+    runner_report(r.published_out(), list(w.values()))
+    doc = json.loads((r.published_out() / "published-report.json").read_text())
+    (r.published_out() / "published-report.json").write_text(json.dumps(dict(doc, coverage=[])))
+    assert "re-derivation" in r.published_ok()[1]
+    assert not any(n.startswith("published") for v in r.box_needs().values() for n in v)
 
 
 def test_published_bytes_that_differ_fail_naming_both_hashes(tmp_path):
     r = make(tmp_path, publish="pypi")
     w = finals(r)
-    mismatch = [dict(file=w["amd"].name, published_sha256="a" * 64, candidate_sha256="b" * 64)]
-    report(r.published_out("amd"), "amd", [w["linux"], w["amd"]], status="failed", mismatch=mismatch)
-    ok, why = r.published_ok("amd")
-    assert not ok and "a" * 64 in why and "b" * 64 in why and "HASH MISMATCH" in why
+    publish_all(r)
+    cands = list(w.values())
+    runner_report(r.published_out(), cands, published=dict({c.name: digest(c) for c in cands}, **{w["amd"].name: "a" * 64}))
+    ok, why = r.published_ok()
+    assert not ok and "a" * 64 in why and digest(w["amd"]) in why and "HASH MISMATCH" in why
 
 
-def test_an_index_lag_report_is_named_apart_from_a_hash_mismatch(tmp_path):
-    # 0.8.66 run v (2026-11-08): PyPI had not listed the macOS file yet; pip resolved nothing
+def test_a_failed_verify_quick_fails_the_step(tmp_path):
     r = make(tmp_path, publish="pypi")
     w = finals(r)
-    report(r.published_out("apple"), "apple", [w["macos"]], status="failed", mismatch=[], failure="index-lag",
-           failure_why="the index did not list %s after 900s (46 polls)" % w["macos"].name)
-    ok, why = r.published_ok("apple")
-    assert not ok and "INDEX LAG (not a hash mismatch)" in why and w["macos"].name in why
-    assert "run published-apple again" in why and r.have_published("apple") is None
+    publish_all(r)
+    runner_report(r.published_out(), list(w.values()), quick=1)
+    ok, why = r.published_ok()
+    assert not ok and "verify-quick" in why and r.have_published(None) is None
 
 
-def test_published_step_runs_the_bytes_check_locally_with_the_gate_receipts(tmp_path, monkeypatch):
+def test_the_step_dispatches_the_github_workflow_and_judges_the_artifact(tmp_path, monkeypatch):
+    r = make(tmp_path, publish="pypi")
+    w = finals(r)
+    publish_all(r)
     seen = []
 
-    def runner(cmd, env, log, detach=False):
-        cmd = [str(c) for c in cmd]
-        seen.append(cmd)
-        report(pathlib.Path(cmd[cmd.index("--out") + 1]), "nvidia", [w["linux"], w["nvidia"]])
-        return 0
-    r = make(tmp_path, runner=runner, publish="pypi")
-    w = finals(r)
-    receipt = tmp_path / "gate" / "gate-smoke.json"
-    receipt.parent.mkdir()
-    receipt.write_text("{}")
-    monkeypatch.setattr(r, "published_gate", lambda vendor: ([receipt], "gate-nvidia PASS"))
-    monkeypatch.setattr(r, "smoke_python", lambda: "python3.12")
-    assert r.step_published_nvidia().startswith("PASSED")
-    (cmd,) = seen
-    assert cmd[1].endswith("tools/release_published_install.py") and cmd[2] == "check"
-    assert "mac_slot.py" not in " ".join(cmd) and "tools/ops/" not in " ".join(cmd)   # no lock, no box
-    assert cmd[cmd.index("--gate-evidence") + 1] == str(receipt) and cmd[cmd.index("--gate-verdict") + 1]
-    assert cmd[cmd.index("--index-url") + 1] == "https://pypi.org/simple"
-    assert [cmd[i + 1] for i, a in enumerate(cmd) if a == "--candidate-wheel"] == [
-        str(w["linux"]), str(w["nvidia"])]  # the NVIDIA wheel carries its PTX set (2026-11-05)
+    def gh(*argv, log=None):
+        argv = [str(a) for a in argv]
+        seen.append(argv)
+        if argv[:2] == ["run", "download"]:
+            runner_report(pathlib.Path(argv[argv.index("-D") + 1]), list(w.values()))
+        return 0, ""
+    monkeypatch.setattr(r, "gh", gh)
+    monkeypatch.setattr(r, "xcc_find_run", lambda token, workflow=None: ("77", "https://github.com/o/r/actions/runs/77"))
+    result, data = r.step_published()
+    assert result.startswith("PASSED") and data["run"].endswith("/77") and sorted(data["platforms"]) == sorted(
+        r.published_platforms())
+    (cmd,) = r.calls                                   # the dispatch; nothing else runs on this Mac
+    assert cmd[:4] == ["gh", "workflow", "run", "published-check.yml"]
+    sent = json.loads(next(a for a in cmd if a.startswith("candidates="))[len("candidates="):])
+    assert sent == {x.name: digest(x) for x in w.values()}
+    assert ["run", "watch", "77", "--exit-status", "--interval", "30"] in seen
+    assert not any(word in " ".join(cmd) for word in ("nvidia_central", "do_amd_steward", "tools/ops/"))
 
 
-def test_published_step_refuses_without_a_passed_gate_and_runs_nothing(tmp_path, monkeypatch):
+def test_a_failed_attempt_is_kept_beside_the_next(tmp_path, monkeypatch):
     r = make(tmp_path, publish="pypi")
-    finals(r)
-    monkeypatch.setattr(r, "gate_ok", lambda vendor: (False, "no gate report"))
-    with pytest.raises(release.StepFailed, match="gate-amd has not passed"):
-        r.step_published_amd()
-    assert r.calls == []
-
-
-def test_published_step_end_to_end_against_a_fake_index(tmp_path, monkeypatch):
-    """The real check tool over a fake file:// index: equal bytes pass, published-report.json is where the ledger
-    looks; then a republished file with other bytes fails with both hashes, the old report kept beside it."""
-    def runner(cmd, env, log, detach=False):
-        return subprocess.run([str(c) for c in cmd], capture_output=True).returncode
-    r = make(tmp_path, runner=runner, publish="pypi")
-    final = r.rel / "linux" / "final"
-    cands = [make_wheel(final, "mojolearn-core"), make_wheel(final, "mojolearn-amd")]
-    receipt = tmp_path / "gate" / "gate-smoke.json"
-    receipt.parent.mkdir()
-    receipt.write_text(json.dumps({c.name: hashlib.sha256(c.read_bytes()).hexdigest() for c in cands}))
-    monkeypatch.setattr(r, "published_gate", lambda vendor: ([receipt], "gate-amd PASS"))
-    monkeypatch.setattr(r, "smoke_python", lambda: sys.executable)
-    monkeypatch.setenv("MOJOLEARN_PUBLISHED_INDEX_URL", fake_index(tmp_path / "index", cands))
-    assert r.published_wheels("amd") == cands
-    assert r.step_published_amd().startswith("PASSED index-resolution=")
-    assert ("published-install", dict(report=str(r.published_out("amd") / "published-report.json"))) \
-        in r.retained_producers()
-    other = make_wheel(tmp_path / "pub", "mojolearn-amd", payload=b"x = 2\n")
-    monkeypatch.setenv("MOJOLEARN_PUBLISHED_INDEX_URL", fake_index(tmp_path / "index2", [cands[0], other]))
-    (r.published_out("amd") / "published-report.json").unlink()
-    with pytest.raises(release.StepFailed, match=hashlib.sha256(other.read_bytes()).hexdigest()):
-        r.step_published_amd()
-    assert list(r.rel.glob("published-amd.failed-*"))
+    w = finals(r)
+    publish_all(r)
+    runner_report(r.published_out(), list(w.values()), quick=1)
+    monkeypatch.setattr(r, "gh", lambda *a, log=None: (1, ""))
+    monkeypatch.setattr(r, "xcc_find_run", lambda token, workflow=None: ("78", "u"))
+    with pytest.raises(release.StepFailed, match="published did not pass"):
+        r.step_published()
+    assert list(r.rel.glob("published-check.failed-*"))
 
 
 def test_boxes_down_waits_only_for_the_gates(tmp_path, monkeypatch):
-    r = make(tmp_path, publish="pypi", only="gate-boxes,gate-nvidia,gate-amd,published-nvidia,boxes-down")
+    r = make(tmp_path, publish="pypi", only="gate-boxes,gate-nvidia,gate-amd,published,boxes-down")
     monkeypatch.setattr(r, "schedule", lambda steps: {s: "skipped" for s in r.STEPS})
     monkeypatch.setattr(r, "report", lambda status: True)
     assert r.go() == 0
     waits = [s for s in release.AFTER["boxes-down"] if s in r.selected]
     assert waits == ["gate-boxes", "gate-nvidia", "gate-amd"]
-    assert "published_smoke_requests" not in r.state
 
 
-@pytest.mark.parametrize("reason", ["", "driver update on the AMD box after the gate"])
-def test_published_smoke_is_refused_with_or_without_a_reason(tmp_path, monkeypatch, reason):
-    # Andrew 2026-11-05: identity runs once, before publish, never after. The installed smoke from PyPI ran the
-    # verifier (identity lanes) on the device after publication; a request now refuses and records nothing.
-    r = make(tmp_path, publish="pypi", published_smoke=["amd"], published_smoke_reason=reason)
-    monkeypatch.setattr(r, "schedule", lambda steps: pytest.fail("nothing may be scheduled"))
-    with pytest.raises(SystemExit, match="--published-smoke is removed"):
-        r.go()
-    assert "published_smoke_requests" not in r.state and r.calls == []
-    assert not hasattr(r, "step_published_smoke_amd")
-
-
-class FakeBox:
-    """The wrappers and R2 as one fake: uploads land in .files, the job's results come home without wheels."""
-
-    def __init__(self, vendor, candidates):
-        self.vendor, self.candidates, self.files, self.calls, self.lists = vendor, candidates, {}, [], 0
-        self.ptag = (f"nvc-release-gate-20261104T000000Z-abc123" if vendor == "nvidia"
-                     else f"rel-{VERSION}-published-amd-20261104T000000Z-def456")
-
-    def run(self, argv, cwd=None, stdin=None, timeout=None, capture_output=True, text=True):
-        self.calls.append(argv)
-        out = SimpleNamespace(returncode=0, stdout="", stderr="")
-        command = argv[-1]
-        if argv[2:3] == ["submit"]:
-            out.stdout = "nvc1-0009\n"
-            out.stderr = f"box_persist: job {self.ptag} persists to R2 measurements/box-jobs/x/\n"
-        elif argv[2] in ("sh", "ssh") and command.startswith("cat > "):
-            self.files[command[len("cat > "):]] = stdin.read()
-            out.stdout = b""
-        elif argv[2] in ("sh", "ssh") and "sha256sum" in command:
-            out.stdout = "".join(f"{hashlib.sha256(v).hexdigest()}  {k}\n" for k, v in self.files.items())
-        elif argv[2] in ("sh", "ssh") and "READY" in command:
-            out.stdout = "READY\n"
-        elif argv[2] == "status":
-            out.stdout = "job 0009: running\n"
-        elif "box_persist.py" in argv[1] and "--list" in argv:
-            self.lists += 1
-            out.stdout = "MANIFEST state=final exit=0 updated=x uploads=1\n"
-        elif "box_persist.py" in argv[1] and "--extract" in argv:
-            final = pathlib.Path(argv[argv.index("--dest") + 1]) / "final"
-            report(final / "out", self.vendor, self.candidates, schema=release.Release.PUBLISHED_SMOKE_SCHEMA)
-            (final / "out" / "wheel-manifest.json").write_text(json.dumps(dict(files=[
-                dict(file=w.name, sha256=hashlib.sha256(w.read_bytes()).hexdigest()) for w in self.candidates])))
-            (final / "job").mkdir()
-            (final / "job" / "status.json").write_text(json.dumps(dict(phase="published", exit=0)))
-        elif "release_published_install.py" in argv[1] and argv[2] == "judge":
-            out.stdout = '{"status": "passed"}'
-        return out
-
-    def popen(self, argv, **kw):
-        self.calls.append(argv)
-        lines = [f"box_persist: job {self.ptag} persists to R2 measurements/box-jobs/x/\n", "published: running\n"]
-        return SimpleNamespace(stdout=iter(lines), wait=lambda: 0, kill=lambda: None)
-
-
-@pytest.mark.parametrize("vendor", ["nvidia", "amd"])
-def test_a_published_smoke_box_job_is_staged_launched_fetched_restored_and_rejudged(tmp_path, monkeypatch, vendor):
-    monkeypatch.setattr(PI, "job_script_committed", lambda: None)
-    monkeypatch.setattr(PI.rg, "on_origin_main", lambda commit: True)
-    r = make(tmp_path, publish="pypi")
-    w = finals(r)
-    candidates = r.published_wheels(vendor)
-    box = FakeBox(vendor, candidates)
-    out = r.published_smoke_out(vendor)
-    a = PI.parse([vendor, VERSION, "--source-commit", COMMIT, "--source-tree", str(tmp_path / "src"),
-                  "--out", str(out), "--state", str(r.rel / "published" / f"smoke-{vendor}.job.json"),
-                  *[x for c in candidates for x in ("--candidate-wheel", str(c))]])
-    assert PI.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen).main() == 0
-    launches = [c for c in box.calls if c[2:3] in (["submit"], ["run"])]
-    assert len(launches) == 1 and launches[0][1] == PI.rg.VENDORS[vendor]["wrapper"]
-    staged = {pathlib.PurePosixPath(k).name: v for k, v in box.files.items()}
-    assert staged["published_install_job.sh"] == JOB.read_bytes()     # the committed job script, verbatim
-    assert {c.name for c in candidates} <= set(staged)
-    env = staged["published.env"].decode()
-    assert f"PUB_VENDOR={vendor}" in env and f"PUB_SOURCE_COMMIT={COMMIT}" in env
-    # the wheels the persisted results lack are restored from the equal candidates, then re-judged at home
-    assert all((out / "wheels" / c.name).read_bytes() == c.read_bytes() for c in candidates)
-    assert any(c[1] == "tools/release_published_install.py" and c[2] == "judge" for c in box.calls)
-    assert json.loads((out / "published-report.json").read_text())["status"] == "passed"
-    assert (r.rel / "published" / f"fetch-{box.ptag}" / "final").is_dir()          # boxes-down sees it home
-    assert w["macos"].exists()
-
-
-def test_restore_wheels_never_restores_bytes_that_differ(tmp_path):
-    good, bad = wheel(tmp_path / "c" / "a-1.whl"), wheel(tmp_path / "c" / "b-1.whl")
-    out = tmp_path / "out"
-    out.mkdir()
-    (out / "wheel-manifest.json").write_text(json.dumps(dict(files=[
-        dict(file="a-1.whl", sha256=hashlib.sha256(good.read_bytes()).hexdigest()),
-        dict(file="b-1.whl", sha256="0" * 64)])))
-    assert PI.restore_wheels(out, [good, bad], log=lambda m: None) == ["a-1.whl"]
-    assert not (out / "wheels" / "b-1.whl").exists()
-
-
-def fake_bin(tmp_path, *names):
-    d = tmp_path / "bin"
-    d.mkdir(exist_ok=True)
-    for name in names:
-        (d / name).write_text("#!/bin/sh\nexit 0\n")
-        (d / name).chmod(0o755)
-    return d
-
-
-@pytest.mark.parametrize("tools,want", [(("nvidia-smi",), "nvidia"), (("rocm-smi",), "amd")])
-def test_the_job_takes_its_vendor_from_the_box(tmp_path, tools, want):
-    env = dict(os.environ, PATH=f"{fake_bin(tmp_path, *tools)}:/usr/bin:/bin")
-    got = subprocess.run(["bash", str(JOB), "--detect-vendor"], capture_output=True, text=True, env=env)
-    assert got.returncode == 0 and got.stdout.strip() == want
-
-
-def test_the_job_refuses_a_box_of_another_vendor_or_none(tmp_path):
-    env = dict(os.environ, PATH="/usr/bin:/bin")
-    if subprocess.run(["sh", "-c", "command -v nvidia-smi || command -v rocm-smi"], env=env).returncode == 0:
-        pytest.skip("this machine has a GPU vendor tool on /usr/bin")
-    assert subprocess.run(["bash", str(JOB), "--detect-vendor"], capture_output=True, env=env).returncode == 2
-    indir = tmp_path / "in"
-    indir.mkdir()
-    shutil.copy2(JOB, indir / JOB.name)
-    (indir / "published.env").write_text(f"PUB_VENDOR=amd\nPUB_VERSION={VERSION}\nPUB_SOURCE_COMMIT={COMMIT}\n"
-                                         "PUB_TREE=/root/x\nPUB_WHEELS=()\n")
-    env = dict(env, PATH=f"{fake_bin(tmp_path, 'nvidia-smi')}:/usr/bin:/bin",
-               MOJOLEARN_RESULTS_DIR=str(tmp_path / "res"))
-    got = subprocess.run(["bash", str(indir / JOB.name)], capture_output=True, text=True, env=env)
-    assert got.returncode == 3 and "this box is nvidia" in got.stderr
-    assert not (tmp_path / "res" / "out").exists()
-
-
-import shutil  # noqa: E402
+def test_the_published_smoke_option_is_gone():
+    with pytest.raises(SystemExit):
+        release.release_parser().parse_args([VERSION, "--published-smoke", "amd"])

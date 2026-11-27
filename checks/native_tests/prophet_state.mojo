@@ -383,7 +383,7 @@ def typed_entry_fit() raises:
     var fp: List[Float64] = [0.05]
     require(prophet_fit_impl(ex, addresses, ip, fp) == 1, "Prophet full default fit count")
     var entry = EntryRef(x_sequence_glue_host_v1, entry_ref_word(Int(GLOBAL_NUMERIC_MODE), 0, XS_OP_COUNT))
-    var fit_input = ProphetFitInput(ProphetTimes(inputs.days.address(), 120, False), False, 1, 120, True,
+    var fit_input = ProphetFitInput(ProphetTimes(inputs.days.address(), 120, False), 1, 120, True,
         List[ProphetSeason](), ProphetAuto(PROPHET_AUTO_AUTO, 0), ProphetAuto(PROPHET_AUTO_AUTO, 0),
         ProphetAuto(PROPHET_AUTO_AUTO, 0), 10.0, False, ProphetTimes(0, 0, False), 0.8, 25)
     var plan = prophet_run_prepare_fit(entry, fit_input)
@@ -484,7 +484,7 @@ def recovers_structure(entry: EntryRef) raises:
     var t = List[Float64](length=n, fill=0)
     for i in range(n):  # small-loop(fixture: day words)
         t[i] = Float64(18000 + i)
-    var fit_input = ProphetFitInput(ProphetTimes(Int(t.unsafe_ptr()), n, False), False, 1, n, True,
+    var fit_input = ProphetFitInput(ProphetTimes(Int(t.unsafe_ptr()), n, False), 1, n, True,
         List[ProphetSeason](), ProphetAuto(PROPHET_AUTO_AUTO, 0), ProphetAuto(PROPHET_AUTO_AUTO, 0),
         ProphetAuto(PROPHET_AUTO_AUTO, 0), 10.0, False, ProphetTimes(0, 0, False), 0.8, 25)
     var plan = prophet_run_prepare_fit(entry, fit_input)
@@ -502,7 +502,7 @@ def recovers_structure(entry: EntryRef) raises:
     for i in range(PROPHET_RS_AHEAD):  # small-loop(oracle: the future days)
         require(isfinite(ahead[i]), "Prophet future day " + String(i) + " is not finite: " + String(ahead[i]))
     # The batch [y, 2y] (rank 2: the door's plan is the same t's): row 0 is the single fit, word for word.
-    var batch_input = ProphetFitInput(ProphetTimes(Int(t.unsafe_ptr()), n, False), False, 2, n, True,
+    var batch_input = ProphetFitInput(ProphetTimes(Int(t.unsafe_ptr()), n, False), 2, n, True,
         List[ProphetSeason](), ProphetAuto(PROPHET_AUTO_AUTO, 0), ProphetAuto(PROPHET_AUTO_AUTO, 0),
         ProphetAuto(PROPHET_AUTO_AUTO, 0), 10.0, False, ProphetTimes(0, 0, False), 0.8, 25)
     var batch_plan = prophet_run_prepare_fit(entry, batch_input)

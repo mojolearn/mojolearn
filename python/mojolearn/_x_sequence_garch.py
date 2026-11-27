@@ -48,7 +48,7 @@ class GARCH(ParamsMixin):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and forecasts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
@@ -72,7 +72,7 @@ class GARCH(ParamsMixin):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Rescaling is not
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Rescaling is not
     supported: scale the data yourself if needed.
 
     Examples
@@ -124,8 +124,8 @@ class GARCH(ParamsMixin):
 
         Raises
         ------
-        TypeError
-            If ``y`` is float64.
+        ValueError
+            If a float64 value is outside float32's range.
         ValueError
             If a series has fewer than 10 observations or ``y`` holds a
             non-finite value.

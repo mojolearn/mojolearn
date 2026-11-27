@@ -34,7 +34,7 @@ first input's device; an `argmax` output uses `int32`.
   retain their original weights.
 - Unsupported graph operations produce an `UnsupportedModel` error naming the
   unsupported nodes.
-- `numeric_mode="fast"` is Apple only. The default is `identical`.
+- Imported models default to `identical`. See [Numeric modes](numeric_modes.md).
 
 CUDA and ROCm tensors on GPU zero use device buffers. Other tensors, including
 Apple MPS tensors, use host staging and return outputs to the input's device.

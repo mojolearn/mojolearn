@@ -99,8 +99,9 @@ def _proba(y_true: PythonObject, y_proba: PythonObject, labels: PythonObject, po
     var n = true.n
     var got = mx_f32_view(y_proba, "y_proba", context)
     var view = got[0]
-    if got[1] != "<f4":
-        raise Error("TypeError: mojolearn " + caller + ": y_proba must have dtype float32; cast explicitly")
+    # float64 is converted once by the shared admission cast below (Andrew, 2026-11-27).
+    if got[1] != "<f4" and got[1] != "<f8":
+        raise Error("TypeError: mojolearn " + caller + ": y_proba must have dtype float32 or float64")
     var nd = Int(py=view.ndim)
     var rows = Int(py=view.shape[0]) if nd >= 1 else 0
     var binary = nd == 1 or (nd == 2 and Int(py=view.shape[1]) == 1)

@@ -15,12 +15,12 @@ straight into the flat parameter block the entry trains (the old per-layer
 arrays were packed into it, then unpacked out of it), and a classifier's
 predicted codes become labels in this same call.
 """
+from sequence.mlp_progress import MLPProgress, MLP_PROGRESS_WORDS
 from bindings.neural_labels_native_unpack import neural_encode_labels, neural_decode_labels
 from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 from std.memory import unsafe_memcpy
 from std.python._cpython import GILReleased
-from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.optimizer_real_unpack import optimizer_real
 from bindings.native_identity_key_door import NativeIdentityKey
@@ -34,7 +34,7 @@ from bindings.optimizer_admission_door import opt_schedule
 from bindings.optimizer_schedule_native_door import schedule_run
 from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_SCHEDULE_VALUES
 from bindings.xseq_native_common_door import (
-    XF32P, XI32P, xseq_route, XseqRoute, xseq_base, xseq_input, xseq_is_f64, xseq_refuse_f64, xseq_zeros,
+    XF32P, XI32P, xseq_route, XseqRoute, xseq_base, xseq_input, xseq_zeros,
     xseq_addr, xseq_f32p, xseq_reshape, xseq_curve_list, xseq_int, xseq_float, xseq_truth, xseq_is_int,
     XseqStream, xseq_neural_provider, xseq_zeros_i64,
 )
@@ -56,7 +56,7 @@ from sequence.fit_loop_words import fit_loop_words
 from bindings.fit_loop_pack import fit_loop_pack
 from sequence.xseq_neural_run import (
     XseqNeuralEntry, XseqOptimizer, XseqRnnFitRequest, XseqRnnPredictRequest, XseqMlpFitRequest, XseqMlpPredictRequest,
-    xseq_run_as_f32_check, xseq_run_uniform, xseq_run_argmax, xseq_run_threshold, xseq_run_curve_min,
+    xseq_run_mlp_check_order, xseq_run_as_f32_check, xseq_run_uniform, xseq_run_argmax, xseq_run_threshold, xseq_run_curve_min,
     xseq_run_opt_sgd, xseq_run_opt_adam, xseq_run_opt_nadam, xseq_run_opt_lion, xseq_run_opt_rmsprop,
     xseq_run_opt_adagrad, xseq_run_rnn_cell, xseq_run_rnn_gates, xseq_run_rnn_rank_check, xseq_run_rnn_dims_check,
     xseq_run_rnn_param_count, xseq_run_rnn_bound, xseq_run_rnn_schedule, xseq_run_rnn_fit, xseq_run_rnn_layout,
@@ -418,9 +418,11 @@ def _rnn_cell(model: PythonObject, fields: PythonObject) raises -> Int:
 
 
 def _rnn_x(source: PythonObject, fields: PythonObject, fitting: Bool, context: PythonObject) raises -> PythonObject:
-    """`_RecurrentBase._check_X`: a C-ordered float32 (n, T, F) array."""
+    """`_RecurrentBase._check_X`: a C-ordered float32 (n, T, F) array. A
+    float64 X is converted once by the shared cast (admit_nd_f32:
+    round-to-nearest-even, a finite value outside float32's range refused
+    by its column)."""
     var a = xseq_input(source, context)
-    xseq_refuse_f64(a, "X: float64 is refused; pass float32 (no float64 on the device)")
     var x = admit_nd_f32(a, "X", False, context)
     xseq_run_rnn_rank_check(Int(py=x.ndim))
     var nk = xseq_keys()
@@ -550,8 +552,9 @@ def rnn_field_options(fields: PythonObject) raises -> RnnFieldOptions:
 
 
 def _rnn_f32(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """y, sample_weight or a carried monitor as C-ordered float32 (float64
+    converted once by the shared cast, as `_rnn_x`)."""
     var a = xseq_input(source, context)
-    xseq_refuse_f64(a, name + ": float64 is refused; pass float32 (no float64 on the device)")
     return admit_nd_f32(a, name, False, context)
 
 
@@ -991,7 +994,28 @@ def _arg(args: PythonObject, i: Int) raises -> PythonObject:
     return args[i] if len(args) > i else PythonObject(None)
 
 
-def _codes_against(classes: PythonObject, source: PythonObject, route: XseqRoute, n: Int, steps: Int,
+def _class_keys(classes: PythonObject, context: PythonObject) raises -> PythonObject:
+    """Exact builtin keys in the encoder's order, including large integers and text ending in NUL."""
+    var nk = xseq_keys()
+    var ndarray = py_item(context, nk[].k_xseq_ndarray)
+    if py_type(classes) is not ndarray or Int(py=classes.ndim) != 1:
+        raise Error("TypeError: fitted classes must be a native one-dimensional label array")
+    var kind = String(py=classes.dtype.kind)
+    if kind != "b" and kind != "i" and kind != "u" and kind != "f" and kind != "S" and kind != "U" and kind != "O":
+        raise Error("TypeError: invalid fitted class dtype")
+    var keys = py_call(ndarray.tolist, classes)
+    if kind == "O":
+        # The neural encoder uses object slots for exact text with trailing NULs.
+        # Restored object arrays may also hold exact numeric labels.
+        var b = native_loaded_module("builtins")
+        for i in range(len(keys)):  # driver-loop: admit each distinct object label before hashing or equality
+            var cls = py_type(keys[i])
+            if cls is not b.str and cls is not b.bytes and cls is not b.int and cls is not b.bool and cls is not b.float:
+                raise Error("TypeError: object classes must contain exact numeric, text or bytes labels")
+    return keys
+
+
+def _codes_against[T: DType = DType.float32](classes: PythonObject, source: PythonObject, route: XseqRoute, n: Int, steps: Int,
                    lengths: PythonObject, context: PythonObject) raises -> PythonObject:
     """The float32 codes of labels `source` (n sequences of `steps` labels; steps 1 for one label a sequence)
     against the FITTED `classes` (partial_fit after the first call, a validation target): the label encoder's own
@@ -1000,7 +1024,7 @@ def _codes_against(classes: PythonObject, source: PythonObject, route: XseqRoute
     "sequence") only valid steps count (lane rnn-review-fixes, P1-b): a label seen only on padded steps is not
     looked up, and every padded step gets code 0, which the loss weighs 0."""
     var encoded = xseq_labels(source, route.entries, context)
-    var own = encoded[0]
+    var own = _class_keys(encoded[0], context)
     var codes = encoded[1]
     var count = Int(py=codes.shape[0])
     if count != n * steps:
@@ -1009,22 +1033,28 @@ def _codes_against(classes: PythonObject, source: PythonObject, route: XseqRoute
     if lengths is not None:
         seen = xseq_run_class_counts[DType.int32](Int(py=xseq_addr(codes)), n, steps, Int(py=xseq_addr(lengths)),
                                                   len(own))
+    var fitted = _class_keys(classes, context)
+    var b = native_loaded_module("builtins")
+    var index = py_call(b.dict, py_call(b.zip, fitted, py_call(b.range, PythonObject(len(fitted)))))
+    if len(index) != len(fitted):
+        raise Error("ValueError: fitted classes must be unique")
+    var missing = PythonObject(-1)
     var mapping = List[Int]()
-    for j in range(len(own)):  # small-loop(classes)
+    for j in range(len(own)):  # driver-loop: one lookup per distinct incoming label
         if lengths is not None and seen[j] == 0:
             mapping.append(-1)  # on padded steps only: never read (xseq_run_remap_codes writes 0 there)
             continue
-        var at = -1
-        for i in range(len(classes)):  # small-loop(classes)
-            if Bool(py=own[j] == classes[i]):
-                at = i
-                break
+        var at = Int(py=py_get(index, own[j], missing))
         if at < 0:
             raise Error("ValueError: y holds the label " + _repr(own[j]) + ", which is not one of the fitted classes "
                         + _repr(classes))
         mapping.append(at)
-    var target = xseq_zeros(Python.tuple(count), context)
-    xseq_run_remap_codes(Int(py=xseq_addr(codes)), n, steps, _rnn_lengths_address(lengths), mapping,
+    var target: PythonObject
+    comptime if T == DType.int32:
+        target = sequential_array(Python.tuple(count), codes.dtype, context)
+    else:
+        target = xseq_zeros(Python.tuple(count), context)
+    xseq_run_remap_codes[T](Int(py=xseq_addr(codes)), n, steps, _rnn_lengths_address(lengths), mapping,
                          Int(py=xseq_addr(target)))
     _ = codes
     _ = lengths
@@ -1557,8 +1587,21 @@ def _mlp_layer_copy(params: PythonObject, offset: Int, shape: PythonObject, coun
     return out
 
 
+def _mlp_checkpoint_vector(value: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
+    """Pin the checkpoint's original words. Optimizer state always has a one-dimensional native layout."""
+    var nk = xseq_keys()
+    var ndarray = py_item(context, nk[].k_xseq_ndarray)
+    if py_type(value) is not ndarray:
+        raise Error("TypeError: MLP optimizer checkpoint vectors must be native ndarrays")
+    var view = py_call(ndarray.view, value)
+    if (Int(py=view.ndim) != 1 or not Bool(py=view.dtype == dtype)
+            or not Bool(py=view.flags.c_contiguous) or not Bool(py=view.flags.aligned)):
+        raise Error("ValueError: invalid MLP optimizer checkpoint vector layout")
+    return view
+
+
 def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, target: PythonObject,
-             out_act: Int, n_out: Int, context: PythonObject) raises -> PythonObject:
+             out_act: Int, n_out: Int, partial: Bool, context: PythonObject) raises -> PythonObject:
     """`_BaseMLP._fit(X, Y, out_act, n_out)`; `n_out` 0 is None (a float
     target of `target.shape[1]` columns)."""
     var b = native_loaded_module("builtins")
@@ -1570,26 +1613,69 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var hidden = _mlp_hidden(fields, context)
     var sizes = xseq_run_mlp_sizes(d, hidden, o)
     var nk = xseq_keys()
-    var stream = XseqStream(py_get(fields, nk[].k_random_state), context)
-    var mods = NativeModules()
-    prepared_drop(mods, _MLP_PACKED_SLOT, model)  # the refit publishes new coefs_ / intercepts_
-    var logistic = _eq(py_item(fields, nk[].k_activation), "logistic")
-    # Glorot-uniform per layer, drawn straight into the flat block the
-    # entry trains, w then b of each layer, as the packed layout orders them
-    var total = xseq_run_mlp_param_count(sizes)
-    var params = xseq_zeros(Python.tuple(total), context)
-    var base = Int(py=xseq_addr(params))
-    # The estimator's route: the output image draws the weights, the fit
-    # entry below is the route's own.
+    if rows == 0 or d == 0 or o == 0 or Int(py=target.shape[0]) != rows:
+        raise Error("ValueError: X and y must have the same nonzero sample count and nonempty feature/output axes")
     var route = xseq_route(model, fields, context)
-    var output_provider = xseq_neural_provider(route.output)
-    var output_entry = _entry(output_provider)
+    var total = xseq_run_mlp_param_count(sizes)
+    var activation = Int(py=py_item(context, nk[].k_xseq_mlp_activations)[py_item(fields, nk[].k_activation)])
+    var solver = Int(py=py_item(context, nk[].k_xseq_mlp_solvers)[py_item(fields, nk[].k_solver)])
+    var shuffle = xseq_truth(py_item(fields, nk[].k_shuffle))
+    var moments_count = total * (2 if solver == 0 else 1)
+    var moments = xseq_zeros(Python.tuple(moments_count), context)
+    var progress_words = xseq_zeros_i64(Python.tuple(MLP_PROGRESS_WORDS), context)
+    var progress = MutPointer[MLPProgress, MutUntrackedOrigin](unsafe_from_address=Int(py=xseq_addr(progress_words)))
+    var order = PythonObject(None)
+    if route.mode == 0 and shuffle:
+        order = xseq_zeros(Python.tuple(rows), context)
+    var old_moments = PythonObject(None)
+    var old_order = PythonObject(None)
+    var params: PythonObject
+    var seed: Int
     var py = Python()
-    with GILReleased(py):
-        stream.offset = xseq_run_mlp_glorot(output_entry, base, sizes, logistic, stream.seed, stream.offset)
-    _ = output_provider
-    _ = params  # keep the Python object alive through the native calls above
-    var seed = Int(stream.child_seed() % UInt64(2147483647))
+    var continuing = partial and py_contains(fields, nk[].k_coefs_)
+    if continuing:
+        var kept = _field(fields, "_optimizer_state_", PythonObject(None))
+        if kept is None:
+            raise Error("ValueError: this fitted MLP has no saved optimizer state; fit it again before partial_fit")
+        if py_type(kept) is not b.tuple or len(kept) != 6:
+            raise Error("ValueError: invalid MLP optimizer checkpoint")
+        if py_type(kept[3]) is not b.int or py_type(kept[4]) is not b.int or py_type(kept[5]) is not b.int:
+            raise Error("TypeError: MLP optimizer checkpoint tags must be exact integers")
+        if Int(py=kept[3]) != solver or Int(py=kept[4]) != activation or Int(py=kept[5]) != route.mode:
+            raise Error("ValueError: partial_fit requires the same solver, activation and numerical mode")
+        var packed = _mlp_pack(py_item(fields, nk[].k_coefs_), py_item(fields, nk[].k_intercepts_), d, context)
+        if len(packed[1]) != len(hidden) or Int(py=packed[3]) != o:
+            raise Error("ValueError: partial_fit requires the same layer sizes and output width")
+        for l in range(len(hidden)):  # driver-loop: over hidden layer widths
+            if Int(py=packed[1][l]) != hidden[l]:
+                raise Error("ValueError: partial_fit requires the same hidden layer sizes")
+        params = packed[0]
+        old_moments = _mlp_checkpoint_vector(kept[0], moments.dtype, context)
+        var old_progress = _mlp_checkpoint_vector(kept[1], progress_words.dtype, context)
+        if Int(py=old_moments.size) != moments_count or Int(py=old_progress.size) != MLP_PROGRESS_WORDS:
+            raise Error("ValueError: invalid MLP optimizer checkpoint vector length")
+        var old_progress_ptr = MutPointer[MLPProgress, MutUntrackedOrigin](unsafe_from_address=Int(py=xseq_addr(old_progress)))
+        progress[] = old_progress_ptr[]
+        progress[].check_resume(rows, Int(py=py_item(fields, nk[].k_n_iter_)), Int(py=py_item(fields, nk[].k_t_)),
+                                len(py_item(fields, nk[].k_loss_curve_)))
+        seed = Int(progress[].seed)
+        if order is not None and kept[2] is not None:
+            var previous = _mlp_checkpoint_vector(kept[2], moments.dtype, context)
+            if Int(py=previous.size) == rows:
+                xseq_run_mlp_check_order(Int(py=xseq_addr(previous)), rows)
+                old_order = previous
+    else:
+        var stream = XseqStream(py_get(fields, nk[].k_random_state), context)
+        params = xseq_zeros(Python.tuple(total), context)
+        var base = Int(py=xseq_addr(params))
+        var logistic = _eq(py_item(fields, nk[].k_activation), "logistic")
+        var output_provider = xseq_neural_provider(route.output)
+        var output_entry = _entry(output_provider)
+        with GILReleased(py):
+            stream.offset = xseq_run_mlp_glorot(output_entry, base, sizes, logistic, stream.seed, stream.offset)
+        _ = output_provider
+        seed = Int(stream.child_seed() % UInt64(2147483647))
+        progress[] = MLPProgress(0, 0, 0, Int64(seed), UInt64(seed), 0, 1, 1, 0)
     var batch: Int
     var requested = py_item(fields, nk[].k_batch_size)
     if _eq(requested, "auto"):
@@ -1597,20 +1683,11 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     else:
         var clipped = py_call(b.max, PythonObject(1), py_call(b.min, requested, PythonObject(rows)))
         batch = xseq_int(clipped)
-    py_setitem(fields, nk[].k_n_outputs_, o)
-    py_setitem(fields, nk[].k_n_layers_, len(sizes))
-    py_setitem(fields, nk[].k_out_activation_, PythonObject(xseq_run_mlp_out_name(out_act)))
-    py_setitem(fields, nk[].k_n_features_in_, d)
-    var max_iter = xseq_int(py_item(fields, nk[].k_max_iter))
+    var max_iter = 1 if partial else xseq_int(py_item(fields, nk[].k_max_iter))
     var curve = xseq_zeros(Python.tuple(max_iter), context)
-    # the descriptor's int and float words, native (no Python list built
-    # and converted back word by word)
-    var activation = Int(py=py_item(context, nk[].k_xseq_mlp_activations)[py_item(fields, nk[].k_activation)])
-    var loss_code = Int(py=py_item(fields, nk[].k__LOSS_CODE) if py_contains(fields, nk[].k__LOSS_CODE) else _attr(py_type(model), "_LOSS_CODE"))
-    var solver = Int(py=py_item(context, nk[].k_xseq_mlp_solvers)[py_item(fields, nk[].k_solver)])
+    var loss_code = 0 if n_out == 0 else (1 if o == 1 else 2)
     var rate_code = Int(py=py_item(context, nk[].k_xseq_mlp_rates)[py_item(fields, nk[].k_learning_rate)])
     var nesterov = xseq_truth(py_item(fields, nk[].k_nesterovs_momentum))
-    var shuffle = xseq_truth(py_item(fields, nk[].k_shuffle))
     var request = XseqMlpFitRequest(rows, d, o, activation, out_act, loss_code, solver, rate_code, nesterov, batch,
                                     max_iter, shuffle, seed, xseq_int(py_item(fields, nk[].k_n_iter_no_change)), hidden.copy(), n_out)
     var fp: List[Float64] = [_opt_real(py_item(fields, nk[].k_learning_rate_init)), _opt_real(py_item(fields, nk[].k_beta_1)),
@@ -1623,9 +1700,16 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     # the fit loop's record (`fit_loop_`): the trainer writes these words once, after its loop
     var loop_words = fit_loop_words()
     var loop_address = Int(loop_words.unsafe_ptr())
+    var progress_addr = Int(py=xseq_addr(progress_words))
+    var previous_moments = 0 if old_moments is None else Int(py=xseq_addr(old_moments))
+    var next_moments = Int(py=xseq_addr(moments))
+    var previous_order = 0 if old_order is None else Int(py=xseq_addr(old_order))
+    var next_order = 0 if order is None else Int(py=xseq_addr(order))
     with GILReleased(py):
         n_iter = xseq_run_mlp_fit(entry, request, fp, addresses[0], addresses[1], addresses[2], addresses[3],
-                                  loop_address)
+                                  loop_address, progress_addr, previous_moments, next_moments, previous_order, next_order)
+    _ = old_order
+    _ = old_moments
     _ = provider
     _ = target
     _ = params  # keep the Python object alive through the native call above
@@ -1646,38 +1730,40 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
         _ = py_call(_method(intercepts, "append"),
                     xseq_readonly_view(_mlp_layer_copy(params, offset, Python.tuple(fo), fo, context)))
         offset += fo
-    py_setitem(fields, nk[].k_coefs_, coefs)
-    py_setitem(fields, nk[].k_intercepts_, intercepts)
-    py_setitem(fields, nk[].k_n_iter_, n_iter)
-    py_setitem(fields, nk[].k_fit_loop_, fit_loop_pack(loop_words))
-    _ = curve  # keep the Python object alive through the native call above
-    _ = params  # keep the Python object alive through the native call above
     var losses = xseq_curve_list(curve, n_iter)
-    _ = params  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_loss_curve_, losses)
-    if n_iter == 0:
-        raise Error("IndexError: list index out of range")
-    _ = curve  # keep the Python object alive through the native calls above
-    _ = params  # keep the Python object alive through the native calls above
-    py_setitem(fields, nk[].k_loss_, losses[n_iter - 1])
-    _ = curve  # keep the Python object alive through the native call above
-    _ = params  # keep the Python object alive through the native call above
-    # the first-wins minimum of the curve (`reduce_stat` 0)
+    var last_loss = losses[n_iter - 1]
+    if continuing:
+        losses = py_item(fields, nk[].k_loss_curve_)
+    var best_entry_owner = xseq_neural_provider(route.output)
+    var best_entry = _entry(best_entry_owner)
     var curve_address = Int(py=xseq_addr(curve))
-    var best_provider = xseq_neural_provider(route.output)
-    var best_entry = _entry(best_provider)
-    var best = 0.0
+    var best: Float64
     with GILReleased(py):
         best = xseq_run_curve_min(best_entry, curve_address, n_iter)
-    _ = best_provider
-    _ = curve  # keep the Python object alive through the native call above
-    _ = params  # keep the Python object alive through the native call above
+    _ = best_entry_owner
+    if continuing:
+        var prior_best = xseq_float(py_item(fields, nk[].k_best_loss_))
+        best = best if best < prior_best else prior_best
+    var checkpoint = Python.tuple(xseq_readonly_view(moments), xseq_readonly_view(progress_words),
+                                  xseq_readonly_view(order) if order is not None else order, solver, activation, route.mode)
+    var mods = NativeModules()
+    prepared_drop(mods, _MLP_PACKED_SLOT, model)
+    py_setitem(fields, nk[].k_n_outputs_, o)
+    py_setitem(fields, nk[].k_n_layers_, len(sizes))
+    py_setitem(fields, nk[].k_out_activation_, PythonObject(xseq_run_mlp_out_name(out_act)))
+    py_setitem(fields, nk[].k_n_features_in_, d)
+    py_setitem(fields, nk[].k_coefs_, coefs)
+    py_setitem(fields, nk[].k_intercepts_, intercepts)
+    py_setitem(fields, nk[].k_n_iter_, Int(progress[].epochs))
+    py_setitem(fields, nk[].k_fit_loop_, fit_loop_pack(loop_words))
+    if continuing:
+        _ = py_call(b.list.append, losses, last_loss)
+    py_setitem(fields, nk[].k_loss_curve_, losses)
+    py_setitem(fields, nk[].k_loss_, last_loss)
     py_setitem(fields, nk[].k_best_loss_, best)
-    _ = route.owner  # the route's images stay loaded through the calls above
-    _ = curve  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_t_, n_iter * rows)
-    _ = curve  # keep the Python object alive through the native call above
-    _ = params  # keep the Python object alive through the native call above
+    py_setitem(fields, nk[].k_t_, Int(progress[].samples))
+    py_setitem(fields, PythonObject("_optimizer_state_"), checkpoint)
+    _ = route.owner
     return model
 
 
@@ -1794,11 +1880,18 @@ def xseq_mlp(model: PythonObject, operation: Int, args: PythonObject, context: P
     var classifier = String(py=_attr(py_type(model), "_estimator_type")) == "classifier"
     var nk = xseq_keys()
     if operation == XSEQ_OPN_MLP_FIT:
+        var partial = len(args) == 3
         if not classifier:
             var y = xseq_as_f32_c(args[1], 0, "y", context)
-            py_setitem(fields, nk[].k__y_1d, Int(py=y.ndim) == 1)
+            var rank = Int(py=y.ndim)
+            if rank != 1 and rank != 2:
+                raise Error("ValueError: MLPRegressor requires one- or two-dimensional targets")
+            if Int(py=y.shape[0]) == 0:
+                raise Error("ValueError: y must contain at least one sample")
             var target = xseq_reshape(y, Python.tuple(Int(py=y.shape[0]), -1))
-            return _mlp_fit(model, fields, args[0], target, 0, 0, context)
+            var fitted = _mlp_fit(model, fields, args[0], target, 0, 0, partial, context)
+            py_setitem(fields, nk[].k__y_1d, rank == 1)
+            return fitted
         var rank = 1
         try:
             rank = Int(py=xseq_input(args[1], context).ndim)
@@ -1807,18 +1900,34 @@ def xseq_mlp(model: PythonObject, operation: Int, args: PythonObject, context: P
         if rank != 1:
             raise Error("NotImplementedError: multilabel targets are not implemented")
         var label_route = xseq_route(model, fields, context)
-        var encoded = xseq_labels(args[1], label_route.entries, context)
-        _ = label_route.owner  # the route's image stays loaded through the encoding above
-        py_setitem(fields, nk[].k_classes_, encoded[0])
-        var k = len(encoded[0])
+        var classes: PythonObject
+        var codes: PythonObject
+        if partial:
+            var continuing = py_contains(fields, nk[].k_classes_)
+            if not continuing and args[2] is None:
+                raise Error("ValueError: classes must be provided on the first MLPClassifier.partial_fit call")
+            if args[2] is not None:
+                classes = xseq_labels(args[2], label_route.entries, context)[0]
+                if continuing:
+                    var fitted_classes = py_item(fields, nk[].k_classes_)
+                    if not Bool(py=_class_keys(classes, context) == _class_keys(fitted_classes, context)):
+                        raise Error("ValueError: classes must match the first partial_fit call")
+                    classes = fitted_classes
+            else:
+                classes = py_item(fields, nk[].k_classes_)
+            codes = _codes_against[DType.int32](classes, args[1], label_route, len(args[1]), 1, PythonObject(None), context)
+        else:
+            var encoded = xseq_labels(args[1], label_route.entries, context)
+            classes = encoded[0]
+            codes = encoded[1]
+        var k = len(classes)
         if k < 2:
-            raise Error("MLPClassifier needs at least two classes")
-        var codes = encoded[1]
-        if k == 2:
-            py_setitem(fields, nk[].k__LOSS_CODE, 1)
-            return _mlp_fit(model, fields, args[0], codes, 1, 1, context)
-        py_setitem(fields, nk[].k__LOSS_CODE, 2)
-        return _mlp_fit(model, fields, args[0], codes, 4, k, context)
+            raise Error("ValueError: MLPClassifier needs at least two classes")
+        var fitted = _mlp_fit(model, fields, args[0], codes, 1 if k == 2 else 4, 1 if k == 2 else k, partial, context)
+        py_setitem(fields, nk[].k_classes_, classes)
+        py_setitem(fields, nk[].k__LOSS_CODE, 1 if k == 2 else 2)
+        _ = label_route.owner
+        return fitted
     if operation == XSEQ_OPN_MLP_PREDICT_PROBA:
         return _mlp_forward(model, fields, args[0], Int(py=py_item(fields, nk[].k_n_outputs_)) == 1, context)
     var out = _mlp_forward(model, fields, args[0], False, context)

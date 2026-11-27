@@ -1134,7 +1134,7 @@ class QNRegressor(_NumericModeMixin):
         Returns
         -------
         str
-            ``'identical'`` or ``'fast'`` (Apple only), read from the compiled
+            ``'identical'`` or ``'fast'``, read from the compiled
             binary the estimator uses, not from the argument it was given.
         """
         return _QN_CALL(self, "numeric_mode_used", (), _QN_CONTEXT)

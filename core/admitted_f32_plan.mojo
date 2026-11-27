@@ -106,11 +106,14 @@ def admitted_f32_run(plan: AdmittedF32Plan, destination: Int, finite: Bool, defe
     var s1 = plan.s0 if plan.want_f else plan.s1
     var rows = plan.cols if plan.want_f else plan.rows
     var cols = plan.rows if plan.want_f else plan.cols
+    # `transposed` (an F-order cast reads the transposed view): a float64
+    # column outside float32's range is named by the caller's column index.
     if not finite:
         if not plan.borrowed:
-            _ = admitted_cast_f32(plan.address, s0, s1, rows, cols, plan.item, plan.kind, dst)
+            _ = admitted_cast_f32(plan.address, s0, s1, rows, cols, plan.item, plan.kind, dst, plan.want_f)
     elif not (plan.borrowed and defer_finite):
-        admitted_check_f32(plan.address, s0, s1, rows, cols, plan.item, plan.kind, plan.name, plan.borrowed, dst)
+        admitted_check_f32(plan.address, s0, s1, rows, cols, plan.item, plan.kind, plan.name, plan.borrowed, dst,
+                           plan.want_f)
 
 
 def admitted_x_shape_error(rank: Int, rows: Int, cols: Int, numeric: Bool,

@@ -115,11 +115,10 @@ def retained_payload(site):
 
 
 def source_payload(source, pw):
-    entries = pw.python_package_entries()
+    entries = pw.python_package_entries(source / "python")
     entries["mojolearn_diagnostics.py"] = source / "python/mojolearn_diagnostics.py"
     package = source / "python/mojolearn"
-    for rel in ("ALPHA_API.md", "models/catalog.json"):
-        entries["mojolearn/" + rel] = package / rel
+    entries["mojolearn/ALPHA_API.md"] = package / "ALPHA_API.md"
     for rel in ("identity_trace_diff", "identity_break"):
         entries["mojolearn/_" + rel + ".py"] = source / "tools" / (rel + ".py")
     for path in sorted((source / "tools/identity_lanes").glob("*.py")):

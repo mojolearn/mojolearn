@@ -377,7 +377,7 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
         Arithmetic profile. None and 'fp32_v1' are float32. 'fixed15_v1' quantizes the
         projection weights once to 15-bit fixed point and is inference only.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
 
     Examples
     --------
@@ -421,7 +421,7 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
         Returns
         -------
         str
-            ``'identical'`` or ``'fast'`` (Apple only), read from the compiled
+            ``'identical'`` or ``'fast'``, read from the compiled
             binary the block uses.
         """
         return _native_neural_bridge.RUNTIME.neural_block_numeric_mode_used(self, _native_neural_bridge.CONTEXT)

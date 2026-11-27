@@ -669,7 +669,7 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
         Only True is supported (False raises `NotImplementedError`): a non-finite
         total norm always raises.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -746,7 +746,7 @@ def cross_entropy(logits, targets, ignore_index=_IGNORE_INDEX_DEFAULT,
     return_grad : bool, default False
         Also return the gradient with respect to `logits`.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -783,7 +783,7 @@ def numeric_mode_used(numeric_mode=None):
     Parameters
     ----------
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
 
     Returns
     -------
@@ -800,7 +800,7 @@ def vendor_used(numeric_mode=None):
     Parameters
     ----------
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
 
     Returns
     -------
@@ -1060,7 +1060,7 @@ def accumulation_is_aligned(tokens, accumulation_steps, numeric_mode=None):
     accumulation_steps : int
         Number of microbatches.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
 
     Returns
     -------
@@ -1086,7 +1086,7 @@ def accumulate_grads(microbatch_grads, tokens, numeric_mode=None, *, device=None
     tokens : int or None
         Token count of the whole step, or None.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -1131,7 +1131,7 @@ class Generator(object):
     seed : int
         Seed in [0, 2**64); otherwise `ValueError`.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the draws run. None uses this installation's device, 'cpu' runs on the CPU and
         'gpu' requires a GPU installation. Other values raise ValueError.
@@ -1281,7 +1281,7 @@ def embedding_forward(weight, ids, numeric_mode=None, *, device=None):
     ids : array, shape (N,)
         Integer row indices.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -1309,7 +1309,7 @@ def embedding_backward(dy, ids, vocab, numeric_mode=None, *, device=None):
     vocab : int
         Number of table rows V.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -1333,7 +1333,7 @@ def rms_norm_forward(x, weight, eps, numeric_mode=None, *, device=None):
     eps : float
         Added to the mean square.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -1360,7 +1360,7 @@ def rms_norm_backward(dy, x, weight, eps, numeric_mode=None, *, device=None):
     eps : float
         The forward's epsilon.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -1426,7 +1426,7 @@ def linear_forward(a, weight, numeric_mode=None, *, device=None):
     weight : array, shape (N, K)
         float32 weight, in torch's layout.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -1463,7 +1463,7 @@ def linear_backward(dc, a, weight, numeric_mode=None, *, device=None):
     weight : array, shape (N, K)
         The forward weight.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -1514,7 +1514,7 @@ def chunked_lm_head_loss(hidden, weight, targets, return_grad=False,
     return_grad : bool, default False
         Also return the gradients.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -1560,7 +1560,7 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
     bias2 : array, shape (out_width,)
         Second layer bias.
     numeric_mode : {'identical', 'fast'}, default 'identical'
-        Numeric mode. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on the CPU and
         'gpu' requires a GPU installation. Other values raise ValueError.

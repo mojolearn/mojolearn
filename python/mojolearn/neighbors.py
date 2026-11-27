@@ -438,7 +438,7 @@ class KNeighborsClassifier(NearestNeighbors):
         Accepted for scikit-learn compatibility; ignored. The work runs on the
         device, not in host worker processes.
     numeric_mode : {'identical', 'fast'}, optional
-        As in `NearestNeighbors`. 'fast' is available on Apple GPUs only.
+        As in `NearestNeighbors`.
 
     Attributes
     ----------
@@ -677,7 +677,7 @@ class KNeighborsRegressor(NearestNeighbors):
         Accepted for scikit-learn compatibility; ignored. The work runs on the
         device, not in host worker processes.
     numeric_mode : {'identical', 'fast'}, optional
-        As in `NearestNeighbors`. 'fast' is available on Apple GPUs only.
+        As in `NearestNeighbors`.
 
     Attributes
     ----------

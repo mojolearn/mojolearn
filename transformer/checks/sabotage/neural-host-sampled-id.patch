@@ -1,0 +1,15 @@
+diff --git a/bindings/causal_lm_public_door.mojo b/bindings/causal_lm_public_door.mojo
+--- a/bindings/causal_lm_public_door.mojo
++++ b/bindings/causal_lm_public_door.mojo
+@@ -3496,6 +3496,11 @@
+             _ = next  # keep the Python object alive through the native call above
+             causal_lm_pick_step(raw, dst, b, l, v, s.finished, s.lengths, s.eos, s.pad, s.greedy,
+                                 s.temperature, s.top_k, s.top_p, s.seed, s.produced, tokens, sampling)
++            if String(s.model.device) == "cpu":  # SABOTAGE: wrong next-token IDs on the CPU route
++                for row in range(b):
++                    var shifted = Int32((Int(dst[row]) + 1) % v)
++                    dst[row] = shifted
++                    tokens[len(tokens) - b + row] = shifted
+             _ = next  # keep the Python object alive through the native call above
+             _ = logits  # keep the Python object alive through the native call above
+             # `raw` points into `logits`: keep it alive through the pick (Mojo

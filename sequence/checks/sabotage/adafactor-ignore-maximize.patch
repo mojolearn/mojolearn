@@ -1,0 +1,7 @@
+--- a/sequence/adafactor_update.mojo
++++ b/sequence/adafactor_update.mojo
+@@ -104,3 +104,3 @@
+     # relative step applies ascent with the same moments and decoupled decay.
+-    a.f1 = -rho if maximize else rho
++    a.f1 = rho  # injected fault: always descend
+     if fast:

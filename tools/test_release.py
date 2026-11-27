@@ -234,7 +234,8 @@ class StepTableTests(unittest.TestCase):
         # no resource: it runs beside cross-compile (GitHub), and before the Mac build by NEEDS
         self.assertIsNone(release.RESOURCE["readiness"])
         self.assertNotIn("readiness", release.NEEDS["cross-compile"])
-        # cross-compile runs beside the Linux builds on github (lane post-cross-compile-redundant); linux-wait needs it
+        # the module table is the rented form: linux-wait needs cross-compile; on github Release.__init__ drops it
+        # and step_cross_compile is not run (lane xcc-retire-1, tools/test_release_cross_compile.py)
         self.assertEqual(release.NEEDS["linux-builds"], ["reuse-plan", "readiness"])
         self.assertIn("cross-compile", release.NEEDS["linux-wait"])
         self.assertEqual(release.NEEDS["macos-build"], ["reuse-plan", "readiness"])
@@ -393,13 +394,9 @@ class RunTests(unittest.TestCase):
                               "--state-dir", str(self.state), *extra],
                              capture_output=True, text=True, timeout=600, env=env)
         self.assertEqual(out.returncode, 0, out.stderr)
-        # published-smoke-<vendor> is selected only by an explicit --published-smoke VENDOR (release.py go):
-        # unrequested, it is not planned at all; every other step is.
+        # every step is planned
         for step in release.Release.STEPS:
-            if step in release.PUBLISHED_SMOKE_STEPS:
-                self.assertNotIn("-- " + step + "\n", out.stdout)
-            else:
-                self.assertIn("-- " + step, out.stdout)
+            self.assertIn("-- " + step, out.stdout)
         self.assertFalse(self.state.exists())
         # THE READINESS ANALYSIS GOES FIRST (lane post-readiness-off-mac, 2026-11-07): the step runs, and is
         # reported done, before linux-builds or macos-build starts, so neither waits on it beside the Mac build.

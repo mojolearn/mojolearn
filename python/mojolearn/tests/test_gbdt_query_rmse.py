@@ -58,16 +58,70 @@ def test_group_id_spelling_does_not_change_the_model():
 
 def test_refusals_by_name():
     X, rel, g = _fixture()
-    # the device refuses in the QueryRMSE sentence; the host binding refuses
-    # eval_set for every loss first, in its own by-name sentence
-    with pytest.raises(Exception, match="with eval_set is not implemented|no CPU implementation of .* for eval_set"):
+    with pytest.raises(Exception, match="eval_group_id"):
         _model().fit(X, rel, group_id=g, eval_set=(X[:32], rel[:32]))
-    with pytest.raises(Exception, match="QueryRMSE"):
+    with pytest.raises(Exception, match="QueryRMSE|SymmetricTree"):
         _model(grow_policy="Depthwise").fit(X, rel, group_id=g)
-    coded = X.copy()
-    coded[:, 0] = np.floor(np.abs(coded[:, 0]) * 3).astype(np.float32)
-    with pytest.raises(Exception, match="cat_features|categorical"):
-        _model(cat_features=[0]).fit(coded, rel, group_id=g)
+
+
+@pytest.mark.parametrize("as_list", [False, True])
+def test_categorical_ranking_accepts_separate_validation_queries(as_list):
+    X, rel, groups = _fixture(32)
+    X[:, 0] = (X[:, 0] > 0).astype(np.float32)
+    valid, target = X[-8:].copy(), rel[-8:]
+    valid[0, 0] = 2  # a held-out category
+    held = (valid, target, ["first"] * 3 + ["second"] * 5)
+    ranker = _model(cat_features=[0], n_estimators=2)
+    assert ranker.fit(X[:-8], rel[:-8], group_id=groups[:-8], eval_set=[held] if as_list else held) is ranker
+    assert len(ranker.test_loss_curve_) == 2
+    assert np.asarray(ranker.predict(valid)).shape == (8,)
+
+
+def test_validation_refuses_an_iterable_without_invoking_it():
+    class Callback:
+        def __iter__(self):
+            pytest.fail("eval_set called a user iterator")
+
+    X, rel, groups = _fixture(16)
+    with pytest.raises(Exception, match="eval_set"):
+        _model().fit(X, rel, group_id=groups, eval_set=Callback())
+
+
+@pytest.mark.parametrize("loss", ["lambdarank", "rank_xendcg"])
+def test_lightgbm_objectives_require_query_ids_and_integer_grades(loss):
+    X, rel, groups = _fixture(16)
+    ranker = _model(loss=loss, n_estimators=1)
+    with pytest.raises(Exception, match="require group_id"):
+        ranker.fit(X, rel)
+    with pytest.raises(Exception, match="eval_set"):
+        ranker.fit(X, rel, group_id=groups, eval_set=(X, rel))
+    cat_x = X.copy()
+    cat_x[:, 0] = (cat_x[:, 0] > 0).astype(np.float32)
+    model = _model(loss=loss, cat_features=[0], n_estimators=1)
+    assert model.fit(cat_x, rel, group_id=groups, eval_set=(cat_x, rel, groups), eval_at=1) is model
+    for invalid_cutoff in (0, -1, 1.5, True, 2**31):
+        with pytest.raises(ValueError, match="eval_at"):
+            model.fit(cat_x, rel, group_id=groups, eval_set=(cat_x, rel, groups), eval_at=invalid_cutoff)
+    for bad_grade in (-1, 0.5, 31):
+        invalid = rel.copy()
+        invalid[0] = bad_grade
+        with pytest.raises(Exception, match=r"integer relevance grades in \[0, 30\]"):
+            ranker.fit(X, invalid, group_id=groups)
+        with pytest.raises(Exception, match="integer relevance grades"):
+            ranker.fit(X, rel, group_id=groups, eval_set=(X, invalid, groups))
+
+
+def test_query_softmax_refuses_unsupported_tree_and_validation_inputs():
+    X, y, groups = _fixture(8)
+    with pytest.raises(ValueError, match="QuerySoftMax.*SymmetricTree"):
+        _model(loss="QuerySoftMax", grow_policy="Lossguide")
+    for option in ("cat_features", "one_hot_features"):
+        model = _model(loss="QuerySoftMax", **{option: [0]})
+        with pytest.raises(ValueError, match="QuerySoftMax.*numeric features"):
+            model.fit(X, y, group_id=groups)
+    model = _model(loss="QuerySoftMax")
+    with pytest.raises(ValueError, match="QuerySoftMax.*eval_set"):
+        model.fit(X, y, group_id=groups, eval_set=(X, y, groups))
 
 
 def test_split_query_still_refused():

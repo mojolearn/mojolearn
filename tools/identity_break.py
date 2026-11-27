@@ -411,6 +411,8 @@ sampler, a solver, a metric, a reduction).
                bootstrap, the score noise, Gradient and multi-step leaves,
                the pointwise searcher's L2 scores and explicit weighted pairs)
       gbdt-rank-bootstrap gbdt-rank-leaves gbdt-rank-pointwise-arms gbdt-rank-pairs
+    Post-release grouped ranking objectives and held-out queries
+      gbdt-lambdarank gbdt-rank-xendcg gbdt-query-softmax gbdt-rank-categorical-eval gbdt-rank-grouped-ctr
     2026-11-23 (lane gbdt-gaps: sample_weight outside Plain numeric Logloss
                and eval sets outside SymmetricTree Logloss, which the CPU
                column refused until this lane)
@@ -974,18 +976,13 @@ def _visible_device(var):
 
 
 def _pick_row(rows, visible, uuid_of=None):
-    """The row of the device this process sees: by index, then by UUID, else the first."""
-    if not rows:
-        return None
-    if visible is not None and visible.isdigit():
-        for r in rows:
-            if str(r.get("index")) == visible:
-                return r
-    if visible is not None and uuid_of is not None:
-        for r in rows:
-            if uuid_of(r) == visible:
-                return r
-    return rows[0]
+    """Resolve the selected index or unique UUID prefix in the device probe."""
+    if visible is None:
+        return rows[0] if rows else None
+    if visible.isdigit():
+        return next((r for r in rows if str(r.get("index")) == visible), None)
+    matches = [r for r in rows if uuid_of and (uuid_of(r) or "").startswith(visible)]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _nvidia_device(unavailable):
@@ -999,8 +996,8 @@ def _nvidia_device(unavailable):
     visible = _visible_device("CUDA_VISIBLE_DEVICES")
     row = _pick_row(rows, visible, uuid_of=lambda r: r["uuid"])
     if row is None:
-        unavailable["device.model"] = why or "nvidia-smi listed no GPU"
-        unavailable["driver.nvidia_driver"] = why or "nvidia-smi listed no GPU"
+        unavailable["device.model"] = why or f"nvidia-smi could not identify the selected GPU ({visible})"
+        unavailable["driver.nvidia_driver"] = unavailable["device.model"]
     plain, why2 = _run_command(["nvidia-smi"])
     m = re.search(r"CUDA Version:\s*([0-9.]+)", plain or "")
     if not m:
@@ -1016,21 +1013,27 @@ def _amd_device(unavailable):
     for line in (out or "").splitlines():
         key, _, value = line.strip().partition(":")
         key, value = key.strip(), value.strip()
-        if key == "Name" and value.startswith("gfx"):
-            cur = dict(arch=value)
-            rows.append(cur)
+        if key == "Name":
+            cur = dict(arch=value) if value.startswith("gfx") else {}
+            if cur:
+                rows.append(cur)
         elif key == "Marketing Name" and cur and "name" not in cur:
             cur["name"] = value
+        elif key.lower() == "uuid" and cur:
+            cur["uuid"] = value
     for i, r in enumerate(rows):
         r["index"] = str(i)
-    row = _pick_row(rows, _visible_device("HIP_VISIBLE_DEVICES") or _visible_device("ROCR_VISIBLE_DEVICES"))
+    visible = _visible_device("HIP_VISIBLE_DEVICES") or _visible_device("ROCR_VISIBLE_DEVICES")
+    row = _pick_row(rows, visible, uuid_of=lambda r: r.get("uuid"))
     model = (row or {}).get("name")
-    if not model:
+    if not model and visible is None:
         smi, why2 = _run_command(["rocm-smi", "--showproductname"])
         m = re.search(r"Card (?:Series|series|SKU|Model)\s*:\s*(.+)", smi or "")
         model = m.group(1).strip() if m else None
         if not model:
             unavailable["device.model"] = why or why2 or "rocminfo and rocm-smi named no GPU"
+    elif not model:
+        unavailable["device.model"] = why or f"rocminfo could not identify the selected GPU ({visible})"
     rocm = None
     for p in (os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), ".info", "version"), "/opt/rocm/.info/version"):
         try:
@@ -1304,9 +1307,9 @@ def check_vendor_label(label):
     return label
 
 
-def default_vendor_label(ml, side=None):
+def default_vendor_label(ml, side=None, code_format=None, device_model=None):
     """`cpu-<cpu model slug>` for the CPU side (on any install), derived from
-    the machine and never typed; `platform.machine()` for the GPU side."""
+    the machine. A CUDA PTX column names its GPU and the selected sm80 set."""
     if (side or ("cpu" if ml.vendor() == "cpu" else "gpu")) == "cpu":
         model = cpu_model()
         if not model:
@@ -1316,6 +1319,11 @@ def default_vendor_label(ml, side=None):
                 "pass --vendor cpu-<model> explicitly"
             )
         return "cpu-" + slug(model)
+    if code_format == "ptx":
+        if not device_model:
+            raise SystemExit("REFUSING: could not read the PTX GPU model; pass --vendor nvidia-ptx-<gpu>-sm80")
+        model = slug(device_model).removeprefix("nvidia-")
+        return f"nvidia-ptx-{model}-sm80"
     return platform.machine().lower()
 
 
@@ -1614,6 +1622,7 @@ LANES = {}
 #: next record instead of DIVERGENT on a user's machine. `umap` also joins
 #: host_surface.PUBLIC_PENDING_LANES as `stale reference` until that record.
 LANE_REVISIONS = {
+    "nn-ep-samba-inference": "explicit-inference-weights-1",
     "linalg-eigh": "fixed-order-gram-1",
     "x-metrics-regression": "metrics-undefined-weighted-score-1",
     "trees-dart-options": "tree-shap-zero-cover-path-1",
@@ -1819,6 +1828,8 @@ def lane_floors():
 #: key lands here with a sentence saying what moved. An entry whose key does
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
+    "nn-ep-samba-inference": "The inference fixture supplies deterministic weights directly from the config's "
+                             "registry so it runs on the CPU of a GPU installation as well.",
     "linalg-eigh": "2026-10-12: Gram fixture uses explicit float32 products and ascending-row sums; BLAS and array-layout dependent input bytes removed, fixture dimensions unchanged",
     "x-metrics-regression": "2026-09-28: undefined variance-weighted scores return explicit NaN before zero-times-infinity; platform NaN sign removed at API arithmetic, fixture sizes unchanged",
     "trees-dart-options": "2026-09-28: arithmetic, not input: TreeSHAP skips unreachable zero-cover paths before zero-over-zero unwinding; old NaN output hashes are not valid references; fixture sizes unchanged",
@@ -2191,12 +2202,12 @@ def device_view(ml, side, name=None):
 #: CPU column is verified on the CPU-only install, where the lane runs both
 #: as usual. Decision (Andrew via the coordinator, 2026-11-25, lane gs-fix
 #: row G1): SambaStack(device='cpu') on a GPU install stays refused
-#: (bindings/samba_route_unpack.mojo: no host block images beside the GPU set).
+#: (bindings/samba_route_unpack.mojo: the stack uses the installation's training provider).
 GPU_INSTALL_CPU_NA = {}
-_SAMBA_GPU_INSTALL = ("SambaStack(device='cpu') is refused on a GPU installation (its blocks' host images are "
-                      "not loaded beside the GPU set); the CPU column is verified on the CPU-only installation")
+_SAMBA_GPU_INSTALL = ("SambaStack uses the installation's training provider; "
+                      "the CPU column is verified on the CPU-only installation")
 for _name in ("samba", "samba-bf16w", "samba-int8w", "samba-untied-dropout-accum", "samba-decode-session",
-              "samba-optimizer-state", "nn-ep-samba-stack", "nn-ep-samba-inference"):
+              "samba-optimizer-state", "nn-ep-samba-stack"):
     GPU_INSTALL_CPU_NA[_name] = _SAMBA_GPU_INSTALL
 del _name
 
@@ -4161,6 +4172,14 @@ def _lane_refuses(fn, text):
 # The saved-model readers it checks (HostForest, HostGBDT, host_predict,
 # host_predict_proba) are the CPU inference surface: no GPU side (vd-verify,
 # 2026-11-24).
+for _host_infer_lane in ("byte-lm-host-infer", "byte-lm-host-infer-threaded"):
+    _one_sided(_host_infer_lane, missing="gpu",
+               reason="LanguageModelInference is a CPU inference class on every installation")
+_one_sided("byte-lm-host-train", missing="gpu",
+           reason="this fixture explicitly requests LanguageModelTrainer(device='cpu'); byte-lm exercises the GPU")
+del _host_infer_lane
+
+
 _one_sided("saved-model-host-infer", missing="gpu",
            reason="the saved-model readers HostForest, HostGBDT, host_predict and host_predict_proba "
                   "are the CPU inference surface and take no device")
@@ -5646,16 +5665,17 @@ def _rank_pairs(groups, relevance, skip_last=2):
     return pairs
 
 
-def _gbdt_rank_fits(ml, X, yr, Xh, configs):
+def _gbdt_rank_fits(ml, X, yr, Xh, configs, max_rows=_GBDT_RANK_ROWS):
     """Fit every `(name, loss, options, with_pairs)` of one ranking lane on
     the first `_GBDT_RANK_ROWS` rows of the `_rank_groups` queries and
     `_relevance` grades; `with_pairs` passes `_rank_pairs` with hashed
     weights. The first fit answers the infer, model and batch columns."""
-    rows = min(_GBDT_RANK_ROWS, X.shape[0])
+    rows = min(max_rows, X.shape[0])
     Xr = np.ascontiguousarray(X[:rows])
     groups, rel = _rank_groups(rows), _relevance(yr[:rows])
-    pairs = _rank_pairs(groups, rel)
-    pair_w = _hw((len(pairs),), "gbdt-rank:pairs_weight", 0.5, 2.0)
+    if any(with_pairs for _, _, _, with_pairs in configs):
+        pairs = _rank_pairs(groups, rel)
+        pair_w = _hw((len(pairs),), "gbdt-rank:pairs_weight", 0.5, 2.0)
     parts, first = {}, None
     for name, loss, options, with_pairs in configs:
         kw = dict(n_estimators=10, max_depth=4, learning_rate=_GBDT_RANK_RATE, l2_leaf_reg=3.0,
@@ -5670,9 +5690,128 @@ def _gbdt_rank_fits(ml, X, yr, Xh, configs):
         pred = m.predict(Xr)
         parts[name] = _h(pred)
         parts[name + ":digest"] = _h(np.frombuffer(str(m.digest_).encode(), dtype=np.uint8))
+        if loss in ("lambdarank", "rank_xendcg"):
+            curve = np.asarray(m.loss_curve_, dtype=np.float64)
+            if curve.shape != (kw["n_estimators"],) or not np.all(np.isfinite(curve)):
+                raise RuntimeError(f"{loss} must report a finite NDCG loss for every fitted tree")
+            parts[name + ":learn_ndcg_loss"] = _h(curve)
         parts[name + ":ndcg"] = _h(_rank_ndcg(ml, groups, rel, pred))
         first = first if first is not None else m
     return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
+def _lightgbm_rank_fits(ml, X, yr, Xh, loss):
+    # First five fixture queries, including one singleton and the 16-document NDCG query.
+    options = dict(n_estimators=3, max_depth=2, border_count=8)
+    configs = [(name, loss, dict(options, use_pointwise_searcher=pointwise), False)
+               for name, pointwise in (("greedy", False), ("pointwise", True))]
+    configs.append(("depthwise", loss, dict(options, grow_policy="Depthwise"), False))
+    answer = _gbdt_rank_fits(ml, X, yr, Xh, configs, max_rows=sum(RANK_QUERY_SIZES[:5]))
+    # Isolate held-out scoring: identical features tie, so the first query
+    # misses at rank one, while the second query finds its relevant document.
+    groups = _rank_groups(18)
+    category, relevance = _rank_cat_examples(yr[:18], groups, ctr=True)
+    train = np.column_stack((category[:, 0], relevance))
+    valid = np.full((4, 2), 9, dtype=np.float32)
+    grades = np.array([0, 2, 2, 0], dtype=np.float32)
+    ids = np.array([7, 7, 11, 11], dtype=np.int64)
+    ranker = ml.GradientBoosting(**_gbdt_gaps_kw(
+        loss=loss, grow_policy="Lossguide", max_leaves=3, max_depth=2,
+        n_estimators=5, border_count=8, cat_features=[0], min_child_hessian=0.0,
+        od_type="Iter", od_wait=1, use_best_model=True,
+    )).fit(train, relevance, group_id=groups, eval_set=(valid, grades, ids), eval_at=1)
+    curve = np.asarray(ranker.test_loss_curve_, dtype=np.float64)
+    if not (0 < curve.size < 5 and ranker.stopped_early_):
+        raise RuntimeError(f"{loss} did not stop after the held-out curve plateaued")
+    _gbdt_gaps_parts(answer, "leafwise_ctr", ranker, train)
+    answer["leafwise_ctr:heldout_ndcg1"] = _h(curve)
+    answer["leafwise_ctr:best_iteration"] = _h(np.asarray([ranker.best_iteration_], dtype=np.int64))
+    return answer
+
+
+@lane("gbdt-lambdarank")
+def _(ml, X, yc, yr, Xh=None):
+    return _lightgbm_rank_fits(ml, X, yr, Xh, "lambdarank")
+
+
+@lane("gbdt-rank-xendcg")
+def _(ml, X, yc, yr, Xh=None):
+    return _lightgbm_rank_fits(ml, X, yr, Xh, "rank_xendcg")
+
+
+@lane("gbdt-query-softmax")
+def _(ml, X, yc, yr, Xh=None):
+    labels = np.asarray([1.5, 0, 2, 0, 1, 0, 0, 2], dtype=np.float32)
+    weight = np.asarray([1, 3, 0, 1, 1, 1, 0, 2], dtype=np.float32)
+    groups = np.asarray([0, 0, 0, 1, 1, 2, 2, 2], dtype=np.int32)
+    parts = {}
+    for pointwise in (False, True):
+        model = ml.GradientBoosting(loss="QuerySoftMax", n_estimators=3, max_depth=2,
+                                    border_count=4, learning_rate=0.2, bootstrap_type="No",
+                                    random_strength=0.0, random_state=7, use_pointwise_searcher=pointwise)
+        model.fit(X[:8], labels, group_id=groups, sample_weight=weight)
+        curve = np.asarray(model.loss_curve_, dtype=np.float64)
+        if curve.shape != (3,) or not np.isfinite(curve).all():
+            raise RuntimeError("QuerySoftMax must report a finite loss per tree")
+        key = "pointwise" if pointwise else "greedy"
+        parts[key + ":loss"] = _h(curve)
+        parts[key + ":predict"] = _h(model.predict(X[:8]))
+    return _fit(parts, model, lambda e: (e.predict(Xh),))
+
+
+def _rank_cat_input(X):
+    # One categorical column; a held-out row's code is independent of its batch.
+    return np.ascontiguousarray((X[:, 3:4] > 0).astype(np.float32))
+
+
+def _rank_cat_examples(values, groups, ctr):
+    # Give every non-singleton query both grades, including on the all-negative
+    # verifier fixture. The only feature is categorical, so a successful split
+    # must have used it. Stable order breaks any ties in the source fixture.
+    grades = np.zeros(len(groups), dtype=np.float32)
+    for group in np.unique(groups):
+        rows = np.flatnonzero(groups == group)
+        ordered = rows[np.argsort(values[rows], kind="stable")]
+        grades[ordered[len(rows) // 2:]] = 2
+    codes = grades.copy() if ctr else (grades > 0).astype(np.float32)
+    if ctr:
+        codes += (np.arange(len(groups)) // 2 % 2).astype(np.float32)
+    return codes[:, None], grades
+
+
+def _categorical_rank_fits(ml, yr, Xh, configs, ctr=False):
+    # Train on five queries and validate on two *other* queries. The first
+    # validation query also sees a categorical code that was absent in training.
+    groups = _rank_groups(18)
+    valid_groups = np.repeat(np.array([11, 18], dtype=np.int64), [4, 6])
+    train, targets = _rank_cat_examples(yr[:18], groups, ctr)
+    valid, valid_labels = _rank_cat_examples(yr[18:28], valid_groups, ctr)
+    valid[1, 0] = 4 if ctr else 2
+    parts, first = {}, None
+    for loss, pointwise in configs:
+        options = _gbdt_gaps_kw(n_estimators=3, max_depth=2, border_count=8,
+                                loss=loss, use_pointwise_searcher=pointwise, cat_features=[0])
+        model = ml.GradientBoosting(**options).fit(
+            train, targets, group_id=groups,
+            eval_set=(valid, valid_labels, valid_groups))
+        if np.unique(model.predict(train)).size < 2:
+            raise RuntimeError(f"{loss} did not split the categorical feature")
+        _gbdt_gaps_parts(parts, loss, model, valid)
+        parts[loss + ":validation"] = _h(np.asarray(model.test_loss_curve_, dtype=np.float64))
+        parts[loss + ":best_iteration"] = _h(np.asarray([model.best_iteration_], dtype=np.int64))
+        if first is None:
+            first = model
+    return _fit(parts, first, lambda e: (e.predict(_rank_cat_input(Xh)),))
+
+
+@lane("gbdt-rank-categorical-eval")
+def _(ml, X, yc, yr, Xh=None):
+    return _categorical_rank_fits(ml, yr, Xh, [("QueryRMSE", False), ("PairLogit", True), ("YetiRank", False)])
+
+
+@lane("gbdt-rank-grouped-ctr")
+def _(ml, X, yc, yr, Xh=None):
+    return _categorical_rank_fits(ml, yr, Xh, [("QueryRMSE", True)], ctr=True)
 
 
 @lane("gbdt-rank-bootstrap")
@@ -6920,7 +7059,9 @@ def _(ml, X, yc, yr, Xh=None):
         stateless = s.train_step(ids[2 * k:2 * k + 2])
     _same_bytes("resident export_gradients()['flat_gradients']", flat,
                 "stateless train_step()['flat_gradients']", np.asarray(stateless["flat_gradients"]))
-    return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(m.parameters_)),
+    state = m.export_state()
+    return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(state["parameters"])),
+                     moments=_h(np.asarray(state["m"]), np.asarray(state["v"])),
                      grads=_h(flat, *[named[k] for k in sorted(named)]),
                      logits=_h(np.asarray(m.logits(ids[:2, :-1])))),
                 m, lambda e: (np.asarray(e.logits(_ids(Xh, shape.batch, shape.length))),))
@@ -7968,6 +8109,8 @@ def _(ml, X, yc, yr, Xh=None):
             tj = fh.read()
         from_file = ml.tokenizer.BpeTokenizer.from_ranks_file(rp)
         ids_file = np.asarray(from_file.encode_bytes(held), dtype=np.int32)
+        from mojolearn._verify_api_misc import bpe_file_ids
+        file_pair = np.asarray(bpe_file_ids(ml.tokenizer.BpeTokenizer), dtype=np.int32)
     tok = v.tokenizer()
     ids = np.asarray(tok.encode_bytes(held), dtype=np.int32)
     back = tok.decode_bytes(ids.tolist())
@@ -7975,7 +8118,7 @@ def _(ml, X, yc, yr, Xh=None):
     flags = np.asarray([ranks == v.render_ranks().encode("ascii"), tj == v.render_tokenizer_json().encode("ascii"),
                         tok.identity == v.identity, from_file.identity == v.identity,
                         ids.tobytes() == ids_file.tobytes()], dtype=np.int64)
-    return _fit(dict(ranks=_h(np.frombuffer(ranks, dtype=np.uint8)), tokenizer_json=_h(np.frombuffer(tj, dtype=np.uint8)),
+    return _fit(dict(gpt2_files=_h(file_pair), ranks=_h(np.frombuffer(ranks, dtype=np.uint8)), tokenizer_json=_h(np.frombuffer(tj, dtype=np.uint8)),
                      identity=_h(np.frombuffer(ident, dtype=np.uint8)), ids=_h(ids),
                      decoded=_h(np.frombuffer(back, dtype=np.uint8)),
                      roundtrip=_h(np.int64(1 if back == held else 0)), flags=_h(flags)))
@@ -10607,7 +10750,9 @@ _batch_decl(_rows_calls("predict", sl=_GBDT_BATCH_ROWS, prep=_gbdt_cat_xh),
             # lane gbdt-cpu-rest-4-cat (2026-11-23) and its sub-lane -ns
             "gbdt-cat-rest", "gbdt-cat-nonsym")
 _batch_decl(_rows_calls("predict"),
-            "gbdt-rank-bootstrap", "gbdt-rank-leaves", "gbdt-rank-pointwise-arms", "gbdt-rank-pairs")
+            "gbdt-rank-bootstrap", "gbdt-rank-leaves", "gbdt-rank-pointwise-arms", "gbdt-rank-pairs",
+            "gbdt-lambdarank", "gbdt-rank-xendcg", "gbdt-query-softmax")
+_batch_decl(_rows_calls("predict", prep=_rank_cat_input), "gbdt-rank-categorical-eval", "gbdt-rank-grouped-ctr")
 _batch_decl(_rows_calls("predict"),
             "gbdt-weighted-symmetric", "gbdt-weighted-nonsym", "gbdt-weighted-rank", "gbdt-eval-gaps")
 _batch_decl(_rows_calls("predict"),
@@ -13064,10 +13209,6 @@ def _run_reference(args):
                          "bitwise promise; use MOJOLEARN_NUMERIC_MODE=identical")
     # PROVENANCE BEFORE THE FIRST FIT. The label and the commit are refused
     # here, in seconds, not after nine fixtures of fits.
-    vendor = check_vendor_label(args.vendor if args.vendor is not None else default_vendor_label(ml, side))
-    if (side == "cpu") != str(vendor).startswith("cpu"):
-        raise SystemExit(f"REFUSING: the {side} side's column is labelled {vendor!r}; a CPU column's label "
-                         "starts with cpu and only a CPU column's does")
     # THE PTX COLUMN (Andrew 2026-10-10: PTX is a normal target; no flag). A CUDA
     # record is the `ptx` device class exactly when the PTX set ran, and its label
     # says so (`nvidia-ptx-<gpu>-sm80`): an A100 or H100 record taken through the
@@ -13084,9 +13225,6 @@ def _run_reference(args):
         code_format = report["code_kind"]
         if code_format not in ("ptx", "native"):
             raise SystemExit(f"REFUSING: runtime_report()['code_kind'] is {code_format!r}, not 'ptx' or 'native'")
-        if (code_format == "ptx") != ("ptx" in str(vendor).lower()):
-            raise SystemExit(f"REFUSING: the {code_format} CUDA set ({gpu_arch}) is loaded and the vendor label is "
-                             f"{vendor!r}; a PTX record is labelled nvidia-ptx-<gpu>-sm80 and only a PTX record is")
     commit, commit_source = commit_witness()
     host = host_record(ml) if side == "cpu" else None
     timing_env = timing_environment()
@@ -13101,7 +13239,7 @@ def _run_reference(args):
         run_static = dict(schema=RUN_FACTS_SCHEMA, unavailable=dict(run=f"{type(exc).__name__}: {exc}"[:200]))
     run_previous = None
     package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__), side=side,
-                   numpy=np.__version__, python=platform.python_version(),
+                   loaded_backend=ml.vendor(), numpy=np.__version__, python=platform.python_version(),
                    par_devices=",".join(str(d) for d in _par_devices()))
     if gpu_arch is not None:
         package.update(gpu_arch=gpu_arch, cuda_code_format=code_format)
@@ -13109,6 +13247,15 @@ def _run_reference(args):
         package["fixture_n"] = N
     if PAR_WIDE:
         package["wide"] = True
+    vendor = check_vendor_label(args.vendor if args.vendor is not None else
+                                default_vendor_label(ml, side, code_format, (run_static.get("device") or {}).get("model")))
+    if (side == "cpu") != str(vendor).startswith("cpu"):
+        raise SystemExit(f"REFUSING: the {side} side's column is labelled {vendor!r}; a CPU column's label "
+                         "starts with cpu and only a CPU column's does")
+    if side == "gpu" and ml.vendor() == "cuda":
+        if (code_format == "ptx") != ("ptx" in str(vendor).lower()):
+            raise SystemExit(f"REFUSING: the {code_format} CUDA set ({gpu_arch}) is loaded and the vendor label is "
+                             f"{vendor!r}; a PTX record is labelled nvidia-ptx-<gpu>-sm80 and only a PTX record is")
     print(f"# side={side} vendor={vendor} commit={commit} ({commit_source})"
           + (f" host.cpu_model={host['cpu_model']!r} host.column={host['column']} "
              f"host.families={sorted(host['families'])}" if host else ""))
@@ -14383,7 +14530,7 @@ def main():
     ap.add_argument("--repeats", type=int, default=1)
     ap.add_argument("--vendor", default=None,
                     help="the box label, ^[a-z0-9][a-z0-9_.-]*$ and not a placeholder; default "
-                         "cpu-<cpu model slug> for the CPU side, platform.machine() for the GPU side")
+                         "cpu-<cpu model slug> on CPU, nvidia-ptx-<gpu>-sm80 on PTX, platform.machine() otherwise")
     ap.add_argument("--side", choices=("cpu", "gpu", "both"), default=None,
                     help="the column this run records, through the public device= parameter in this "
                          "process: cpu (device='cpu'), gpu (device='gpu') or both (the GPU column to "

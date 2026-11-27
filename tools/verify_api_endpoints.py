@@ -43,10 +43,10 @@ def main():
         report=capture(paths[side],endpoints=selected,side=side)
         # A device-only endpoint the CPU side records not applicable has no CPU form; it is not a failure.
         failed=[e for e,r in report['endpoints'].items() if r['status'] not in ('captured','not applicable')]
-        if args.self_test and side==run[-1]:
+        if args.self_test:
             from mojolearn._verify_api_faults import check_faults
             report['faults']=check_faults(report,retain=lambda name,data:
-                args.out.with_name(args.out.stem+'-'+name+'.json').write_text(json.dumps(data,sort_keys=True)+'\n'))
+                paths[side].with_name(paths[side].stem+'-'+name+'.json').write_text(json.dumps(data,sort_keys=True)+'\n'))
         if reference is not None:
             applicable=[e for e in report['expected'] if report['endpoints'].get(e,{}).get('status')!='not applicable']
             report['differences']=differences(dict(report,expected=applicable),
@@ -59,7 +59,7 @@ def main():
             faults={k:v['status'] for k,v in report.get('faults',{}).items()},
             differences=len(report.get('differences',[])))
         failed_any=failed_any or bool(failed or report['pending'] or report.get('differences') or
-            any(r['status']!='CAUGHT_AND_RESTORED' for r in report.get('faults',{}).values()))
+            any(r['status'] not in ('CAUGHT_AND_RESTORED','NOT_APPLICABLE') for r in report.get('faults',{}).values()))
     print(json.dumps(summary,sort_keys=True))
     code=int(failed_any)
     try_retain(retain_verification, 'api-' + args.family + ('-faults' if args.self_test else ''),

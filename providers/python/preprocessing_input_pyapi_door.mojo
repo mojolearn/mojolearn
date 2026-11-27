@@ -80,6 +80,16 @@ def _frozen_values(metadata: ArrayMetadata, pin: ArrayPin, view: PythonObject, c
     return result
 
 
+def _scaler_float(value: PythonObject, context: PythonObject) raises -> Bool:
+    """The input's storage is float32 or float64 (the scalers compute in
+    float32; float64 is converted once, below)."""
+    if classical_is_f32(value, context):
+        return True
+    if classical_is_array(value, context):
+        return String(py=value.dtype) == "<f8"
+    return String(value.dtype.kind) == "f" and (Int(py=value.itemsize) == 4 or Int(py=value.itemsize) == 8)
+
+
 def scaler_input_snapshot(source: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = prep_keys()
     classical_admit_value(source, context)
@@ -98,13 +108,12 @@ def scaler_input_snapshot(source: PythonObject, context: PythonObject) raises ->
     if len(shape) != 2:
         # Preserve the dtype-before-rank refusal on an invalid input. A
         # successful operation only enters array_metadata_once below.
-        if not sequence and not classical_is_f32(value, context):
-            if classical_is_array(value, context) or String(value.dtype.kind) != "f" or Int(py=value.itemsize) != 4:
-                raise Error("TypeError: Scaler input must have dtype float32")
+        if not sequence and not _scaler_float(value, context):
+            raise Error("TypeError: Scaler input must have dtype float32 or float64")
         raise Error("Scaler requires a nonempty two-dimensional input")
     var pin = ArrayPin()
     var metadata = array_metadata_once(value, shape^, "input", context, pin, True,
-        f32_error="" if sequence else "TypeError: Scaler input must have dtype float32")
+        f32_error="" if sequence else "TypeError: Scaler input must have dtype float32 or float64", f64_ok=True)
     var n = metadata.source.rows
     var d = metadata.source.cols
     if n < 1 or d < 1:

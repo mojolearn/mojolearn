@@ -23,6 +23,7 @@ from bindings.nn_optim_compile_pack import nn_optim_compile_words
 from autograd.model import parse_model
 from autograd.model_execution import model_float_words
 from autograd.model_checkpoint import model_layout
+from autograd.nn_optim import nn_positive_lr
 from autograd.nn_pg import pg_admit_key
 from autograd.nn_pgseq import PGSEQ_GROUP_WORDS, pgseq_admit_schedule, pgseq_resolve
 
@@ -51,8 +52,8 @@ def _group_words(
     var scratch = Python.dict()
     nn_optim_compile_words(scratch, py_call(b.tuple, options), optimizer, sched, b)
     var lr = Float64(py=py_call(b.float, options[_AT_LR]))
-    if not (lr > 0.0):
-        raise Error("ValueError: a parameter group's lr must be positive")
+    if not nn_positive_lr(Float32(lr)):
+        raise Error("ValueError: a parameter group's lr must be positive and finite in float32")
     var w = List[Float64]()
     w.append(lr)
     w.append(Float64(Int(py=py_item(scratch, PythonObject("flags")))))

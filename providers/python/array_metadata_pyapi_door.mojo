@@ -67,7 +67,7 @@ def array_shape_once(value: PythonObject, context: PythonObject) raises -> List[
 def array_metadata_once(value: PythonObject, var shape: List[Int], name: String,
                         context: PythonObject, mut pin: ArrayPin, allow_non_native: Bool = False,
                         complex_error: String = "", f32_error: String = "",
-                        allow_unsupported: Bool = False) raises -> ArrayMetadata:
+                        allow_unsupported: Bool = False, f64_ok: Bool = False) raises -> ArrayMetadata:
     var nd = len(shape)
     if nd > 2 and complex_error.byte_length() == 0 and not allow_unsupported:
         raise Error(name + " metadata requires an admitted scalar/vector/matrix")
@@ -111,7 +111,9 @@ def array_metadata_once(value: PythonObject, var shape: List[Int], name: String,
         raise Error(complex_error)
     if nd > 2 and not allow_unsupported:
         raise Error(name + " metadata requires an admitted scalar/vector/matrix")
-    if f32_error.byte_length() > 0 and (code != NPY_FLOAT or item != 4):
+    # `f64_ok`: an owner that converts float64 once at its boundary (the
+    # float32-computing estimators, Andrew 2026-11-27) admits float64 too.
+    if f32_error.byte_length() > 0 and (code != NPY_FLOAT or item != 4) and not (f64_ok and code == NPY_DOUBLE and item == 8):
         raise Error(f32_error)
     var kind = 0
     var castable = nd <= 2

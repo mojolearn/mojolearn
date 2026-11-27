@@ -18,7 +18,7 @@ between layers, `bias`, `clip_grad_norm`, `class_weight`, early stopping on
 validation data, `warm_start`, `partial_fit`, an initial state `h_0` / `c_0`
 and streaming `step`. Variable lengths (`lengths=`) in fit, predict, score
 and hidden_sequence. Refused by name (sequence/NOT_IMPLEMENTED.tsv):
-proj_size, float64, float16 / bfloat16.
+proj_size, float16 / bfloat16.
 """
 from ._mode import ParamsMixin
 
@@ -473,11 +473,12 @@ class LSTMRegressor(_RecurrentRegressor):
     layer's last hidden state, and training minimizes the mean squared error by backpropagation
     through time.
 
-    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
-    raises `TypeError`). `y` is (n_samples,) or (n_samples, n_outputs).
+    `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
+    with round-to-nearest-even; values outside float32's range are refused). `y` is (n_samples,) or (n_samples, n_outputs).
 
-    Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float64, float16 or bfloat16 data.
+    Variable-length sequences take ``lengths=`` in every method. For projected LSTMs,
+    use ``Sequential.lstm(proj_size=...)`` or ``ops.Session.lstm(weight_hr=...)``.
+    This estimator uses unprojected cells. Float16 and bfloat16 inputs are unsupported.
 
     Parameters
     ----------
@@ -503,7 +504,7 @@ class LSTMRegressor(_RecurrentRegressor):
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
@@ -610,11 +611,12 @@ class LSTMClassifier(_RecurrentClassifier):
     layer's last hidden state, and training minimizes the softmax cross-entropy by backpropagation
     through time.
 
-    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
-    raises `TypeError`). `y` holds class labels (at least two classes).
+    `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
+    with round-to-nearest-even; values outside float32's range are refused). `y` holds class labels (at least two classes).
 
-    Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float64, float16 or bfloat16 data.
+    Variable-length sequences take ``lengths=`` in every method. For projected LSTMs,
+    use ``Sequential.lstm(proj_size=...)`` or ``ops.Session.lstm(weight_hr=...)``.
+    This estimator uses unprojected cells. Float16 and bfloat16 inputs are unsupported.
 
     Parameters
     ----------
@@ -640,7 +642,7 @@ class LSTMClassifier(_RecurrentClassifier):
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
@@ -752,11 +754,11 @@ class GRURegressor(_RecurrentRegressor):
     layer's last hidden state, and training minimizes the mean squared error by backpropagation
     through time.
 
-    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
-    raises `TypeError`). `y` is (n_samples,) or (n_samples, n_outputs).
+    `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
+    with round-to-nearest-even; values outside float32's range are refused). `y` is (n_samples,) or (n_samples, n_outputs).
 
     Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float64, float16 or bfloat16 data.
+    and float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -782,7 +784,7 @@ class GRURegressor(_RecurrentRegressor):
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
@@ -889,11 +891,11 @@ class GRUClassifier(_RecurrentClassifier):
     layer's last hidden state, and training minimizes the softmax cross-entropy by backpropagation
     through time.
 
-    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
-    raises `TypeError`). `y` holds class labels (at least two classes).
+    `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
+    with round-to-nearest-even; values outside float32's range are refused). `y` holds class labels (at least two classes).
 
     Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float64, float16 or bfloat16 data.
+    and float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -919,7 +921,7 @@ class GRUClassifier(_RecurrentClassifier):
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
@@ -1031,11 +1033,11 @@ class RNNRegressor(_RecurrentRegressor):
     layer's last hidden state, and training minimizes the mean squared error by backpropagation
     through time.
 
-    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
-    raises `TypeError`). `y` is (n_samples,) or (n_samples, n_outputs).
+    `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
+    with round-to-nearest-even; values outside float32's range are refused). `y` is (n_samples,) or (n_samples, n_outputs).
 
     Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float64, float16 or bfloat16 data.
+    and float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -1061,7 +1063,7 @@ class RNNRegressor(_RecurrentRegressor):
     nonlinearity : {'tanh', 'relu'}, default 'tanh'
         Activation of the recurrence, as `nn.RNN`.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
@@ -1169,11 +1171,11 @@ class RNNClassifier(_RecurrentClassifier):
     layer's last hidden state, and training minimizes the softmax cross-entropy by backpropagation
     through time.
 
-    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
-    raises `TypeError`). `y` holds class labels (at least two classes).
+    `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
+    with round-to-nearest-even; values outside float32's range are refused). `y` holds class labels (at least two classes).
 
     Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float64, float16 or bfloat16 data.
+    and float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -1199,7 +1201,7 @@ class RNNClassifier(_RecurrentClassifier):
     nonlinearity : {'tanh', 'relu'}, default 'tanh'
         Activation of the recurrence, as `nn.RNN`.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.

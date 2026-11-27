@@ -261,7 +261,7 @@ class LocalOutlierFactor(_XNeighbors):
     n_jobs : int or None, default None
         Accepted for scikit-learn compatibility; unused.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
 
     Attributes
@@ -439,7 +439,7 @@ class NearestCentroid(_XNeighbors):
         Class priors. ``'empirical'`` uses the class frequencies. Given priors
         must be non-negative, one per class, and are rescaled to sum to one.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
 
     Attributes
@@ -647,7 +647,7 @@ class OneClassSVM(_XNeighbors):
     max_iter : int, default -1
         Iteration limit of the solver; -1 means 10,000,000.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -856,7 +856,7 @@ class KernelPCA(_XNeighbors):
         Drop components with zero eigenvalue even when ``n_components`` is
         set.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
 
     Attributes
@@ -1016,7 +1016,7 @@ class PolynomialCountSketch(_XNeighbors):
         Seed for the hash tables. A RandomState or None contributes one draw
         that seeds the generator. Anything else raises ``ValueError``.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
 
     Attributes
@@ -1147,7 +1147,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         Sampling interval. Required when ``sample_steps`` is not 1, 2 or 3
         (``ValueError`` otherwise); by default 0.8, 0.5 or 0.4 for those.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
 
     Attributes
@@ -1280,7 +1280,7 @@ class SkewedChi2Sampler(_XNeighbors):
         one draw that seeds the generator. Anything else raises
         ``ValueError``.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
 
     Attributes
@@ -1512,7 +1512,7 @@ class LabelPropagation(_LabelPropagationBase):
     n_jobs : int or None, default None
         Accepted for scikit-learn compatibility; unused.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
 
     Attributes
@@ -1603,7 +1603,7 @@ class LabelSpreading(_LabelPropagationBase):
     n_jobs : int or None, default None
         Accepted for scikit-learn compatibility; unused.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
 
     Attributes
@@ -1731,7 +1731,7 @@ class KNNImputer(_XNeighbors):
     keep_empty_features : bool, default False
         Keep features that are entirely missing at ``fit``, imputed as zero.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
 
     Attributes
@@ -1882,7 +1882,7 @@ class PageRank(_XNeighbors):
         Where the mass of nodes without out-edges goes, normalized to sum to
         one; None uses the personalization.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
 
     The ``personalization``, ``nstart`` and ``dangling`` vectors must have
@@ -1973,7 +1973,7 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     return_labels : bool, default True
         Also return the component label of each node.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for the call (``'fast'`` is Apple only). None uses the
+        Numeric mode for the call. None uses the
         process default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -2033,7 +2033,7 @@ class Louvain(_XNeighbors):
     seed : int or None, default None
         Accepted for networkx compatibility; unused.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
 
     Attributes
@@ -2150,7 +2150,7 @@ class SVGP(_XNeighbors):
     jitter : float, default 1e-6
         Diagonal jitter added to the inducing-point kernel matrix.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        Numeric mode for this estimator. None uses
         the process default.
 
     Attributes

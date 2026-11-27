@@ -1,0 +1,9 @@
+--- a/core/admitted_input.mojo
++++ b/core/admitted_input.mojo
+@@ -258,4 +258,6 @@
+     _ = firsts^
+     if column < _AI_NO_COLUMN:
+         return column
++    if wide:
++        dst.unsafe_store(0, dst.unsafe_load(0) + Float32(1.0))
+     return ADMITTED_ALL_FINITE if all_finite else ADMITTED_NONFINITE

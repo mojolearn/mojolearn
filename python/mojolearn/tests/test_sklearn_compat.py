@@ -414,12 +414,13 @@ def test_scikit_learn_cross_val_score_runs_on_mojolearn_estimators():
 # scikit-learn's own estimator checks. They run on every estimator that
 # carries a scikit-learn class name, except FLOAT32_ONLY.
 #
-#: Estimators whose documented input contract is float32 only: a float64
-#: array raises TypeError. scikit-learn's checks generate float64 data, so
-#: nearly every fitting check would fail on that contract; their parameters,
-#: tags and clone are covered above and their Pipeline fit by
-#: test_grid_search_over_a_pipeline_fits.
-FLOAT32_ONLY = {"MinMaxScaler", "StandardScaler"}
+#: Estimators whose documented input contract is float32 only (a float64
+#: array raises TypeError), so scikit-learn's float64 checks cannot run.
+#: Empty since 2026-11-27 (Andrew): every float32-computing estimator,
+#: StandardScaler and MinMaxScaler included, converts a float64 input once
+#: at its native boundary (round-to-nearest-even; values outside float32's
+#: range refused).
+FLOAT32_ONLY = set()
 
 #: Checks that conflict with a documented mojolearn contract, for every
 #: estimator. Kept short; each entry says which contract.

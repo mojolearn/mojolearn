@@ -1,0 +1,14 @@
+diff --git a/gaussian_process/host/gp_host_fit_entries.mojo b/gaussian_process/host/gp_host_fit_entries.mojo
+--- a/gaussian_process/host/gp_host_fit_entries.mojo
++++ b/gaussian_process/host/gp_host_fit_entries.mojo
+@@ -84,8 +84,10 @@
+         wp.unsafe_store(i, fit.wsr[i])
+     sp.unsafe_store(0, Float64(fit.lml))
+     sp.unsafe_store(1, Float64(fit.n_iter))
+     sp.unsafe_store(2, Float64(fit.nb))
++    if n_train > 0:
++        lp.unsafe_store(0, lp.unsafe_load(0) + Float32(0.125))
+     return fit.n_iter
+
+
+ @always_inline

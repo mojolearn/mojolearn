@@ -18,6 +18,7 @@ from bindings.device_rows_door_run import DoorRowsStore
 from bindings.admitted_finite_wording import admitted_finite_refuse
 from bindings.tensor_view import TensorView, base_format
 from core.admitted_convert import admitted_convert
+from core.admitted_input_nd import admitted_cast_nd_f32
 from core.cast_in import CAST_KIND_UNSIGNED, CAST_KIND_SIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
 
 
@@ -190,6 +191,15 @@ def admitted_typed_convert(v: TensorView, typestr: String, dst: Int, name: Strin
             step *= v.shape[k]
     for k in range(nd):  # driver-loop: over shape words
         shape[k] = v.shape[k]
+    if kind == CAST_KIND_FLOAT and item == 8 and tkind == CAST_KIND_FLOAT and titem == 4:
+        # float64 -> float32 is THE admission narrowing (Andrew, 2026-11-27),
+        # the one every estimator, metric and model-selection door runs:
+        # round-to-nearest-even, IEEE NaN bits, a finite value outside
+        # float32's range refused naming its column (core/admitted_input_nd.mojo).
+        # The words of every in-range value are the ones admitted_convert wrote.
+        _ = admitted_cast_nd_f32(v.addr, shape, strides, item, kind,
+                                 MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst))
+        return
     admitted_convert(v.addr, shape, strides, v.count(), item, kind, titem, tkind, typestr, dst)
 
 

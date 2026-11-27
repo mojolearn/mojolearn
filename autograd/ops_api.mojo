@@ -136,6 +136,9 @@ from autograd.block_step_ops import (
 )
 from autograd.rules_step_ops import StepOpRules
 from autograd.rules_recurrent import OPS_RNN_SCAN, rnn_scan_op
+from autograd.projected_lstm import (
+    OPS_PROJECTED_LSTM, OPS_PROJECTED_LSTM_OUTPUT, projected_lstm, projected_lstm_check_lengths, projected_lstm_output,
+)
 # Lane rnn-parity-B: the weighted per-step losses (session code 95) and the
 # recurrent layer's padded-step zeroing (autograd/per_step_ops.mojo).
 from autograd.per_step_ops import OPS_WEIGHTED_LOSS, weighted_loss, rnn_zero_padded
@@ -210,7 +213,8 @@ from autograd.nn_scatter import (
 # nn-blocks-scatter end
 # nn-blocks-scan begin: the public scan over a captured cell, session code 118 (autograd/nn_scan.mojo)
 from autograd.nn_scan import (
-    OPS_SCAN, OPS_SCAN_CKPT, ScanCell, ScanCache, scan_decode, scan_call_key, scan_check_binding, SCAN_SABOTAGE_STATE_LAG, SCAN_SABOTAGE_STATE_LAG_HOST,
+    OPS_SCAN, OPS_SCAN_CKPT, ScanCell, ScanCache, scan_decode, scan_call_key, scan_check_binding, scan_check_custom_program, SCAN_SABOTAGE_STATE_LAG, SCAN_SABOTAGE_STATE_LAG_HOST,
+    SCAN_SABOTAGE_CUSTOM_RULE, SCAN_SABOTAGE_CUSTOM_RULE_HOST,
     SCAN_SABOTAGE_INIT_GRAD, SCAN_SABOTAGE_INIT_GRAD_HOST, SCAN_SABOTAGE_DROP_KEY, SCAN_SABOTAGE_DROP_KEY_HOST,
     scan_dropout_seed,
 )
@@ -2170,7 +2174,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # nn-blocks-scan / nn-blocks-cbw begin: the scan over a captured cell and a user-defined backward rule,
             # on the chain's no-match path (no other operation pays a compare for them). Both run captured nodes
             # (a cell, a custom op's programs) through the `nested` instance, which has neither branch, so no
-            # function reaches itself (AGENTS.md part 6); cbw_bind and scan_check_cell refuse the nesting itself.
+            # function reaches itself (AGENTS.md part 6); scan cells bind their custom rules separately in _scan_cell.
             comptime if not nested:
                 if code == OPS_SCAN:
                     return self._scan(hs, ints, fs)
@@ -2190,6 +2194,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     return self._ckpt(hs, ints, fs)
                 if code == OPS_SCAN_CKPT:
                     return self._scan_ckpt_op(hs, ints, fs)
+            if code == OPS_PROJECTED_LSTM:
+                return self._projected_lstm(hs, ints, fs, x)
+            if code == OPS_PROJECTED_LSTM_OUTPUT:
+                _need("projected LSTM output", n, 3, 2, ni, 0, nf)
+                if ints[1] != 0 and ints[1] != 1:
+                    raise Error("ValueError: invalid projected LSTM direction")
+                var view = projected_lstm_output(self.tape, self.ex, x[0], x[1], x[2], ints[0], ints[1] != 0)
+                return self._add(view, 0, self.tape.requires_grad(view), 0)
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):
             # elementwise and row-wise ops keep x's full shape (a free view
@@ -2553,6 +2565,38 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         rx.append(x[2])
         var rt = self.tape.custom(self.ex, rx, dst, n, d_out, CNN_LINEAR_TAG, saved)
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _projected_lstm(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        if len(ints) != 5:
+            raise Error("ValueError: projected LSTM needs five option flags")
+        for j in range(5):  # driver-loop: over the serialized option flags
+            if ints[j] != 0 and ints[j] != 1:
+                raise Error("ValueError: invalid projected LSTM option flag")
+        _need("projected LSTM", len(x), 6 + ints[2] + ints[3] + ints[4], 5, len(ints), 0, len(fs))
+        for j in range(len(hs)):  # driver-loop: over bound operands
+            if self.int_words[self._slot(hs[j])]:
+                raise Error("ValueError: projected LSTM operands must be floating-point tensors")
+        var h0 = Optional[Tensor](None)
+        var c0 = Optional[Tensor](None)
+        var lengths = Optional[Tensor](None)
+        if ints[2] != 0:
+            h0 = x[6]
+        if ints[3] != 0:
+            c0 = x[6 + ints[2]]
+        if ints[4] != 0:
+            lengths = x[6 + ints[2] + ints[3]]
+            var shape = self.tape.shape_of(x[0])
+            if shape.ndim != 3:
+                raise Error("ValueError: projected LSTM expects (steps, batch, inputs)")
+            projected_lstm_check_lengths(self.tape, self.ex, lengths.value(), shape.d[1], shape.d[0])
+        var result = projected_lstm(self.tape, self.ex, x[0], x[1], x[2], x[3], x[4], x[5], ints[0] == 1, h0, c0, lengths)
+        var y = result[0]
+        if ints[1] != 0:
+            var yy = self.tape.view_nd(self.ex, y, ShapeN.matrix(self.tape.shape_of(y).count(), 1))
+            var c = result[2]
+            var cc = self.tape.view_nd(self.ex, c, ShapeN.matrix(self.tape.shape_of(c).count(), 1))
+            y = rankn_concat(self.tape, self.ex, [yy, cc], 0)
+        return self._add(y, 0, self.tape.requires_grad(y), 0)
 
     def _rnn_scan(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
         """OPS_RNN_SCAN: [x (steps * batch rows of inputs, time-major),
@@ -3373,7 +3417,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         swap(sc, self.scans.cells[ci])
         var packed = 0
         try:
-            packed = self._scan_run(sc, hs, ints)
+            if len(sc.custom_ids) > 0:
+                packed = self._scan_run[True](sc, hs, ints)
+            else:
+                packed = self._scan_run[False](sc, hs, ints)
         finally:
             swap(sc, self.scans.cells[ci])
         return packed
@@ -3389,9 +3436,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var packed = 0
         try:
             if sc.every > 0 and self.tape.is_recording():
-                packed = self._scan_ckpt_run(ci, sc, hs, ints)
+                if len(sc.custom_ids) > 0:
+                    packed = self._scan_ckpt_run[True](ci, sc, hs, ints)
+                else:
+                    packed = self._scan_ckpt_run[False](ci, sc, hs, ints)
+            elif len(sc.custom_ids) > 0:
+                packed = self._scan_run[True](sc, hs, ints)
             else:
-                packed = self._scan_run(sc, hs, ints)
+                packed = self._scan_run[False](sc, hs, ints)
         finally:
             swap(sc, self.scans.cells[ci])
         return packed
@@ -3403,6 +3455,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if i >= 0:
             return i
         var got = scan_decode(ints, fs)
+        for k in range(len(got.custom_ids)):  # driver-loop: bind rules once, only for a cell that has them
+            if got.cell.code[k] == OPS_CUSTOM_VJP:
+                var oi = self._cbw_op(got.node_ints[k], got.node_fs[k])
+                scan_check_custom_program(self.cbw.ops[oi].forward, "forward")
+                scan_check_custom_program(self.cbw.ops[oi].backward, "backward")
+                got.custom_ids[k] = oi
         return self.scans.add(got^)
 
     def _scan_bind(mut self, sc: ScanCell, hs: List[Int], mut state: List[Int], mut params: List[Int]) raises -> Int:
@@ -3486,7 +3544,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             rank_view.append(rv^)
         return rank_view^
 
-    def _scan_steps[recompute: Bool](
+    def _scan_steps[recompute: Bool, custom: Bool](
         mut self, mut sc: ScanCell, key: Int, xs: Int, params: List[Int], mut state: List[Int], begin: Int,
         end: Int, mask: Int, zero: Int, rank_view: List[List[Int]], mut outs_by_time: List[Int],
         mut temps: List[Int], mut step_at: Int,
@@ -3562,7 +3620,23 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 for j in range(cell.a_at[k], cell.a_at[k + 1]):  # small-loop(args: a node's input refs)
                     var rf = cell.args[j]
                     args.append(params[-rf - 1] if rf < 0 else vals[rf])
-                var h = self._scan_call(cell.code[k], args, sc.node_ints[k], sc.node_fs[k], x)
+                var h: Int
+                comptime if custom:
+                    var oi = sc.custom_ids[k]
+                    if oi >= 0:
+                        x.clear()
+                        for j in range(len(args)):  # driver-loop: over custom operands
+                            x.append(self.tensor(args[j]))
+                        h = self._cbw_forward_bound(oi, args, x)
+                        comptime if (SCAN_SABOTAGE_CUSTOM_RULE and Self.E.IS_DEVICE) or (
+                                SCAN_SABOTAGE_CUSTOM_RULE_HOST and not Self.E.IS_DEVICE):
+                            if len(args) == 1 and self.shape_nd(h).same(self.shape_nd(args[0])):
+                                temps.append(h)
+                                h = self._scan_call(OPS_COPY, args, no_ints, no_fs, x)
+                    else:
+                        h = self._scan_call(cell.code[k], args, sc.node_ints[k], sc.node_fs[k], x)
+                else:
+                    h = self._scan_call(cell.code[k], args, sc.node_ints[k], sc.node_fs[k], x)
                 temps.append(h)
                 comptime if recompute and ((CKPT_SABOTAGE_SKIP_NODE and Self.E.IS_DEVICE) or (
                         CKPT_SABOTAGE_SKIP_NODE_HOST and not Self.E.IS_DEVICE)):
@@ -3634,7 +3708,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var stacked = rankn_concat(self.tape, self.ex, parts, 0)
         return self._add(stacked, 0, self.tape.requires_grad(stacked), 0)
 
-    def _scan_run(mut self, mut sc: ScanCell, hs: List[Int], ints: List[Int]) raises -> Int:
+    def _scan_run[custom: Bool](mut self, mut sc: ScanCell, hs: List[Int], ints: List[Int]) raises -> Int:
         """The body of `_scan` on a decoded cell `sc` (lent by `_scan`; its dropout nodes' seed words are
         rewritten before each step that runs them): the binding (`_scan_bind`), the mask, every step
         (`_scan_steps`), then the stack (`_pack_columns`: each step's output and each final state as a column,
@@ -3671,7 +3745,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     temps.append(dk)
                     state[k] = dk
             var outs_by_time = List[Int](length=steps, fill=0)
-            self._scan_steps[False](sc, key, xs, params, state, 0, steps, mask, zero, rank_view, outs_by_time,
+            self._scan_steps[False, custom](sc, key, xs, params, state, 0, steps, mask, zero, rank_view, outs_by_time,
                                     temps, step_at)
             step_at = -1
             var cols = List[Int](capacity=steps + n_state)
@@ -3760,10 +3834,17 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             raise Error("checkpoint: the tape recorded the checkpointed node at an unexpected index")
         return self._add(t, 0, False, 0)
 
-    def _ckpt_tape_backward(mut self, root: Tensor, seed: Tensor) raises:
+    def _ckpt_tape_backward[custom: Bool = False](mut self, root: Tensor, seed: Tensor) raises:
         """A recompute's backward on the scratch tape from `root` seeded with `seed`, with the session's rules
         (the plain graph's; with LayerRules when a layer op recorded a node), adding into the carried leaves'
         destinations (accumulate=True)."""
+        comptime if custom:
+            var rules = CbwRules[Self.E](StepOpRules(self.steps_address()), Int(UnsafePointer(to=self)))
+            if self.layer_nodes:
+                self.tape.backward_with_rules(self.ex, root, seed, LayerRules[CbwRules[Self.E]](rules), True)
+            else:
+                self.tape.backward_with_rules(self.ex, root, seed, rules, True)
+            return
         if self.layer_nodes:
             self.tape.backward_with_rules(
                 self.ex, root, seed, LayerRules[StepOpRules](StepOpRules(self.steps_address())), True)
@@ -3996,7 +4077,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 var sc = ScanCell()
                 swap(sc, self.scans.cells[rec.cache])
                 try:
-                    self._ckpt_scan_backward(sc, rec, upstream, carry, dest)
+                    if len(sc.custom_ids) > 0:
+                        self._ckpt_scan_backward[True](sc, rec, upstream, carry, dest)
+                    else:
+                        self._ckpt_scan_backward[False](sc, rec, upstream, carry, dest)
                 finally:
                     swap(sc, self.scans.cells[rec.cache])
             else:
@@ -4068,7 +4152,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             swap(held, self.tape)
             swap(held, self.ckpt_tape)
 
-    def _scan_ckpt_run(mut self, ci: Int, mut sc: ScanCell, hs: List[Int], ints: List[Int]) raises -> Int:
+    def _scan_ckpt_run[custom: Bool](mut self, ci: Int, mut sc: ScanCell, hs: List[Int], ints: List[Int]) raises -> Int:
         """A scan with checkpoint_every = k in a recording session (autograd/nn_ckpt.mojo): the steps run in
         segments of k on the scratch tape (each segment's forward recorded there and dropped), the state at
         every segment boundary copied into this tape's storage (one row of distinct state tensors per boundary),
@@ -4144,10 +4228,19 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var held = Tape()
         swap(held, self.ckpt_tape)
         swap(held, self.tape)
+        # The scratch tape reuses node indices. Each segment owns its saved custom tensors
+        # until its backward or reset; neither can discard a rule recorded on the parent tape.
+        var outer_records = List[CbwRecord]()
+        var outer_live = False
+        comptime if custom:
+            swap(outer_records, self.cbw.records)
+            outer_live = self.cbw.live
         var temps = List[Int]()
         var step_at = -1
         try:
             for p in range(n_seg):  # driver-loop: over segments
+                comptime if custom:
+                    self.cbw.records.clear()
                 self.tape.reset()
                 self.tape.record()
                 var begin = p * every
@@ -4185,7 +4278,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     zero = mz[1]
                 var rank_view = self._scan_rank_views(batch)
                 var outs_by_time = List[Int](length=steps, fill=0)
-                self._scan_steps[False](sc, key, leaf[rec.role[0]], params, state, begin, end, mask, zero,
+                self._scan_steps[False, custom](sc, key, leaf[rec.role[0]], params, state, begin, end, mask, zero,
                                         rank_view, outs_by_time, temps, step_at)
                 step_at = -1
                 # Each step's output and the segment's end state leave the scratch tape (one copy each).
@@ -4216,11 +4309,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 temps.clear()
         except err:
             self._drop_temps(temps)
+            raise _scan_step_error(err, step_at)
+        finally:
             swap(held, self.tape)
             swap(held, self.ckpt_tape)
-            raise _scan_step_error(err, step_at)
-        swap(held, self.tape)
-        swap(held, self.ckpt_tape)
+            comptime if custom:
+                swap(outer_records, self.cbw.records)
+                self.cbw.live = outer_live
         var edges = List[Tensor]()
         for d in range(n_op):  # driver-loop: over the distinct operands (the node's edges)
             if op_req[d] and reached[d] and not rec.op_ids[d]:
@@ -4230,7 +4325,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             return self._leaf(packed_fp, ShapeN.matrix(total, 1))
         return self._ckpt_admit(rec^, edges, packed_fp, ShapeN.matrix(total, 1))
 
-    def _ckpt_scan_backward(
+    def _ckpt_scan_backward[custom: Bool](
         mut self, mut sc: ScanCell, rec: CkptRecord, upstream: FP, mut carry: List[Bool], dest: List[Int],
     ) raises:
         """The checkpointed scan's rule: the segments last first, each recomputed from its boundary row on the
@@ -4273,12 +4368,21 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var held = Tape()
         swap(held, self.ckpt_tape)
         swap(held, self.tape)
+        # The scratch tape reuses node indices. Each segment owns its saved custom tensors
+        # until its backward or reset; neither can discard a rule recorded on the parent tape.
+        var outer_records = List[CbwRecord]()
+        var outer_live = False
+        comptime if custom:
+            swap(outer_records, self.cbw.records)
+            outer_live = self.cbw.live
         var temps = List[Int]()
         var step_at = -1
         try:
             for q in range(n_seg):  # driver-loop: over segments, last first
                 var p = n_seg - 1 - q
                 var last = p == n_seg - 1
+                comptime if custom:
+                    self.cbw.records.clear()
                 self.tape.reset()
                 self.tape.record()
                 var begin = p * every
@@ -4333,7 +4437,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     zero = mz[1]
                 var rank_view = self._scan_rank_views(batch)
                 var outs_by_time = List[Int](length=steps, fill=0)
-                self._scan_steps[True](sc, rec.key, leaf[rec.role[0]], params, state, begin, end, mask, zero,
+                self._scan_steps[True, custom](sc, rec.key, leaf[rec.role[0]], params, state, begin, end, mask, zero,
                                        rank_view, outs_by_time, temps, step_at)
                 step_at = -1
                 # The plain stack's columns that touch this segment, in its order (outputs in time order, then the
@@ -4391,7 +4495,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                             at += cnt[c]
                         var seed = self._ckpt_leaf(Int(seed_fp), ShapeN.matrix(n_words, 1), False, False)
                         temps.append(seed)
-                        self._ckpt_tape_backward(rt, self.tensor(seed))
+                        self._ckpt_tape_backward[custom](rt, self.tensor(seed))
                         for c in range(len(carry_t)):  # driver-loop: over the carried operand leaves
                             if got[c]:
                                 carry[carry_d[c]] = True
@@ -4405,11 +4509,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 temps.clear()
         except err:
             self._drop_temps(temps)
+            raise _scan_step_error(err, step_at)
+        finally:
             swap(held, self.tape)
             swap(held, self.ckpt_tape)
-            raise _scan_step_error(err, step_at)
-        swap(held, self.tape)
-        swap(held, self.ckpt_tape)
+            comptime if custom:
+                swap(outer_records, self.cbw.records)
+                self.cbw.live = outer_live
     # activation-ckpt end
     # nn-blocks-scan end
 
@@ -5193,6 +5299,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         recording session one custom tape node over the inputs (its value the
         output, or the outputs packed in one (1, total) row)."""
         var oi = self._cbw_op(ints, fs)
+        return self._cbw_forward_bound(oi, hs, x)
+
+    def _cbw_forward_bound(mut self, oi: Int, hs: List[Int], x: List[Tensor]) raises -> Int:
         var recording = self.tape.is_recording()
         var op = CbwOp()
         swap(op, self.cbw.ops[oi])

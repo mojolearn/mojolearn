@@ -22,7 +22,7 @@ def catalog():
     return _NATIVE.catalog_public_call("catalog", (), _NATIVE_CONTEXT)
 
 
-def verify_catalog_entry(name, *, source=None, inputs=None, numeric_mode=None, cache=None):
+def verify_catalog_entry(name, *, source=None, inputs=None, numeric_mode=None, cache=None, device=None):
     """Verify an exported catalog model using explicit native check inputs.
 
     ``source`` is an existing ONNX artifact or native ``GraphIR``. ``inputs``
@@ -31,14 +31,15 @@ def verify_catalog_entry(name, *, source=None, inputs=None, numeric_mode=None, c
     Export and seeded check-input generation belong to application/test setup;
     no Python model forward, exporter, downloader or random generator runs here.
     ``cache`` remains accepted for call compatibility; the artifact is supplied
-    directly. ``numeric_mode`` uses the normal import provider selection.
+    directly. ``device="cpu"`` or ``device="gpu"`` selects the execution
+    device in the same way as ``import_model``. The default uses the installation’s selected device.
 
     Returns the name, version, numeric mode, vendor, source, input/output digests,
     elapsed run milliseconds, expected digest and match result. A missing
     expected digest yields ``match=None``. Missing source/inputs are refused
     with the explicit native alternative.
     """
-    return _NATIVE.catalog_public_call("verify", (name, source, inputs, numeric_mode, cache), _NATIVE_CONTEXT)
+    return _NATIVE.catalog_public_call("verify", (name, source, inputs, numeric_mode, cache, device), _NATIVE_CONTEXT)
 
 
 # Import-time connections only; product calls never resolve package bindings.

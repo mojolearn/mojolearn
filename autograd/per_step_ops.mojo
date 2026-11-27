@@ -14,12 +14,12 @@ from std.sys import is_defined
 from autograd.tape import Tape, Tensor
 from autograd.rankn import ShapeN
 from autograd.rankn_api import rn_as_shape
-from autograd.import_api import imp_binary, imp_where
-from autograd.import_ops import IMP_GE
+from autograd.import_api import imp_where
+from autograd.nn_recurrent import nn_rnn_pad_mask
 from autograd.loss_ops import LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS
 from autograd.losses import REDUCTION_MEAN, REDUCTION_SUM
 from sequence.exec_trait import Exec
-from sequence.ops import FP, Args, OP_SEQ_IOTA
+from sequence.ops import FP
 from sequence.recurrent import fill
 
 comptime OPS_WEIGHTED_LOSS = 95
@@ -120,16 +120,10 @@ def weighted_loss[E: Exec](
 
 def rnn_zero_padded[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, lengths: FP, T: Int, B: Int) raises -> Tensor:
     """x (T, B, D), time first, with every padded step's inputs replaced by +0.0: step t of row b is padded when
-    t >= lengths[b] (B float32 words on the executor). A select on the executor (iota, compare, where; the
+    t >= lengths[b] (B float32 words on the executor). A select on the executor (padding mask and where; the
     model's block_recurrent does the same time-second), so no padded value, not even inf or NaN, reaches a
     product; the gradient of x is zero at those steps. rnn_scan_op takes the zeroed x."""
-    var pos = tape.reserve(ex, T)
-    var ia = Args()
-    ia.p0 = pos
-    ex.launch[OP_SEQ_IOTA](ia, T)
-    var col = tape.variable(ex, pos, T, 1, False)
-    var lens = tape.variable(ex, lengths, 1, B, False)
-    var cond = imp_binary(tape, ex, col, lens, IMP_GE)
+    var cond = nn_rnn_pad_mask[E, True](tape, ex, lengths, T, B)
     var c3: List[Int] = [T, B, 1]
     cond = tape.view_nd(ex, cond, ShapeN.of(c3))
     var zp = tape.reserve(ex, 1)

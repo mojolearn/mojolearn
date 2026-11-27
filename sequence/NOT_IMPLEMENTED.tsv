@@ -1,15 +1,16 @@
 algorithm	option	reference	why
-LSTM	proj_size > 0	torch/nn/modules/rnn.py	the projected LSTM gives h and c different widths inside every fused cell kernel (forward and backward, scan and per-step chain) and adds a per-step projection GEMM; not carried yet
-LSTM/GRU/RNN	float64	-	Apple GPUs have no float64 arithmetic, so identical mode cannot give the same bits on every vendor without a software double (about an order of magnitude slower); float32 only
+LSTMRegressor / LSTMClassifier	proj_size > 0	torch/nn/modules/rnn.py	These standalone estimators pack both recurrent states at hidden_size and store four gate tensors per direction. Use Sequential.lstm(proj_size=...) or ops.Session.lstm(weight_hr=...) for a projected recurrence.
+LSTM/GRU/RNN	float64 arithmetic	-	Apple GPUs have no float64 arithmetic, so identical mode cannot give the same bits on every vendor without a software double (about an order of magnitude slower); the cells compute in float32, and a float64 input is converted to float32 once at the boundary (round-to-nearest-even; values outside float32's range are refused)
 LSTM/GRU/RNN	float16 / bfloat16	-	identical mode: tensor-core half-precision products are not the same bits across vendors; fast mode: no half-precision cell kernels yet
-RMSprop/Adagrad/Lion/Adamax/NAdam/LAMB/Adafactor	parameter groups, maximize, foreach/fused/capturable/differentiable	torch.optim	one config per optimizer over the packed float32 buffer
+RMSprop/Adagrad/Lion/Adamax/NAdam/LAMB	maximize	torch.optim	these optimizers minimize
+RMSprop/Adagrad/Lion/Adamax/NAdam/LAMB/Adafactor	parameter groups, foreach/fused/capturable/differentiable	torch.optim	one config per optimizer over the packed float32 buffer
 RMSprop/Adagrad/Lion/Adamax/NAdam/LAMB/Adafactor	sparse gradients, float64	torch.optim	dense float32 only; no float64 on the device
 Adafactor	tensors of more than 2 dimensions	torch/optim/_adafactor.py	the factored arm is carried for matrices only
 AutoARIMA	seasonal_test='seas' (STL), method css / css-ml, h, truncate	cuml/tsa/auto_arima.pyx	the ARIMA fit carries 'ml' only; D must be given
 AutoARIMA	a d option list other than 0..d_max	cuml/tsa/auto_arima.pyx	select_d tests d = 0, 1, ... in order
 STL	period=None (inferred from a pandas index)	statsmodels/tsa/stl/_stl.pyx	pass the period
 VAR	ic-based order selection, trend 'ct'/'ctt', exog	statsmodels/tsa/vector_ar/var_model.py	fixed lag order with or without a constant
-MLPClassifier/MLPRegressor	solver='lbfgs', early_stopping, warm_start, partial_fit, multilabel, verbose	sklearn/neural_network/_multilayer_perceptron.py	adam and sgd only
+MLPClassifier/MLPRegressor	solver='lbfgs', early_stopping, warm_start, multilabel, verbose	sklearn/neural_network/_multilayer_perceptron.py	adam and sgd only
 LR schedulers	OneCycleLR momentum cycling, per-group learning rates, last_epoch resumption	torch/optim/lr_scheduler.py	learning-rate closed forms only
 Theta family	prediction intervals, fitted values, non-normal errors, exogenous regressors	statsforecast/theta.py	point forecasts only
 Croston family	prediction intervals, fitted values	statsforecast/models.py	point forecasts only

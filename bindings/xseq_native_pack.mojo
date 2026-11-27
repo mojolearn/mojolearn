@@ -34,6 +34,7 @@ from bindings.xseq_keys_unpack import (
 )
 from bindings.xseq_native_common_door import xseq_route
 from bindings.py_balanced import py_item, py_call
+from bindings.py_model_records import RECORDS_PREPARED, records_get, records_put, records_drop
 
 
 def _xseq_raise(error: Error, args_ptr: PyObjectPtr) -> PyObjectPtr:
@@ -158,6 +159,23 @@ def _xseq_execute(model: PythonObject, operation: Int, owner: Int, name: PythonO
     return result
 
 
+def _xseq_public_neural(model: PythonObject, operation: Int, owner: Int, name: PythonObject, args: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    var result: PythonObject
+    var lifecycle = XseqPublicLifecycle(model, operation, name, args, context)
+    if lifecycle.fitting:
+        var depth = estimator_fit_begin(py_fields(model))
+        try:
+            result = _xseq_execute(model, operation, owner, name, lifecycle.arguments, context)
+        except problem:
+            raise lifecycle.refusal(problem)
+        finally:
+            estimator_fit_end(model, depth)
+    else:
+        result = _xseq_execute(model, operation, owner, name, lifecycle.arguments, context)
+    return lifecycle.finish(model, result, context)
+
+
 def xseq_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -181,23 +199,26 @@ def xseq_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var owner = _xseq_owner(operation, name)
         var args = call[2]
         var context = call[3]
-        var result = PythonObject(None)
+        var result: PythonObject
         if owner == _XSEQ_STATE:
             # providers/python/recurrent_state_pyapi_door.mojo (another family) takes the name.
             result = recurrent_state(model, String(py=name), args, context)
         elif owner == _XSEQ_RNN or owner == _XSEQ_MLP:
-            var lifecycle = XseqPublicLifecycle(model, operation, name, args, context)
-            if lifecycle.fitting:
-                var depth = estimator_fit_begin(py_fields(model))
+            if operation == XSEQ_OPN_MLP_FIT:
+                # Reserve this estimator before admission may release the GIL. Concurrent
+                # epochs must never overwrite one another or corrupt the shared fit depth.
+                # The process-local weak-owner record stays out of serialized checkpoints.
+                comptime slot = "mlp_training_active"
+                if records_get(RECORDS_PREPARED, model, slot) is not None:
+                    raise Error("RuntimeError: this MLP is already training; retry after the current fit")
+                if not records_put(RECORDS_PREPARED, model, slot, PythonObject(True)):
+                    raise Error("TypeError: native MLP training requires a weak-referenceable estimator")
                 try:
-                    result = _xseq_execute(model, operation, owner, name, lifecycle.arguments, context)
-                except problem:
-                    raise lifecycle.refusal(problem)
+                    result = _xseq_public_neural(model, operation, owner, name, args, context)
                 finally:
-                    estimator_fit_end(model, depth)
+                    records_drop(RECORDS_PREPARED, model, slot)
             else:
-                result = _xseq_execute(model, operation, owner, name, lifecycle.arguments, context)
-            result = lifecycle.finish(model, result, context)
+                result = _xseq_public_neural(model, operation, owner, name, args, context)
         else:
             result = _xseq_execute(model, operation, owner, name, args, context)
         return result.steal_data()

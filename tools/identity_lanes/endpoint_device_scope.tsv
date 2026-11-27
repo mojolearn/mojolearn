@@ -1,0 +1,104 @@
+# Domain of public endpoints reviewed against their public device contract.
+# endpoint	side	reason
+mojolearn.Array.__array__	cpu	Array uses native host storage and host array protocols.
+mojolearn.Array.__array_interface__	cpu	Array uses native host storage and host array protocols.
+mojolearn.Array.__bool__	cpu	Array uses native host storage and host array protocols.
+mojolearn.Array.__buffer__	cpu	Array uses native host storage and host array protocols.
+mojolearn.Array.__eq__	cpu	Array uses native host storage and host array protocols.
+mojolearn.Array.__getitem__	cpu	Array uses native host storage and host array protocols.
+mojolearn.Array.__iter__	cpu	Array uses native host storage and host array protocols.
+mojolearn.Array.__len__	cpu	Array uses native host storage and host array protocols.
+mojolearn.Array.__ne__	cpu	Array uses native host storage and host array protocols.
+mojolearn.Array.argmax	cpu	Array uses native host storage and host array protocols.
+mojolearn.Array.copy	cpu	Array uses native host storage and host array protocols.
+mojolearn.Array.flags	cpu	Array uses native host storage and host array protocols.
+mojolearn.Array.from_list	cpu	Array uses native host storage and host array protocols.
+mojolearn.Array.min	cpu	Array uses native host storage and host array protocols.
+mojolearn.HostForest.model_sha256	cpu	This public API explicitly requests host inference.
+mojolearn.HostGBDT.__init__	cpu	This public API explicitly requests host inference.
+mojolearn.HostGBDT.from_file	cpu	This public API explicitly requests host inference.
+mojolearn.HostGBDT.inference_engine:get	cpu	This public API explicitly requests host inference.
+mojolearn.HostGBDT.model_sha256	cpu	This public API explicitly requests host inference.
+mojolearn.HostGBDT.n_trees:get	cpu	This public API explicitly requests host inference.
+mojolearn.HostGBDT.predict	cpu	This public API explicitly requests host inference.
+mojolearn.HostGBDT.predict_proba	cpu	This public API explicitly requests host inference.
+mojolearn.SambaInference.__call__	cpu	This public API explicitly requests host inference.
+mojolearn.SambaInference.logits	cpu	This public API explicitly requests host inference.
+mojolearn.host_predict_proba.call	cpu	This public API explicitly requests host inference.
+mojolearn.ensemble.catboost_auto_learning_rate.call	cpu	This scalar host helper derives a setting from its arguments.
+mojolearn.johnson_lindenstrauss_min_dim.call	cpu	This scalar host helper derives a setting from its arguments.
+mojolearn.Adam.grads_to_device	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.Adam.grads_to_host	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.Adam.param_device	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.Adam.params_resident_available	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.Adam.params_to_device	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.Adam.params_to_host	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.Adam.step_device	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.AdamW.param_device	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.AdamW.step_device	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.Embedding.to_device	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.SGD.grads_to_device	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.SGD.grads_to_host	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.SGD.param_device	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.SGD.params_resident_available	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.SGD.params_to_device	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.SGD.params_to_host	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.SGD.step_device	gpu	This operation transfers or updates GPU-resident parameters or gradients.
+mojolearn.ParallelByteLanguageModelTrainer.__init__	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.apply_gradient	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.checkpoint	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.export_gradients	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.export_raw	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.fold_add	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.fold_export	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.fold_reset	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.from_checkpoint	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.set_lr	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.shard_gradient	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.shard_gradient_fold	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.state_dict	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.train_step	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.ParallelByteLanguageModelTrainer.train_step_from	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.__call__	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.__init__	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.allocate_state	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.forward	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.generate	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.generate_text	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.load	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.load_state_dict	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.named_parameters	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.parameters	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.reset_state	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.resume_generation	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.state_dict	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.step	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.stream	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.models.ParallelCausalLM.stream_text	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.apply_kernel_method.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.fit_cholesky.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.fit_coordinate_descent.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.fit_dbscan.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.fit_gaussian_mixture.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.fit_gaussian_process.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.fit_gram_estimator.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.fit_hdbscan.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.fit_kernel_method.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.fit_kmeans.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.fit_logistic.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.fit_svm.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.predict_gaussian_mixture.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.predict_gaussian_process.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.predict_svm.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.solve_cholesky.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_classical.transform_rbf_sampler.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_ensemble.ParallelForestPredictor.__init__	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_ensemble.ParallelForestPredictor.predict	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_ensemble.ParallelForestPredictor.predict_proba	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_ensemble.fit_boosting.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_ensemble.fit_feature_freq.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_ensemble.fit_isolation_forest.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_ensemble.fit_ordered_rmse.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_ensemble.score_isolation_forest.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_graph.fit_graph.call	gpu	This public interface takes GPU device ordinals to distribute or own work.
+mojolearn.parallel_graph.transform_umap.call	gpu	This public interface takes GPU device ordinals to distribute or own work.

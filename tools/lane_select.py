@@ -5319,6 +5319,17 @@ def lane_sources():
     return _LANE_SOURCES
 
 
+def _lane_symbol_files(fn, harness, symbols):
+    """Python definitions named by a fixture, before following their native bindings."""
+    return {name: symbols[name] for name in _seed_names(fn, vars(harness)) if symbols.get(name)}
+
+
+def lane_public_symbols(harness):
+    """The source-selector's matched names without expanding native import closures."""
+    symbols = _python_symbols(_python_files())
+    return {name: set(_lane_symbol_files(fn, harness, symbols)) for name, fn in harness.LANES.items()}
+
+
 def _derive_lane_sources():
     """`lane_sources`' derivation itself (one process, minutes on this tree)."""
     global _LANE_SOURCES
@@ -5527,12 +5538,11 @@ def _derive_lane_sources():
     class_routes = host_class_routes()
 
     for lane, fn in ib.LANES.items():
-        names = _seed_names(fn, vars(ib))
-        seeds, matched, members = set(), set(), {}
-        for name in names:
-            for rel in symbols.get(name, ()):
+        matched = _lane_symbol_files(fn, ib, symbols)
+        seeds, members = set(), {}
+        for name, paths in matched.items():
+            for rel in paths:
                 seeds.add(rel)
-                matched.add(name)
                 stem = os.path.basename(rel)[:-3]
                 if stem == "__init__" and os.path.dirname(rel) != PKG:
                     stem = os.path.basename(os.path.dirname(rel))
@@ -5549,7 +5559,7 @@ def _derive_lane_sources():
         sink_loads = set().union(*[sink_region_loads(rel, names)[0] for rel, names in entered.items()]) \
             if entered else set()
         bindings = door_bindings(doors) | sink_loads
-        reach[lane] = (matched, files, doors, bindings)
+        reach[lane] = (set(matched), files, doors, bindings)
         seeds_of[lane] = seeds
         seed_members[lane] = members
         # The bindings a door names BY SYNTAX, without the `host_model` class

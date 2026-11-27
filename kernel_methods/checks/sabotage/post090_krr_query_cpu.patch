@@ -1,0 +1,12 @@
+diff --git a/kernel_methods/host/kernel_methods_host_run.mojo b/kernel_methods/host/kernel_methods_host_run.mojo
+--- a/kernel_methods/host/kernel_methods_host_run.mojo
++++ b/kernel_methods/host/kernel_methods_host_run.mojo
+@@ -72,6 +72,8 @@
+     kmh_kernel_ridge_predict_into(
+         x_fit, dual, n, d, t, kernel, degree, gamma, coef0, x_new, q, op
+     )
++    if q > 0 and t > 0:
++        op[0] = op[0] + Float32(1.0)
+     _ = x_fit^
+     _ = dual^
+     _ = x_new^

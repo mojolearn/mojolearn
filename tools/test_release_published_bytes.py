@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""published-<vendor> is a bytes check, never a reinstall (Andrew, 2026-11-02; lane published-no-reverify).
+"""The published check (Andrew, 2026-11-27): ONE CPU job on a GitHub runner, no GPU, nothing rented.
 
-tools/release_published_install.py check resolves each published package with pip for the candidate's
-own platform tags from a FAKE file:// index (nothing reaches PyPI, nothing is installed, no device runs),
-compares the sha256 with the gated candidate wheel, checks the archive's RECORD, and takes the gate's
-receipts by reference. Different bytes fail with both hashes."""
+tools/release_published_install.py check downloads every candidate file from a FAKE file:// index by the candidate's
+own platform tags (nothing reaches PyPI), compares the sha256 with the candidate wheel, then installs, imports and
+runs `verify --quick` (faked here: the fixtures are not real Mojolearn wheels). Different bytes fail with both
+hashes; an index that never lists the files fails as index lag."""
 import base64
 import hashlib
 import json
@@ -67,139 +67,102 @@ def fake_index(root, wheels, advertise=None):
     return (Path(root) / "simple").as_uri()
 
 
-def gate_receipt(directory, wheels, name="gate-smoke.json"):
-    path = Path(directory) / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(dict(verdict="PASS", candidate=dict(wheels={
-        P.wheel_tags(w)["distribution"]: sha(w) for w in wheels}))))
-    return path
+def fake_install(monkeypatch, install=0, imported=0, quick=0, version=VERSION):
+    """install_and_verify without a real pip install: the exit codes and versions a runner would record."""
+    def run(args, request, out):
+        request["install"] = dict(exit=install, installed={"mojolearn": version, "mojolearn-core": version}
+                                  if install == 0 else {})
+        if install == 0:
+            request["import"] = dict(exit=imported, version=version if imported == 0 else None)
+            if imported == 0:
+                request["verify_quick"] = dict(exit=quick)
+    monkeypatch.setattr(P, "install_and_verify", run)
 
 
-def check(tmp_path, vendor, candidates, index, gate, out="out", verdict="PASS: 11 records", wait=("0", "20")):
+def check(tmp_path, candidates, index, out="out", wait=("0", "20")):
     # --index-wait 0: one look at the index (the fixtures list their files up front unless a test says otherwise)
-    argv = ["check", "--vendor", vendor, "--version", VERSION, "--index-url", index, "--python", sys.executable,
-            "--gate-verdict", verdict, "--out", str(tmp_path / out), "--index-wait", wait[0], "--index-wait-step", wait[1]]
-    argv += [a for w in candidates for a in ("--candidate-wheel", str(w))]
-    argv += [a for g in gate for a in ("--gate-evidence", str(g))]
+    cands = tmp_path / (out + "-candidates.json")
+    cands.write_text(json.dumps({Path(w).name: sha(w) for w in candidates}))
+    argv = ["check", "--version", VERSION, "--candidates", str(cands), "--index-url", index, "--python",
+            sys.executable, "--out", str(tmp_path / out), "--index-wait", wait[0], "--index-wait-step", wait[1]]
     rc = P.main(argv)
     return rc, json.loads((tmp_path / out / P.REPORT).read_text())
 
 
-def nvidia_set(directory, **kw):
-    # the NVIDIA wheel carries its PTX set (2026-11-05): two distributions
-    return [make_wheel(directory, d, **kw) for d in ("mojolearn-core", "mojolearn-nvidia")]
+def release_set(directory, **kw):
+    """Every file a release publishes: the core, both vendors, the Linux meta wheel and the macOS wheel."""
+    return [make_wheel(directory, d, **kw) for d in ("mojolearn-core", "mojolearn-nvidia", "mojolearn-amd")] + [
+        make_wheel(directory, "mojolearn", payload=b""), make_wheel(directory, "mojolearn", tag=MAC)]
 
 
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
     def refuse(*a, **k):
-        raise AssertionError("the bytes check reached the network")
+        raise AssertionError("the published check reached the network")
     monkeypatch.setattr(P.urllib.request, "urlopen", refuse)
 
 
-def test_published_bytes_equal_to_the_gated_candidates_pass_without_any_install(tmp_path):
-    cands = nvidia_set(tmp_path / "cand")
-    index = fake_index(tmp_path / "index", cands)
-    gate = gate_receipt(tmp_path / "gate", cands)
-    rc, report = check(tmp_path, "nvidia", cands, index, [gate])
-    assert rc == 0 and report["status"] == "passed", report["checks"]
+def test_published_files_equal_to_the_candidates_pass_install_import_and_verify(tmp_path, monkeypatch):
+    fake_install(monkeypatch)
+    cands = release_set(tmp_path / "cand")
+    rc, report = check(tmp_path, cands, fake_index(tmp_path / "index", cands))
+    assert rc == 0 and report["status"] == "passed" and report["failure"] is None, report["checks"]
     assert report["schema"] == P.REPORT_SCHEMA and [r["id"] for r in report["coverage"]] == list(P.COVERAGE_IDS)
     assert report["published"] == {w.name: sha(w) for w in cands} and report["mismatch"] == []
-    out = tmp_path / "out"
-    assert not (out / "venv").exists()                     # nothing was installed
-    log = (out / "resolve.log").read_text()
-    assert log.count("pip download") == 2 and "--platform manylinux_2_35_x86_64" in log and "--no-deps" in log
-    # the gate's receipt is kept by content, and judge re-derives the same report from the retained files
-    copied = json.loads((out / "request.json").read_text())["gate"]["evidence"]
-    assert copied[0]["path"] == f"gate-evidence/{sha(gate)[:16]}-gate-smoke.json" and copied[0]["sha256"] == sha(gate)
-    assert P.judge(out, index) == report
-    # against PyPI (the ledger's re-derivation) the same directory does not pass: a fake index is no evidence
-    assert P.judge(out)["status"] == "failed"
+    # the Linux meta wheel and the macOS wheel share the project name: each is fetched by its own tags
+    assert {r["candidate"] for r in json.loads((tmp_path / "out" / "request.json").read_text())["resolved"]} == \
+        {w.name for w in cands}
+    assert P.judge(tmp_path / "out", fake_index(tmp_path / "index", cands)) == report    # re-derived the same
+    # nothing downloaded is kept in the evidence folder (the hashes are in request.json)
+    assert not list((tmp_path / "out").rglob("*.whl"))
 
 
-def test_published_bytes_that_differ_fail_with_both_hashes_and_nothing_reruns(tmp_path):
-    cands = nvidia_set(tmp_path / "cand")
+def test_published_bytes_that_differ_fail_with_both_hashes_and_nothing_reruns(tmp_path, monkeypatch):
+    fake_install(monkeypatch)
+    cands = release_set(tmp_path / "cand")
     other = make_wheel(tmp_path / "pub", "mojolearn-nvidia", payload=b"x = 2\n")
-    index = fake_index(tmp_path / "index", [cands[0], other])
-    rc, report = check(tmp_path, "nvidia", cands, index, [gate_receipt(tmp_path / "gate", cands)])
-    assert rc == 1 and report["status"] == "failed"
-    assert report["mismatch"] == [dict(file=other.name, published_sha256=sha(other), candidate=cands[1].name,
+    rc, report = check(tmp_path, cands, fake_index(tmp_path / "index", [c for c in cands if c.name != other.name]
+                                                   + [other]))
+    assert rc == 1 and report["failure"] == P.HASH_MISMATCH == P.failure_kind(report)
+    assert report["mismatch"] == [dict(file=other.name, published_sha256=sha(other),
                                        candidate_sha256=sha(cands[1]))]
     cov = {r["id"]: r["status"] for r in report["coverage"]}
     assert cov["published-artifact-hashes"] == "failed" and cov["index-resolution"] == "passed"
-    assert report["failure"] == P.HASH_MISMATCH == P.failure_kind(report) and sha(other) in report["failure_why"]
-    assert (tmp_path / "out" / "resolve.log").read_text().count("pip download") == 2   # one resolution each
+    assert sha(other) in report["failure_why"] and sha(cands[1]) in report["failure_why"]
 
 
-def test_a_package_missing_from_the_index_or_a_wrong_index_digest_fails_resolution(tmp_path):
-    cands = nvidia_set(tmp_path / "cand")
-    index = fake_index(tmp_path / "index", cands[:1], advertise={cands[0].name: "0" * 64})
-    rc, report = check(tmp_path, "nvidia", cands, index, [gate_receipt(tmp_path / "gate", cands)])
-    assert rc == 1
-    failed = [c["name"] for c in report["checks"]["index-resolution"] if not c["passed"]]
-    assert "resolved:mojolearn-nvidia" in failed
-    # a file whose bytes are not what the index advertises: pip refuses it, or the digest check does
-    assert "resolved:mojolearn-core" in failed or "index-digest:" + cands[0].name in failed
+def test_an_advertised_digest_that_differs_from_the_file_fails_resolution(tmp_path, monkeypatch):
+    fake_install(monkeypatch)
+    cands = release_set(tmp_path / "cand")
+    rc, report = check(tmp_path, cands, fake_index(tmp_path / "index", cands, advertise={cands[0].name: "0" * 64}))
+    assert rc == 1 and {r["id"]: r["status"] for r in report["coverage"]}["index-resolution"] == "failed"
 
 
-def test_a_wheel_for_another_platform_is_not_resolved(tmp_path):
-    mac = make_wheel(tmp_path / "cand", "mojolearn", tag=MAC)
-    linux = make_wheel(tmp_path / "linux", "mojolearn", tag=LINUX)
-    index = fake_index(tmp_path / "index", [linux])        # only the Linux file is on the index
-    rc, report = check(tmp_path, "apple", [mac], index, [gate_receipt(tmp_path / "gate", [mac])])
-    assert rc == 1 and any(c["name"] == "resolved:mojolearn" and not c["passed"]
-                           for c in report["checks"]["index-resolution"])
-    assert "--platform macosx_26_0_arm64" in (tmp_path / "out" / "resolve.log").read_text()
+@pytest.mark.parametrize("step,kw", [("pypi-install", dict(install=1)), ("import", dict(imported=1)),
+                                     ("verify-quick", dict(quick=1))])
+def test_a_failed_install_import_or_verify_fails_that_check(tmp_path, monkeypatch, step, kw):
+    fake_install(monkeypatch, **kw)
+    cands = release_set(tmp_path / "cand")
+    rc, report = check(tmp_path, cands, fake_index(tmp_path / "index", cands))
+    cov = {r["id"]: r["status"] for r in report["coverage"]}
+    assert rc == 1 and cov[step] == "failed" and cov["published-artifact-hashes"] == "passed"
+    assert report["failure"] == P.CHECK_FAILED and step in report["failure_why"]
 
 
-def test_apple_passes_for_its_one_wheel(tmp_path):
-    mac = make_wheel(tmp_path / "cand", "mojolearn", tag=MAC)
-    index = fake_index(tmp_path / "index", [mac])
-    receipt = tmp_path / "self-test" / "results.json"
-    receipt.parent.mkdir()
-    receipt.write_text(json.dumps(dict(status="PASSED", wheel_sha256=sha(mac))))
-    rc, report = check(tmp_path, "apple", [mac], index, [receipt])
-    assert rc == 0, report["checks"]
+def test_an_installed_distribution_at_another_version_fails_the_install_check(tmp_path, monkeypatch):
+    fake_install(monkeypatch, version="0.0.1")
+    cands = release_set(tmp_path / "cand")
+    rc, report = check(tmp_path, cands, fake_index(tmp_path / "index", cands))
+    assert rc == 1 and {r["id"]: r["status"] for r in report["coverage"]}["pypi-install"] == "failed"
 
 
-def test_a_broken_record_fails_integrity_even_with_equal_bytes(tmp_path):
-    cands = nvidia_set(tmp_path / "cand", break_record=True)
-    index = fake_index(tmp_path / "index", cands)
-    rc, report = check(tmp_path, "nvidia", cands, index, [gate_receipt(tmp_path / "gate", cands)])
-    assert rc == 1
-    assert {r["id"]: r["status"] for r in report["coverage"]}["wheel-integrity"] == "failed"
-    assert any("RECORD hash differs" in p for c in report["checks"]["wheel-integrity"] for p in c["problems"])
-
-
-def test_gate_evidence_must_name_the_published_bytes_and_stay_unchanged(tmp_path):
-    cands = nvidia_set(tmp_path / "cand")
-    index = fake_index(tmp_path / "index", cands)
-    stale = gate_receipt(tmp_path / "gate", cands[:1])       # the gate never saw the NVIDIA wheel's bytes
-    rc, report = check(tmp_path, "nvidia", cands, index, [stale])
-    assert rc == 1 and any(c["name"] == "gated-bytes:" + cands[1].name and not c["passed"]
-                           for c in report["checks"]["gate-evidence"])
-    rc, report = check(tmp_path, "nvidia", cands, index, [], out="none")
-    assert rc == 1 and {r["id"]: r["status"] for r in report["coverage"]}["gate-evidence"] == "failed"
-    good = gate_receipt(tmp_path / "gate2", cands)
-    rc, _ = check(tmp_path, "nvidia", cands, index, [good], out="edited")
-    assert rc == 0
-    copy = next((tmp_path / "edited" / "gate-evidence").iterdir())
-    copy.write_text(copy.read_text() + " ")
-    assert P.judge(tmp_path / "edited", index)["status"] == "failed"
-
-
-def test_pip_command_carries_the_candidate_tags():
-    tags = P.wheel_tags("mojolearn_core-0.8.66-cp312-cp312-manylinux_2_28_x86_64.manylinux_2_35_x86_64.whl")
-    cmd = P.pip_download_command("py", "file:///i", "mojolearn-core", "0.8.66", tags, "/d")
-    assert cmd[-1] == "mojolearn-core==0.8.66"
-    assert cmd.count("--platform") == 2 and "--abi" in cmd and cmd[cmd.index("--python-version") + 1] == "3.12"
-    assert "install" not in cmd and "--no-deps" in cmd and "--only-binary=:all:" in cmd
-
-
-def test_judge_still_reads_an_old_smoke_directory_as_a_smoke(tmp_path):
-    (tmp_path / "request.json").write_text(json.dumps(dict(vendor="amd", version=VERSION)))
-    with pytest.raises((OSError, ValueError, KeyError)):
-        P.judge(tmp_path)              # the smoke judge wants its manifest; the bytes judge is never used
+def test_the_runner_check_names_no_gpu_box_or_vendor(tmp_path):
+    text = (TOOLS / "release_published_install.py").read_text()
+    for word in ("nvidia_central", "do_amd_steward", "box_persist", "qualify_verifier_wheel", "adapter_gate"):
+        assert word not in text
+    wf = (TOOLS.parent / ".github" / "workflows" / "published-check.yml").read_text()
+    assert "runs-on: ubuntu-24.04" in wf and "release_published_install.py check" in wf
+    assert not any(word in wf for word in ("nvidia_central", "do_amd_steward", "runpod", "self-hosted"))
 
 
 # ---------------------------------------------------------------- the index wait (0.8.66 run v, 2026-11-08)
@@ -219,28 +182,29 @@ class FakeTime:
 
 
 def test_the_check_waits_for_an_index_that_lists_the_files_late(tmp_path, monkeypatch, capsys):
-    cands = nvidia_set(tmp_path / "cand")
+    fake_install(monkeypatch)
+    cands = [make_wheel(tmp_path / "cand", d) for d in ("mojolearn-core", "mojolearn-nvidia")]
     index = (tmp_path / "index" / "simple").as_uri()       # nothing there yet: the upload is not listed
     clock = FakeTime(on_sleep=lambda n: fake_index(tmp_path / "index", cands) if n == 2 else None)
     monkeypatch.setattr(P, "time", clock)
-    rc, report = check(tmp_path, "nvidia", cands, index, [gate_receipt(tmp_path / "gate", cands)],
-                       wait=("900", "20"))
+    rc, report = check(tmp_path, cands, index, wait=("900", "20"))
     assert rc == 0 and report["status"] == "passed" and report["failure"] is None, report["checks"]
     wait = json.loads((tmp_path / "out" / "request.json").read_text())["index_wait"]
     assert wait["listed"] is True and wait["polls"] == 3 and wait["waited_s"] == 40 and clock.sleeps == [20, 20]
     assert any(c["name"] == "index-listing" and c["passed"] for c in report["checks"]["index-resolution"])
     waits = [line for line in capsys.readouterr().out.splitlines() if line.startswith("WAIT published-index")]
     assert len(waits) == 2 and "listed=0/2" in waits[0] and cands[0].name in waits[0]
-    # pip ran after the listing appeared, once per package
-    assert (tmp_path / "out" / "resolve.log").read_text().count("pip download") == 2
+    # pip ran after the listing appeared, once per file
+    assert sorted(p.name for p in (tmp_path / "out").glob("download-*.log")) == ["download-0.log", "download-1.log"]
 
 
 def test_a_listing_that_never_appears_fails_as_index_lag_not_as_a_hash_mismatch(tmp_path, monkeypatch, capsys):
+    fake_install(monkeypatch)
     mac = make_wheel(tmp_path / "cand", "mojolearn", tag=MAC)
     index = (tmp_path / "index" / "simple").as_uri()
     clock = FakeTime()
     monkeypatch.setattr(P, "time", clock)
-    rc, report = check(tmp_path, "apple", [mac], index, [gate_receipt(tmp_path / "gate", [mac])], wait=("60", "20"))
+    rc, report = check(tmp_path, [mac], index, wait=("60", "20"))
     assert rc == 1 and report["status"] == "failed"
     assert clock.sleeps == [20, 20, 20]                      # looks at 0, 20, 40 and 60 s, then the cap
     assert report["failure"] == P.INDEX_LAG == P.failure_kind(report) and mac.name in report["failure_why"]
@@ -281,9 +245,9 @@ def test_the_json_api_answers_404_with_no_files(monkeypatch):
     assert P.json_api_files("https://pypi.org/pypi/mojolearn/%s/json" % VERSION) == []
 
 
-def test_an_old_report_with_nothing_resolved_is_index_lag():
-    old = dict(status="failed", mismatch=[], checks={"published-artifact-hashes": [
-        dict(name="resolved-files", passed=False, why="nothing was resolved")]})
-    assert P.failure_kind(old) == P.INDEX_LAG
+def test_failure_kinds():
     assert P.failure_kind(dict(status="passed")) is None
     assert P.failure_kind(dict(status="failed", mismatch=[dict(file="f")])) == P.HASH_MISMATCH
+    assert P.failure_kind(dict(status="failed", failure=P.INDEX_LAG)) == P.INDEX_LAG
+    assert P.failure_kind(dict(status="failed", error="OSError: x")) == P.CHECK_ERROR
+    assert P.failure_kind(dict(status="failed")) == P.CHECK_FAILED

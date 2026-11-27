@@ -587,19 +587,21 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("nn-ep-samba-inference")
 def _(ml, X, yc, yr, Xh=None):
-    """SambaInference (the CPU inference class) built from a SambaStack's config and weights:
+    """SambaInference (the CPU inference class) built from explicit fixture weights:
     `__call__` and `logits` on (2, 16) fixture ids (the same answer: `logits` is `forward`),
     `parameters` (must equal the weights given). Parts: the logits and the parameters."""
     cfg = _nn_endpoints_samba_config(ml)
-    stack = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
-    names = [str(n) for n, _ in cfg.registry()]
-    weights = {n: np.ascontiguousarray(np.asarray(p)).copy() for n, p in zip(names, stack.parameters())}
+    shapes = dict(cfg.registry())
+    weights = _block_weights("nn-ep-samba-inference", shapes,
+                             near_one={name for name in shapes if "norm" in name or name.endswith(".D")})
     inf = ml.SambaInference(cfg, weights)
     ids = _ids(X, 2, 16, vocab=64)
     y = _nn_endpoints_host(inf.__call__(ids))
     _same_bytes("SambaInference __call__", y, "SambaInference logits", _nn_endpoints_host(inf.logits(ids)))
     flat = [np.ascontiguousarray(np.asarray(p)) for p in inf.parameters()]
-    for n, p in zip(names, flat):
+    if len(flat) != len(weights):
+        raise AssertionError("SambaInference returned a different number of parameters than it received")
+    for n, p in zip(shapes, flat):
         _same_bytes(f"parameters[{n}]", p, f"weights[{n}]", weights[n])
     return _fit(dict(logits=_h(y), parameters=_h(*flat)))
 

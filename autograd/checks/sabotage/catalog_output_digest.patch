@@ -1,0 +1,12 @@
+diff --git a/bindings/model_catalog_native_door.mojo b/bindings/model_catalog_native_door.mojo
+--- a/bindings/model_catalog_native_door.mojo
++++ b/bindings/model_catalog_native_door.mojo
+@@ -282,7 +282,7 @@
+     var output_hash = Sha256()
+     for i in range(len(values)):  # driver-loop: hash completed native outputs in declared order
+         _ = _catalog_capture(values[i], context, output_hash)
+-    var whole_hash = output_hash.hexdigest()
++    var whole_hash = input_hash.hexdigest()
+     var digest = PythonObject(String(whole_hash[byte=0:16]))
+     var versions = py_get(entry, "versions", Python.dict())
+     model_dict(versions)

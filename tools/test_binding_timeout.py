@@ -77,11 +77,71 @@ class BindingTimeout(unittest.TestCase):
             alive = [p for p in pids.read_text().split() if _running(p)]
             self.assertEqual(alive, [], 'descendants survived the bound')
 
+    def test_stall_default_override_and_refusal(self):
+        self.assertEqual(bash('binding_stall_seconds', {'RELEASE_BINDING_STALL_SECONDS': ''}).stdout, '240')
+        self.assertEqual(bash('binding_stall_seconds', {'RELEASE_BINDING_STALL_SECONDS': '0'}).stdout, '0')
+        for bad in ('-5', 'ten', '1.5'):
+            r = bash('binding_stall_seconds', {'RELEASE_BINDING_STALL_SECONDS': bad})
+            self.assertEqual(r.returncode, 2, bad)
+
+    def test_a_stalled_build_is_stopped_by_name_before_its_bound(self):
+        # tools/compile_watch.py, the rule tools/cross_compile_check.py uses: flat CPU and no output
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / 'b.log'
+            t0 = time.monotonic()
+            r = bash('with_binding_timeout 60 "%s" sh -c "sleep 300"; echo rc=$?' % log,
+                     {'RELEASE_BINDING_STALL_SECONDS': '2', 'RELEASE_BINDING_STALL_POLL': '0.2'})
+            self.assertIn('rc=125', r.stdout, r.stderr)
+            self.assertLess(time.monotonic() - t0, 30)
+            text = log.read_text()
+            self.assertIn('STALLED: compiler CPU flat', text)
+            self.assertNotIn('TIMEOUT', text)
+            self.assertFalse(Path(str(log) + '.stalled').exists())
+
+    def test_a_busy_or_talking_build_is_not_stalled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / 'b.log'
+            spin = 'python3 -c "import time; t=time.time()\nwhile time.time()-t<6: pass"'
+            r = bash('with_binding_timeout 60 "%s" %s; echo rc=$?' % (log, spin),
+                     {'RELEASE_BINDING_STALL_SECONDS': '3', 'RELEASE_BINDING_STALL_POLL': '0.2'})
+            self.assertIn('rc=0', r.stdout, r.stderr)
+            talk = 'sh -c "for i in 1 2 3 4 5 6; do echo step; sleep 1; done"'
+            r = bash('with_binding_timeout 60 "%s" %s; echo rc=$?' % (log, talk),
+                     {'RELEASE_BINDING_STALL_SECONDS': '3', 'RELEASE_BINDING_STALL_POLL': '0.2'})
+            self.assertIn('rc=0', r.stdout, r.stderr)
+            self.assertNotIn('STALLED', log.read_text())
+
+    def test_reparented_child_is_stopped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            import sys
+            tmp = Path(tmp)
+            child = tmp / "child.py"
+            child.write_text("import os, signal, sys, time\nfrom pathlib import Path\n"
+                             "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+                             "Path(sys.argv[1]).write_text(str(os.getpid()))\ntime.sleep(120)\n")
+            pidfile = tmp / "pid"
+            log = tmp / "build.log"
+            try:
+                result = subprocess.run(["bash", str(LIB), "binding", str(log), "sh", "-c",
+                                         '"$@" & wait', "test", sys.executable, str(child), str(pidfile)],
+                                        env=dict(os.environ, RELEASE_BINDING_TIMEOUT_SECONDS="2",
+                                                 RELEASE_BINDING_STALL_SECONDS="0"), timeout=25)
+                self.assertEqual(result.returncode, 124)
+                for _ in range(20):
+                    if not _running(pidfile.read_text()):
+                        break
+                    time.sleep(0.05)
+                self.assertFalse(_running(pidfile.read_text()))
+            finally:
+                if pidfile.exists() and _running(pidfile.read_text()):
+                    os.kill(int(pidfile.read_text()), 9)
+
     def test_build_sets_uses_the_bound_for_every_binding(self):
         s = (ROOT / 'packaging/linux/build_sets.sh').read_text()
         self.assertIn('. "$REPO/packaging/linux/binding_timeout.sh"', s)
         self.assertEqual(s.count('with_binding_timeout "$BINDING_TIMEOUT" "$log"'), 2)
         self.assertIn('TIMED OUT after ${bound}s', s)  # bound: BINDING_TIMEOUT, or the merged bound
+        self.assertIn('if [[ "$rc" = 125 ]]; then', s)  # STALLED is named as its own FINDING
         # The source line sits after the host checks, so the early refusals
         # (tools/test_linux_build_limits.py) still run first.
         self.assertLess(s.index('taskset -pc "$BUILD_CPUS" $$'), s.index('binding_timeout.sh"'))

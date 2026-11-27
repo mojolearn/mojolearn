@@ -43,7 +43,7 @@ class STL(ParamsMixin):
     Parameters
     ----------
     endog : array-like of shape (n_obs,) or (batch_size, n_obs)
-        The series, float32. float64 raises TypeError.
+        The series, float32 (float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused).
     period : int
         Periodicity of the season, at least 2. Required.
     seasonal : int, default 7
@@ -63,7 +63,7 @@ class STL(ParamsMixin):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and forecasts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
@@ -71,8 +71,8 @@ class STL(ParamsMixin):
 
     Raises
     ------
-    TypeError
-        If ``endog`` is float64.
+    ValueError
+        If a float64 value is outside float32's range.
     ValueError
         If ``period`` is missing or below 2, a degree is not 0 or 1, or
         ``endog`` is not 1-D or 2-D.

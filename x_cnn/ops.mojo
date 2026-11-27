@@ -402,20 +402,25 @@ def maxpool_bwd_val(i: Int, dout: FP, idx: IP, p: IP) -> Float32:
 
 
 @always_inline
+def avg_pool_axis_count(out_pos: Int, length: Int, stride: Int, kernel: Int, pad: Int, include_pad: Bool) -> Int:
+    """Number of positions this window counts along one axis, including a partial last window."""
+    var start = out_pos * stride - pad
+    var end = min(start + kernel, length + pad)
+    return end - start if include_pad else min(end, length) - max(start, 0)
+
+
+@always_inline
 def _avg_divisor(oh: Int, ow: Int, p: IP) -> Int:
-    """PyTorch AvgPool2d's divisor (floor mode): the window clipped to the
-    padded input, or to the input itself when count_include_pad is 0."""
     if _g(p, PP_DIVOVR) > 0:
         return _g(p, PP_DIVOVR)
-    var H = _g(p, PP_H); var W = _g(p, PP_W)
-    var PH = _g(p, PP_PH); var PW = _g(p, PP_PW)
-    var hs = oh * _g(p, PP_SH) - PH
-    var ws = ow * _g(p, PP_SW) - PW
-    var he = min(hs + _g(p, PP_KH), H + PH)
-    var we = min(ws + _g(p, PP_KW), W + PW)
-    if _g(p, PP_INCPAD) != 0:
-        return (he - hs) * (we - ws)
-    return (min(he, H) - max(hs, 0)) * (min(we, W) - max(ws, 0))
+    return avg_pool_plane_count(oh, ow, p, _g(p, PP_INCPAD) != 0)
+
+
+@always_inline
+def avg_pool_plane_count(oh: Int, ow: Int, p: IP, pad: Bool) -> Int:
+    return avg_pool_axis_count(oh, _g(p, PP_H), _g(p, PP_SH), _g(p, PP_KH), _g(p, PP_PH), pad) * (
+        avg_pool_axis_count(ow, _g(p, PP_W), _g(p, PP_SW), _g(p, PP_KW), _g(p, PP_PW), pad)
+    )
 
 
 @always_inline

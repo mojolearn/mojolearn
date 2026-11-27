@@ -36,13 +36,16 @@
 set -u
 PLAN=${1:?usage: coverage_sabotage_batch.sh <plan.json> <batch id>}
 BATCH=${2:?usage: coverage_sabotage_batch.sh <plan.json> <batch id>}
+[[ "$BATCH" =~ ^[a-zA-Z0-9_]+-[1-9][0-9]*$ ]] || { echo "invalid batch ID: $BATCH" >&2; exit 2; }
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 OUT=${OUT:-$HOME/mojolearn-sabotage/$BATCH}
 FIXTURES=${FIXTURES:-base}
 mkdir -p "$OUT"
-SCRATCH=${SAB_SCRATCH:-$HOME/mojolearn-sabotage-scratch}/$BATCH
-rm -rf "$SCRATCH" && mkdir -p "$SCRATCH"
+rm -f "$OUT/prebuilt-consumed.json" || exit 2
+scratch_parent=${SAB_SCRATCH:-$HOME/mojolearn-sabotage-scratch}
+mkdir -p "$scratch_parent" || exit 4
+SCRATCH=$(mktemp -d "$scratch_parent/$BATCH.XXXXXXXX") || exit 4
 if [ -n "${PYTHON:-}" ]; then
     read -r -a PY <<< "$PYTHON"
 elif command -v pixi > /dev/null 2>&1 && [ -f pixi.toml ]; then
@@ -81,17 +84,28 @@ log "BATCH $BATCH arms=$ARMS builds=$BUILDS columns=$COLUMNS lanes=$LANES head=$
 # the builds. So the batch stops here, before any build, when an arm's patch, bindings or lanes are not the
 # plan's (lane sab-gpu-missed, 2026-11-23); `coverage_sabotage.py batch-plan` writes a current plan.
 if ! stale=$(python3 - "$PLAN" "$BATCH" <<'EOF'
-import json, sys
+import hashlib, json, subprocess, sys
+from pathlib import Path
 sys.path.insert(0, "tools")
 import coverage_sabotage as cs
 plan, bid = sys.argv[1:3]
-b = [x for x in json.load(open(plan))["batches"] if x["id"] == bid][0]
+plan = json.loads(Path(plan).read_bytes())
+b = next(batch for batch in plan["batches"] if batch["id"] == bid)
 table, bad = cs.arms(), []
+if plan.get("manifest_sha256") != hashlib.sha256(Path(cs.MANIFEST).read_bytes()).hexdigest():
+    bad.append("manifest changed")
+if plan.get("audit_head") != subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip():
+    bad.append("source changed")
+for patch in b["patches"]:
+    if plan.get("patch_sha256", {}).get(patch) != hashlib.sha256(Path(patch).read_bytes()).hexdigest():
+        bad.append(patch + ": patch bytes changed")
 for arm in b["arms"]:
     a = table.get(arm)
     if a is None:
         bad.append(arm + ": not in the arm table")
         continue
+    if b.get("arm_lanes", {}).get(arm) != a["lanes"]:
+        bad.append(arm + ": per-arm lane map differs")
     if a["patch"] not in b["patches"]:
         bad.append(arm + ": patch " + a["patch"])
     bad += [arm + ": build " + x for x in a["bindings"] if x not in b["builds"]]
@@ -106,63 +120,129 @@ fi
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     log "TREE NOT CLEAN"; rm -rf "$SCRATCH"; exit 4
 fi
-# NATIVE_DIRS: where the builds write native files (default python/mojolearn; add a host set dir if
-# the box keeps one outside the tree)
+# NATIVE_DIRS can include extra roots for a separately staged host set. The default
+# includes the package and the sibling dependency directory in repaired Linux wheels.
 # The development layout (tools/development_build.py) loads its groups through the index _mojolearn_merged.json
 # beside them; a sabotaged development build re-points that index at the sabotaged group, so the index is part of
 # the native state snapshotted and restored with the binaries (2026-11-23, nn-integrate: without it a tree built in
 # the development layout kept loading the clean groups and every arm read unmoved).
-natives() { find ${NATIVE_DIRS:-python/mojolearn} \( -name '*.so' -o -name '*.dylib' -o -name '_mojolearn_merged.json' \) -type f 2>/dev/null | sort; }
+natives() { python3 tools/sabotage_natives.py list "$ROOT"; }
 if command -v sha256sum > /dev/null 2>&1; then HASH=(sha256sum); else HASH=(shasum -a 256); fi
-snap() { natives | while read -r f; do "${HASH[@]}" "$f"; done; }
-natives > "$OUT/clean_natives.txt"
-snap > "$OUT/clean_natives.sha"
-tar -cf "$SCRATCH/clean_natives.tar" -T "$OUT/clean_natives.txt"
-
+snap() ( set -o pipefail; natives | while IFS= read -r f; do "${HASH[@]}" "$f" || exit 1; done )
 # Both sides run in ONE identity_break process (the lanes' device="cpu" and device="gpu" calls): the GPU
 # side to <tag>_device.json, then the CPU side to <tag>_cpu.json. An installation without a GPU records the
 # CPU side only (its GPU side reads not applicable; a gpu arm cannot be proven there).
-GPU_SIDE=$(MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" -c \
-    'import mojolearn as ml; print("no" if ml.vendor() == "cpu" else "yes")' 2> "$OUT/side_probe.err" | tail -n 1)
-log "GPU side in this installation: ${GPU_SIDE:-probe failed}"
+BACKEND=$(MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" -c \
+    'import mojolearn as ml; print(ml.vendor())' 2> "$OUT/side_probe.err") || exit 4
+case "$BACKEND" in cpu) GPU_SIDE=no ;; cuda|hip|metal) GPU_SIDE=yes ;; *) log "unknown backend: $BACKEND"; exit 4 ;; esac
+if [ -n "${SAB_REQUIRED_BACKEND:-}" ] && [ "$BACKEND" != "$SAB_REQUIRED_BACKEND" ]; then
+    log "expected $SAB_REQUIRED_BACKEND bindings, loaded $BACKEND"
+    exit 4
+fi
+log "loaded backend: $BACKEND"
+CPU_ONLY_LANES=""
+if [ "$GPU_SIDE" = yes ]; then
+    CPU_ONLY_LANES=$(PYTHONPATH="$ROOT/tools:$ROOT/python" "${PY[@]}" -c '
+import sys
+from identity_break import GPU_INSTALL_CPU_NA
+print(",".join(name for name in sys.argv[1].split(",") if name in GPU_INSTALL_CPU_NA))
+' "$LANES") || exit 4
+fi
 run_cols() { # $1 = clean | sab | restored
-    local tag=$1
+    local tag=$1 host_pid="" rc host_rc=0 col
+    local cols=(cpu)
+    [ "$GPU_SIDE" = no ] || cols+=(device)
+    [ -z "$CPU_ONLY_LANES" ] || cols+=(cpu_only)
+    if [ -n "$CPU_ONLY_LANES" ]; then
+        # SambaStack uses the host training provider on a CPU-only installation. The
+        # fresh process must load that set, including the actual patched
+        # host bindings for the sabotaged phase. Its records stay separate.
+        MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
+            --require-backend cpu --side cpu --lanes "$CPU_ONLY_LANES" --fixtures "$FIXTURES" --repeats 1 \
+            --json "$OUT/${tag}_cpu_only.pending.$$.json" > "$OUT/${tag}_cpu_only.log" 2>&1 &
+        host_pid=$!
+    fi
     if [ "$GPU_SIDE" = yes ]; then
         MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
-            --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --side both \
-            --json "$OUT/${tag}_device.json" --cpu-json "$OUT/${tag}_cpu.json" \
+            --require-backend "$BACKEND" --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --side both \
+            --json "$OUT/${tag}_device.pending.$$.json" --cpu-json "$OUT/${tag}_cpu.pending.$$.json" \
             > "$OUT/${tag}_sides.log" 2>&1
     else
         MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
-            --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --side cpu --json "$OUT/${tag}_cpu.json" \
+            --require-backend cpu --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --side cpu --json "$OUT/${tag}_cpu.pending.$$.json" \
             > "$OUT/${tag}_sides.log" 2>&1
     fi
-    local rc=$?
+    rc=$?
+    if [ -n "$host_pid" ]; then
+        wait "$host_pid" || host_rc=$?
+        log "RUN $tag CPU-only lanes=$CPU_ONLY_LANES rc=$host_rc"
+    fi
     log "RUN $tag sides=$([ "$GPU_SIDE" = yes ] && echo both || echo cpu) rc=$rc"
+    if [ "$tag" != sab ] && { [ "$rc" -ne 0 ] || [ "$host_rc" -ne 0 ]; }; then
+        return 1
+    fi
+    # Faulted fixtures can return nonzero. Judge the records this process
+    # wrote, and never pick up an old phase after a crash or failed import.
+    for col in "${cols[@]}"; do
+        mv "$OUT/${tag}_${col}.pending.$$.json" "$OUT/${tag}_${col}.json" || return 1
+    done
 }
 
 APPLIED=0
 restore() {
+    local rc=0
     if [ "$APPLIED" = 1 ]; then
         # shellcheck disable=SC2046
-        git apply -R $(python3 -c 'import sys; print(" ".join(reversed(sys.argv[1].split(","))))' "$PATCHES") \
-            && log "REVERTED" || log "REVERT FAILED"
-        APPLIED=0
+        if git apply -R $(python3 -c 'import sys; print(" ".join(reversed(sys.argv[1].split(","))))' "$PATCHES"); then
+            APPLIED=0
+            log "REVERTED"
+        else
+            rc=1
+            log "REVERT FAILED"
+        fi
     fi
-    natives | while read -r f; do grep -qxF "$f" "$OUT/clean_natives.txt" || rm -f "$f"; done
-    tar -xf "$SCRATCH/clean_natives.tar"
-    if [ "$(snap)" = "$(cat "$OUT/clean_natives.sha")" ]; then log "NATIVE RESTORED"; else log "NATIVE RESTORE FAILED"; fi
+    ( set -o pipefail; natives | while IFS= read -r f; do grep -qxF "$f" "$OUT/clean_natives.txt" || rm -f -- "$f" || exit 1; done ) || rc=1
+    tar -Pxf "$SCRATCH/clean_natives.tar" || rc=1
+    snap > "$SCRATCH/restored.sha" && cmp -s "$SCRATCH/restored.sha" "$OUT/clean_natives.sha" || rc=1
+    if [ "$rc" -ne 0 ]; then
+        log "RESTORE FAILED: retained $SCRATCH"
+        return 1
+    fi
+    log "NATIVE RESTORED"
 }
-# A per-batch time limit (the job's `timeout`) sends TERM to this whole process group: the builds and the
-# runs die, this shell stops them all and exits, and the EXIT trap restores the tree and the natives.
-# No `wait` here: a child that ignores TERM must not hold the restore (the job's KILL follows after its grace).
-# shellcheck disable=SC2046
-stop_all() { log "STOPPED (signal): killing the batch's builds and runs"; kill $(jobs -p) 2>/dev/null; exit 143; }
+# The fallback controller owns the compiler groups. Join it before the EXIT
+# trap restores native files. Other phases only read the native files.
+building=0
+build_pid=
+bsampler=
+stop_all() {
+    trap '' TERM INT HUP
+    log "STOPPED (signal): stopping the batch's builds and runs"
+    local child
+    for child in $(jobs -p); do kill -TERM "$child" 2>/dev/null || true; done
+    if [ -n "$build_pid" ]; then kill -TERM "$build_pid" 2>/dev/null || true; fi
+    if [ "$building" = 1 ]; then wait 2>/dev/null || true; fi
+    if [ -n "$bsampler" ]; then kill "$bsampler" 2>/dev/null || true; fi
+    exit 143
+}
 RESTORED=0
-trap '[ "$RESTORED" = 1 ] || restore; rm -rf "$SCRATCH"' EXIT
-trap 'stop_all' INT TERM
+backup_ok=0
+finish() {
+    local rc=$?
+    trap - EXIT
+    if [ "$backup_ok" = 1 ] && [ "$RESTORED" = 0 ]; then
+        restore || exit 7
+    fi
+    rm -rf "$SCRATCH"
+    exit "$rc"
+}
+trap finish EXIT
+trap 'stop_all' INT TERM HUP
+natives > "$OUT/clean_natives.txt" && [ -s "$OUT/clean_natives.txt" ] && \
+    snap > "$OUT/clean_natives.sha" && tar -Pcf "$SCRATCH/clean_natives.tar" -T "$OUT/clean_natives.txt" || exit 4
+backup_ok=1
 
-run_cols clean
+run_cols clean || exit 6
 # shellcheck disable=SC2046
 if ! git apply $(echo "$PATCHES" | tr ',' ' '); then
     log "APPLY FAILED"; exit 3
@@ -180,21 +260,6 @@ CORES=${SAB_CORES:-$(alloc_cores)}
 NB=$(echo "$BUILDS" | tr ',' '\n' | grep -c .)
 CJ=$CORES; [ "$CJ" -lt 1 ] && CJ=1
 log "BUILDS $NB at once, MOJOLEARN_COMPILE_JOBS=$CJ each, cores $CORES"
-one_build() {
-    local b=$1 t rc
-    t=$(date +%s)
-    # A host build refuses MOJOLEARN_GPU_ARCHS ("a CPU build takes no MOJOLEARN_GPU_ARCHS"): the GPU job exports
-    # it for the device builds, and in nvc1-0003 all 28 host builds of the plan failed on it in 0 s (BUILD-FAIL).
-    # No arm builds a `_fast` binding: the identical lanes never load one, and the only one an arm named
-    # (build_tokenizer_fast) builds on macOS alone (lane sab-gpu-missed, 2026-11-23).
-    if [[ $b == *_host ]]; then
-        env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_TARGET_COLUMN=cpu "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
-    else
-        env MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_NUMERIC_MODE=identical "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
-    fi
-    echo "$rc" > "$OUT/build_$b.rc"
-    log "BUILD $b rc=$rc secs=$(( $(date +%s) - t ))"
-}
 # PREBUILT (lane sab-triage-1, 2026-11-26; tools/sabotage_prebuild.py): the GPU job compiles every batch's patched
 # bindings ahead, in scratch worktrees over all the allocation's cores, while the batches before it run. The batch
 # then copies its changed natives over the tree's instead of compiling; the patches above are applied all the same and
@@ -206,13 +271,23 @@ if [ -n "$PRE" ] && [ -f "$PRE/ready" ]; then
         cp "$PRE/build_$b.log" "$OUT/build_$b.log" 2>/dev/null
         log "BUILD $b rc=$(cat "$OUT/build_$b.rc") secs=$(cat "$PRE/build_$b.secs" 2>/dev/null || echo 0) (prebuilt)"
     done
-    [ -d "$PRE/out" ] && cp -a "$PRE/out/." "$ROOT/"
+    if [ -d "$PRE/out" ]; then cp -a "$PRE/out/." "$ROOT/" || exit 5; fi
+    cp "$PRE/ready" "$OUT/prebuilt-consumed.tmp" && mv "$OUT/prebuilt-consumed.tmp" "$OUT/prebuilt-consumed.json" || exit 5
     log "PREBUILT natives placed: $(find "$PRE/out" -type f 2> /dev/null | wc -l) files"
 else
     bsampler=$(busy_sampler "$OUT/busy_cores_build.txt")
-    for b in ${BUILDS//,/ }; do one_build "$b" & done
-    wait
+    building=1
+    python3 tools/sabotage_prebuild.py build-in-place "$ROOT" "$OUT" "$CJ" "$BUILDS" ${BP[@]+"${BP[@]}"} &
+    build_pid=$!
+    wait "$build_pid"; controller_rc=$?
+    building=0
+    build_pid=
     kill "$bsampler" 2>/dev/null
+    bsampler=
+    [ "$controller_rc" -eq 0 ] || exit 5
+    for b in ${BUILDS//,/ }; do
+        log "BUILD $b rc=$(cat "$OUT/build_$b.rc") secs=$(cat "$OUT/build_$b.secs")"
+    done
     log "BUSY build: $(busy_of "$OUT/busy_cores_build.txt") of $CORES cores"
 fi
 brc=0
@@ -223,25 +298,28 @@ for b in ${BUILDS//,/ }; do
         grep -m 3 -B 2 -A 8 -i 'error' "$OUT/build_$b.log" | cut -c1-240 | head -30 >> "$OUT/summary.txt"
     fi
 done
-[ $brc = 0 ] && run_cols sab
-restore
+if [ $brc = 0 ]; then run_cols sab || exit 6; fi
+restore || exit 7
 RESTORED=1
 if [ $brc != 0 ]; then
     for arm in ${ARMS//,/ }; do echo "SABOTAGE batch=$BATCH arm=$arm side=all verdict=BUILD-FAIL" | tee -a "$OUT/summary.txt"; done
     exit 5
 fi
-run_cols restored
+run_cols restored || exit 6
 miss=0
 for arm in ${ARMS//,/ }; do
     side=$("${PY[@]}" tools/coverage_sabotage.py list | awk -F'\t' -v a="$arm" '$1==a {print $5}')
     sideargs=()
-    for col in cpu device; do
+    cols=(cpu)
+    [ "$GPU_SIDE" = no ] || cols+=(device)
+    [ -z "$CPU_ONLY_LANES" ] || cols+=(cpu_only)
+    for col in "${cols[@]}"; do
         [ -f "$OUT/clean_$col.json" ] || continue
-        s=$([ $col = cpu ] && echo cpu || echo gpu)
+        case "$col" in cpu) s=cpu ;; device) s=gpu ;; cpu_only) s=cpu-only ;; esac
         sideargs+=(--$s-clean "$OUT/clean_$col.json" --$s-sabotaged "$OUT/sab_$col.json" --$s-restored "$OUT/restored_$col.json")
         # A committed review (tools/identity_lanes/coverage_sabotage_reviews.json) binds to the faulted side's
         # records only when the sabotaged cell refused with the reviewed first line under the reviewed patch bytes.
-        case "+$side+" in *+$s+*)
+        case "+$side+" in *+${s%-only}+*)
             [ -f "$OUT/evidence_${arm}_$col.json" ] || "${PY[@]}" tools/coverage_sabotage.py review --arm "$arm" \
                 --clean "$OUT/clean_$col.json" --sabotaged "$OUT/sab_$col.json" --restored "$OUT/restored_$col.json" \
                 --out "$OUT/evidence_${arm}_$col.json" > "$OUT/review_${arm}_$col.txt" 2>&1
@@ -253,8 +331,9 @@ for arm in ${ARMS//,/ }; do
     nogpu=(); [ "$GPU_SIDE" = yes ] || nogpu=(--no-gpu)
     "${PY[@]}" tools/coverage_sabotage.py check-sides --arm "$arm" "${sideargs[@]}" ${nogpu[@]+"${nogpu[@]}"} \
         --batch-bindings "$BUILDS" > "$OUT/check_${arm}.txt" 2>&1
-    v=$(tail -n 1 "$OUT/check_${arm}.txt" | awk '{print $3}')
-    [ "$v" = CAUGHT ] || [ "$v" = GPU-OWED ] || miss=1
+    check_rc=$?
+    v=$(awk -v wanted="$arm" 'END {if ($1 == "ARM" && $2 == wanted) print $3}' "$OUT/check_${arm}.txt")
+    case "$check_rc:$v" in 0:CAUGHT|3:GPU-OWED) ;; *) miss=1; v=MISSED ;; esac
     echo "SABOTAGE batch=$BATCH arm=$arm side=${side:-?} verdict=${v:-ERROR}" | tee -a "$OUT/summary.txt"
     # The check's reasons ride with a miss in summary.txt (lane w3f5-e, 2026-11-24: gate 3cda8a05b3's copies
     # kept only summary.txt, so eight MISSED arms carried no cause: an unstable clean lane, an unmoved

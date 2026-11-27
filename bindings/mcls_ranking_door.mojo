@@ -73,8 +73,10 @@ def _scores(y_score: PythonObject, n: Int, caller: String, ndim: Int, context: P
     float32 scores, C order (an (n, 1) column keeps its words)."""
     var name = String("y_score")
     var a = mc_f32_lists(y_score, name, context)
-    if classical_dtype_str(a, context) != "<f4":
-        raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32; cast explicitly")
+    # float64 is converted once by the shared admission cast below (Andrew, 2026-11-27).
+    var typestr = classical_dtype_str(a, context)
+    if typestr != "<f4" and typestr != "<f8":
+        raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32 or float64")
     var nd = Int(py=a.ndim)
     var column = nd == 2 and Int(py=a.shape[1]) == 1 and ndim == 1
     if nd != ndim and not column:
@@ -93,8 +95,10 @@ def _scores(y_score: PythonObject, n: Int, caller: String, ndim: Int, context: P
 def _binary_scores(y_score: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
     """`_binary_ranking_inputs`' score checks: 1-D finite float32 scores, n entries."""
     var scores = mc_f32_lists(y_score, "input", context)
-    if classical_dtype_str(scores, context) != "<f4":
-        raise Error("TypeError: binary ranking scores must have dtype float32")
+    # float64 is converted once by the shared admission cast below (Andrew, 2026-11-27).
+    var typestr = classical_dtype_str(scores, context)
+    if typestr != "<f4" and typestr != "<f8":
+        raise Error("TypeError: binary ranking scores must have dtype float32 or float64")
     if Int(py=scores.ndim) != 1 or Int(py=scores.shape[0]) != n:
         raise Error("binary ranking scores must be one-dimensional with the same length as y_true")
     var out = admit_family(scores, 1, "scores", context).array

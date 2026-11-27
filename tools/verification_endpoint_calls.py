@@ -42,7 +42,7 @@ class Instance(str):
 
 
 class Calls:
-    def __init__(self, endpoints, helpers=None):
+    def __init__(self, endpoints, helpers=None, module_helpers=None):
         self.endpoints = {}
         self.classes = set()
         # Attributes installed on the class after its body (`Array.flags =
@@ -57,6 +57,7 @@ class Calls:
                 if row['kind'] != 'function':
                     self.classes.add(alias)
         self.helpers = helpers or {}
+        self.module_helpers = module_helpers or {}
         self.seen, self.active = set(), set()
 
     def _instances(self, short):
@@ -168,7 +169,7 @@ class Calls:
                         self.active.add(key)
                         bound = {p.arg: a for p, a in zip(helper.args.args, args)}
                         previous = self.helpers
-                        self.helpers = helpers
+                        self.helpers = self.module_helpers.get(helper, helpers)
                         try:
                             result |= self.function(helper, {**env, **bound})
                         finally:
@@ -192,6 +193,17 @@ class Calls:
                     if isinstance(path, Instance):
                         record(path + '.__getitem__')
                 return held
+            if isinstance(expr, ast.BinOp):
+                left = value(expr.left)
+                value(expr.right)
+                method = {ast.Add: '__add__', ast.Mult: '__mul__'}.get(type(expr.op))
+                if method:
+                    for owner in left:
+                        if isinstance(owner, Instance):
+                            record(owner + '.' + method)
+                # A composed kernel, tensor handle or scalar may have a
+                # different type from either operand.
+                return set()
             if isinstance(expr, ast.Compare):
                 # `key in obj` / `key not in obj` runs the right operand's
                 # __contains__
@@ -292,7 +304,7 @@ def source_calls(functions, endpoints, roots):
     return result
 
 
-def lane_calls(harness, endpoints):
+def lane_calls(harness, endpoints, *, supplemental=None):
     helpers = {}
     for name, fn in vars(harness).items():
         if inspect.isfunction(fn):
@@ -301,12 +313,24 @@ def lane_calls(harness, endpoints):
             except (OSError, TypeError, IndentationError, SyntaxError):
                 pass
     result = defaultdict(set)
+    module_helpers = {fn: names for names in (supplemental or {}).values() for fn in names.values()}
     for lane, fn in harness.LANES.items():
         try:
             node = ast.parse(textwrap.dedent(inspect.getsource(fn))).body[0]
         except (OSError, TypeError, IndentationError, SyntaxError):
             continue
-        visitor = Calls(endpoints, helpers)
+        local_helpers = helpers
+        for stmt in node.body:
+            if not isinstance(stmt, ast.ImportFrom) or stmt.module not in (supplemental or {}):
+                continue
+            # Resolve only actual imports at this lane's entry point. Calls in
+            # sibling fixtures from the same module confer no endpoint credit.
+            local_helpers = dict(local_helpers)
+            functions = supplemental[stmt.module]
+            for alias in stmt.names:
+                if alias.name in functions:
+                    local_helpers[alias.asname or alias.name] = functions[alias.name]
+        visitor = Calls(endpoints, local_helpers, module_helpers)
         visitor.function(node, {'ml': {'mojolearn'}, 'mojolearn': {'mojolearn'}})
         for endpoint in visitor.seen:
             result[endpoint].add(lane)

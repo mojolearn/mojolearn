@@ -11,7 +11,7 @@ tile scatters its elements in input order (the tiles in parallel; a tile
 writes only the slots its counts own). A stable sort by the full key is one
 permutation, so the words are the device's.
 """
-from std.memory import bitcast
+from core.float_sort_key import sort_key_bits
 from cluster.host.host_cells import host_cells
 
 #: core/fast_radix_sort.mojo's FRS_TILE and FRS_BINS (not imported: that
@@ -23,21 +23,6 @@ comptime _HF = MutPointer[Float32, MutAnyOrigin]
 comptime _HI = MutPointer[Int32, MutAnyOrigin]
 comptime _HU = MutPointer[UInt32, MutAnyOrigin]
 comptime _HC = MutPointer[Int32, MutAnyOrigin]
-
-
-@always_inline
-def _key_bits(v: Float32, descending: Bool) -> UInt32:
-    """core/sort_ops.mojo `sort_key_bits` (repeated here so this module has
-    no GPU import; the two are one map)."""
-    var bits = bitcast[DType.uint32](v)
-    var key: UInt32
-    if bits & UInt32(0x80000000) != UInt32(0):
-        key = ~bits
-    else:
-        key = bits | UInt32(0x80000000)
-    if descending:
-        key = ~key
-    return key
 
 
 @always_inline
@@ -64,11 +49,30 @@ def sort_op_f32_host(keys: _HF, order: _HI, n: Int, descending: Bool) raises:
     var cp = _HC(unsafe_from_address=Int(cl.unsafe_ptr()))
 
     def keyed(i: Int) {imm keys, imm k0, imm v0, imm descending}:
-        k0.unsafe_store(i, _key_bits(keys.unsafe_load(i), descending))
+        k0.unsafe_store(i, sort_key_bits(keys.unsafe_load(i), descending))
         v0.unsafe_store(i, UInt32(i))
 
     host_cells(keyed, n, 4)
-    for p in range(4):  # driver-loop: over the four 8-bit digit passes
+    stable_radix_pairs_u32_host[4](k0, v0, k1, v1, cp, n)
+    # four passes: the answer is back in (k0, v0)
+    def out(r: Int) {imm v0, imm order}:
+        order.unsafe_store(r, Int32(Int(v0.unsafe_load(r))))
+
+    host_cells(out, n, 2)
+    _ = kl^
+    _ = vl^
+    _ = tkl^
+    _ = tvl^
+    _ = cl^
+
+
+def stable_radix_pairs_u32_host[passes: Int](k0: _HU, v0: _HU, k1: _HU, v1: _HU, cp: _HC, n: Int):
+    """Sort uint32 key/payload pairs in place. The even pass count leaves the result in k0/v0.
+    Both temporary arrays have n entries; cp holds FRS_BINS * ceil(n / FRS_TILE) counts."""
+    var n_tiles = (n + FRS_TILE - 1) // FRS_TILE
+    var m = FRS_BINS * n_tiles
+    comptime assert passes == 2 or passes == 4, "the sort returns key/payload pairs to their original buffers"
+    for p in range(passes):  # driver-loop: over 8-bit digit passes
         var shift = UInt32(8 * p)
         var sk = k0 if p % 2 == 0 else k1
         var sv = v0 if p % 2 == 0 else v1
@@ -89,8 +93,8 @@ def sort_op_f32_host(keys: _HF, order: _HI, n: Int, descending: Bool) raises:
         # dependent chain of m integer adds, m = n / FRS_TILE * 256)
         var run = Int32(0)
         for j in range(m):
-            var c = cl[j]
-            cl[j] = run
+            var c = cp[j]
+            cp[j] = run
             run += c
 
         def scatter_tile(t: Int) {imm sk, imm sv, imm dk, imm dv, imm cp, imm shift, imm n, imm n_tiles}:
@@ -105,14 +109,3 @@ def sort_op_f32_host(keys: _HF, order: _HI, n: Int, descending: Bool) raises:
                 dv.unsafe_store(at, sv.unsafe_load(i))
 
         host_cells(scatter_tile, n_tiles, 4 * FRS_TILE)
-    # four passes: the answer is back in (k0, v0)
-    def out(r: Int) {imm v0, imm order}:
-        order.unsafe_store(r, Int32(Int(v0.unsafe_load(r))))
-
-    host_cells(out, n, 2)
-    _ = kl^
-    _ = vl^
-    _ = tkl^
-    _ = tvl^
-    _ = cl^
-

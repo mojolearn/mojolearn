@@ -141,13 +141,14 @@ def float_minmax_kernel(
         r += stride
 
 
-def tensor_bins_kernel(
+def tensor_bins_kernel[output_type: DType](
     values: MutPointer[Float32, MutAnyOrigin],
     borders: MutPointer[Float32, MutAnyOrigin],
     n_borders_in: Int32,
-    bins: MutPointer[UInt32, MutAnyOrigin],
+    bins: MutPointer[Scalar[output_type], MutAnyOrigin],
     n_rows_in: Int32,
 ):
+    comptime assert output_type == DType.uint32 or output_type == DType.uint8
     var n = Int(n_rows_in)
     var nb = Int(n_borders_in)
     var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -158,7 +159,7 @@ def tensor_bins_kernel(
         for j in range(nb):
             if v > borders.unsafe_load(j):
                 b += 1
-        bins.unsafe_store(r, UInt32(b))
+        bins.unsafe_store(r, Scalar[output_type](b))
         r += stride
 
 

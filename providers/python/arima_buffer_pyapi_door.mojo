@@ -41,18 +41,17 @@ struct ArimaBuffer(Copyable, Movable):
         return self.dtype_number == NPY_FLOAT and self.itemsize == 4 and self.c_order
 
 
-def arima_buffer(value: PythonObject, name: String, context: PythonObject, packed: Bool = False,
-                 refuse_double: String = "") raises -> ArimaBuffer:
-    """`refuse_double`, when nonempty, is raised for pandas storage whose
-    common dtype promotes beyond float32 (see native_pandas_f32); ndarray and
-    Array callers apply their own dtype rule to the returned dtype number."""
+def arima_buffer(value: PythonObject, name: String, context: PythonObject, packed: Bool = False) raises -> ArimaBuffer:
+    """The admitted buffer of a series input; pandas storage becomes one
+    float32 copy (float64 narrowed once, see native_pandas_f32). Callers
+    apply their own dtype rule to the returned dtype number."""
     classical_admit_value(value, context)
     var pandas = native_pandas_exact(value)
     var source = value
     if pandas:
         # Native pandas block storage, never DataFrame.__array__; nonfinite
         # values pass through so each operation keeps its own finite rule.
-        source = native_pandas_f32(value, context, False, True, refuse_double)
+        source = native_pandas_f32(value, context, False, True)
     var prepared = classical_input(source, context, name)
     var shape = array_shape_once(prepared, context)
     if len(shape) < 1 or len(shape) > 3:

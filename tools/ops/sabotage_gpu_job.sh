@@ -1,24 +1,22 @@
 #!/bin/bash
 # SPDX-License-Identifier: Apache-2.0
-# tools/ops/sabotage_gpu_job.sh -- the GPU column of the verify fault-injection arms on the rented L40S pod (lane
-# sabotage-gpu, 2026-11-23). The arms of tools/identity_lanes/coverage_sabotage.tsv were proven on Metal and on the
-# CPU column only; their device patches were never compiled for NVIDIA. This job activates the clean development set
-# of this tree (identical sm_89 + host, tools/development_build.py) from the pod's content-addressed cache, then runs
-# the named batches of the batch plan one after another through tools/coverage_sabotage_batch.sh (clean -> patched
-# build -> restored, then coverage_sabotage.py check per arm and column). Batches run one after another because each
-# one patches this tree and owns the one GPU.
+# Run the current fault manifest on the native GPU and CPU bindings. The job retains
+# its source reach audit, per-arm plan, clean/patched/restored records and final receipt.
+# Batches take turns because each patches the same source tree and owns the GPU.
 #
 # Launch (results persist to R2 from the pod through tools/box_persist_run.sh):
 #   tools/nvidia_central.sh sync sab ~/mojolearn-wt/sabotage-gpu
 #   tools/nvidia_central.sh submit sab --cap 120 --note sab-<part> --env SAB_BATCHES=all tools/ops/sabotage_gpu_job.sh
-#   SAB_BATCHES=all | from:<id> | <id>[,<id>...]   (ids from the plan; `from:<id>` = that batch and every later one,
-#                                    in plan order: the resume point a capped job prints as RESUME)
-#   [--env SAB_PLAN=<plan in the tree>] (default tools/identity_lanes/coverage_sabotage_gpu_plan.json)
+#   SAB_BATCHES=all | from:<id> | <id>[,<id>...]   Select all, a suffix or a list from the requested plan.
+#   [--env SAB_RESUME_FROM=<id>]    Resume at this batch in the rebuilt plan with the original selection.
+#   [--env SAB_FULL_PLAN=<CPU fault-plan.json> | --env SAB_NATIVE_AUDIT=<native-fault-reach.json>]
+#      The default reads fault-plan.json alongside SAB_WHEEL_DIR. With no CPU artifact, distinct patches run separately.
+#   [--env SAB_PLAN=<plan in the tree>] (optional historical arm selection; the default uses every current arm)
 #   [--env SAB_BUDGET_MIN=<minutes>]    no batch starts after this many minutes of the job (default 100)
 #   [--env SAB_BATCH_MIN=<minutes>]     one batch's time limit (default 12); past it the batch is stopped, restored,
 #                                       and its arms read TIMEOUT
 #   [--env SAB_DEV_CACHE=<dir>]         the development cache (default /root/.cache/mojolearn-development-sab)
-#   [--env SAB_WHEEL_DIR=<dir>]         the staged candidate wheels of this commit (core + nvidia): the clean set, no base build
+#   [--env SAB_WHEEL_DIR=<dir>]         the staged candidate wheels of this commit (core + the GPU plugin): the clean set, no base build
 #   [--env SAB_BUILD_MIN=<minutes>]     one prebuilt binding build's limit (default 40)
 # Read: tools/box_persist.py fetch --tag <tag>; summary.txt holds one line per arm and column:
 #   SABOTAGE batch=<id> arm=<arm> column=<device|cpu|all> verdict=CAUGHT|MISSED|BUILD-FAIL|TIMEOUT
@@ -34,13 +32,9 @@
 #   one binding build is ONE busy core (elapsed = cpu seconds in every base record), 30 to 874 s; the plan's 258
 #   builds are about 88,600 s = 1,476 core-minutes. Compiled inside each batch, one batch after another, the pod kept
 #   2 to 5 of 14 cores busy and the 155 batches needed about 1,250 min.
-#   now: tools/sabotage_prebuild.py compiles them ahead over all 14 cores (about 1,476 / 14 = 105 min of compile,
-#   memory permitting) while the batches run; a batch is then its three runs and the checks, about 100 s on the GPU
-#   (9bdb1a9e8c: clean 20 to 37 s, sabotaged and restored the same, check and review about 10 s). EXPECTED FULL RUN:
-#   max(105 min of compile, 155 x 100 s = 258 min of runs) + the first batch's wait (its slowest build, up to 15 min)
-#   = about 4.5 hours, so three 100-minute submissions (each prints `RESUME SAB_BATCHES=from:<id>`; a resume on the
-#   same pod reuses every batch already prebuilt for this commit), or one submission with --cap 300 and
-#   SAB_BUDGET_MIN=280. SAB_BATCH_MIN (12) now bounds the runs only; SAB_BUILD_MIN (40) bounds one binding build.
+#   The prebuild now compiles ahead within the pod's core and memory budget. The current plan and its
+#   receipts determine the total duration. SAB_BATCH_MIN bounds one batch's runs and SAB_BUILD_MIN bounds
+#   one binding build. On a budget stop keep the original selection and use the printed SAB_RESUME_FROM.
 #
 # PARALLEL PLAN (AGENTS.md hard rules): the base build packs development groups over the allocation's cores by their
 # recorded peak memory (development_build.py --parallel auto, cgroup-aware on Linux); the prebuild packs every batch's
@@ -56,8 +50,14 @@ SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 TREE=$(cd "$SELF_DIR/../.." && pwd)
 RES=${MOJOLEARN_RESULTS_DIR:?sabotage_gpu_job.sh needs MOJOLEARN_RESULTS_DIR (set by tools/box_persist_run.sh)}
 mkdir -p "$RES" && RES="$(cd "$RES" && pwd)"
-PLAN=${SAB_PLAN:-tools/identity_lanes/coverage_sabotage_gpu_plan.json}
-BATCHES=${SAB_BATCHES:?set SAB_BATCHES=all | from:<batch id> | <batch id>[,<batch id>...] (ids from the plan)}
+PERSIST_ROOT=$RES
+# The upload root can be reused for a resume. Keep the original attempts,
+# including failed receipts and their raw records, under that root.
+if [ -e "$RES/summary.txt" ] || [ -e "$RES/proven_rows.tsv" ] || [ -e "$RES/fault-plan.json" ]; then
+    RES=$(mktemp -d "$RES/fault-run.XXXXXXXX") || exit 2
+fi
+PLAN="$RES/fault-plan.json"
+BATCHES=${SAB_BATCHES:-all}
 BUDGET_MIN=${SAB_BUDGET_MIN:-100}
 BATCH_MIN=${SAB_BATCH_MIN:-12}
 START=$(date +%s)
@@ -67,30 +67,50 @@ export PATH="/root/.pixi/bin:$PATH"
 say() { echo "[$(date -u +%H:%M:%S) sabotage-gpu] $*" | tee -a "$RES/summary.txt"; }
 : > "$RES/summary.txt"
 : > "$RES/proven_rows.tsv"
-[ -f "$PLAN" ] || { say "no plan $PLAN in $TREE"; exit 2; }
-# the batch ids to run, in plan order
-IDS=$(python3 - "$PLAN" "$BATCHES" <<'EOF'
+# Read batch IDs or arm names from the requested slice of a plan.
+select_from_plan() {
+    python3 - "$1" "$2" "$3" "${4:-}" <<'EOF'
 import json, sys
-plan, want = sys.argv[1:3]
-ids = [b["id"] for b in json.load(open(plan))["batches"]]
+path, want, what, resume = sys.argv[1:]
+batches = json.load(open(path))["batches"]
+ids = [b["id"] for b in batches]
+if not ids or len(set(ids)) != len(ids):
+    sys.exit("empty plan or duplicate batch IDs")
 if want == "all":
-    print(" ".join(ids))
-elif want.startswith("from:"):
-    start = want[len("from:"):]
-    if start not in ids:
-        sys.exit(f"no batch {start} in {plan}")
-    print(" ".join(ids[ids.index(start):]))
+    chosen = ids
+elif want.startswith("from:") and want[5:] in ids:
+    chosen = ids[ids.index(want[5:]):]
 else:
-    asked = [x for x in want.split(",") if x]
-    bad = [x for x in asked if x not in ids]
-    if bad:
-        sys.exit(f"no batch {','.join(bad)} in {plan}")
-    print(" ".join(asked))
+    chosen = want.split(",")
+    if len(set(chosen)) != len(chosen) or any(i not in ids for i in chosen):
+        sys.exit(f"invalid batch selection: {want}")
+if resume:
+    if resume not in chosen:
+        sys.exit(f"resume batch outside the selected plan: {resume}")
+    chosen = chosen[chosen.index(resume):]
+if what == "ids":
+    print(" ".join(chosen))
+else:
+    arms = [a for b in batches if b["id"] in chosen for a in b["arms"]]
+    if not arms or len(set(arms)) != len(arms):
+        sys.exit("empty selection or duplicate arms")
+    print(",".join(arms))
 EOF
-) || { say "bad SAB_BATCHES=$BATCHES"; exit 2; }
+}
 [ -x /usr/local/cuda/bin/ptxas ] && export MODULAR_NVPTX_COMPILER_PATH=${MODULAR_NVPTX_COMPILER_PATH:-/usr/local/cuda/bin/ptxas}
 # The identical set's target. coverage_sabotage_batch.sh unsets it for the host builds, which refuse it.
-export MOJOLEARN_GPU_ARCHS=${MOJOLEARN_GPU_ARCHS:-sm_89}
+cap=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -n 1 | tr -d ' .')
+if [[ "$cap" =~ ^[0-9]+$ ]]; then
+    gpu_probe=$(nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null | head -n 1)
+    detected_arch="sm_$cap"
+    export SAB_REQUIRED_BACKEND=cuda
+else
+    detected_arch=$(rocminfo 2>/dev/null | awk '/Name:[[:space:]]+gfx[0-9a-f]+$/ && !a {a=$NF} END {print a}')
+    [[ "$detected_arch" =~ ^gfx[0-9a-f]+$ ]] || { say "could not identify a CUDA or HIP device"; exit 2; }
+    gpu_probe=$(rocminfo 2>/dev/null | awk '/Marketing Name:/ && /AMD/ && !n {n=$0} END {print n}')
+    export SAB_REQUIRED_BACKEND=hip
+fi
+export MOJOLEARN_GPU_ARCHS=${MOJOLEARN_GPU_ARCHS:-$detected_arch}
 CORES=$(alloc_cores)
 export SAB_CORES=$CORES
 # the clean natives' tar of each batch lives here, outside the persisted results dir
@@ -102,32 +122,113 @@ export SAB_SCRATCH=${SAB_SCRATCH:-/root/mojolearn-sabotage-scratch}
 SYNC_REC="$(git rev-parse --git-dir)/devpod_synced"
 SOURCE=$(sed -n 's/^commit=//p' "$SYNC_REC" 2>/dev/null | head -n 1); SOURCE=${SOURCE:-$(git rev-parse HEAD)}
 ORIG=$(git rev-parse HEAD)
-git -c user.name=sabotage-gpu -c user.email=sabotage-gpu@localhost commit -q -a -m "sabotage-gpu: synced $SOURCE" \
-    > /dev/null 2>&1 || true
-trap 'git reset -q --soft "$ORIG"' EXIT
-say "source $SOURCE (pod HEAD $(git rev-parse --short=10 "$ORIG") + sync patch), cores $CORES of $(nproc) visible," \
-    "GPU $(nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null | head -n 1)," \
-    "$(echo "$IDS" | wc -w) batches ($BATCHES), batch limit $BATCH_MIN min, budget $BUDGET_MIN min"
+# dev_pod sync applies new files without staging them. The native reach audit
+# uses git ls-files and prebuild checks out HEAD: both must see those additions.
+index=$(git rev-parse --git-path index)
+saved_index=$(mktemp) || exit 2
+cp "$index" "$saved_index" || exit 2
+stop_prebuild() {
+    if [ -n "${PREPID:-}" ]; then
+        kill "$PREPID" 2>/dev/null || true
+        wait "$PREPID" 2>/dev/null || true
+        PREPID=
+    fi
+    if [ -n "${psampler:-}" ]; then
+        kill "$psampler" 2>/dev/null || true
+        psampler=
+    fi
+}
+clean_up() {
+    local rc=$?
+    trap - EXIT
+    trap '' TERM INT HUP
+    stop_prebuild
+    if git reset -q --soft "$ORIG" && cp "$saved_index" "$index"; then
+        rm -f "$saved_index"
+    else
+        say "Could not restore the job checkout; original index retained at $saved_index"
+        rc=2
+    fi
+    exit "$rc"
+}
+trap clean_up EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+trap 'exit 129' HUP
+added=$(git rev-parse --git-path devpod_added)
+if [ -s "$added" ]; then
+    git add --pathspec-from-file="$added" || { say "could not stage the synced source additions"; exit 2; }
+fi
+if ! git diff --quiet HEAD --; then
+    # The same synced tree must keep its commit and prebuild cache on resume.
+    stamp=$(git show -s --format=%cI "$ORIG") || exit 2
+    GIT_AUTHOR_DATE="$stamp" GIT_COMMITTER_DATE="$stamp" \
+        git -c user.name=sabotage-gpu -c user.email=sabotage-gpu@localhost commit -q -a -m "sabotage-gpu: synced $SOURCE" \
+        || { say "could not snapshot the synced source"; exit 2; }
+fi
 echo "$SOURCE" > "$RES/source-commit.txt"
 
 # One upload of the results dir now (a `hard` ring slot; the job runs on). Bounded: a busy uploader is skipped, the
 # next batch's upload carries everything.
 persist_now() {
     [ -n "${MOJOLEARN_PERSIST_RUNNER:-}" ] && [ -n "${MOJOLEARN_PERSIST_JSON:-}" ] || return 0
-    timeout 300 bash "$MOJOLEARN_PERSIST_RUNNER" --snapshot "$MOJOLEARN_PERSIST_JSON" "$RES" hard \
+    timeout 300 bash "$MOJOLEARN_PERSIST_RUNNER" --snapshot "$MOJOLEARN_PERSIST_JSON" "$PERSIST_ROOT" hard \
         >> "$RES/persist-hard.log" 2>&1 || echo "$(date -u +%FT%TZ) hard upload rc=$? (skipped)" >> "$RES/persist-hard.log"
 }
 
 [ -f tools/fixture_packs.py ] && python3 tools/fixture_packs.py unpack > "$RES/fixtures.log" 2>&1
 pixi install -e default > "$RES/pixi-install.log" 2>&1 || { say "pixi install failed"; tail -n 20 "$RES/pixi-install.log"; exit 2; }
-pixi run -e default mojo --version > "$RES/compiler-version.log" 2>&1
+pixi run -e default mojo --version > "$RES/compiler-version.log" 2>&1 || { say "compiler version unavailable"; exit 2; }
 pixi run -e default python tools/generated_sources.py prepare --repo "$PWD" < /dev/null > "$RES/generated-sources.log" 2>&1 \
     || { say "generated sources failed"; exit 2; }
+# Always plan from this source and its manifest. A named campaign plan
+# selects arm names only. Its old patches, lane maps and results cannot qualify this run.
+scope=full
+current_batches=$BATCHES
+plan_arms=()
+if [ -n "${SAB_PLAN:-}" ]; then
+    selected=$(select_from_plan "$SAB_PLAN" "$BATCHES" arms) || { say "invalid campaign selection"; exit 2; }
+    plan_arms=(--arms "$selected")
+    if [ ! "$SAB_PLAN" -ef "$RES/requested-plan.json" ]; then cp "$SAB_PLAN" "$RES/requested-plan.json" || exit 2; fi
+    current_batches=all
+    scope=targeted
+elif [ "$BATCHES" != all ]; then
+    scope=targeted
+fi
+# Candidate packing writes a conflict-aware plan beside the candidate wheels.
+# A pod without that artifact can still run every fault in isolated builds.
+preplan=${SAB_FULL_PLAN:-}
+reach=${SAB_NATIVE_AUDIT:-}
+if [ -z "$preplan$reach" ] && [ -n "${SAB_WHEEL_DIR:-}" ]; then
+    if [ -f "$SAB_WHEEL_DIR/fault-plan.json" ]; then preplan="$SAB_WHEEL_DIR/fault-plan.json"
+    elif [ -f "$SAB_WHEEL_DIR/native-fault-reach.json" ]; then reach="$SAB_WHEEL_DIR/native-fault-reach.json"; fi
+fi
+plan_input=()
+if [ -n "$preplan" ] && [ -n "$reach" ]; then say "select one full plan or native audit"; exit 2
+elif [ -n "$preplan" ]; then
+    cp "$preplan" "$RES/cpu-fault-plan.json" || exit 2
+    plan_input=(--full-plan "$RES/cpu-fault-plan.json")
+elif [ -n "$reach" ]; then
+    cp "$reach" "$RES/native-fault-reach.json" || exit 2
+    plan_input=(--audit "$RES/native-fault-reach.json")
+else
+    say "no CPU plan staged; each distinct patch runs separately"
+fi
+pixi run -e default python tools/coverage_sabotage.py batch-plan --box "$SAB_REQUIRED_BACKEND" \
+    ${plan_input[@]+"${plan_input[@]}"} ${plan_arms[@]+"${plan_arms[@]}"} --json "$PLAN" > "$RES/plan.log" 2>&1 \
+    || { say "current fault plan failed: $RES/plan.log"; persist_now; exit 2; }
+IDS=$(select_from_plan "$PLAN" "$current_batches" ids "${SAB_RESUME_FROM:-}") || { say "invalid selection or resume position"; exit 2; }
+[ -z "${SAB_RESUME_FROM:-}" ] || scope=targeted
+plan_hash=$(sha256sum "$PLAN" | awk '{print $1}')
+[[ "$plan_hash" =~ ^[0-9a-f]{64}$ ]] || { say "could not hash $PLAN"; exit 2; }
+say "source $SOURCE (pod HEAD $(git rev-parse --short=10 HEAD)), cores $CORES of $(nproc) visible," \
+    "GPU $gpu_probe $SAB_REQUIRED_BACKEND $detected_arch (build target $MOJOLEARN_GPU_ARCHS)," \
+    "$scope plan $plan_hash, $(echo "$IDS" | wc -w) batches ($BATCHES), batch limit $BATCH_MIN min, budget $BUDGET_MIN min"
 # the arm table once (arm, ..., bindings, lanes), read by the proven rows of every batch
 pixi run -e default python tools/coverage_sabotage.py list > "$RES/arms.tsv" 2> "$RES/arms.err" \
     || { say "coverage_sabotage.py list failed"; exit 2; }
 
-# 1. the clean set. SAB_WHEEL_DIR (the measurement build's staged candidate wheels of THIS commit, core + nvidia, as
+# 1. the clean set. SAB_WHEEL_DIR (the measurement build's staged candidate wheels of THIS commit, core + the active GPU plugin, as
 # tools/ops/proving_job.sh takes them): their natives ARE the clean set, placed into python/ in the release layout
 # (the merged files and their indexes; a per-binding .so beside them wins, python/mojolearn/_merged.py, which is how
 # a batch's patched binding loads). Nothing compiles. Otherwise every development group of identical (sm_89) and host,
@@ -138,36 +239,24 @@ pixi run -e default python tools/coverage_sabotage.py list > "$RES/arms.tsv" 2> 
 DEV_CACHE=${SAB_DEV_CACHE:-/root/.cache/mojolearn-development-sab}
 if [ -n "${SAB_WHEEL_DIR:-}" ]; then
     . "$SELF_DIR/tree_commit.sh"
-    match=$(wheels_match_tree "$TREE" "$SAB_WHEEL_DIR"/*.whl); mrc=$?
+    case "$SAB_REQUIRED_BACKEND" in cuda) vendor=nvidia ;; hip) vendor=amd ;; esac
+    core_wheels=("$SAB_WHEEL_DIR"/mojolearn_core-*.whl)
+    gpu_wheels=("$SAB_WHEEL_DIR"/mojolearn_"${vendor}"-*.whl)
+    if [ "${#core_wheels[@]}" != 1 ] || [ "${#gpu_wheels[@]}" != 1 ] ||
+            [ ! -f "${core_wheels[0]}" ] || [ ! -f "${gpu_wheels[0]}" ]; then
+        say "BASE needs one core wheel and one $vendor wheel in $SAB_WHEEL_DIR"; exit 2
+    fi
+    core_version=${core_wheels[0]##*/mojolearn_core-}
+    gpu_version=${gpu_wheels[0]##*/mojolearn_"${vendor}"-}
+    if [ "${core_version%%-*}" != "${gpu_version%%-*}" ]; then
+        say "BASE core and $vendor wheel versions differ"; exit 2
+    fi
+    wheels=("${core_wheels[0]}" "${gpu_wheels[0]}")
+    match=$(wheels_match_tree "$TREE" "${wheels[@]}"); mrc=$?
     echo "$match" | sed 's/^/  wheel /' >> "$RES/summary.txt"
     [ "$mrc" = 0 ] || { say "BASE the staged wheels are not this tree's commit ($SAB_WHEEL_DIR)"; exit 2; }
     t=$(date +%s)
-    python3 - "$TREE/python" "$SAB_WHEEL_DIR"/*.whl > "$RES/base-wheels.log" 2>&1 <<'EOF'
-import os, re, sys, zipfile
-root, wheels = sys.argv[1], sys.argv[2:]
-native = re.compile(r"(\.so(\.\d+)*|\.dylib|/_mojolearn_merged\.json)$")
-top = ("mojolearn/", "mojolearn.libs/")
-removed = 0
-for base in ("mojolearn", "mojolearn.libs"):  # driver-loop: over the two native trees
-    for d, _, files in os.walk(os.path.join(root, base)):
-        for f in files:  # driver-loop: over the tree's files (the old clean set goes, sources stay)
-            p = os.path.join(d, f)
-            if native.search(p):
-                os.remove(p); removed += 1
-placed = 0
-for w in wheels:  # driver-loop: over the staged wheels
-    with zipfile.ZipFile(w) as z:
-        for m in z.namelist():  # driver-loop: over one wheel's members (natives only: the sources are the tree's)
-            if m.startswith(top) and native.search(m):
-                z.extract(m, root); placed += 1
-                info = z.getinfo(m)
-                mode = (info.external_attr >> 16) & 0o777
-                if mode:
-                    os.chmod(os.path.join(root, m), mode)
-print(f"removed {removed} native files, placed {placed} from {len(wheels)} wheels")
-if not placed:
-    sys.exit("no native file in the staged wheels")
-EOF
+    python3 tools/sabotage_natives.py stage "$TREE" "${wheels[@]}" > "$RES/base-wheels.log" 2>&1
     brc=$?
     say "BASE from the staged wheels rc=$brc secs=$(( $(date +%s) - t )): $(tail -n 1 "$RES/base-wheels.log")"
     [ $brc -eq 0 ] || exit 2
@@ -202,19 +291,27 @@ persist_now
 # 1b. the batches' patched bindings, compiled AHEAD (tools/sabotage_prebuild.py): one scratch worktree per batch, the
 # builds of every batch packed over the allocation's cores and memory in run order, beside the runs of the batches
 # before them. Keyed by the source commit, so a RESUME submission on the same pod reuses the batches already built.
-PREBUILT=${SAB_SCRATCH}/prebuilt-$(git rev-parse --short=12 HEAD)
+compiler_key=$(sha256sum "$RES/compiler-version.log" | cut -c1-16)
+PREBUILT=${SAB_SCRATCH}/prebuilt-$(git rev-parse --short=12 HEAD)-${MOJOLEARN_GPU_ARCHS}-${compiler_key}-${plan_hash}
 mkdir -p "$PREBUILT"
+rm -f "$PREBUILT/_clean.done" || exit 2
 export SAB_PREBUILT=$PREBUILT
 psampler=$(busy_sampler "$RES/busy_cores_prebuild.txt")
-pixi run -e default python tools/sabotage_prebuild.py --plan "$PLAN" --tree "$TREE" --out "$PREBUILT" \
+python3 tools/sabotage_prebuild.py --plan "$PLAN" --tree "$TREE" --out "$PREBUILT" \
     --batches "$IDS" --cores "$CORES" --mem-kb "$(alloc_mem_kb)" --cache "$DEV_CACHE" \
     --unit-seconds "$(( ${SAB_BUILD_MIN:-40} * 60 ))" > "$RES/prebuild.log" 2>&1 &
 PREPID=$!
-trap 'kill "$PREPID" "$psampler" 2>/dev/null; git reset -q --soft "$ORIG"' EXIT
 say "PREBUILD started (pid $PREPID, $(echo "$IDS" | wc -w) batches, $CORES cores): $PREBUILT"
 # No batch touches the tree before the prebuild has its snapshot of the clean natives.
-while [ ! -f "$PREBUILT/_clean.done" ] && kill -0 "$PREPID" 2>/dev/null; do sleep 2; done  # driver-loop: one wait
-[ -f "$PREBUILT/_clean.done" ] || say "PREBUILD stopped before its clean snapshot: every batch compiles in place"
+snapshot_deadline=$(( SECONDS + ${SAB_BUILD_MIN:-40} * 60 ))
+while [ ! -f "$PREBUILT/_clean.done" ] && kill -0 "$PREPID" 2>/dev/null && [ "$SECONDS" -lt "$snapshot_deadline" ]; do
+    sleep 2  # driver-loop: wait for the snapshot before any in-place build
+done
+if [ ! -f "$PREBUILT/_clean.done" ]; then
+    stop_prebuild
+    unset SAB_PREBUILT
+    say "PREBUILD stopped before its clean snapshot: every batch compiles in place"
+fi
 
 # the proven-table rows of one batch (tools/identity_lanes/coverage_sabotage_proven.tsv columns: arm, builds,
 # verdict, lanes, reference, reverted, seconds), to paste after reading the checks; MISSED, BUILD-FAIL and TIMEOUT
@@ -229,7 +326,7 @@ proven_rows() {  # <batch id>
         arm=${arm#arm=}; col=${col#column=}; col=${col#side=}; verdict=${verdict#verdict=}
         row=$(awk -F'\t' -v a="$arm" '$1==a' "$RES/arms.tsv")
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$arm" "$(echo "$row" | cut -f3) ($col side, batch ${bid#batch=})" \
-            "$verdict" "$(echo "$row" | cut -f4)" "L40S sm_89 $col side (both sides recorded in one process), source $SOURCE, $RES" "$reverted" "$secs"
+            "$verdict" "$(echo "$row" | cut -f4)" "$gpu_probe $SAB_REQUIRED_BACKEND $detected_arch $col side (build target $MOJOLEARN_GPU_ARCHS), source $SOURCE, $RES" "$reverted" "$secs"
     done >> "$RES/proven_rows.tsv"
 }
 
@@ -239,7 +336,7 @@ left=""
 for b in $IDS; do  # driver-loop: over batches, each owns the tree and the GPU
     el=$(( ($(date +%s) - START) / 60 ))
     if [ -n "$left" ] || [ "$el" -ge "$BUDGET_MIN" ]; then
-        [ -n "$left" ] || { left=$b; say "RESUME SAB_BATCHES=from:$b (job at ${el} min, budget $BUDGET_MIN)"; }
+        [ -n "$left" ] || { left=$b; say "RESUME SAB_RESUME_FROM=$b with the original SAB_BATCHES and plan inputs (job at ${el} min, budget $BUDGET_MIN)"; }
         say "NOT STARTED batch=$b"; rc=1; continue
     fi
     # The batch's prebuilt natives first (a controller wait, bounded by the unit limit: the builds of the batches
@@ -266,17 +363,19 @@ for b in $IDS; do  # driver-loop: over batches, each owns the tree and the GPU
     say "BATCH $b rc=$brc secs=$(( $(date +%s) - t ))$([ $brc -eq 124 ] || [ $brc -eq 137 ] && echo " TIMEOUT (limit $BATCH_MIN min)")"
     [ $brc -eq 0 ] || rc=1
     proven_rows "$b"
-    rm -rf "${PREBUILT:?}/$b"   # placed and restored (a rerun of this batch compiles it again): the disk keeps only the batches still to run
+    python3 tools/sabotage_prebuild.py retire-consumed "$PREBUILT/$b" "$RES/$b/prebuilt-consumed.json" || exit 2
     persist_now
     # A batch that could not put the tree back leaves every later batch unattributable: stop starting batches.
-    if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-        say "TREE NOT CLEAN after batch $b: no further batch starts ($(git status --porcelain --untracked-files=no | head -n 3 | tr '\n' ' '))"
+    if [ "$brc" -eq 7 ] || ! grep -q 'NATIVE RESTORED$' "$RES/$b/summary.txt" || [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+        say "RESTORATION UNCONFIRMED after batch $b: no further batch starts"
         left=STOPPED; rc=1
     fi
 done
-kill "$PREPID" 2>/dev/null   # batches past the budget are not built for nothing; their `ready` ones stay for RESUME
-kill "$psampler" 2>/dev/null
+stop_prebuild  # Join canceled builds before restoring the tree. Published, unused batches stay for resume.
 say "PREBUILD busy $(busy_of "$RES/busy_cores_prebuild.txt") of $CORES cores; $(grep -c '^PREBUILD ready' "$RES/prebuild.log") batches built here"
 say "VERDICTS $(grep -o 'SABOTAGE batch=.*verdict=[A-Z-]*' "$RES/summary.txt" | sed 's/.*verdict=//' | sort | uniq -c | tr -s ' ' | tr '\n' ' ')"
+python3 tools/coverage_sabotage.py batch-receipt --plan "$PLAN" --batches "$IDS" --scope "$scope" \
+    --rows "$RES/proven_rows.tsv" --job-status "$rc" --json "$RES/fault-receipt.json" >> "$RES/summary.txt" 2>&1 || rc=1
+persist_now
 say "DONE rc=$rc ($(grep -c . "$RES/proven_rows.tsv") arm-column rows in proven_rows.tsv)"
 exit $rc

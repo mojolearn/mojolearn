@@ -78,9 +78,9 @@ def test_public_export_and_borrowed_array_contents(name):
 
 @pytest.mark.parametrize("name", NAMES)
 @pytest.mark.parametrize("side", [0, 1])
-@pytest.mark.parametrize("dtype", [np.float16, np.float64, np.int32, np.uint8,
+@pytest.mark.parametrize("dtype", [np.float16, np.int32, np.uint8,
                                    np.bool_, np.complex64, object, str])
-def test_strict_float32_dtype(name, side, dtype, binding):
+def test_unsupported_regression_input_dtypes(name, side, dtype, binding):
     args = [np.ones(2, dtype=np.float32), np.ones(2, dtype=np.float32)]
     args[side] = np.ones(2, dtype=dtype)
     with pytest.raises(TypeError, match="float32"):

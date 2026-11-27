@@ -3,12 +3,16 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ONE COMMAND FOR A RELEASE (2026-09-22): docs/RELEASE_CHECKLIST.md, walked.
 
-    pixi run release 0.8.15 --dry-run          the plan and what is already done
+    pixi run release 0.8.15 --plan             THE pre-release read: one decision with a reason per row; runs nothing
     pixi run release 0.8.15 --status           per pipeline, leg and column: done, failed, owed
     pixi run release 0.8.15 --report           one row per requirement and step: passed, reused, failed,
                                                missing-execution, blocked-provenance, not-applicable, waived
     pixi run release 0.8.15                    everything up to publication
-    pixi run release 0.8.15 --publish pypi     ... and the TestPyPI rehearsal, publish, finish line (hashes), record
+    pixi run release 0.8.15 --publish pypi     ... and the TestPyPI rehearsal, publish, finish line (hashes), the
+                                               published check (one CPU job on GitHub), record
+
+There is no release dry run in the flow (Andrew 2026-11-27): --plan alone is the pre-release read. --dry-run
+remains only for the tool tests that walk the step graph.
 
 NO GPU BY DEFAULT (Andrew 2026-10-13): identity and behavior are checked
 before merge on NVIDIA, AMD, Apple and CPU; the release only builds, checks
@@ -114,18 +118,20 @@ THE STEPS
                      (os.cpu_count(); MOJOLEARN_ADMISSION_JOBS / _WORKER override), into the content-keyed
                      cache that linux-builds and every later ledger read then hit. linux-builds AND
                      macos-build need it, so it never competes with the macOS wheel build for the Mac
-  cross-compile      (core-linux, beside the rehearsal AND the Linux builds) dispatch
+  cross-compile      (core-linux, a rented build backend only) dispatch
                      .github/workflows/cross-compile-check.yml on the frozen
                      commit against the previous release's source commit and
                      wait: every changed Linux GPU binding x tier x arch
                      compiled on GitHub's free runners in parallel. Any FAIL,
                      TIMEOUT, STALLED or MISSING job stops the Linux pipelines
-                     by name at linux-wait, before anything is packed, gated,
-                     rented or published. On the default `github` backend
-                     linux-builds does not wait for it (2026-11-07: it compiles
-                     the same sources for the same targets, 2128 s that were
-                     serial in 0.8.66); on a rented backend (cpu-box, gpu-legs)
-                     linux-builds still waits, so no box is rented before it
+                     by name, and linux-builds waits for it, so no box (cpu-box,
+                     gpu-legs) is rented before it passes. On the default
+                     `github` backend it is NOT RUN (lane xcc-retire-1,
+                     2026-11-27: linux-builds compiles the same sources for the
+                     same targets on the same runners, so it compiled every
+                     changed binding twice): each build leg names a failed build
+                     by binding, tier and arch with its first compiler errors and
+                     stops a STALLED compile after 240 s (tools/compile_watch.py)
   reuse-plan         tools/release_reuse.py: for every binding of every set
                      (cuda sm_89, the cuda sm_80 PTX slot, hip gfx942, the host bindings,
                      the runtime closure, the macOS wheel) REUSE the bytes the
@@ -144,8 +150,16 @@ THE STEPS
                      NVIDIA (walking NVIDIA_WALK on no stock) and a DigitalOcean
                      MI325X (--amd-build-provider do|cpu-box or
                      MOJOLEARN_AMD_PROVIDER pins one)
-  macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
-  macos-smoke        default: wheel_self_test.py (fresh venv, verify --tamper-test);
+  macos-build        --macos-build-backend github (the default, lane mac-speed-1 2026-11-27): tools/apple_github_build.py
+                     run, .github/workflows/apple-release-build.yml on GitHub's FREE STANDARD macos-15 runners (never
+                     a larger/xlarge label, a self-hosted runner or a rented Mac): one job per merged file at once,
+                     keys looked up in R2, the pack and its gates there; the wheel, macos-build.log and
+                     macos-bincache/ come home. --macos-build-backend laptop: mac_slot --slots 4 run --
+                     build_release_wheel.sh, byte LM on, in ONE fixed tree (<release root>/macos-build-tree) so the
+                     cache keys (repo_path) hit across freezes
+  macos-smoke        default: wheel_self_test.py (fresh venv, verify --tamper-test); the GitHub runner's PASSED
+                     receipt for the same wheel bytes is taken; the runner's Apple lanes fail this step when the
+                     runner's Metal device was usable and a lane failed;
                      --gpu-smoke: qualify_verifier_wheel.py --scope expanded under the Metal lock;
                      its self-test job is the bundled-table gate (0.8.35 shipped a
                      stale table): no PASSED receipt for these wheel bytes, no
@@ -193,15 +207,15 @@ THE STEPS
   publish-meta-linux }   the vendors next, the Linux mojolearn last; with --publish pypi each
   publish-macos      }   needs a passed testpypi-rehearsal of its exact bytes
   finish-line        HASH ONLY: per published platform, `pip download --no-deps` from the real PyPI, the
-                     sha256 compared with the shipped wheel. NOTHING AFTER THE FIRST PUBLISH INSTALLS OR RUNS
-                     ANYTHING: the install, the import and the package-set resolution ran in testpypi-rehearsal
+                     sha256 compared with the shipped wheel. Nothing installed or run on this Mac; the one
+                     install after publication is the published step's, on a GitHub runner
   gate-boxes         ORCHESTRATOR ONLY (MOJOLEARN_ORCHESTRATOR=1; it rents): the boxes the selected box
                      steps (gate-*) still need: the shared NVIDIA pod
                      (tools/nvidia_central.sh up 1, out of stock retried there; lane release-gate synced to
                      the frozen source) and the DigitalOcean AMD droplet (tools/do_amd_steward.sh up 240), or
                      the live ones adopted; recorded in the state. While a box step is pending the release
                      holds the pod busy (one `nvidia_central.sh sh release-gate` hold, renewed) and renews
-                     the droplet's lease (do_amd_steward.sh extend 120 every 85 minutes). --dry-run prints
+                     the droplet's lease (do_amd_steward.sh extend 120 every 85 minutes). --plan says
                      what it would rent and for how long. Never an Apple machine
   gate-nvidia        } THE RELEASE GATE, after linux-pack and before any publish: tools/release_lq_smoke.py
   gate-amd           }   --gate runs tools/gate_smoke_box.py <vendor> <version> ... all ON the held lq box
@@ -216,18 +230,17 @@ THE STEPS
                          smoke); a background `release_gate.py await-final` brings the smoke's summary
                          home and boxes-down and record wait for it and record it SOFT. --strict: the
                          step waits for the smoke and a failed smoke stops it.
-  published-apple    } after publish-<platform>, with --publish pypi: tools/release_published_install.py
-  published-nvidia   }   check, on this Mac, no device, no box, nothing installed: pip resolves each
-  published-amd      }   published package for the candidate's platform tags and downloads it; its
-                         sha256 must equal the gated candidate wheel's (different bytes FAIL with both
-                         hashes; nothing reruns), its RECORD must hold, and the gate's receipts are the
-                         evidence by reference. Report at <commit12>/published-<vendor>/published-report.json,
-                         where the ledger reads it (Andrew 2026-11-02: no re-verification of green work)
-  published-smoke-*  REMOVED 2026-11-05 (--published-smoke refuses): no release step runs identity lanes
-                     on a device after the first publish. Every identity-lane step (DEVICE_LANE_STEPS:
-                     macos-smoke, gpu-column-*, gate-nvidia, gate-amd) settles before any publish starts
-                     and refuses to launch once a platform of the release is published
-  boxes-down         right after the gates (no published-* step needs a box): every box job's results home first
+  published          after every publish settles, with --publish pypi: ONE CPU job on a free GitHub runner
+                     (.github/workflows/published-check.yml running tools/release_published_install.py check;
+                     Andrew 2026-11-27: no GPU, nothing rented after publication, because the published bytes
+                     are hash-identical to the tested candidate and a GPU rerun proves nothing new):
+                     every published candidate file downloaded from PyPI by its own platform tags, sha256
+                     equal to the candidate's; `pip install mojolearn==<version>`; `import mojolearn`;
+                     `python -m mojolearn verify --quick`. Report at <commit12>/published-check/
+                     published-report.json. The per-vendor published-apple/-nvidia/-amd steps and the
+                     --published-smoke GPU route are removed. No identity-lane step (DEVICE_LANE_STEPS:
+                     macos-smoke, gpu-column-*, gate-nvidia, gate-amd) runs once a platform is published
+  boxes-down         right after the gates (the published step needs no box): every box job's results home first
                      (tools/box_persist.py fetch --tag; none missing, or nothing is taken down), then what
                      gate-boxes rented taken down (nvidia_central.sh down, do_amd_steward.sh down); an
                      adopted box is released, left up
@@ -238,7 +251,7 @@ THE STEPS
                      account), commits it as "Release evidence for
                      <version>", pushes, and tags that commit v<version>. A missing required item fails the step by
                      name. An older release's evidence: `git show v<version>:bench/results/release_evidence/
-                     manifest.json`. Waits for both gates and the published-* producers
+                     manifest.json`. Waits for both gates and the published step
 
 Nothing is published without `--publish none|testpypi|pypi`; without it both
 pipelines stop at their publish step and say so.
@@ -325,6 +338,7 @@ PUBLISH_CHOICES = ("none", "testpypi", "pypi")
 sys.path.insert(0, str(ROOT / "tools"))
 import release_ledger  # noqa: E402
 import release_reuse  # noqa: E402
+from qualify_verifier_wheel import ptx_smoke_device
 import release_requirements  # noqa: E402
 import release_box_watch  # noqa: E402
 import release_tooling  # noqa: E402
@@ -931,11 +945,16 @@ def github_legs(ctx):
 #: layout too, one compile per shard job with swap); "cpu-box" and "gpu-legs" are
 #: opt-in by name.
 BUILD_BACKENDS = {"cpu-box": cpu_legs, "github": github_legs, "gpu-legs": gpu_legs}
+#: Where macos-build compiles the Apple wheel (--macos-build-backend): "github" (tools/apple_github_build.py on GitHub's
+#: free standard macOS runners, the default since lane mac-speed-1, 2026-11-27) or "laptop" (this Mac).
+MACOS_BUILD_BACKENDS = ("github", "laptop")
 #: Routes that overlay their own box-side files and take no route overlay.
 SELF_OVERLAID = ("cpu-box", "github")
 #: Routes whose linux-builds step rents a box: there linux-builds waits for the free cross-compile
 #: (Release.__init__); on `github` the two compile at once (STEP_TABLE, 2026-11-07).
 RENTED_BUILD_BACKENDS = ("cpu-box", "gpu-legs")
+#: BUILD FAILED lines per failed leg in linux-wait's stop message (the rest stay in the leg's records)
+LEG_FAILURES_IN_STOP = 8
 
 
 def scoped_sets():
@@ -1179,15 +1198,17 @@ STEP_TABLE = [
     # linux-builds dispatches from its cache as soon as reuse-plan and readiness are done (beside cross-compile).
     ("readiness", "common", ["freeze-commit"], None),
     ("cross-compile", "core-linux", ["freeze-commit"], None),
-    # THE CROSS-COMPILE RUNS BESIDE THE LINUX BUILDS (lane post-cross-compile-redundant, 2026-11-07). On the default
-    # `github` backend linux-builds compiles the same changed sources for the same targets (sm_89, sm_80, gfx942) and
-    # tiers with the same tier and column defines, on the same free runners, so waiting for cross-compile first cost
-    # 0.8.66 a serial 2128 s for no finding the builds lack. What cross-compile still gives alone: a per-binding name on
-    # a compile error (the merged layout's builds name the merged group) and STALLED after 240 s of flat compiler CPU
-    # (the builds only time out at their bound). It stays a check: linux-wait NEEDS it, so a FAIL stops the Linux
-    # pipeline before linux-pack and everything after it (gates, boxes, columns, every publish) exactly as before.
-    # A rented backend (cpu-box, gpu-legs) rents inside linux-builds, so there it still NEEDS cross-compile
-    # (Release.__init__, RENTED_BUILD_BACKENDS).
+    # THE CROSS-COMPILE ONLY GATES A RENTAL (lane xcc-retire-1, 2026-11-27; before: lane post-cross-compile-redundant,
+    # 2026-11-07, ran it beside the builds). On the default `github` backend linux-builds compiles the same changed
+    # sources for the same targets (sm_89, sm_80, gfx942) and tiers with the same tier and column defines, on the same
+    # free runners, so cross-compile compiled every changed binding a second time and took runner slots from the legs.
+    # What it gave alone the legs now give: a failed build named by binding, tier and arch with its first compiler
+    # error lines (release_github_build.build_failures, in the leg's failure line and linux-wait's stop message) and
+    # STALLED after 240 s of flat compiler CPU and no output (tools/compile_watch.py, the check's own rule, in
+    # packaging/linux/binding_timeout.sh). So on `github` it is not run (step_cross_compile writes a NOT-RUN receipt)
+    # and linux-wait waits for the legs alone (Release.__init__). A rented backend (cpu-box, gpu-legs) rents inside
+    # linux-builds, so there linux-builds still NEEDS cross-compile and nothing is rented before it passes. The table
+    # below is that rented form; the workflow stays for manual use and for the Apple compile at integration.
     ("linux-builds", "core-linux", ["reuse-plan", "readiness"], None),
     ("macos-build", "macos", ["reuse-plan", "readiness"], "mac"),
     ("macos-smoke", "macos", ["macos-build"], "mac"),
@@ -1265,8 +1286,8 @@ STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "gpu-co
 # (--smoke-via lq); the Hopper column runs only on a held Hopper box
 # (--hopper-box), so publish-nvidia no longer NEEDS it: it waits for it to
 # settle (AFTER) and requires its PASS only when a Hopper box was held
-# (Release.hopper_required). Without one the sm_90a payload publishes on its
-# GitHub build receipt and the alpha manifest says "smoke: not run".
+# (Release.hopper_required). When the release includes a native Hopper set,
+# its packaging notes record whether that target went unsmoked.
 PIPELINES["nvidia"]["checks"].append("gpu-column-nvidia-hopper")
 AFTER["publish-nvidia"] = ["gpu-column-nvidia-hopper"]
 #: where --smoke-via lq runs each column: the lq box and the column's tag stem
@@ -1303,28 +1324,23 @@ STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "gate-n
                   ("gate-boxes", "finish", ["linux-pack"], "boxes"))
 STEP_TABLE = [(name, pipeline, needs + (["gate-boxes"] if name in BOX_CONSUMERS else []), resource)
               for name, pipeline, needs, resource in STEP_TABLE]
-# THE PUBLISHED PRODUCERS (lane published-no-reverify, 2026-11-04; Andrew 2026-11-02: the gates verified the
-# exact wheel bytes, nothing reinstalls them from PyPI to verify again). After each platform's publish,
-# published-<vendor> runs tools/release_published_install.py check HERE, on no device and no box: pip resolves
-# each published package for the candidate's platform tags, the downloaded file's sha256 must equal the gated
-# candidate's and its RECORD must hold, and the gate's own receipts are its evidence by reference. The report
-# lands at <commit12>/published-<vendor>/published-report.json (retained_producers admits it into the ledger).
-# No published-<vendor> step needs gate-boxes, so boxes-down follows the gates.
-PUBLISHED_STEPS = {"published-apple": ("apple", "publish-macos"), "published-nvidia": ("nvidia", "publish-nvidia"),
-                   "published-amd": ("amd", "publish-amd")}
-# REMOVED (lane identity-once-on-frozen-source, Andrew 2026-11-05: identity runs ONCE per release, BEFORE
-# publish, and NEVER after publish): the published-smoke-<vendor> steps. Behind --published-smoke they
-# reinstalled the published wheels and ran tools/qualify_verifier_wheel.py --scope expanded (identity lanes on
-# the vendor device) AFTER publish-<platform>. `--published-smoke` now refuses; published-<vendor> (the bytes
-# check on the Mac, no device) is the post-publication read. PUBLISHED_SMOKE_STEPS stays as an empty map for
-# the modules and tests that iterate it.
-PUBLISHED_SMOKE_STEPS = {}
+# THE PUBLISHED CHECK (Andrew, 2026-11-27): after publication ONE step, `published`, runs ONE CPU job on a free
+# GitHub runner (.github/workflows/published-check.yml -> tools/release_published_install.py check): every published
+# candidate file downloaded from PyPI and its sha256 equal to the candidate's, `pip install mojolearn==<version>`,
+# `import mojolearn`, `python -m mojolearn verify --quick`. It rents nothing and runs no GPU: the published bytes are
+# hash-identical to the tested candidate, so a GPU rerun proves nothing new (AGENTS.md "No re-verification of green
+# work"). Like finish-line it waits for every publish to SETTLE and checks what is published.
+# REMOVED with it: the published-apple / published-nvidia / published-amd steps (a bytes check on the Mac with the
+# gate's receipts by reference, admitted into the requirements ledger as published-<vendor> rows), the inert
+# --published-smoke / --published-smoke-reason options and PUBLISHED_SMOKE_STEPS, and the GPU-box producer
+# tools/ops/published_install.py + published_install_job.sh. Recoverable at eec67ac1204b.
 STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "record")),
                   ("boxes-down", "finish", [], "boxes"))
-STEP_TABLE[STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "boxes-down")):0] = [
-    (step, "finish", [publish], None) for step, (_, publish) in PUBLISHED_STEPS.items()]
+STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "boxes-down")),
+                  ("published", "finish", ["freeze-commit"], None))
+AFTER["published"] = list(PUBLISH_STEPS)
 AFTER["boxes-down"] = ["gate-boxes", *BOX_CONSUMERS]
-AFTER["record"] = AFTER["record"] + list(PUBLISHED_STEPS)
+AFTER["record"] = AFTER["record"] + ["published"]
 
 # IDENTITY ONCE, ON THE FROZEN SOURCE (lane identity-once-on-frozen-source, Andrew 2026-11-05). identity-at-freeze
 # (tools/identity_at_freeze.py) compares the frozen source with the commit each identity column was last recorded
@@ -1595,7 +1611,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
     #: wheel); these are skipped on their record
     #: (finish-line and record: when the platforms they covered are still the
     #: published ones).
-    SKIP_IF_RECORDED = {"identity-at-freeze", "rehearsal", "cross-compile", "finish-line", "record",
+    SKIP_IF_RECORDED = {"identity-at-freeze", "rehearsal", "cross-compile", "finish-line", "published", "record",
                         "identity-cpu", "identity-admit", *PUBLISH_STEPS}
 
     def __init__(self, args, runner=None):
@@ -1653,6 +1669,10 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if args.build_backend in RENTED_BUILD_BACKENDS and "cross-compile" not in self.NEEDS["linux-builds"]:
             # a rented backend rents inside linux-builds: nothing is rented before the free cross-compile passes
             self.NEEDS = dict(self.NEEDS, **{"linux-builds": self.NEEDS["linux-builds"] + ["cross-compile"]})
+        elif args.build_backend not in RENTED_BUILD_BACKENDS:
+            # ON GITHUB THE BUILDS ARE THE COMPILE CHECK (lane xcc-retire-1, 2026-11-27): cross-compile is not run
+            # (step_cross_compile) and linux-wait waits for the legs alone
+            self.NEEDS = dict(self.NEEDS, **{"linux-wait": [n for n in self.NEEDS["linux-wait"] if n != "cross-compile"]})
         self.dry = args.dry_run
         self.readonly = bool(getattr(args, "status", False) or getattr(args, "report", False))
         self.commands_shown = 0
@@ -1731,7 +1751,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
     def skip_recorded(self, step, rec):
         if step not in self.SKIP_IF_RECORDED:
             return False
-        if step in ("finish-line", "record") and "platforms" in rec:
+        if step in ("finish-line", "published", "record") and "platforms" in rec:
             return sorted(rec["platforms"]) == sorted(self.published_platforms())
         return True
 
@@ -2200,11 +2220,11 @@ class Release(release_identity_wheels.IdentityOnWheels):
             found = [shared] + [d for d in found if d.resolve() != shared.resolve()]
         return found
 
-    def macos_cache_plan(self, env):
+    def macos_cache_plan(self, env, src=None):
         """One line per merged macOS group, before anything compiles: `hit (<cache>)`
         or `compile: <reason>` (tools/bincache.py explain in the frozen tree, under
         the build's environment). Empty when that tree's bincache has no explain."""
-        src = self.src
+        src = src or self.src
         tool = src / "tools" / "bincache.py"
         if not tool.is_file() or "def cmd_explain" not in tool.read_text(errors="replace"):
             return []
@@ -2276,13 +2296,6 @@ class Release(release_identity_wheels.IdentityOnWheels):
             out.append(("installed-runtime", dict(report=str(report))))
         if (self.apple_runtime_out() / "runtime-report.json").is_file():
             out.append(("installed-runtime", dict(report=str(self.apple_runtime_out() / "runtime-report.json"))))
-        # published-<vendor> (post stage): tools/release_published_install.py reports under published-<vendor>/.
-        # Only published-<vendor>/: an explicit --published-smoke report (published-smoke-<vendor>/) is not this
-        # row's evidence.
-        for vendor, _ in PUBLISHED_STEPS.values():
-            report = self.published_out(vendor) / "published-report.json"
-            if report.is_file():
-                out.append(("published-install", dict(report=str(report))))
         # The Linux release legs (compile-<vendor>/runtime, compile-<vendor>/adapters/<arch>, compile-cpu/runtime
         # on the host leg): a leg built in this freeze, or the earlier freeze's leg a <leg>.reused.json names.
         for directory in self.retained_leg_dirs():
@@ -2766,23 +2779,38 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 fh.write(p.stdout + p.stderr)
         return p.returncode, p.stdout
 
-    def xcc_find_run(self, token, tries=24):
-        """The run whose title carries `token` (the workflow's run-name), as
-        (id, url); a dispatch takes a few seconds to appear."""
+    def xcc_find_run(self, token, tries=24, workflow=None):
+        """The run of `workflow` (default cross-compile-check) whose title carries `token` (the workflow's
+        run-name), as (id, url); a dispatch takes a few seconds to appear."""
+        workflow = workflow or self.XCC_WORKFLOW
         for _ in range(tries):
-            rc, out = self.gh("run", "list", "--workflow", self.XCC_WORKFLOW, "--event", "workflow_dispatch",
+            rc, out = self.gh("run", "list", "--workflow", workflow, "--event", "workflow_dispatch",
                               "--limit", "30", "--json", "databaseId,displayTitle,url")
             for r in (json.loads(out or "[]") if rc == 0 else []):
                 if token in r.get("displayTitle", ""):
                     return str(r["databaseId"]), r.get("url", "")
             self.sleep(5)
-        raise StepFailed(f"the dispatched {self.XCC_WORKFLOW} run (token {token}) never appeared in gh run list")
+        raise StepFailed(f"the dispatched {workflow} run (token {token}) never appeared in gh run list")
 
     def step_cross_compile(self):
-        """CROSS-COMPILE ON GITHUB, RELEASE ONLY. The frozen commit's changed
-        Linux GPU bindings, every tier and arch, each on its own free runner;
-        diffed against the previous release's source commit (the reuse plan's
-        base). Refuses when there is no such commit: it never widens."""
+        """CROSS-COMPILE ON GITHUB, RELEASE ONLY, ON A RENTED BUILD BACKEND. The
+        frozen commit's changed Linux GPU bindings, every tier and arch, each on
+        its own free runner; diffed against the previous release's source commit
+        (the reuse plan's base). Refuses when there is no such commit: it never
+        widens. On the github backend it is NOT RUN (lane xcc-retire-1,
+        2026-11-27): linux-builds compiles the same sources for the same targets
+        and tiers on the same free runners, and competed with it for them; the
+        legs now give what only it gave (each failed build named by binding,
+        tier and arch with its first compiler errors, and STALLED after 240 s of
+        flat compiler CPU and no output, packaging/linux/binding_timeout.sh).
+        The receipt says NOT-RUN and why."""
+        if self.args.build_backend not in RENTED_BUILD_BACKENDS:
+            why = (f"not run (--build-backend {self.args.build_backend}: linux-builds compiles every changed binding x "
+                   "tier x arch on the same free runners and names a failed or STALLED build itself)")
+            if not self.dry:
+                write_json(self.cross_compile_receipt(), dict(schema=self.XCC_SCHEMA, verdict="NOT-RUN",
+                           commit=self.commit, backend=self.args.build_backend, reason=why, at=now()))
+            return why
         prev = release_reuse.previous_release() or {}
         base = prev.get("source_commit")
         if not base:
@@ -2795,7 +2823,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
         wf_ref = os.environ.get("MOJOLEARN_XCC_WORKFLOW_REF", "main")
         self.must(["gh", "workflow", "run", self.XCC_WORKFLOW, "--ref", wf_ref, "-f", f"ref={base}",
                    "-f", f"commit={self.commit}", "-f", f"archs={self.XCC_ARCHS}",
-                   "-f", "tiers=" + ",".join(self.release_modes), "-f", f"token={token}"],
+                   "-f", "tiers=" + ",".join(self.release_modes), "-f", f"token={token}",
+                   # macos-build compiles the Darwin files on the same free runners (lane mac-speed-1)
+                   "-f", "apple=false"],
                   what="gh workflow run " + self.XCC_WORKFLOW)
         if self.dry:
             return f"would dispatch {self.XCC_WORKFLOW} on {self.commit[:12]} vs {prev.get('version')} and wait"
@@ -2819,7 +2849,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
     #: cross-compile-check compiles and how: the toolchain pins, the workflow
     #: and its planner.
     XCC_INPUTS = ("pixi.toml", "pixi.lock", ".github/workflows/cross-compile-check.yml",
-                  "tools/cross_compile_check.py")
+                  "tools/cross_compile_check.py", "tools/compile_watch.py")
 
     def cross_compile_receipt(self):
         return self.rel / "cross-compile.json"
@@ -3538,11 +3568,21 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 self.save()
         return moved, receipt
 
+    def macos_backend(self):
+        return getattr(self.args, "macos_build_backend", None) or "github"
+
+    def macos_gha_out(self):
+        """tools/apple_github_build.py run's directory for this freeze (the wheel, the pack's cache and log, the
+        smoke receipts, the group records)."""
+        return self.rel / "macos-gha"
+
     def step_macos_build(self):
         w = self.macos_wheel()
         if w and wheel_commit(w) == self.commit:
             return "have " + w.name
         self.stale_preflight("build")
+        if self.macos_backend() == "github":
+            return self.macos_build_github()
         # Four builds at once, as measured on the 10-core M4, never more than
         # this Mac's slot ceiling (tools/mac_slot.py slot_count), which
         # mac_slot.py would otherwise refuse.
@@ -3568,10 +3608,15 @@ class Release(release_identity_wheels.IdentityOnWheels):
         seeds = self.macos_bincache_seeds()
         if seeds:
             env["MOJOLEARN_BINCACHE_SEED_DIRS"] = os.pathsep.join(str(d) for d in seeds)
-        for line in self.macos_cache_plan(env):
+        # ONE FIXED TREE FOR THE LAPTOP BUILD (lane mac-speed-1, 2026-11-27): the key carries the checkout path
+        # (bincache repo_path: the rpath into .pixi is baked in), and a per-freeze checkout at
+        # <version>/source/<commit12>/ made every group of 0.9.0's f6a2ad489a build miss (the 12 groups whose
+        # closures were unchanged differed in repo_path alone, macos-bincache/provenance/keys). It is also this
+        # pipeline's own tree, so the linux pack never reads a checkout the macOS build is writing in.
+        src = self.macos_build_tree()
+        for line in self.macos_cache_plan(env, src):
             self.say("  " + line)
         plan = self.plan()
-        src = self.src
         reuse = release_reuse.plan_rows(plan, release_reuse.MACOS, "REUSE")
         # A MERGED macOS BUILD (MOJOLEARN_MERGED_BINDINGS, default 1) compiles
         # each merged file whole: per-binding reuse cannot place one member's
@@ -3611,6 +3656,69 @@ class Release(release_identity_wheels.IdentityOnWheels):
         shutil.copy2(built[0], dest)
         return f"{dest.name} sha256 {sha256(dest)}"
 
+    def macos_build_tree(self):
+        """THE LAPTOP macOS BUILD'S FIXED TREE: <release root>/macos-build-tree, one detached worktree of ROOT that
+        every freeze of every version checks its commit out into (git checkout --detach --force, then git clean of
+        everything untracked except .pixi), so the bincache keys (repo_path) of an unchanged group are equal from
+        one freeze and one release to the next. Held under an fcntl lock for the step (one macOS build at a time).
+        Verified a clean, complete checkout of the commit before use (_source_problem)."""
+        c = self.commit
+        p = self.base.parent / "macos-build-tree"
+        if self.dry or self.readonly:
+            return p
+        import fcntl
+        lock = open(p.parent / ".macos-build-tree.lock", "a+")
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        self.__dict__.setdefault("_held_locks", []).append(lock)   # released when this process exits
+        if not (p / ".git").exists():
+            self._add_source(p, c)
+        else:
+            for cmd in (["checkout", "--detach", "--force", c], ["sparse-checkout", "disable"],
+                        ["clean", "-ffdx", "-e", ".pixi", "-q"]):
+                rc = subprocess.run(["git", "-C", str(p), *cmd], capture_output=True, text=True)
+                if rc.returncode != 0:
+                    raise StepFailed(f"the macOS build tree {p}: git {' '.join(cmd[:2])} failed: {rc.stderr.strip()[-300:]}")
+            self._verify_source(p, c)
+        self.say(f"  macOS build tree: {p} at {c[:12]} (one path for every freeze: the cache keys carry it)")
+        return p
+
+    def macos_build_github(self):
+        """macos-build on GitHub's free standard macOS runners (tools/apple_github_build.py run): one job per merged
+        file at once, the pack and its gates, the smoke there; the wheel, the pack's log and cache come home as the
+        laptop build's would (macos/<wheel>, macos-build.log, macos-bincache/), so every later step and the ledger
+        adapter read them unchanged."""
+        out = self.macos_gha_out()
+        cmd = [PY, str(ROOT / "tools" / "apple_github_build.py"), "run", "--commit", self.commit, "--out", str(out),
+               "--modes", " ".join(self.release_modes)]
+        ref = getattr(self.args, "candidate_ref", "") or os.environ.get("MOJOLEARN_APPLE_WORKFLOW_REF", "")
+        if ref:
+            cmd += ["--ref", ref]
+        self.must(cmd, log=self.rel / "macos-gha.log", what="apple_github_build.py run")
+        if self.dry:
+            return "would build the macOS wheel on GitHub (macos-15) and copy it to " + str(self.rel / "macos")
+        built = sorted((out / "apple-wheel" / "wheel").glob(f"mojolearn-*-macosx_*.whl"))
+        if len(built) != 1 or wheel_commit(built[0]) != self.commit:
+            raise StepFailed(f"expected one macOS wheel of {self.commit} from GitHub in {out}, found {built}")
+        shutil.copy2(out / "apple-wheel" / "macos-build.log", self.rel / "macos-build.log")
+        cache = self.macos_bincache()
+        if cache.exists():
+            shutil.rmtree(cache)
+        shutil.copytree(out / "apple-wheel" / "macos-bincache", cache)
+        (self.rel / "macos").mkdir(parents=True, exist_ok=True)
+        dest = self.rel / "macos" / built[0].name
+        shutil.copy2(built[0], dest)
+        return f"{dest.name} sha256 {sha256(dest)} (GitHub macos-15)"
+
+    def macos_runner_lanes(self):
+        """The runner's Apple-lanes record for this wheel ({} when absent or for other bytes)."""
+        w = self.macos_wheel()
+        p = self.macos_gha_out() / "apple-smoke" / "apple-lanes" / "apple-lanes.json"
+        try:
+            d = json.loads(p.read_text())
+        except (OSError, ValueError):
+            return {}
+        return d if w and d.get("wheel_sha256") == sha256(w) else {}
+
     def smoke_python(self):
         for name in ("python3.12", "python3.13", "python3.11", "python3.14", "python3.10"):
             if shutil.which(name):
@@ -3637,8 +3745,24 @@ class Release(release_identity_wheels.IdentityOnWheels):
             # docs/RELEASE_CHECKLIST.md's preverified macOS gate: a fresh venv, `verify --tamper-test`
             # (the bundled reference table reproduces the wheel's own bits). Metal lock: it fits.
             out = self.macos_self_test().parent
+            # THE APPLE LANES ON THE RUNNER (lane mac-speed-1): a lane that failed on a usable runner Metal device is
+            # a product bug for this wheel (0.9.0's record segfaulted in _mojolearn_native_m1.so on the laptop)
+            lanes = self.macos_runner_lanes()
+            if lanes.get("metal_usable") and lanes.get("status") != "PASSED":
+                raise StepFailed(f"the Apple lanes {','.join(lanes.get('lanes') or [])} FAILED on the runner's Metal "
+                                 f"device for this wheel: {self.macos_gha_out() / 'apple-smoke' / 'apple-lanes'}")
             if self.macos_self_test_passed():
                 return "WHEEL-SELF-TEST PASSED (receipt exists)"
+            # the runner's receipt for these exact bytes (GitHub smoke job) is taken; else the self-test runs here
+            runner = self.macos_gha_out() / "apple-smoke" / "self-test-macos" / "results.json"
+            if w and not self.dry and runner.is_file():
+                sys.path.insert(0, str(ROOT / "tools"))
+                import wheel_self_test
+                if wheel_self_test.passed(runner, w):
+                    if out.exists():
+                        out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+                    shutil.copytree(runner.parent, out)
+                    return "WHEEL-SELF-TEST PASSED on the GitHub runner (receipt for these wheel bytes)"
             if not w and not self.dry:
                 raise StepFailed("no macOS wheel; run macos-build")
             self.stale_preflight("smoke")
@@ -3725,8 +3849,10 @@ class Release(release_identity_wheels.IdentityOnWheels):
                     told.add(l.name)
                     import release_candidate
                     err = release_candidate.legs_first_error([l.workdir / l.name, l.out_dir])
+                    # BY BINDING, TIER AND ARCH (lane xcc-retire-1): the leg's BUILD FAILED lines
+                    named = release_github_build.leg_build_failures(l.name, l.workdir / l.name, l.out_dir)
                     self.say(f"  {l.name}: FAILED (exit {l.exit_code()}, log {l.log})"
-                             + (f"; first error: {err}" if err else "")
+                             + ("; " + "; ".join(named) if named else f"; first error: {err}" if err else "")
                              + ("; waiting for " + ", ".join(x.name for x in legs if x.running())
                                 if any(x.running() for x in legs) else ""))
             if not any(l.running() for l in legs):
@@ -3746,7 +3872,11 @@ class Release(release_identity_wheels.IdentityOnWheels):
                         closed = [g for g in self.close_stopped_compile_producers(l) if g.get("closed")]
                     except (StepFailed, ValueError, OSError) as error:
                         self.say(f"  {l.name}: open compile runs not closed: {error}")
+                named = release_github_build.leg_build_failures(l.name, l.workdir / l.name, l.out_dir)
                 bad.append(f"{l.name} (exit {l.exit_code()}, log {l.log}"
+                           + ("".join("; " + row for row in named[:LEG_FAILURES_IN_STOP])
+                              + (f"; {len(named) - LEG_FAILURES_IN_STOP} more in its GHA/build-failures.json"
+                                 if len(named) > LEG_FAILURES_IN_STOP else ""))
                            + (f"; {sum(len(g['run_ids']) for g in closed)} open compile run(s) interrupted, "
                               f"producer {closed[0]['state']}; linux-builds relaunches it" if closed else "") + ")")
                 continue
@@ -4167,16 +4297,21 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 and self.plugin_installed(out / "results.json", "nvidia")
                 and self.column_arch_ok(out, ("sm_89",)))
 
-    def column_arch_ok(self, out, arches):
-        # Actual installed loader selection, not the requested rental model.
-        installed = (read_json(out / "results.json") or {}).get("installed") or {}
-        return installed.get("gpu_arch") in arches
+    def column_arch_ok(self, out, arches, *, allow_ptx=False):
+        receipt = read_json(out / "results.json") or {}
+        installed = receipt.get("installed") or {}
+        if installed.get("gpu_arch") in arches:
+            # Older native receipts recorded only the selected target. Use the
+            # physical device too when the smoke recorded it.
+            return installed.get("ptx_selection") is None and (
+                installed.get("device_arch") is None or installed["device_arch"] in arches)
+        return allow_ptx and ptx_smoke_device(installed, receipt.get("source_commit")) in arches
 
     def hopper_column_ok(self):
         final, out = self.linux_final(), self.rel / "column-nvidia-hopper"
         return (bool(final) and smoke_passed(out / "results.json", final)
                 and self.plugin_installed(out / "results.json", "nvidia")
-                and self.column_arch_ok(out, ("sm_90", "sm_90a")))
+                and self.column_arch_ok(out, ("sm_90", "sm_90a"), allow_ptx=True))
 
     def amd_column_ok(self):
         out = self.rel / "column-amd"
@@ -4313,8 +4448,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             return self.NO_GPU_SKIP
         if not self.hopper_required():
             self.say("  nvidia-hopper: no Hopper box held (--hopper-box <ssh> runs it); nothing is rented")
-            return ("SKIPPED: no Hopper box held; the sm_90a payload publishes on its GitHub build receipt, "
-                    "smoke " + HOPPER_NOT_RUN)
+            return "SKIPPED: no Hopper box held"
         self.run_columns(("nvidia-hopper",))
         return "NVIDIA Hopper column PASSED"
 
@@ -4780,9 +4914,10 @@ class Release(release_identity_wheels.IdentityOnWheels):
     def smoke_notes(self, platform):
         """{native set: smoke line} for the alpha manifest of a vendor wheel
         whose set had no installed smoke (sm_90a without a held Hopper box)."""
-        if platform == "nvidia" and self.gpu_smoke() and not self.hopper_required() and "sm_90a" in GPU_PACKAGES["PLUGINS"]["cuda"]["arches"]:
-            return {"sm_90a": HOPPER_NOT_RUN}
-        return {}
+        if platform != "nvidia" or not self.gpu_smoke() or self.hopper_required():
+            return {}
+        return {arch: HOPPER_NOT_RUN for vendor, arch in release_reuse.LINUX_SETS
+                if vendor == "cuda" and arch in ("sm_90", "sm_90a")}
 
     def core_receipt(self):
         """The receipt mojolearn-core publishes on: a PASSED column that
@@ -5991,191 +6126,104 @@ class Release(release_identity_wheels.IdentityOnWheels):
     def have_boxes_down(self, rec):
         return None if self.held_boxes() else "have: this release holds no box"
 
-    # ------------------------------------------------------------ published-<vendor> (post stage)
-    PUBLISHED_SCHEMA = "mojolearn.release-published-install.v2"
-    PUBLISHED_SMOKE_SCHEMA = "mojolearn.release-published-install.v1"
+    # ------------------------------------------------------------ published (post stage)
+    PUBLISHED_SCHEMA = "mojolearn.release-published-check.v3"
+    PUBLISHED_WORKFLOW = "published-check.yml"
 
-    def published_out(self, vendor):
-        """Where retained_producers looks: <commit12>/published-<vendor>/published-report.json."""
-        return self.rel / f"published-{vendor}"
+    def published_out(self):
+        """Where the published check's report lands: <commit12>/published-check/published-report.json."""
+        return self.rel / "published-check"
 
-    def published_smoke_out(self, vendor):
-        """The explicit --published-smoke report: <commit12>/published-smoke-<vendor>/ (never ledger evidence)."""
-        return self.rel / f"published-smoke-{vendor}"
+    def published_candidates(self):
+        """{file name: sha256} of the shipped wheel of every platform this release published (None: one is missing
+        on this Mac)."""
+        out = {}
+        for platform in self.published_platforms():
+            wheel = self.rehearsal_wheel(platform)
+            if not wheel or not Path(wheel).is_file():
+                return None
+            out[Path(wheel).name] = sha256(wheel)
+        return out
 
-    def published_wheels(self, vendor):
-        """The qualified candidate wheels the published files must equal."""
-        if vendor == "apple":
-            return [self.shipped_wheel("macos", self.macos_wheel())]
-        return [self.shipped_wheel("linux", self.split_final("linux"))] + (
-            [self.split_final("nvidia")] if vendor == "nvidia" else [self.split_final("amd")])
-
-    def published_index_url(self):
-        """PyPI. MOJOLEARN_PUBLISHED_INDEX_URL names a mirror or a test index; a report made against any
-        index but PyPI re-derives differently in the ledger and is refused there, so it is never evidence."""
-        return os.environ.get("MOJOLEARN_PUBLISHED_INDEX_URL") or "https://pypi.org/simple"
-
-    def published_gate(self, vendor):
-        """(receipt paths, verdict): the gate that passed these candidate bytes, whose receipts are the
-        published row's evidence by reference. StepFailed when that gate has not passed: the published
-        bytes are then not verified work, and nothing here runs a device to make up for it."""
-        if vendor == "apple":
-            w = self.macos_wheel()
-            if not w:
-                raise StepFailed("published-apple: no macOS candidate wheel; run macos-build")
-            receipts, why = [], []
-            if self.macos_self_test_passed():
-                receipts.append(self.macos_self_test())
-                why.append("macOS wheel self-test PASSED")
-            elif smoke_passed(self.rel / "smoke-macos" / "results.json", w):
-                receipts.append(self.rel / "smoke-macos" / "results.json")
-                why.append("macOS smoke PASSED")
-            elif self.single() and self.apple_identity_ok()[0]:
-                # --identity-on-wheels: macos-smoke is SKIPPED and the Apple column is recorded from this very
-                # wheel in gate-apple (installed, imported, every lane run): that record is the passed gate
-                # (0.8.66 run u, 2026-11-08: published-apple asked for the skipped smoke)
-                receipts.append(self.apple_identity_out() / "identity-wheels.json")
-                why.append("Apple identity column recorded from this wheel (gate-apple)")
-            else:
-                raise StepFailed("published-apple: the macOS wheel's smoke has not passed for these bytes "
-                                 "(macos-smoke); the published bytes are judged against a passed gate only")
-            if adapter_gate_module().enabled():
-                ok, adapters = self.apple_adapters_ok()
-                if not ok and self.apple_adapters_soft_failed():
-                    adapters = "SOFT FAIL (recorded in soft-failures.json): " + adapters
-                elif not ok:
-                    raise StepFailed("published-apple: the Apple adapter gate has not passed: " + adapters)
-                out = self.apple_adapters_out()
-                receipts += [p for p in (out / "wheel.json", out / adapter_gate_module().RECEIPT, out / "reuse.json")
-                             if p.is_file()]
-                why.append("adapters " + adapters)
-            return receipts + self.repack_receipts(), "; ".join(why)
-        ok, why = self.gate_ok(vendor)
-        if not ok:
-            raise StepFailed(f"published-{vendor}: gate-{vendor} has not passed for these candidate bytes: {why}")
-        out = self.gate_out(vendor)
-        receipts = [p for p in (out / "gate-smoke.json", out / "adapter-smoke" / adapter_gate_module().RECEIPT,
-                                out / f"runtime-{vendor}" / "runtime-report.json") if p.is_file()]
-        return receipts + self.repack_receipts(), f"gate-{vendor} " + why
-
-    def repack_receipts(self):
-        """identity-admit's repack receipts (input = the gated bytes, output = the shipped bytes, the admitted
-        table): gate evidence for the published check, which asks that every published wheel's sha256 appear in
-        the retained evidence (0.8.66 run u, 2026-11-08: the repacked core wheel's hash was in no gate receipt)."""
-        done = self.admitted() if self.single() else None
-        return [Path(p) for p in ((done or {}).get("repacked") or {}).values() if isinstance(p, str) and Path(p).is_file()]
-
-    def published_ok(self, vendor):
-        """(ok, why): a passed published-<vendor> bytes report for this version, vendor and these candidates."""
-        out = self.published_out(vendor)
+    def published_ok(self):
+        """(ok, why): a passed published-check report for this version and exactly this release's published files,
+        equal to its own re-derivation from the retained request.json."""
+        import release_published_install as published_tool
+        out = self.published_out()
         doc, req = read_json(out / "published-report.json"), read_json(out / "request.json") or {}
         if not doc:
             return False, f"no published report at {out}"
-        if (doc.get("schema") != self.PUBLISHED_SCHEMA or doc.get("vendor") != vendor
-                or doc.get("version") != self.version):
-            return False, (f"the report at {out} is a {doc.get('schema')} report for {doc.get('vendor')} "
-                           f"{doc.get('version')}")
+        if doc.get("schema") != self.PUBLISHED_SCHEMA or doc.get("version") != self.version:
+            return False, f"the report at {out} is a {doc.get('schema')} report for {doc.get('version')}"
+        try:
+            fresh = published_tool.judge(out)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return False, f"the report at {out} cannot be re-derived: {type(exc).__name__}: {exc}"
+        if fresh != doc:
+            return False, f"the report at {out} differs from its re-derivation from request.json"
         if doc.get("status") != "passed" or doc.get("exit_code") != 0:
-            import release_published_install as published_tool
             kind = published_tool.failure_kind(doc) or published_tool.CHECK_FAILED
-            differs = "; ".join("%s published %s, candidate %s" % (m.get("file"), m.get("published_sha256"),
-                                                                  m.get("candidate_sha256"))
-                                for m in doc.get("mismatch") or [])
             if kind == published_tool.INDEX_LAG:
                 # no verdict on the bytes (0.8.66 run v, 2026-11-08): the step runs again, the record refuses it
-                return False, (f"published-{vendor} INDEX LAG (not a hash mismatch): "
+                return False, (f"published INDEX LAG (not a hash mismatch): "
                                f"{doc.get('failure_why') or published_tool.NOTHING_RESOLVED}; "
-                               f"run published-{vendor} again once the index lists the files")
-            return False, (f"published-{vendor} status {doc.get('status')} ({kind.upper().replace('-', ' ')}): "
-                           + (differs or str(doc.get("error") or "")[:200]
-                              or ", ".join(r["id"] for r in doc.get("coverage", []) if r.get("status") != "passed")))
-        wheels = self.published_wheels(vendor)
-        if not all(wheels) or req.get("candidates") != {Path(w).name: sha256(w) for w in wheels}:
-            return False, f"the published-{vendor} report compared other candidate wheels than this release's"
+                               "run published again once the index lists the files")
+            return False, (f"published status {doc.get('status')} ({kind.upper().replace('-', ' ')}): "
+                           + str(doc.get("failure_why") or doc.get("error") or "")[:300])
+        candidates = self.published_candidates()
+        if candidates is None or req.get("candidates") != candidates:
+            return False, "the published report compared other files than this release's published wheels"
         return True, "PASSED " + " ".join("%s=%s/%s" % (r.get("id"), r.get("completed"), r.get("expected"))
-                                          for r in doc.get("coverage", []))
+                                          for r in doc.get("coverage", [])) + (f" ({doc['runner']})" if doc.get("runner") else "")
 
-    def step_published(self, vendor):
-        """published-<vendor>: the published files resolved from PyPI for the candidates' platform tags, their
-        bytes equal to the gated candidates', their RECORD intact, the gate's receipts as the evidence. No
-        device, no box, no install. Different bytes FAIL with both hashes; nothing is rerun."""
+    def step_published(self):
+        """published: ONE CPU job on a free GitHub runner (.github/workflows/published-check.yml): every published
+        file downloaded from PyPI with the candidate's sha256, `pip install mojolearn==<version>`, `import
+        mojolearn`, `python -m mojolearn verify --quick`. No GPU, no box (Andrew 2026-11-27). Different bytes FAIL
+        with both hashes; nothing is rerun to make a failure pass."""
         if self.args.publish != "pypi":
             return "skipped (not published to PyPI)"
-        ok, why = self.published_ok(vendor)
+        published = self.published_platforms()
+        if not published:
+            return "nothing published yet", dict(platforms=[])
+        if "linux-meta" not in published:
+            raise StepFailed(f"published: the Linux `mojolearn` {self.version} is not published yet "
+                             f"(published: {', '.join(published)}), so `pip install mojolearn=={self.version}` "
+                             "cannot run; run published again once it is")
+        if self.dry:
+            return (f"would dispatch {self.PUBLISHED_WORKFLOW} for {self.version} ({', '.join(published)}) on a "
+                    "GitHub runner and judge its report")
+        ok, why = self.published_ok()
         if ok:
-            return why + " (report exists)"
-        wheels = self.published_wheels(vendor)
-        if not all(wheels) and not self.dry:
-            raise StepFailed(f"published-{vendor}: a candidate wheel is missing; run linux-pack / macos-build")
-        if self.dry:
-            receipts, verdict = [], "<the gate's verdict>"
-        else:
-            receipts, verdict = self.published_gate(vendor)
-        out, work = self.published_out(vendor), self.rel / "published"
-        if out.exists() and not self.dry:
-            # the producer refuses an existing output; a failed attempt is kept beside it, never deleted
+            return why + " (report exists)", dict(platforms=published)
+        candidates = self.published_candidates()
+        if candidates is None:
+            raise StepFailed("published: a shipped wheel of a published platform is missing on this Mac "
+                             "(linux-pack / macos-build)")
+        out = self.published_out()
+        if out.exists():
+            # a failed attempt is kept beside the new one, never deleted
             out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
-        names = [str(w) if w else "<candidate wheel>" for w in wheels]
-        cmd = [PY, str(ROOT / "tools" / "release_published_install.py"), "check", "--vendor", vendor,
-               "--version", self.version, "--source-commit", self.commit,
-               *[a for n in names for a in ("--candidate-wheel", n)],
-               *[a for r in receipts for a in ("--gate-evidence", str(r))], "--gate-verdict", verdict,
-               "--index-url", self.published_index_url(),
-               "--python", self.smoke_python() if not self.dry else "python3.12", "--out", str(out)]
-        if not self.dry:
-            work.mkdir(parents=True, exist_ok=True)
-        rc = self.run(cmd, log=work / f"published-{vendor}.log")
-        if self.dry:
-            return None
-        # the report names what failed (both hashes when the bytes differ); it is judged, never rerun
-        ok, why = self.published_ok(vendor)
-        if not ok or rc != 0:
-            raise StepFailed(f"published-{vendor} did not pass (exit {rc}): {why} "
-                             f"({work / f'published-{vendor}.log'})")
-        return why
+        token = f"published-{self.version}-{self.commit[:12]}-{int(time.time())}"
+        wf_ref = os.environ.get("MOJOLEARN_PUBLISHED_WORKFLOW_REF", "main")
+        log = self.rel / "published-check.log"
+        self.must(["gh", "workflow", "run", self.PUBLISHED_WORKFLOW, "--ref", wf_ref, "-f", f"version={self.version}",
+                   "-f", "candidates=" + json.dumps(candidates, sort_keys=True), "-f", f"token={token}"],
+                  what="gh workflow run " + self.PUBLISHED_WORKFLOW)
+        run_id, url = self.xcc_find_run(token, workflow=self.PUBLISHED_WORKFLOW)
+        self.say(f"  published-check run {url} (waiting; log {log})")
+        rc, _ = self.gh("run", "watch", run_id, "--exit-status", "--interval", "30", log=log)
+        got, _ = self.gh("run", "download", run_id, "-n", "published-check", "-D", out, log=log)
+        ok, why = self.published_ok()
+        if not ok:
+            raise StepFailed(f"published did not pass (run exit {rc}, artifact download exit {got}): {why}; {url}")
+        return f"{why}; {url}", dict(run=url, platforms=published)
 
-    def step_published_apple(self):
-        return self.step_published("apple")
-
-    def step_published_nvidia(self):
-        return self.step_published("nvidia")
-
-    def step_published_amd(self):
-        return self.step_published("amd")
-
-    def have_published(self, vendor):
+    def have_published(self, rec):
         if self.args.publish != "pypi":
             return None
-        ok, why = self.published_ok(vendor)
+        ok, why = self.published_ok()
         return (why + " (report exists)") if ok else None
-
-    def have_published_apple(self, rec):
-        return self.have_published("apple")
-
-    def have_published_nvidia(self, rec):
-        return self.have_published("nvidia")
-
-    def have_published_amd(self, rec):
-        return self.have_published("amd")
-
-    # ------------------------------------------------------------ --published-smoke (REMOVED 2026-11-05)
-    def published_smoke_vendors(self):
-        """{vendor: reason} of the --published-smoke requests of this invocation (each one is refused)."""
-        vendors = list(getattr(self.args, "published_smoke", None) or [])
-        reason = (getattr(self.args, "published_smoke_reason", None) or "").strip()
-        return {v: reason for v in vendors}
-
-    def record_published_smoke_requests(self):
-        """REMOVED (lane identity-once-on-frozen-source, Andrew 2026-11-05: identity runs ONCE per release, before
-        publish, NEVER after): the published-smoke-<vendor> steps ran the installed verifier (identity lanes) on a
-        vendor device after publication. A request is refused; nothing is selected or recorded."""
-        wanted = self.published_smoke_vendors()
-        if wanted:
-            raise SystemExit("release: --published-smoke is removed: no release step runs identity lanes on a device "
-                             "after the first publish (Andrew 2026-11-05). published-<vendor> checks the published "
-                             "bytes against the gated candidates on this Mac; a real fault is fixed in code and "
-                             "ships in the next version")
-        return {}
 
     def step_record(self):
         if self.args.publish != "pypi":
@@ -6597,8 +6645,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         "gate-apple": ("numerical", None), "gate-nvidia": ("numerical", "nvidia"), "gate-amd": ("numerical", "amd"),
         "gpu-column-nvidia": ("numerical", "nvidia"), "gpu-column-nvidia-hopper": ("numerical", "nvidia"),
         "gpu-column-amd": ("numerical", "amd"),
-        "published-apple": ("package", None), "published-nvidia": ("package", None),
-        "published-amd": ("package", None), "identity-at-freeze": ("metadata", None),
+        "published": ("package", None), "identity-at-freeze": ("metadata", None),
         "testpypi-rehearsal": ("package", None),
         "identity-cpu": ("numerical", None), "identity-admit": ("package", None),
     }
@@ -6765,11 +6812,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
                                                 required=True, evidence=[], reasons=[
                                                     f"ledger unreadable: {type(exc).__name__}: {exc}"])}
             notes.append(f"ledger unreadable ({type(exc).__name__}: {exc})")
-        smoke = set(getattr(self.args, "published_smoke", None) or ())
         steps = {}
         for step in self.selected_steps():
-            if step in PUBLISHED_SMOKE_STEPS and PUBLISHED_SMOKE_STEPS[step][0] not in smoke:
-                continue
             st, detail = self.step_state(step)
             steps[step] = (st, detail, st == "held")
         waivers = release_report_module().waivers_from(self.report_waiver_paths(), self.state)
@@ -6828,12 +6872,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
             if unknown:
                 raise SystemExit("release: unknown step(s) " + ", ".join(unknown) + "; steps: " + ", ".join(steps))
             steps = [s for s in steps if s in wanted]
-        # --published-smoke is refused (removed 2026-11-05: no identity lane after the first publish)
-        smoke = self.record_published_smoke_requests()
         if self.single() and self.gpu_smoke():
             raise SystemExit("release: --identity-on-wheels replaces the --gpu-smoke wheel columns (one run, nothing "
                              "twice); drop --gpu-smoke")
-        steps = [s for s in steps if s not in PUBLISHED_SMOKE_STEPS or PUBLISHED_SMOKE_STEPS[s][0] in smoke]
         self.selected = list(steps)
         for redo in (self.args.redo.split(",") if self.args.redo else []):
             if redo not in self.STEPS:
@@ -6875,7 +6916,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
 
     def rerun_action(self, step, st, states):
         if st == "done":
-            if step in ("finish-line", "record"):
+            if step in ("finish-line", "published", "record"):
                 rec = self.recorded(step) or {}
                 if sorted(rec.get("platforms", [])) != sorted(self.published_platforms()):
                     return "run it again for the newly published platform(s)"
@@ -7045,7 +7086,9 @@ def release_parser():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     ap.add_argument("version")
-    ap.add_argument("--dry-run", action="store_true", help="print the plan and each step's status; run nothing")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="walk the step graph and run nothing (tool tests only; not part of the release flow: "
+                         "--plan is the pre-release read)")
     ap.add_argument("--plan", action="store_true",
                     help="THE RELEASE PLAN (tools/release_plan.py): one decision with a reason per compile group, "
                          "identity lane x column, gate/producer, box and publish row; writes plan.json; runs nothing")
@@ -7082,6 +7125,12 @@ def release_parser():
                          "is the source commit, else a worktree under the release directory)")
     # default: github for either layout (default_build_backend); cpu-box and gpu-legs by name
     ap.add_argument("--build-backend", default=None, choices=sorted(BUILD_BACKENDS))
+    # THE macOS BUILD BACKEND (lane mac-speed-1, 2026-11-27; Andrew: GitHub's free STANDARD macOS runners may be
+    # used, never a larger/xlarge label, a self-hosted runner or a rented Mac): `github` (the default) builds the
+    # Apple wheel on macos-15 through tools/apple_github_build.py run; `laptop` is the old route on this Mac.
+    ap.add_argument("--macos-build-backend", default="github", choices=MACOS_BUILD_BACKENDS,
+                    help="where macos-build compiles the Apple wheel: github (free standard macOS runners, the "
+                         "default) or laptop (this Mac, tools/mac_slot.py, the route before 2026-11-27)")
     # WHY NO GPU BY DEFAULT (Andrew 2026-10-13): identity and behavior are checked before merge on NVIDIA,
     # AMD, Apple and CPU; the release only builds, checks artifact integrity and publishes.
     ap.add_argument("--identity-on-wheels", action="store_true",
@@ -7106,12 +7155,6 @@ def release_parser():
     # Inert since 2026-10-10 (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun): the
     # Apple cross-diff and release-check they steered are deleted; kept so
     # existing invocations still parse.
-    ap.add_argument("--published-smoke", action="append", default=[], choices=["apple", "nvidia", "amd"],
-                    metavar="VENDOR",
-                    help="REMOVED 2026-11-05 (refused): no release step runs identity lanes on a device after "
-                         "the first publish")
-    ap.add_argument("--published-smoke-reason", default="",
-                    help="REMOVED 2026-11-05 with --published-smoke")
     ap.add_argument("--accept-moved", action="store_true", help="inert since 2026-10-10")
     ap.add_argument("--cpu-column", action="store_true", help="inert since 2026-10-10")
     ap.add_argument("--amd-expect-from", default="",
@@ -7120,8 +7163,7 @@ def release_parser():
                     help="lq (default): the NVIDIA and AMD columns run on the nv and amd boxes we hold, queued next "
                          "with `lq add --front` (tools/release_lq_smoke.py); rent: the old per-architecture rented smoke")
     ap.add_argument("--hopper-box", default="",
-                    help="ssh target of a Hopper (sm_90a) box we hold; without it the Hopper column is SKIPPED and "
-                         "the sm_90a payload publishes unsmoked on its GitHub build receipt (--smoke-via lq)")
+                    help="SSH target of a held Hopper box for the optional Hopper smoke (--smoke-via lq)")
     ap.add_argument("--smoke-branch", default="main",
                     help="the branch whose tree runs the smoke on the lq box (default main)")
     ap.add_argument('--gate-autograd-root', help='precompiled gate artifacts under nvidia/ and amd/, each with build-manifest.json (default release-dir/autograd-bin)')

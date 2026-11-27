@@ -52,7 +52,7 @@ class AutoTheta(ParamsMixin):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and forecasts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
@@ -69,7 +69,7 @@ class AutoTheta(ParamsMixin):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Each series needs more
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Each series needs more
     than 3 observations. Prediction intervals (``level``), fitted values,
     non-normal error distributions and exogenous regressors are not supported
     and raise NotImplementedError.
@@ -133,8 +133,8 @@ class AutoTheta(ParamsMixin):
 
         Raises
         ------
-        TypeError
-            If ``y`` is float64.
+        ValueError
+            If a float64 value is outside float32's range.
         ValueError
             If a series has 3 or fewer observations.
         """
@@ -200,7 +200,7 @@ class Theta(AutoTheta):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and forecasts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
@@ -217,7 +217,7 @@ class Theta(AutoTheta):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Each series needs more
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Each series needs more
     than 3 observations. Prediction intervals (``level``), fitted values,
     non-normal error distributions and exogenous regressors are not supported
     and raise NotImplementedError.
@@ -260,7 +260,7 @@ class OptimizedTheta(AutoTheta):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and forecasts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
@@ -277,7 +277,7 @@ class OptimizedTheta(AutoTheta):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Each series needs more
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Each series needs more
     than 3 observations. Prediction intervals (``level``), fitted values,
     non-normal error distributions and exogenous regressors are not supported
     and raise NotImplementedError.
@@ -320,7 +320,7 @@ class DynamicTheta(AutoTheta):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and forecasts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
@@ -337,7 +337,7 @@ class DynamicTheta(AutoTheta):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Each series needs more
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Each series needs more
     than 3 observations. Prediction intervals (``level``), fitted values,
     non-normal error distributions and exogenous regressors are not supported
     and raise NotImplementedError.
@@ -380,7 +380,7 @@ class DynamicOptimizedTheta(AutoTheta):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and forecasts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
@@ -397,7 +397,7 @@ class DynamicOptimizedTheta(AutoTheta):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Each series needs more
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Each series needs more
     than 3 observations. Prediction intervals (``level``), fitted values,
     non-normal error distributions and exogenous regressors are not supported
     and raise NotImplementedError.

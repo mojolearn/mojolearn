@@ -19,7 +19,8 @@ import time and device memory of each vendor's run. Other versions already in th
 THE BUILD REFUSES (exit 1, nothing written) when, for one model, version, numeric mode, batch and seed:
   * the `identical` output digests differ between vendors, between two runs of one vendor, or from the
     digest the catalog already holds for that cell;
-  * a run's second output differs from its first (repeat_equal false) in `identical` mode;
+  * an ok run lacks a check-input digest, or an identical run lacks an output digest or a confirmed repeat;
+  * the same version and mode has both a successful import and a refusal;
   * the check inputs differ (input_digest), or the runs name different sources (weights, revision, sha256);
   * the runs used different batch or seed values.
 A failed run (status failed) is reported and left out; it never makes an entry.
@@ -29,13 +30,13 @@ Status of an entry, from its newest version's `identical` cell:
   refused: <ops>    the import refuses the model (the ops it does not support, from the run);
   unverified: ...   ok but not yet run on both NVIDIA and AMD (left out of the docs page).
 
-Only revisions, hashes and numbers are written: never weights, model files or evaluation images (the
-catalog ships in the wheel; no third-party data in the distribution).
+The catalog stores metadata. The wheel also includes the pinned MNIST-12 model for offline verification.
 """
 import argparse
 import copy
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -56,6 +57,11 @@ _ENV = ("torch_version", "torchvision_version", "transformers_version", "onnx_ve
 
 class Refused(Exception):
     pass
+
+
+def _check_digest(value, label):
+    if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{16}", value) is None:
+        raise Refused(f"{label}: expected the first 16 hex digits of SHA-256")
 
 
 def _version_key(v):
@@ -85,6 +91,11 @@ def load_runs(dirs):
             if doc.get("status") == "failed":
                 failed.append(f"{doc.get('model')} ({doc.get('vendor')}, {f}): {str(doc.get('error'))[:160]}")
                 continue
+            status = doc.get("status")
+            if status == "ok":
+                _check_digest(doc.get("input_digest"), f"{f}: input digest")
+            elif not isinstance(status, str) or (status != "refused" and not status.startswith("refused: ")):
+                raise Refused(f"{f}: unknown run status {status!r}")
             for k in ("model", "vendor", "numeric_mode", "mojolearn_version"):
                 if not doc.get(k):
                     raise Refused(f"{f}: no {k}")
@@ -158,7 +169,6 @@ def merge_model(entry, model, runs):
     entry["kind"] = kind
     entry["source"] = old_src
     ok = [r for r in runs if r["status"] == "ok"]
-    refused = [r for r in runs if str(r["status"]).startswith("refused")]
     if ok:
         ins = _one([r.get("inputs") for r in ok], "the program inputs", model)
         outs = _one([r.get("outputs") for r in ok], "the program outputs", model)
@@ -176,19 +186,23 @@ def merge_model(entry, model, runs):
     for r in runs:
         cell = versions.setdefault(r["mojolearn_version"], {}).setdefault(r["numeric_mode"], {})
         vendor = r["vendor"]
-        if str(r["status"]).startswith("refused"):
+        status = "ok" if r["status"] == "ok" else "refused"
+        if cell.get("status", status) != status:
+            raise Refused(f"{model} {r['mojolearn_version']} {r['numeric_mode']}: conflicting import "
+                          f"status {cell['status']!r} and {status!r} ({r['_file']})")
+        if status == "refused":
             cell["status"] = "refused"
             cell["unsupported_ops"] = sorted(set(cell.get("unsupported_ops", [])) | set(r.get("unsupported_ops") or []))
             continue
         ours = r.get("ours") or {}
         d = ours.get("digest")
         if r["numeric_mode"] == "identical":
-            if not ours.get("repeat_equal", False):
-                raise Refused(f"{model} {vendor} {r['mojolearn_version']}: the second run's output differs "
-                              f"from the first ({r['_file']})")
+            _check_digest(d, f"{r['_file']}: output digest")
+            if ours.get("repeat_equal") is not True:
+                raise Refused(f"{model} {vendor} {r['mojolearn_version']}: the second run did not "
+                              f"confirm the first output ({r['_file']})")
             digests = cell.setdefault("digests", {})
-            have = set(digests.values()) | ({d} if d else set())
-            if len(have) > 1:
+            if any(recorded != d for recorded in digests.values()):
                 raise Refused(f"{model} {r['mojolearn_version']} identical: the output digests disagree: "
                               + ", ".join(f"{v}={x}" for v, x in sorted(digests.items()))
                               + f", {vendor}={d} ({r['_file']})")
@@ -209,8 +223,6 @@ def merge_model(entry, model, runs):
                               f"{prev} on {meas.get('vendors')} with equal digests: the eval inputs differ")
             meas.update({k: acc[k] for k in ("metric", "value", "n", "slice", "slice_files_sha256", "preprocess")})
             meas["vendors"] = sorted(set(meas.get("vendors", [])) | {vendor})
-    if refused and ok:
-        raise Refused(f"{model}: refused on {[r['vendor'] for r in refused]}, ok on {[r['vendor'] for r in ok]}")
     entry["status"] = entry_status(entry)
     acc = {}
     if old_src.get("published_top1") is not None:
@@ -234,7 +246,16 @@ def entry_status(entry):
         return "unverified: no identical-mode run"
     if cell.get("status") == "refused":
         return "refused: " + ", ".join(cell.get("unsupported_ops") or ["unsupported model"])
+    if cell.get("status") != "ok":
+        raise Refused(f"{entry['name']}: unknown catalog cell status {cell.get('status')!r}")
+    _check_digest((entry.get("check") or {}).get("input_digest"), f"{entry['name']}: input digest")
     digests = cell.get("digests") or {}
+    for vendor, digest in digests.items():
+        _check_digest(digest, f"{entry['name']} {vendor}: output digest")
+        if cell.get("vendors", {}).get(vendor, {}).get("repeat_equal") is not True:
+            raise Refused(f"{entry['name']} {vendor}: no confirmed repeat for the recorded output digest")
+    if len(set(digests.values())) > 1:
+        raise Refused(f"{entry['name']}: the recorded output digests disagree")
     missing = [VENDOR_NAMES[v] for v in GPU_VENDORS if v not in digests]
     if missing:
         return "unverified: no %s run" % " or ".join(missing)

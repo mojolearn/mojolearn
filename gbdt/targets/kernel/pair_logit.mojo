@@ -241,7 +241,7 @@ def make_pairwise_target_buffers(
     )
 
 
-def make_pairwise_group_buffers(
+def make_pairwise_group_buffers[held_out: Bool = False](
     ctx: DeviceContext,
     group_sizes: List[UInt32],
     n_rows: Int,
@@ -270,7 +270,7 @@ def make_pairwise_group_buffers(
     pair counts for the reference's per-group cap and constant-target
     refusals, and the weighted counts summed in Float64 for
     `PairsTotalWeight`."""
-    comptime if PAIRLOGIT_GROUP_FUSED:
+    comptime if PAIRLOGIT_GROUP_FUSED or held_out:
         var n_groups = len(group_sizes)
         if n_groups < 1:
             raise Error("Cannot generate pairs for data without groups")

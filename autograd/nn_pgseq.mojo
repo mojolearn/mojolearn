@@ -53,7 +53,7 @@ from sequence.lamb_core import lamb_apply, lamb_clip, lamb_table, lamb_trust, la
 from autograd.nn_pg import ParamGroupTable, pg_check_membership
 from autograd.nn_optim import (
     NN_LAMB_ALWAYS_ADAPT, NN_LAMB_BIAS_CORRECTION, NN_LAMB_CLIP, NN_OPT_ADAGRAD, NN_OPT_LAMB, NN_SCHED_PLATEAU,
-    NnLamb, nn_opt_step,
+    NnLamb, nn_opt_step, nn_optim_admit, nn_positive_lr,
 )
 
 comptime PGSEQ_GROUP_WORDS = 8   # lr, flags, f1, f2, eps, weight_decay, f7, reserved (0)
@@ -125,13 +125,17 @@ def pgseq_table(fp: List[Float64], at: Int, kind: Int, offsets: List[Int], n: In
                     + " parameter tensors; call compile again")
     table.default = D
     var w = at + PGSEQ_HEADER
+    var no_schedule = List[Float64]()
     for g in range(G):  # driver-loop: over parameter groups (once per fit)
-        var lr = fp[w]
-        if not (lr > 0.0):
-            raise Error("ValueError: param_groups[" + String(g) + "]: the learning rate must be positive")
-        table.lrs.append(Float32(lr))
-        table.cfgs.append(OptConfig(kind, Int(fp[w + 1]), Float32(fp[w + 2]), Float32(fp[w + 3]),
-                                    Float32(fp[w + 4]), Float32(fp[w + 5]), Float32(fp[w + 6])))
+        var lr = Float32(fp[w])
+        if not nn_positive_lr(lr):
+            raise Error("ValueError: param_groups[" + String(g) + "]: the learning rate must be positive and finite in float32")
+        var cfg = OptConfig(kind, Int(fp[w + 1]), Float32(fp[w + 2]), Float32(fp[w + 3]),
+                            Float32(fp[w + 4]), Float32(fp[w + 5]), Float32(fp[w + 6]))
+        nn_optim_admit(kind, cfg.flags, Float64(cfg.f1), Float64(cfg.f2), Float64(cfg.eps),
+                       Float64(cfg.wd), Float64(cfg.f7), 0, no_schedule)
+        table.lrs.append(lr)
+        table.cfgs.append(cfg)
         w += PGSEQ_GROUP_WORDS
     # the tensor offsets by NnLamb's rule (autograd/nn_optim.mojo: rising ends, then n), each kept tensor's group
     var groups_of = List[Int]()

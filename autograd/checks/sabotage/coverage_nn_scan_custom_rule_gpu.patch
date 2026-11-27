@@ -1,0 +1,11 @@
+diff --git a/autograd/nn_scan.mojo b/autograd/nn_scan.mojo
+--- a/autograd/nn_scan.mojo
++++ b/autograd/nn_scan.mojo
+@@ -173,6 +173,6 @@
+ # Replace a same-shaped unary custom rule in a scanned cell by the ordinary identity gradient.
+-comptime SCAN_SABOTAGE_CUSTOM_RULE = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_CUSTOM_RULE"]()
++comptime SCAN_SABOTAGE_CUSTOM_RULE = True  # SABOTAGE
+ comptime SCAN_SABOTAGE_CUSTOM_RULE_HOST = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_CUSTOM_RULE_HOST"]()
+
+
+ def scan_check_custom_program(p: OpsProgram, role: String) raises:

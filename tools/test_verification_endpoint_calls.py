@@ -205,3 +205,37 @@ def fixture(ml):
     visitor = Calls(rows)
     visitor.function(node, {'ml': {'mojolearn'}})
     assert visitor.seen == {r['endpoint'] for r in rows}
+
+
+def test_kernel_infix_call_is_attributed_to_its_left_operand():
+    endpoints = (_rows('mojolearn.RBF', ('__init__', '__add__', '__mul__'))
+                 + _rows('mojolearn.Matern', ('__init__', '__add__', '__mul__')))
+    fixture = ast.parse('''
+def fixture(ml):
+    r = ml.RBF()
+    m = ml.Matern()
+    unused = r + (m * r)
+''').body[0]
+    visitor = Calls(endpoints)
+    visitor.function(fixture, {'ml': {'mojolearn'}})
+    assert {x for x in visitor.seen if not x.endswith('__init__')} == {
+        'mojolearn.RBF.__add__', 'mojolearn.Matern.__mul__'}
+
+
+def test_shipped_fixture_uses_its_own_nested_helpers():
+    fixture, inner = ast.parse('''
+def light_case(session):
+    return nested(session)
+def nested(session):
+    return session.mul(1, 2)
+''').body
+    outer, shadowed = ast.parse('''
+def lane(ml):
+    light_case(ml.ops.Session())
+def nested(session):
+    session.backward(4)
+''').body
+    visitor = Calls(rows(), {'light_case': fixture, 'nested': shadowed}, {fixture: {'nested': inner}})
+    visitor.function(outer, {'ml': {'mojolearn'}})
+    assert 'mojolearn.ops.Session.mul' in visitor.seen
+    assert 'mojolearn.ops.Session.backward' not in visitor.seen

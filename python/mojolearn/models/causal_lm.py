@@ -218,7 +218,7 @@ class CausalLM:
         Raises
         ------
         AttributeError
-            If the model runs in `fast` mode (Apple only), which promises no
+            If the model runs in `fast` mode, which promises no
             identical bits.
         """
         return _NATIVE.causal_lm_digest(self)

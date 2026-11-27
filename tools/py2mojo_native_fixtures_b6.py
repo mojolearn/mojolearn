@@ -14,7 +14,8 @@ every array the original test built (same seed, draw order and dtype), every ref
     checks/native_tests/fixtures/xn_louvain/    x_neighbors_graph_check.mojo `test_louvain`
                                                 (python/mojolearn/tests/test_x_neighbors_sanity.py)
 
-Generated with numpy 2.5.5 and networkx 3.7 (2026-11-22). Regenerate and repack:
+The post-release linear_public_coefficients fixture used NumPy 2.4.4.
+The original sets were generated with numpy 2.5.5 and networkx 3.7 (2026-11-22). Regenerate and repack:
 
     python tools/py2mojo_native_fixtures_b6.py && python3 tools/fixture_packs.py pack checks/native_tests/fixtures
 
@@ -167,7 +168,23 @@ def svgp():
             _put("xn_svgp", "elbo.f64", [elbo], np.float64)]
 
 
-SETS = (linalg_inputs, linalg_eigh, linalg_qr, linalg_svd, pca_random, louvain, svgp)
+def linear_public_coefficients():
+    # Match test_native_classical_public.data() exactly, including when y is rounded.
+    x = np.random.default_rng(2059).normal(size=(19, 3)).astype("f4")
+    y = (x @ np.array([.75, -.5, 1.25], "f4") + .375).astype("f4")
+    coefficients = []
+    for order in (slice(None), slice(None, None, -1)):
+        a, b = x[order].astype("f8"), y[order].astype("f8")
+        a -= a.mean(0)
+        b -= b.mean()
+        for alpha in (0., 1.):
+            coefficients.append(np.linalg.solve(a.T @ a + alpha * np.eye(3), a.T @ b))
+    family = "linear_public_coefficients"
+    return [_put(family, "x.f32", x, np.float32), _put(family, "y.f32", y, np.float32),
+            _put(family, "coefficients.f64", coefficients, np.float64)]
+
+
+SETS = (linalg_inputs, linalg_eigh, linalg_qr, linalg_svd, pca_random, louvain, svgp, linear_public_coefficients)
 
 
 def _run(index):

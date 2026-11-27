@@ -23,7 +23,7 @@ run on the op's own scratch either way (a stable re-sort of stale scratch
 changes nothing the caller sees). Nothing is read back or drained.
 """
 from max.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast
+from core.float_sort_key import sort_key_bits
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
@@ -38,23 +38,6 @@ comptime _U = MutPointer[UInt32, MutAnyOrigin]
 @always_inline
 def _so_blocks(count: Int) -> Int:
     return (count + SO_TPB - 1) // SO_TPB if count > 0 else 1
-
-
-@always_inline
-def sort_key_bits(v: Float32, descending: Bool) -> UInt32:
-    """The sortable key of a float32: unsigned order is ascending float
-    order (svm/checks/device_select.mojo `twiddle_keys_kernel`'s map:
-    negatives bit-inverted, non-negatives with the sign bit set); inverted
-    for a descending order."""
-    var bits = bitcast[DType.uint32](v)
-    var key: UInt32
-    if bits & UInt32(0x80000000) != UInt32(0):
-        key = ~bits
-    else:
-        key = bits | UInt32(0x80000000)
-    if descending:
-        key = ~key
-    return key
 
 
 def so_key_kernel(gate: StepI32, f: _F, keys: _U, vals: _U, n_in: Int32, desc_in: Int32):

@@ -216,7 +216,7 @@ class _MambaBase(NumericModeMixin):
         Returns
         -------
         str
-            ``'identical'`` or ``'fast'`` (Apple only), read from the compiled
+            ``'identical'`` or ``'fast'``, read from the compiled
             binary the block uses.
         """
         return _native_neural_bridge.RUNTIME.neural_block_numeric_mode_used(self, _native_neural_bridge.CONTEXT)
@@ -330,7 +330,7 @@ class _MambaBase(NumericModeMixin):
 
         Recomputes the forward with the current weights on every call; no earlier
         forward or cached state is used or changed. Runs under ``numeric_mode``
-        'identical' or 'fast' (Apple GPUs only); other modes raise `NotImplementedError`. Gradients with
+        'identical' or 'fast'; other modes raise `NotImplementedError`. Gradients with
         respect to a carried state, decode backward and final-state cotangents are not
         available.
 
@@ -387,7 +387,7 @@ class Mamba1Block(_MambaBase, _native_constructor=True):
     returns (B, L, d_model) float32, with the recurrent state explicit and
     caller-owned (`Mamba1State`).
 
-    Constructor keyword ``numeric_mode`` selects 'identical' (the default) or 'fast' (Apple GPUs only).
+    Constructor keyword ``numeric_mode`` selects 'identical' (the default) or 'fast'.
     Inputs, weights and state must be float32: bfloat16, float16 and float64 are
     refused by name rather than converted, and non-finite values are refused by name.
     Arrays are read through the buffer protocol, so NumPy is not required; arrays the
@@ -690,7 +690,7 @@ class Mamba2Block(_MambaBase, _native_constructor=True):
     Takes (B, L, d_model) float32 and returns (B, L, d_model) float32, with the
     recurrent state explicit and caller-owned (`Mamba2State`).
 
-    Constructor keyword ``numeric_mode`` selects 'identical' (the default) or 'fast' (Apple GPUs only).
+    Constructor keyword ``numeric_mode`` selects 'identical' (the default) or 'fast'.
     Inputs, weights and state must be float32: bfloat16, float16 and float64 are
     refused by name rather than converted, and non-finite values are refused by name.
     Arrays are read through the buffer protocol, so NumPy is not required; arrays the
@@ -1064,7 +1064,7 @@ class Mamba3Block(_MambaBase, _native_constructor=True):
     is applied inside the core (no gated output norm), and B and C have their own
     RMSNorms with per-head biases added after the norm.
 
-    Constructor keyword ``numeric_mode`` selects 'identical' (the default) or 'fast' (Apple GPUs only).
+    Constructor keyword ``numeric_mode`` selects 'identical' (the default) or 'fast'.
     Inputs, weights and state must be float32: bfloat16, float16 and float64 are
     refused by name rather than converted, and non-finite values are refused by name.
     Arrays are read through the buffer protocol, so NumPy is not required; arrays the

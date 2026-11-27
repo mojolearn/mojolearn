@@ -1,0 +1,24 @@
+diff --git a/mamba/host/mamba_host_shell_impl.mojo b/mamba/host/mamba_host_shell_impl.mojo
+--- a/mamba/host/mamba_host_shell_impl.mojo
++++ b/mamba/host/mamba_host_shell_impl.mojo
+@@ -269,6 +269,8 @@
+             state.pend_k = read_f32(a[18], k_n)
+             state.pend_v = read_f32(a[19], v_n)
+     var st = mamba3_block_oracle(w, read_f32(a[0], b * l * dm), b, l, state)
++    for i in range(b * l * dm):
++        st.residual_out[i] += Float32(1)  # SABOTAGE: offset each emitted hidden value
+     _write(a[20], st.residual_out, b * l * dm)
+     _write(a[21], st.h_last, h_n)
+     _write(a[22], st.k_last, k_n)
+diff --git a/core/mojolearn_neural_host_impl.mojo b/core/mojolearn_neural_host_impl.mojo
+--- a/core/mojolearn_neural_host_impl.mojo
++++ b/core/mojolearn_neural_host_impl.mojo
+@@ -344,6 +344,8 @@
+             state.pend_k = read_f32(a[18], k_n)
+             state.pend_v = read_f32(a[19], v_n)
+     var st = mamba3_block_oracle(w, read_f32(a[0], b * l * dm), b, l, state)
++    for i in range(b * l * dm):
++        st.residual_out[i] += Float32(1)  # SABOTAGE: offset each emitted hidden value
+     _write(a[20], st.residual_out, b * l * dm)
+     _write(a[21], st.h_last, h_n)
+     _write(a[22], st.k_last, k_n)

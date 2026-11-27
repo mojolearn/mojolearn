@@ -1,0 +1,12 @@
+diff --git a/gbdt/targets/lightgbm_ranking.mojo b/gbdt/targets/lightgbm_ranking.mojo
+--- a/gbdt/targets/lightgbm_ranking.mojo
++++ b/gbdt/targets/lightgbm_ranking.mojo
+@@ -241,7 +241,7 @@
+         var discounts = a.plane(LR_DISCOUNT)
+         comptime if phase == RR_IDCG:
+             discounts[row] = identical_div(Float32(0.6931471805599453), routed_log(Float32(pos + 2)))
+-        a.plane(0)[row] = identical_mul(_gain(a.labels[Int(a.order[row])]), discounts[row]) if pos < arg else Float32(0)
++        a.plane(0)[row] = identical_mul(_gain(a.labels[Int(a.order[row])]), discounts[row]) if pos < LR_CUTOFF else Float32(0)
+     elif phase == RR_CLEAR:
+         a.direction[row] = 0
+         a.hessian[row] = 0

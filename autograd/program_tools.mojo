@@ -305,6 +305,10 @@ def program_op_name(code: Int) -> String:
     if code == 174:
         return "trapezoid_scan"
     # session-ops-rest end
+    if code == 190:
+        return "projected_lstm"
+    if code == 191:
+        return "projected_lstm_output"
     return "op_" + String(code)
 
 

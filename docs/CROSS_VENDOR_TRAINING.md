@@ -13,16 +13,23 @@ A coordinator on any machine (no GPU needed):
 python -m mojolearn.cross_vendor coordinator --port 7777 --workers 2 --shards 4 --steps 100
 ```
 
-A worker on each GPU machine:
+On each worker, start from the same trainer state and the same token batches.
+Save the batches as an int32 NumPy array of shape
+`(steps, logical_shards, batch, length + 1)`. For the coordinator above,
+the first two dimensions are 100 and 4. This worker owns shards 0 and 1.
+On the second machine, use shards 2 and 3 and a different worker name.
 
 ```python
-from mojolearn.cross_vendor import Worker
+import numpy as np
+from mojolearn.cross_vendor import BatchFeed, LearningRateTable, Worker
 
-Worker(state,                      # a LanguageModelTrainer state_dict(), the same on every worker
-       shards=[0, 1],              # this worker's logical shards; together the workers own 0..K-1 once
-       batches=lambda step, shard: ids_for(step, shard),   # int32 [batch, length + 1], same function everywhere
-       address=("coordinator-host", 7777),
-       name="my-mac").run()
+# state is the same LanguageModelTrainer.state_dict() on both machines.
+start = state["completed_steps"]
+tokens = np.load("token_batches.npy", allow_pickle=False)
+worker = Worker(state, shards=[0, 1], batches=BatchFeed(tokens, start_step=start),
+                lr_for_step=LearningRateTable([0.001] * len(tokens), start_step=start),
+                address=("coordinator-host", 7777), name="worker-0")
+worker.run()
 ```
 
 ## Why the bits agree
@@ -62,16 +69,13 @@ coordinator on the first owner's box put two gradients on the wide-area
 link. The bits are the flat fold's bits because the fold is a left fold, and
 the M4 column, the gathered group and chained groups of two and three
 workers (unequal blocks) agree step for step
-(`bench/results/lm_segment_t0_2026-09-22/`). The host fold runs the
-vectorized NumPy spelling when NumPy is installed and the exact pure-Python
-one otherwise; `test_cross_vendor.py` holds the two equal.
+(`bench/results/lm_segment_t0_2026-09-22/`). The host fold runs in compiled Mojo.
 
 A worker holds its block's gradients in host memory until its turn
 (`shards x 4 bytes x n_total`; 44 shards of the 162M shape is 28 GB).
 
-`Worker(..., lr_for_step=f)` applies `f(step)` through `trainer.set_lr`
-before each step's gradients, so a recipe's learning-rate table drives a
-live group exactly as it drives `tools/lm_segment.py`.
+To use the learning rate in the trainer state, omit `lr_for_step`. For a
+schedule, pass a `LearningRateTable` with one rate per absolute training step.
 
 ## Limits
 

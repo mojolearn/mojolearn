@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The public `linalg` doors at the Python boundary: returned shapes and dtypes,
 caller storage left untouched, and the refusals by type and words. Their
-numbers against NumPy are test_linalg_decompositions.py; their bits on each
+numerical comparisons against NumPy run in the native Mojo suites; their bits on each
 side are the verify lanes."""
 import os
 import sys
@@ -39,8 +39,8 @@ def test_qr_r_public_shape_and_dtype_match_numpy(rows, cols):
     """
     a = _matrix(rows, cols)
     original = a.copy()
-    r = np.asarray(linalg.qr(a, mode="r")).reshape(cols, cols)
-    assert r.shape == np.linalg.qr(a.astype(np.float64), mode="r").shape
+    r = np.asarray(linalg.qr(a, mode="r"))
+    assert r.shape == (cols, cols)
     assert r.dtype == np.float32
     np.testing.assert_array_equal(a, original)
 
