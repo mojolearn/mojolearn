@@ -28,6 +28,37 @@ def _nn_scan_cell(s):
     return s.capture(inputs=[h, c, x], outputs=[h2, c2, y])
 
 
+def _nn_scan_custom_grad(ops, tmp):
+    """Reload the whole checkpointed scan and take one SGD step using the cell's saved rule."""
+    import os
+
+    zero = np.zeros((2, 1), dtype=np.float32)
+    data = np.array([1, 4, 2, 7, 3, 9], np.float32).reshape(3, 2, 1)
+    path = os.path.join(tmp, "custom-rule-scan.mlp")
+    with ops.Session() as c:
+        v = c.tensor(zero)
+        forward = c.capture(inputs=[v], outputs=[c.copy(v)])
+        y, g = c.tensor(zero), c.tensor(zero)
+        backward = c.capture(inputs=[y, g], outputs=[c.mul(y, g)])
+        rule = c.custom_op(forward, backward, saved=[0])
+        h, x = c.tensor(zero), c.tensor(zero)
+        h1 = c.custom(rule, c.add(h, x))
+        cell = c.capture(inputs=[h, x], outputs=[h1, h1])
+        xs = c.tensor(data)
+        h0 = c.tensor(np.array([[1], [2]], np.float32))
+        lengths = c.tensor(np.array([3, 1], np.float32))
+        _, final = c.scan(cell, xs, h0, lengths=lengths, checkpoint_every=2)
+        model = c.capture(inputs=[xs], outputs=[c.scale(c.sum(final), 3.0)])
+        initial_state_index = list(model.params).index(h0)
+        model.save(path, verify=False)
+    with ops.Session() as s:
+        model = s.load_program(path)
+        initial_state = model.params[initial_state_index]
+        model.fit(data, parameters=[initial_state], optimizer=s.optimizer("sgd", lr=0.125),
+                  epochs=1, batch_size=3, shuffle=False, loss="output")
+        return _h(np.asarray(s.numpy(initial_state)))
+
+
 @lane("ops-scan-cell")
 def _(ml, X, yc, yr, Xh=None):
     """ops.Session.scan (lane nn-blocks-scan, 2026-11-25): a two-state cell (h, c) captured in an inference session
@@ -96,6 +127,8 @@ def _(ml, X, yc, yr, Xh=None):
         masks = [np.asarray(c.numpy(c.scan(dcell, c.tensor(np.ones((n, B, 16), np.float32)), d0, counter=k)[0]))
                  for n, k in ((T, 0), (T, 1), (2, 1))]  # glue: three calls
         parts["dropout"] = _h(*masks)
+    with tempfile.TemporaryDirectory(prefix="ib-custom-scan-") as tmp:
+        parts["custom_backward"] = _nn_scan_custom_grad(ml.ops, tmp)
     return _fit(parts)
 
 
