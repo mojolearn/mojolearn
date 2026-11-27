@@ -22,6 +22,7 @@ from std.memory import unsafe_memcpy
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_leased_call
 from std.sys.compile import is_defined
+from sequence.lengths import recurrent_length_valid
 from sequence.ops_impl import net_of, rnn_lengths_of
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -699,7 +700,7 @@ def xseq_run_class_counts[dt: DType](codes: Int, n: Int, steps: Int, lengths: In
             if has_lens:
                 var v = lp[i]
                 comptime if _RNN_REVIEW_COUNTS_CHECK_LENGTHS:
-                    if v != v or v < Float32(1.0) or v > Float32(steps) or Float32(Int(v)) != v:
+                    if not recurrent_length_valid(v, steps):
                         bp[worker] = 1
                         continue
                 valid = Int(v)

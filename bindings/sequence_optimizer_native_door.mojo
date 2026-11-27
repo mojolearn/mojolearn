@@ -517,9 +517,12 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
             py_setitem(fields, nk[].k__flags, PythonObject(flags))
             py_setitem(fields, nk[].k__fp, fp)
         elif kind == 5:
-            for name in ["beta2_decay", "d", "weight_decay", "maximize"]:  # driver-loop: over Adafactor scalar options
+            for name in ["beta2_decay", "d", "weight_decay"]:  # driver-loop: over Adafactor scalar options
                 opt_scalar(options[PythonObject(name)], context)
-            extra.append(Int(Bool(py=py_item(options, nk[].k_maximize))))
+            var maximize = py_item(options, nk[].k_maximize)
+            if py_type(maximize) is not b.bool:
+                raise Error("TypeError: Adafactor: maximize must be a bool")
+            extra.append(Int(Bool(py=maximize)))
             var beta2_decay = Float64(py=_seq_real(py_item(options, nk[].k_beta2_decay), "beta2_decay"))
             var d = Float64(py=_seq_real(py_item(options, nk[].k_d), "d"))
             var decay = Float64(py=_seq_real(py_item(options, nk[].k_weight_decay), "weight_decay"))

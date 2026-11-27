@@ -811,6 +811,10 @@ class Sequential(_CheckMixin):
             ``'final'``: the last layer's final state of each direction,
             ``(directions, hidden_size)`` (PyTorch's ``h_n`` of the last
             layer).
+        proj_size : int, default 0
+            A positive value below ``hidden_size`` projects the hidden state
+            before the next step. The output has ``proj_size`` features per
+            direction and the cell state keeps ``hidden_size`` features.
 
         With ``lengths`` given to :meth:`fit` and :meth:`predict`, a sample's
         steps past its length do not change its state; the ``'sequence'``
@@ -823,6 +827,7 @@ class Sequential(_CheckMixin):
         directions and the dropout layers), in PyTorch's parameter order:
         ``weight_ih``, ``weight_hh``, ``bias_ih``, ``bias_hh`` of layer 0's
         forward direction, then of its reverse direction, then layer 1.
+        Each projected layer adds ``weight_hr`` directly after its biases.
 
         Example: classify variable-length sequences of 3 features padded to
         20 steps by the final states of a two-layer bidirectional LSTM::
@@ -832,9 +837,6 @@ class Sequential(_CheckMixin):
                      .flatten().linear(2)
                      .compile(loss="cross_entropy"))
             model.fit(X, y, lengths=lengths)
-        With ``0 < proj_size < hidden_size`` each step projects its hidden
-        state before the next step. The output has ``proj_size`` features
-        per direction. The cell state keeps ``hidden_size`` features.
         """
         return _SEQUENTIAL_ENTRY(self, "add", ("lstm", (hidden_size, num_layers, bidirectional, dropout, output, proj_size), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 

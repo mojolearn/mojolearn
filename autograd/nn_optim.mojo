@@ -114,6 +114,11 @@ def _finite(v: Float64) -> Bool:
     return v == v and abs(v) <= 1.7976931348623157e308
 
 
+@always_inline
+def nn_positive_lr(rate: Float32) -> Bool:
+    return rate > Float32(0) and rate <= Float32.MAX
+
+
 # ---------------------------------------------------------------- admission (compile and fit call this one body)
 def nn_optim_admit(
     kind: Int, flags: Int, f1: Float64, f2: Float64, eps: Float64, wd: Float64, f7: Float64,

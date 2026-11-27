@@ -1021,9 +1021,11 @@ def block_forward[E: Exec](
         var lens = Optional[Tensor](None)
         if lengths:
             lens = tape.variable(ex, lengths.value(), B, 1, False)
-        var states = projected_lstm(tape, ex, xt, wi, wh, bi, bh, hr, _x(xargs, i, 2) == 1, None, None, lens)
+        var reverse = _x(xargs, i, 2) == 1
         if _x(xargs, i, 3) == 1:
+            var states = projected_lstm[E, True](tape, ex, xt, wi, wh, bi, bh, hr, reverse, None, None, lens)
             return tape.view_nd(ex, states[1], rn_shape([B, 1, projection], "projected LSTM final"))
+        var states = projected_lstm(tape, ex, xt, wi, wh, bi, bh, hr, reverse, None, None, lens)
         return tape.permute(ex, states[0], axes)
     raise Error("model: unknown block code " + String(code))
 

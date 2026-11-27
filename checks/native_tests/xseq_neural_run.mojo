@@ -329,6 +329,13 @@ def run_case(unit: Int) raises:
             require(False, "the admission accepted a non-finite length")
         except problem:
             _refuses(problem, "ValueError: fit: every length must be a whole number from 1 to the sequence length 4")
+        var wide: List[Float32] = [16777220.0]
+        try:
+            xseq_run_lengths_check(Int(wide.unsafe_ptr()), 1, 16777219, "fit")
+            require(False, "a rounded-up float32 bound admitted an extra step")
+        except problem:
+            _refuses(problem, "ValueError: fit: every length must be a whole number from 1 to the sequence length 16777219")
+        xseq_run_lengths_check(Int(wide.unsafe_ptr()), 1, 16777220, "fit")
         xseq_run_lengths_check(Int(ok.unsafe_ptr()), 3, 4, "fit")
         var both: List[Float32] = [0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
         var weights = xseq_run_balanced_class_weights(Int(both.unsafe_ptr()), 3, 4, Int(ok.unsafe_ptr()), 2)

@@ -30,7 +30,7 @@ from sequence.exec_device import DeviceExec
 from sequence.ops import FP, CELL_GRU, CELL_LSTM, CELL_RNN_TANH, gates_of
 from autograd.tape import Tape, Tensor
 from autograd.rankn_api import rn_shape
-from autograd.projected_lstm import projected_lstm
+from autograd.projected_lstm import projected_lstm, projected_lstm_check_lengths
 from autograd.model_blocks import ModelRules, block_recurrent
 from autograd.model import LOSS_CROSS_ENTROPY, LOSS_MSE, OUT_ARGMAX, OUT_RAW, TARGET_CODES, TARGET_DENSE
 from checks.native_tests.sequence_port_common import normal, u01
@@ -509,6 +509,16 @@ def run_projected_feedback[E: Exec](mut ex: E) raises -> List[Float32]:
     var hr = tape.tensor(ex, [2, -1], 1, 2, True)
     var h0 = tape.tensor(ex, [0.25], 1, 1)
     var c0 = tape.tensor(ex, [0.5, 0], 1, 2)
+    # Check the last step at a float32 rounding boundary with a single length on this executor.
+    var wide = tape.tensor(ex, [16777220.0], 1, 1)
+    projected_lstm_check_lengths(tape, ex, wide, 1, 16777220)
+    var refused = False
+    try:
+        projected_lstm_check_lengths(tape, ex, wide, 1, 16777219)
+    except err:
+        refused = String(err).find("projected LSTM lengths") >= 0
+    if not refused:
+        _fail("projected LSTM admitted a length beyond its integer step count")
     var out = projected_lstm(tape, ex, x, wi, wh, bi, bh, hr, False, h0, c0)
     var hs = tape.values(ex, out[0])
     var cs = tape.values(ex, out[2])

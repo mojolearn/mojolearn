@@ -3,13 +3,13 @@
 
 from sequence.exec_trait import Exec
 from sequence.lengths import check_recurrent_lengths
-from sequence.ops import Args, FP, OP_FILL, OP_SEQ_IOTA
+from sequence.ops import Args, FP, OP_FILL
 from autograd.tape import Tape, Tensor
 from autograd.rankn import ShapeN
 from autograd.rankn_api import rn_shape
 from autograd.rankn_layout import rankn_concat, rankn_narrow
-from autograd.import_api import imp_binary, imp_unary, imp_where
-from autograd.import_ops import IMP_GE, IMP_LE, IMP_EQ, IMP_AND, IMP_FLOOR
+from autograd.import_api import imp_where
+from autograd.model_ops import OP_AGM_LENGTH_INVALID, OP_AGM_PAD_MASK
 
 comptime OPS_PROJECTED_LSTM = 190
 comptime OPS_PROJECTED_LSTM_OUTPUT = 191
@@ -62,13 +62,13 @@ def projected_lstm_check_lengths[E: Exec](mut tape: Tape, mut ex: E, values: Ten
     else:
         # A Session length tensor can be the result of earlier device operations.
         # Reduce its admission to one status word before entering the recurrence.
-        var lengths = tape.variable(ex, ptr, B, 1, False)
-        var low = imp_binary(tape, ex, lengths, _filled(tape, ex, 1, 1, 1), IMP_GE)
-        var high = imp_binary(tape, ex, lengths, _filled(tape, ex, 1, 1, Float32(T)), IMP_LE)
-        var whole = imp_binary(tape, ex, lengths, imp_unary(tape, ex, lengths, IMP_FLOOR), IMP_EQ)
-        var valid = imp_binary(tape, ex, imp_binary(tape, ex, low, high, IMP_AND), whole, IMP_AND)
-        var invalid = imp_binary(tape, ex, valid, _filled(tape, ex, 1, 1, 0), IMP_EQ)
-        var count = tape.sum(ex, invalid)
+        var flags = tape.reserve(ex, B)
+        var cfg = Args()
+        cfg.p0 = ptr
+        cfg.p1 = flags
+        cfg.i0 = T
+        ex.launch[OP_AGM_LENGTH_INVALID](cfg, B)
+        var count = tape.sum(ex, tape.variable(ex, flags, B, 1, False))
         var result = List[Float32](length=1, fill=0)
         ex.download(FP(unsafe_from_address=Int(result.unsafe_ptr())), tape.value_of(ex, count), 1)
         if result[0] != 0:
@@ -93,7 +93,7 @@ def _state[E: Exec](mut tape: Tape, mut ex: E, initial: Optional[Tensor], B: Int
     return initial.value()
 
 
-def projected_lstm[E: Exec](
+def projected_lstm[E: Exec, final_only: Bool = False](
     mut tape: Tape, mut ex: E, xs: Tensor, weight_ih: Tensor, weight_hh: Tensor,
     bias_ih: Tensor, bias_hh: Tensor, weight_hr: Tensor, reverse: Bool,
     h0: Optional[Tensor] = None, c0: Optional[Tensor] = None, lengths: Optional[Tensor] = None,
@@ -104,6 +104,7 @@ def projected_lstm[E: Exec](
     over the entire batch on the selected executor, with the same shapes in a
     single-step call as in a sequence. Padded inputs are selected out before
     the input product, including NaNs. A padded step carries both states.
+    The final-only specialization returns h in place of the sequence.
     """
     var shape = tape.shape_of(xs)
     if shape.ndim != 3:
@@ -132,19 +133,19 @@ def projected_lstm[E: Exec](
     var iw = tape.transpose(ex, weight_ih)
     var projection = tape.transpose(ex, weight_hr)
     var xflat = tape.view_nd(ex, xs, ShapeN.matrix(T * B, F))
-    var output = List[Tensor](length=T, fill=h)
+    var output = List[Tensor](length=0 if final_only else T, fill=h)
     var mask = Optional[Tensor](None)
     var zero = Optional[Tensor](None)
     if lengths:
         if tape.shape_of(lengths.value()).count() != B:
             raise Error("ValueError: projected LSTM lengths must have one entry per batch row")
-        var positions = tape.reserve(ex, T)
+        var bits = tape.reserve(ex, T * B)
         var cfg = Args()
-        cfg.p0 = positions
-        ex.launch[OP_SEQ_IOTA](cfg, T)
-        var steps = tape.variable(ex, positions, T, 1, False)
-        var lens = tape.view_nd(ex, lengths.value(), ShapeN.matrix(1, B))
-        mask = imp_binary(tape, ex, steps, lens, IMP_GE)
+        cfg.p0 = tape.value_of(ex, lengths.value())
+        cfg.p1 = bits
+        cfg.i0 = B
+        ex.launch[OP_AGM_PAD_MASK](cfg, T * B)
+        mask = tape.variable(ex, bits, T, B, False)
         zero = _filled(tape, ex, 1, 1, Float32(0))
     for step in range(T):  # driver-loop: over recurrent time steps
         var t = T - 1 - step if reverse else step
@@ -170,7 +171,11 @@ def projected_lstm[E: Exec](
         else:
             h = next_h
             c = next_c
-        output[t] = h
-    var flat = h if T == 1 else rankn_concat(tape, ex, output, 0)
-    var dims: List[Int] = [T, B, P]
-    return (tape.view_nd(ex, flat, rn_shape(dims, "projected LSTM")), h, c)
+        comptime if not final_only:
+            output[t] = h
+    comptime if final_only:
+        return (h, h, c)
+    else:
+        var flat = h if T == 1 else rankn_concat(tape, ex, output, 0)
+        var dims: List[Int] = [T, B, P]
+        return (tape.view_nd(ex, flat, rn_shape(dims, "projected LSTM")), h, c)

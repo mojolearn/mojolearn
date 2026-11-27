@@ -72,7 +72,7 @@ from autograd.nn_attention import (
 # lane nn-optim (2026-11-23): rmsprop, adagrad, lamb and the schedules multi_step .. reduce_on_plateau
 from autograd.nn_optim import (
     NN_OPT_ADAFACTOR, NN_OPT_ADAGRAD, NN_SCHED_MULTI_STEP, NN_SCHED_PLATEAU, NnLamb, NnPlateau, nn_epoch_lr, nn_multi_step_count,
-    nn_opt_step, nn_optim_admit, nn_sched_per_step, nn_step_lrs, nn_opt_keeps_third,
+    nn_opt_step, nn_optim_admit, nn_positive_lr, nn_sched_per_step, nn_step_lrs, nn_opt_keeps_third,
 )
 # lane stream-fits (2026-11-25): Sequential.fit(source=), the streamed instance of the fit loop
 from std.math import nan
@@ -830,8 +830,8 @@ def check_fit(spec: ModelSpec, cfg: FitConfig, N: Int) raises:
     # lane nn-optim: every optimizer code and this lane's schedule codes, one admission body with compile's
     nn_optim_admit(cfg.opt.kind, cfg.opt.flags, Float64(cfg.opt.f1), Float64(cfg.opt.f2), Float64(cfg.opt.eps),
                    Float64(cfg.opt.wd), Float64(cfg.opt.f7), cfg.sched, cfg.sched_args)
-    if not (cfg.lr > Float32(0)):
-        raise Error("model fit: the learning rate must be positive")
+    if not nn_positive_lr(cfg.lr):
+        raise Error("model fit: the learning rate must be positive and finite in float32")
     if cfg.batch < 1 or cfg.epochs < 1:
         raise Error("model fit: batch size and epochs must be at least 1")
     if cfg.sched < SCHED_CONSTANT or cfg.sched > NN_SCHED_PLATEAU:
@@ -1796,7 +1796,8 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool, adafactor: Bool = F
     # nn-blocks-pgseq begin: the parameter groups, resolved once a fit (nothing without groups): each group's
     # running products from the step count, LAMB's per-run tables, adagrad's starting sums per group
     pgseq_admit_fit(cfg.groups, cfg.sched)
-    var pg_state = PgSeqState(cfg.groups, step)
+    # Adafactor uses the step count directly and has no beta products to replay on resume.
+    var pg_state = PgSeqState(cfg.groups, 0 if adafactor else step)
     var pg_lamb = PgSeqLamb(ex, cfg.groups)
     var pg_rates = List[Float32](length=cfg.groups.groups(), fill=Float32(0))
     comptime if grouped:  # the loop's instance (model_fit_state)

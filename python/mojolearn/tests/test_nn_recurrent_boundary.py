@@ -194,6 +194,9 @@ def test_saved_projected_program_resizes_all_three_outputs(tmp_path):
         s.capture(inputs=[x, h, c], outputs=list(outputs)).save(path)
     with mojolearn.ops.Session() as s:
         program = s.load_program(path)
+        names = [node["op"] for node in program.inspect()["nodes"]]
+        assert names.count("projected_lstm") == 1
+        assert names.count("projected_lstm_output") == 3
         for dims in ((2, 3), (4, 2)):
             arrays = inputs(*dims)
             actual = program.run(*arrays, dynamic_shapes=True)

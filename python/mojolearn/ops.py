@@ -1052,10 +1052,11 @@ class Session:
             time order. A bidirectional layer is the forward and the
             reverse layer joined on the last axis.
         return_state : bool, default False
-            Also return the final states: ``(outputs, h_n, c_n)``, each
-            state ``(batch, hidden)``, the state after the last step run
-            (the first step when ``reverse``). ``h_n`` carries the outputs'
-            gradient; ``c_n`` is a value.
+            Also return the final states: ``(outputs, h_n, c_n)``,
+            taken after the last step run (the first step when ``reverse``).
+            With ``weight_hr``, both states carry gradients, with hidden width
+            ``proj_size`` and cell width ``hidden_size``. Otherwise both have
+            width ``hidden_size`` and only ``h_n`` carries a gradient.
 
         Examples
         --------

@@ -56,6 +56,8 @@ def test_head_rate_moves_the_fit():
     ([{"layers": [0], "momentum": 0.5}], "the adamw optimizer does not take 'momentum'"),
     ([{"layers": [0], "colour": 1}], "unknown parameter group key 'colour'"),
     ([{"layers": [0], "lr": -1.0}], "lr must be positive"),
+    ([{"layers": [0], "lr": 1e-100}], "lr must be positive"),
+    ([{"layers": [0], "lr": 1e100}], "lr must be positive"),
 ])
 def test_compile_refusals(groups, words):
     with pytest.raises((ValueError, TypeError, RuntimeError, Exception), match=words):
