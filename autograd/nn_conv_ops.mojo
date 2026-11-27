@@ -241,9 +241,18 @@ def up_candidates(i: Int, osize: Int, scale: Float32) -> Tuple[Int, Int]:
     [i - 1, i + 2)), widened by one on each side for rounding. scale 0: every output reads index 0."""
     if not (scale > Float32(0)):
         return (0, osize)
-    var inv = Float64(1) / Float64(scale)
-    var lo = Int(Float64(i - 1) * inv) - 2
-    var hi = Int(Float64(i + 2) * inv) + 2
+    # Float32 only: this runs inside a device kernel and Metal has no float64 (the Apple build of
+    # _mojolearn_native_sequence_m1 failed "Failed to verify LLVM IR for Metal" on the float64 converts).
+    # The range only bounds the candidate loop; every candidate is tested for membership and the
+    # accumulation stays ascending, so a wider range gives the same bits. The float32 error of
+    # (i + 2) / scale is under osize * 2^-22, so a margin of 2 + osize / 2^20 covers it; the bounds are
+    # clamped in float before the integer conversion so a tiny scale cannot overflow it.
+    var margin = 2 + (osize >> 20)
+    var top = Float32(osize)
+    var flo = min(max(Float32(i - 1) / scale, Float32(0)), top)
+    var fhi = min(max(Float32(i + 2) / scale, Float32(0)), top)
+    var lo = Int(flo) - margin
+    var hi = Int(fhi) + margin
     if lo < 0:
         lo = 0
     if hi > osize:
