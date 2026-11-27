@@ -411,6 +411,8 @@ sampler, a solver, a metric, a reduction).
                bootstrap, the score noise, Gradient and multi-step leaves,
                the pointwise searcher's L2 scores and explicit weighted pairs)
       gbdt-rank-bootstrap gbdt-rank-leaves gbdt-rank-pointwise-arms gbdt-rank-pairs
+    Post-release grouped ranking objectives and held-out queries
+      gbdt-lambdarank gbdt-rank-xendcg gbdt-rank-categorical-eval gbdt-rank-grouped-ctr
     2026-11-23 (lane gbdt-gaps: sample_weight outside Plain numeric Logloss
                and eval sets outside SymmetricTree Logloss, which the CPU
                column refused until this lane)
@@ -5660,16 +5662,17 @@ def _rank_pairs(groups, relevance, skip_last=2):
     return pairs
 
 
-def _gbdt_rank_fits(ml, X, yr, Xh, configs):
+def _gbdt_rank_fits(ml, X, yr, Xh, configs, max_rows=_GBDT_RANK_ROWS):
     """Fit every `(name, loss, options, with_pairs)` of one ranking lane on
     the first `_GBDT_RANK_ROWS` rows of the `_rank_groups` queries and
     `_relevance` grades; `with_pairs` passes `_rank_pairs` with hashed
     weights. The first fit answers the infer, model and batch columns."""
-    rows = min(_GBDT_RANK_ROWS, X.shape[0])
+    rows = min(max_rows, X.shape[0])
     Xr = np.ascontiguousarray(X[:rows])
     groups, rel = _rank_groups(rows), _relevance(yr[:rows])
-    pairs = _rank_pairs(groups, rel)
-    pair_w = _hw((len(pairs),), "gbdt-rank:pairs_weight", 0.5, 2.0)
+    if any(with_pairs for _, _, _, with_pairs in configs):
+        pairs = _rank_pairs(groups, rel)
+        pair_w = _hw((len(pairs),), "gbdt-rank:pairs_weight", 0.5, 2.0)
     parts, first = {}, None
     for name, loss, options, with_pairs in configs:
         kw = dict(n_estimators=10, max_depth=4, learning_rate=_GBDT_RANK_RATE, l2_leaf_reg=3.0,
@@ -5687,6 +5690,79 @@ def _gbdt_rank_fits(ml, X, yr, Xh, configs):
         parts[name + ":ndcg"] = _h(_rank_ndcg(ml, groups, rel, pred))
         first = first if first is not None else m
     return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
+def _lightgbm_rank_fits(ml, X, yr, Xh, loss):
+    # First five fixture queries, including one singleton and the 16-document NDCG query.
+    options = dict(n_estimators=3, max_depth=2, border_count=8)
+    configs = [(name, loss, dict(options, use_pointwise_searcher=pointwise), False)
+               for name, pointwise in (("greedy", False), ("pointwise", True))]
+    return _gbdt_rank_fits(ml, X, yr, Xh, configs, max_rows=sum(RANK_QUERY_SIZES[:5]))
+
+
+@lane("gbdt-lambdarank")
+def _(ml, X, yc, yr, Xh=None):
+    return _lightgbm_rank_fits(ml, X, yr, Xh, "lambdarank")
+
+
+@lane("gbdt-rank-xendcg")
+def _(ml, X, yc, yr, Xh=None):
+    return _lightgbm_rank_fits(ml, X, yr, Xh, "rank_xendcg")
+
+
+def _rank_cat_input(X):
+    # One categorical column; a held-out row's code is independent of its batch.
+    return np.ascontiguousarray((X[:, 3:4] > 0).astype(np.float32))
+
+
+def _rank_cat_examples(values, groups, ctr):
+    # Give every non-singleton query both grades, including on the all-negative
+    # verifier fixture. The only feature is categorical, so a successful split
+    # must have used it. Stable order breaks any ties in the source fixture.
+    grades = np.zeros(len(groups), dtype=np.float32)
+    for group in np.unique(groups):
+        rows = np.flatnonzero(groups == group)
+        ordered = rows[np.argsort(values[rows], kind="stable")]
+        grades[ordered[len(rows) // 2:]] = 2
+    codes = grades.copy() if ctr else (grades > 0).astype(np.float32)
+    if ctr:
+        codes += (np.arange(len(groups)) // 2 % 2).astype(np.float32)
+    return codes[:, None], grades
+
+
+def _categorical_rank_fits(ml, yr, Xh, configs, ctr=False):
+    # Train on five queries and validate on two *other* queries. The first
+    # validation query also sees a categorical code that was absent in training.
+    groups = _rank_groups(18)
+    valid_groups = np.repeat(np.array([11, 18], dtype=np.int64), [4, 6])
+    train, targets = _rank_cat_examples(yr[:18], groups, ctr)
+    valid, valid_labels = _rank_cat_examples(yr[18:28], valid_groups, ctr)
+    valid[1, 0] = 4 if ctr else 2
+    parts, first = {}, None
+    for loss, pointwise in configs:
+        options = _gbdt_gaps_kw(n_estimators=3, max_depth=2, border_count=8, one_hot_max_size=2,
+                                loss=loss, use_pointwise_searcher=pointwise, cat_features=[0])
+        model = ml.GradientBoosting(**options).fit(
+            train, targets, group_id=groups,
+            eval_set=(valid, valid_labels, valid_groups))
+        if np.unique(model.predict(train)).size < 2:
+            raise RuntimeError(f"{loss} did not split the categorical feature")
+        _gbdt_gaps_parts(parts, loss, model, valid)
+        parts[loss + ":validation"] = _h(np.asarray(model.test_loss_curve_, dtype=np.float64))
+        parts[loss + ":best_iteration"] = _h(np.asarray([model.best_iteration_], dtype=np.int64))
+        if first is None:
+            first = model
+    return _fit(parts, first, lambda e: (e.predict(_rank_cat_input(Xh)),))
+
+
+@lane("gbdt-rank-categorical-eval")
+def _(ml, X, yc, yr, Xh=None):
+    return _categorical_rank_fits(ml, yr, Xh, [("QueryRMSE", False), ("PairLogit", True), ("YetiRank", False)])
+
+
+@lane("gbdt-rank-grouped-ctr")
+def _(ml, X, yc, yr, Xh=None):
+    return _categorical_rank_fits(ml, yr, Xh, [("QueryRMSE", True)], ctr=True)
 
 
 @lane("gbdt-rank-bootstrap")
@@ -10621,7 +10697,9 @@ _batch_decl(_rows_calls("predict", sl=_GBDT_BATCH_ROWS, prep=_gbdt_cat_xh),
             # lane gbdt-cpu-rest-4-cat (2026-11-23) and its sub-lane -ns
             "gbdt-cat-rest", "gbdt-cat-nonsym")
 _batch_decl(_rows_calls("predict"),
-            "gbdt-rank-bootstrap", "gbdt-rank-leaves", "gbdt-rank-pointwise-arms", "gbdt-rank-pairs")
+            "gbdt-rank-bootstrap", "gbdt-rank-leaves", "gbdt-rank-pointwise-arms", "gbdt-rank-pairs",
+            "gbdt-lambdarank", "gbdt-rank-xendcg")
+_batch_decl(_rows_calls("predict", prep=_rank_cat_input), "gbdt-rank-categorical-eval", "gbdt-rank-grouped-ctr")
 _batch_decl(_rows_calls("predict"),
             "gbdt-weighted-symmetric", "gbdt-weighted-nonsym", "gbdt-weighted-rank", "gbdt-eval-gaps")
 _batch_decl(_rows_calls("predict"),

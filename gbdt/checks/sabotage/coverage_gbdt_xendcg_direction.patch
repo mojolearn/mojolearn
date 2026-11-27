@@ -1,0 +1,12 @@
+diff --git a/gbdt/targets/lightgbm_ranking.mojo b/gbdt/targets/lightgbm_ranking.mojo
+--- a/gbdt/targets/lightgbm_ranking.mojo
++++ b/gbdt/targets/lightgbm_ranking.mojo
+@@ -181,7 +181,7 @@
+     var grad = ftz(a.direction[row] + term)
+     comptime if third:
+         var w = a.weights[row] if a.weighted else Float32(1)
+-        a.direction[row] = -identical_mul(grad, w)
++        a.direction[row] = identical_mul(grad, w)
+         a.hessian[row] = identical_mul(a.hessian[row], w)
+     else:
+         a.direction[row] = grad

@@ -1,0 +1,12 @@
+diff --git a/gbdt/host/gbdt_oracle_losses.mojo b/gbdt/host/gbdt_oracle_losses.mojo
+--- a/gbdt/host/gbdt_oracle_losses.mojo
++++ b/gbdt/host/gbdt_oracle_losses.mojo
+@@ -1152,7 +1152,7 @@
+         var weight = Float64(len(targets))
+         if self.pairs:
+             parts = pair_logit_value(self.pairs.value(), cursor)
+-            weight = self.pairs.value().total_weight()
++            weight = Float64(len(targets))
+         else:
+             parts = query_rmse_value(targets, cursor, self.groups, len(targets))
+         return -Float64(_deterministic_sum_lanes(parts, 1, len(parts))[0]) / weight

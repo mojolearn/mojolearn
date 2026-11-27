@@ -809,6 +809,10 @@ TRAINING_LANE_NAMES = {
     "gbdt-rank-leaves": "gradient boosting ranking losses with score noise, Gradient leaves and several Newton steps",
     "gbdt-rank-pointwise-arms": "gradient boosting ranking losses on the pointwise searcher with L2 scores and bootstraps",
     "gbdt-rank-pairs": "gradient boosting PairLogit on explicit weighted pairs under bootstrap and the pointwise searcher",
+    "gbdt-lambdarank": "LambdaRank on graded queries",
+    "gbdt-rank-xendcg": "XE_NDCG on graded queries",
+    "gbdt-rank-categorical-eval": "grouped categorical training with separate validation queries",
+    "gbdt-rank-grouped-ctr": "target statistics from earlier queries in grouped ranking",
     # lane gbdt-gaps (2026-11-23): sample weights and eval sets the CPU
     # column refused until then (gbdt_oracle_losses.mojo, gbdt_oracle.mojo,
     # gbdt_oracle_depthwise.mojo)
@@ -3174,6 +3178,7 @@ FAMILIES = (
             # lane verify-gbdt-rank (2026-11-22): the ranking losses' bootstraps,
             # noise, leaves, pointwise scores and explicit weighted pairs
             "gbdt-rank-bootstrap", "gbdt-rank-leaves", "gbdt-rank-pointwise-arms", "gbdt-rank-pairs",
+            "gbdt-lambdarank", "gbdt-rank-xendcg", "gbdt-rank-categorical-eval", "gbdt-rank-grouped-ctr",
             # lane gbdt-gaps (2026-11-23): sample weights and eval sets
             "gbdt-weighted-symmetric", "gbdt-weighted-nonsym", "gbdt-weighted-rank", "gbdt-eval-gaps",
             # lane gbdt-cpu-rest (2026-11-23): the rest of the CPU gaps
@@ -4453,6 +4458,10 @@ PUBLIC_PENDING_LANES = {
     "gbdt-rank-leaves": "no reference",
     "gbdt-rank-pointwise-arms": "no reference",
     "gbdt-rank-pairs": "no reference",
+    "gbdt-lambdarank": "no reference",
+    "gbdt-rank-xendcg": "no reference",
+    "gbdt-rank-categorical-eval": "no reference",
+    "gbdt-rank-grouped-ctr": "no reference",
     # lane gbdt-gaps (2026-11-23): new lanes, recorded CPU first at the release
     "gbdt-weighted-symmetric": "no reference",
     "gbdt-weighted-nonsym": "no reference",

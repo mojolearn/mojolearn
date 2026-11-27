@@ -1,0 +1,12 @@
+diff --git a/gbdt/ctrs/kernel/ctr_order.mojo b/gbdt/ctrs/kernel/ctr_order.mojo
+--- a/gbdt/ctrs/kernel/ctr_order.mojo
++++ b/gbdt/ctrs/kernel/ctr_order.mojo
+@@ -152,7 +152,7 @@
+     while lo < hi:
+         var mid = (lo + hi) // 2
+         var other = Int(sorted_rows[mid] & CTR_INDEX_MASK)
+-        if codes[other] == code and query[other] == q:
++        if codes[other] == code and query[row] == q:
+             hi = mid
+         else:
+             lo = mid + 1

@@ -1,0 +1,12 @@
+diff --git a/gbdt/host/gbdt_oracle_ctr.mojo b/gbdt/host/gbdt_oracle_ctr.mojo
+--- a/gbdt/host/gbdt_oracle_ctr.mojo
++++ b/gbdt/host/gbdt_oracle_ctr.mojo
+@@ -446,7 +446,7 @@
+             for j in range(i, end):
+                 var row = Int(order[j])
+                 var k = Int(codes[row])
+-                column[row] = (hits[k] + num) / (before[k] + denom)
++                column[row] = num / denom
+             for j in range(i, end):
+                 var row = Int(order[j])
+                 var k = Int(codes[row])

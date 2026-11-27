@@ -1,0 +1,12 @@
+diff --git a/gbdt/methods/doc_parallel_boosting.mojo b/gbdt/methods/doc_parallel_boosting.mojo
+--- a/gbdt/methods/doc_parallel_boosting.mojo
++++ b/gbdt/methods/doc_parallel_boosting.mojo
+@@ -463,7 +463,7 @@
+             # metric is PairLogit over unequal grades within each test query.
+             pairs = Optional(make_pairwise_group_buffers[True](ctx, group_sizes, n, targets, w))
+             blocks = max(blocks, len(group_sizes))
+-            loss_weight = pairs.value().pairs_total_weight
++            loss_weight = Float64(n)
+     var fv_n = 1
+     var h_fv_n = blocks
+     var vals_n = max_leaves * approx_dim
