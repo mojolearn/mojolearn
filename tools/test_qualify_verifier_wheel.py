@@ -4,11 +4,11 @@ import unittest
 from qualify_verifier_wheel import admit, admit_ptx_bindings, admit_ptx_selection, expanded_checks
 
 
-def ptx_install():
-    return dict(vendor='cuda', gpu_arch='sm_80', device_arch='sm_86',
+def ptx_install(source_commit='c'*40, device_arch='sm_86'):
+    return dict(vendor='cuda', gpu_arch='sm_80', device_arch=device_arch,
         ptx_payload_files={'identical/_mojolearn_native.so': 'a'*64, '_mojolearn_native.so': 'b'*64},
         ptx_selection=dict(schema='mojolearn.ptx-selection.v2', selected='ptx', code_format='ptx',
-            arch='sm_80', numeric_mode='identical', source_commit='c'*40, manifest_sha256='d'*64,
+            arch='sm_80', numeric_mode='identical', source_commit=source_commit, manifest_sha256='d'*64,
             loaded_files=[dict(file='identical/_mojolearn_native.so', sha256='a'*64)]))
 
 
@@ -27,6 +27,9 @@ class PTXQualificationTests(unittest.TestCase):
             lambda d: d['ptx_selection'].update(source_commit='e'*40),
             lambda d: d['ptx_selection'].update(numeric_mode='fast'),
             lambda d: d['ptx_selection'].update(loaded_files=[]),
+            lambda d: d['ptx_selection'].update(loaded_files=[{}]),
+            lambda d: d['ptx_selection'].update(loaded_files='not a file list'),
+            lambda d: d['ptx_selection']['loaded_files'][0].pop('sha256'),
             lambda d: d['ptx_selection']['loaded_files'][0].update(sha256='f'*64),
             lambda d: d['ptx_selection']['loaded_files'][0].update(
                 file='_mojolearn_native.so', sha256='b'*64),

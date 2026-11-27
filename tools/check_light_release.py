@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import zipfile
 
+from qualify_verifier_wheel import ptx_smoke_device
 
 JOBS = {'create-venv', 'install', 'dependencies', 'installed', 'expanded-api',
         'loaded-lm-cpu', 'loaded-lm-gpu', 'loaded-lm-cpu-gpu-compare',
@@ -162,10 +163,23 @@ def check(directory, source_commit, platform="all"):
                 inventories = [n for n in archive.namelist() if n.endswith('.dist-info/LINUX_PAYLOAD.json')]
                 require(len(inventories) == 1 and json.loads(archive.read(inventories[0])).get('source_commit') == source_commit,
                         'plugin packaged source mismatch')
-            row = PLUGIN_ROWS[wheel.split('-', 1)[0]]
-            if row['role'] in ('vendor', 'payload'):
-                require(report.get('installed', {}).get('gpu_arch') in row['arches'],
-                        'payload receipt loaded another GPU architecture')
+                row = PLUGIN_ROWS[wheel.split('-', 1)[0]]
+                installed = report['installed']
+                arch = installed.get('gpu_arch')
+                if _GPU_PACKAGES.is_ptx_arch(row, arch):
+                    require(ptx_smoke_device(installed, source_commit),
+                            'payload receipt loaded another GPU architecture or lacks PTX load evidence')
+                    name = _GPU_PACKAGES.BUNDLED_PTX_ROOT + '/' + _GPU_PACKAGES.BASELINE_MANIFEST
+                    require(name in archive.namelist(), 'PTX manifest absent from vendor wheel')
+                    raw = archive.read(name)
+                    require(hashlib.sha256(raw).hexdigest() == installed['ptx_selection']['manifest_sha256'],
+                            'installed PTX manifest differs from vendor wheel')
+                    baseline = json.loads(raw)
+                    require(baseline.get('source_commit') == source_commit, 'PTX manifest source mismatch')
+                    _GPU_PACKAGES.validate_baseline_manifest(baseline, installed['ptx_payload_files'])
+                elif row['role'] in ('vendor', 'payload'):
+                    require(arch in row['arches'] and installed.get('ptx_selection') is None,
+                            'payload receipt loaded another GPU architecture')
             require(core.split('-')[:2] == [_GPU_PACKAGES.CORE_WHEEL_NAME, wheel.split('-')[1]],
                     'plugin receipt installed a core of another version')
         else:

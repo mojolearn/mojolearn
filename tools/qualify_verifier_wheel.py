@@ -183,21 +183,43 @@ print(json.dumps(dict(package=str(p),version=mojolearn.__version__,vendor=mojole
 
 def admit_ptx_selection(installed, source_commit):
     """Require the installed, source-bound PTX set, including a loaded binding."""
-    assert installed['vendor'] == 'cuda' and installed['gpu_arch'] == 'sm_80', \
-        'PTX qualification requires the CUDA sm_80 set'
-    selection = installed.get('ptx_selection') or {}
-    assert selection.get('schema') == 'mojolearn.ptx-selection.v2'
-    assert selection.get('selected') == selection.get('code_format') == 'ptx', \
-        'native CUDA execution does not qualify PTX'
-    assert selection.get('arch') == 'sm_80' and selection.get('numeric_mode') == 'identical'
-    assert selection.get('source_commit') == source_commit, 'PTX source differs from the installed core'
-    assert re.fullmatch('[0-9a-f]{64}', selection.get('manifest_sha256', ''))
-    payloads = installed.get('ptx_payload_files') or {}
-    assert payloads and selection.get('loaded_files'), 'PTX binding load evidence is missing'
-    for row in selection['loaded_files']:
-        assert row['file'].startswith('identical/') and payloads.get(row['file']) == row['sha256'], \
-            'loaded binding is outside the identical PTX manifest'
+    if installed.get('vendor') != 'cuda' or installed.get('gpu_arch') != 'sm_80':
+        raise AssertionError('PTX qualification requires the CUDA sm_80 set')
+    selection = installed.get('ptx_selection')
+    if not isinstance(selection, dict) or selection.get('schema') != 'mojolearn.ptx-selection.v2':
+        raise AssertionError('missing PTX selection receipt')
+    if (selection.get('selected') != 'ptx' or selection.get('code_format') != 'ptx'
+            or selection.get('arch') != 'sm_80' or selection.get('numeric_mode') != 'identical'):
+        raise AssertionError('identical PTX execution is required')
+    if not source_commit or selection.get('source_commit') != source_commit:
+        raise AssertionError('PTX source differs from the installed core')
+    if not re.fullmatch('[0-9a-f]{64}', str(selection.get('manifest_sha256'))):
+        raise AssertionError('missing PTX manifest digest')
+    payloads = installed.get('ptx_payload_files')
+    loaded = selection.get('loaded_files')
+    if not isinstance(payloads, dict) or not isinstance(loaded, list) or not loaded:
+        raise AssertionError('PTX binding load evidence is missing')
+    for row in loaded:
+        if (not isinstance(row, dict) or not isinstance(row.get('file'), str)
+                or not row['file'].startswith('identical/')
+                or not re.fullmatch('[0-9a-f]{64}', str(row.get('sha256')))
+                or payloads.get(row['file']) != row['sha256']):
+            raise AssertionError('loaded binding is outside the identical PTX manifest')
     return selection
+
+
+def ptx_smoke_device(installed, source_commit):
+    """The physical CUDA architecture proved by a PTX smoke, or None."""
+    device = installed.get('device_arch')
+    # The CUDA driver reports compute capability as sm_<major><minor>.
+    match = re.fullmatch(r'sm_([1-9][0-9]+)', device) if isinstance(device, str) else None
+    if not match or int(match[1]) < 80:
+        return None
+    try:
+        admit_ptx_selection(installed, source_commit)
+    except AssertionError:
+        return None
+    return device
 
 
 def admit_ptx_bindings(doc, installed):

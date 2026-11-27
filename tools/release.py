@@ -338,6 +338,7 @@ PUBLISH_CHOICES = ("none", "testpypi", "pypi")
 sys.path.insert(0, str(ROOT / "tools"))
 import release_ledger  # noqa: E402
 import release_reuse  # noqa: E402
+from qualify_verifier_wheel import ptx_smoke_device
 import release_requirements  # noqa: E402
 import release_box_watch  # noqa: E402
 import release_tooling  # noqa: E402
@@ -1285,8 +1286,8 @@ STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "gpu-co
 # (--smoke-via lq); the Hopper column runs only on a held Hopper box
 # (--hopper-box), so publish-nvidia no longer NEEDS it: it waits for it to
 # settle (AFTER) and requires its PASS only when a Hopper box was held
-# (Release.hopper_required). Without one the sm_90a payload publishes on its
-# GitHub build receipt and the alpha manifest says "smoke: not run".
+# (Release.hopper_required). When the release includes a native Hopper set,
+# its packaging notes record whether that target went unsmoked.
 PIPELINES["nvidia"]["checks"].append("gpu-column-nvidia-hopper")
 AFTER["publish-nvidia"] = ["gpu-column-nvidia-hopper"]
 #: where --smoke-via lq runs each column: the lq box and the column's tag stem
@@ -4296,16 +4297,21 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 and self.plugin_installed(out / "results.json", "nvidia")
                 and self.column_arch_ok(out, ("sm_89",)))
 
-    def column_arch_ok(self, out, arches):
-        # Actual installed loader selection, not the requested rental model.
-        installed = (read_json(out / "results.json") or {}).get("installed") or {}
-        return installed.get("gpu_arch") in arches
+    def column_arch_ok(self, out, arches, *, allow_ptx=False):
+        receipt = read_json(out / "results.json") or {}
+        installed = receipt.get("installed") or {}
+        if installed.get("gpu_arch") in arches:
+            # Older native receipts recorded only the selected target. Use the
+            # physical device too when the smoke recorded it.
+            return installed.get("ptx_selection") is None and (
+                installed.get("device_arch") is None or installed["device_arch"] in arches)
+        return allow_ptx and ptx_smoke_device(installed, receipt.get("source_commit")) in arches
 
     def hopper_column_ok(self):
         final, out = self.linux_final(), self.rel / "column-nvidia-hopper"
         return (bool(final) and smoke_passed(out / "results.json", final)
                 and self.plugin_installed(out / "results.json", "nvidia")
-                and self.column_arch_ok(out, ("sm_90", "sm_90a")))
+                and self.column_arch_ok(out, ("sm_90", "sm_90a"), allow_ptx=True))
 
     def amd_column_ok(self):
         out = self.rel / "column-amd"
@@ -4442,8 +4448,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             return self.NO_GPU_SKIP
         if not self.hopper_required():
             self.say("  nvidia-hopper: no Hopper box held (--hopper-box <ssh> runs it); nothing is rented")
-            return ("SKIPPED: no Hopper box held; the sm_90a payload publishes on its GitHub build receipt, "
-                    "smoke " + HOPPER_NOT_RUN)
+            return "SKIPPED: no Hopper box held"
         self.run_columns(("nvidia-hopper",))
         return "NVIDIA Hopper column PASSED"
 
@@ -4909,9 +4914,10 @@ class Release(release_identity_wheels.IdentityOnWheels):
     def smoke_notes(self, platform):
         """{native set: smoke line} for the alpha manifest of a vendor wheel
         whose set had no installed smoke (sm_90a without a held Hopper box)."""
-        if platform == "nvidia" and self.gpu_smoke() and not self.hopper_required() and "sm_90a" in GPU_PACKAGES["PLUGINS"]["cuda"]["arches"]:
-            return {"sm_90a": HOPPER_NOT_RUN}
-        return {}
+        if platform != "nvidia" or not self.gpu_smoke() or self.hopper_required():
+            return {}
+        return {arch: HOPPER_NOT_RUN for vendor, arch in release_reuse.LINUX_SETS
+                if vendor == "cuda" and arch in ("sm_90", "sm_90a")}
 
     def core_receipt(self):
         """The receipt mojolearn-core publishes on: a PASSED column that
@@ -7157,8 +7163,7 @@ def release_parser():
                     help="lq (default): the NVIDIA and AMD columns run on the nv and amd boxes we hold, queued next "
                          "with `lq add --front` (tools/release_lq_smoke.py); rent: the old per-architecture rented smoke")
     ap.add_argument("--hopper-box", default="",
-                    help="ssh target of a Hopper (sm_90a) box we hold; without it the Hopper column is SKIPPED and "
-                         "the sm_90a payload publishes unsmoked on its GitHub build receipt (--smoke-via lq)")
+                    help="SSH target of a held Hopper box for the optional Hopper smoke (--smoke-via lq)")
     ap.add_argument("--smoke-branch", default="main",
                     help="the branch whose tree runs the smoke on the lq box (default main)")
     ap.add_argument('--gate-autograd-root', help='precompiled gate artifacts under nvidia/ and amd/, each with build-manifest.json (default release-dir/autograd-bin)')

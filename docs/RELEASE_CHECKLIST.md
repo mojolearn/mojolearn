@@ -195,8 +195,7 @@ qualification remain required independently. See
 This is the default release (Andrew 2026-10-13: identity and behavior are
 checked before merge on NVIDIA, AMD, Apple and CPU; the release only builds,
 checks artifact integrity and publishes). `pixi run release <v> --publish pypi`
-builds Linux where the source's binding layout fits (merged bindings: RunPod CPU
-pods, 2c; per-binding: GitHub's free runners, 2d), skips the GPU wheel smokes, gates the
+builds either Linux binding layout on GitHub runners (section 2d), skips the GPU wheel smokes, gates the
 macOS wheel on `tools/wheel_self_test.py` below, and publishes every package
 with `tools/release_linux_publish.sh ... --preverified`. Its rehearsal skips
 `python-tests` and the GPU-box leg dry-runs. `--gpu-smoke` restores the old
@@ -289,10 +288,10 @@ FIVE PIPELINES AT ONCE, each publishing as soon as its own gates pass:
 
 - **macos**: macos-build, macos-smoke (its self-test job is the bundled-table
   gate: publish-macos refuses without its PASSED receipt), publish-macos.
-- **core-linux**: cross-compile (step 0b, beside the rehearsal; it gates
-  linux-builds, the first rental), linux-builds (the legs of step 2, launched together,
+- **core-linux**: linux-builds (the legs of step 2, launched together,
   detached), linux-wait, linux-assemble, linux-pack (step 3: the core and both
   plugins, the NVIDIA one carrying the PTX set, 3b), publish-core-linux (first on Linux).
+  When a rented build backend is selected, step 0b must pass before linux-builds rents a box.
 - **nvidia**: gpu-column-nvidia (the expanded smoke, on the
   nv box we hold, the RunPod L40S sm_89), gpu-column-nvidia-hopper (only with
   `--hopper-box <ssh>`, a Hopper box we hold; otherwise SKIPPED), publish-nvidia
@@ -309,10 +308,12 @@ FIVE PIPELINES AT ONCE, each publishing as soon as its own gates pass:
   no binding build, no pixi env), polls `lq results <box> <tag>`, fetches the out
   directory back and is judged exactly as the rented run was (same receipt). A relaunch while the job is queued polls
   it again (`<commit12>/columns/<column>.lq.json`); it never queues twice.
-  Hopper (sm_90a) is unsmoked unless a Hopper box is held: publish-nvidia then
-  needs only the Ada column, the sm_90a payload publishes on its GitHub build
-  receipt, the alpha manifest carries `"smoke": {"sm_90a": "not run (no Hopper box held)"}`
-  and the vendor wheel's README says so. `--smoke-via rent` keeps the old
+  On the default queue route, a held Hopper box adds a Hopper smoke to the
+  NVIDIA publication gate. Otherwise only the Ada column is required here.
+  The current NVIDIA wheel contains native sm_89 and sm_80 PTX (section 3b).
+  A Hopper running PTX records the physical sm_90 device and the sm_80 PTX
+  binding loaded from the installed wheel.
+  `--smoke-via rent` keeps the old
   rented route (`--smoke-gpu`, `--amd-provider`) for an emergency only.
   Both columns run at once as detached legs from the installed core and both
   plugins. ONE IDENTITY CHECK PER RELEASE (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun):
@@ -420,13 +421,13 @@ relaunched. `--only STEP[,STEP]` runs some steps, `--redo STEP` discards a
 step's record, `--amd-expect-from <NVIDIA release-build dir>` restores the AMD
 core-host probe, `--smoke-gpu` picks the Linux smoke GPU. The build legs and
 the GPU columns share one launcher (`launch_detached`; build routes in
-`BUILD_BACKENDS`, chosen with `--build-backend`, default by the source's layout, 2c). A pipeline is `PIPELINES`'
+`BUILD_BACKENDS`, chosen with `--build-backend`, default `github`, section 2d). A pipeline is `PIPELINES`'
 named builds, checks and one publish, so the Linux pipeline can split into
 per-package pipelines without a new scheduler.
 
 **Bindings are rebuilt only when their identity moved (2026-09-23,
 `tools/release_reuse.py`).** After the rehearsal the `reuse-plan` step decides,
-for every binding of every set (cuda sm_90a, cuda sm_89, hip gfx942, the host
+for every binding of every set (cuda sm_89, cuda sm_80 PTX, hip gfx942, the host
 bindings, the runtime closure, and the macOS wheel), REUSE or BUILD. The
 identity of a binding is its source closure digest (the same walk
 `tools/binding_stamps.py` records, computed from `git archive` of the commit),
@@ -476,45 +477,31 @@ orchestrator steps complete. Preserve the original receipts and their SHA256s,
 run the existing exact-artifact admission checks, publish both Linux plugins
 before the Linux core, and complete the post-index installation checks.
 
-## 0. Rehearse (by hand, before anything is rented)
+## 0. Release rehearsal
 
-```sh
-pixi run release-rehearsal
-```
+The release driver runs the rehearsal on the frozen source and keeps the logs
+in its `rehearsal` directory. The default rehearsal checks the wheel audit,
+documentation facts, both extension lists and the staged package's platform
+math. With `--gpu-smoke` it also runs the Python suite in identical mode
+and exercises the NVIDIA and AMD launch scripts in dry-run mode. To see the
+available checks, run `pixi run release-rehearsal --list`.
 
-A pre-release rehearsal the releaser runs by hand. It is not a per-merge check
-and not a CI job. It runs locally in minutes, rents nothing and compiles
-nothing, and prints one PASS or FAIL line per step with a non-zero exit when
-any step failed: the wheel audit's tests, the Python suite in IDENTICAL mode
-(the one step that may touch Metal, so it waits for the Mac's Metal slot),
-the docs facts, both extension-list checks, the wheel's NumPy and platform-math
-audit over the package staged as the wheel ships it (with the
-`_identity_break.py` and `_identity_trace_diff.py` copies), and the dry runs of
-the NVIDIA and AMD release legs. Each of these failed 0.8.12 after boxes were
-rented or after a 16-minute macOS compile. `--list` prints the steps; `--only`
-reruns some of them.
+## 0b. Cross-compilation before a rented Linux build
 
-## 0b. Cross-compile on GitHub (the release does this; nothing is rented)
+On the default `github` backend, the Linux build legs compile the release
+targets and report compiler errors and stalls by binding. The driver records
+`NOT-RUN` for the separate cross-compile step.
 
-The `cross-compile` step of `pixi run release` dispatches
-`.github/workflows/cross-compile-check.yml` on the frozen commit, diffed
-against the previous release's source commit (the reuse plan's base), and
-waits for it (`gh run watch --exit-status`). The plan job runs
-`tools/cross_compile_check.py --list-json` (the same selection as the local
-`pixi run cross-compile-check`), and every changed Linux GPU binding x tier x
-arch (sm_90a, sm_89, gfx942) compiles on its own free standard runner, in
-parallel, with the release flags. The summary job fails on any FAIL, TIMEOUT,
-STALLED or MISSING job and names it; the release step then stops the Linux
-pipelines by name before linux-builds rents a box (the macOS pipeline goes
-on). The workflow is `workflow_dispatch` only and never runs on a merge. By
-hand:
+With `--build-backend cpu-box` or `--build-backend gpu-legs`, the driver
+automatically dispatches `.github/workflows/cross-compile-check.yml` when a
+check is due. GitHub compiles the Linux GPU bindings that changed since the
+previous release's source commit, across the release tiers and architectures
+(sm_89, sm_80 PTX and gfx942). The macOS build covers Apple. A failed,
+timed-out, stalled or missing compile stops the Linux build before it rents
+a box. `MOJOLEARN_XCC_WORKFLOW_REF` selects the branch containing the
+workflow, defaulting to `main`.
 
-```sh
-gh workflow run cross-compile-check.yml --ref main -f ref=<previous release commit> -f commit=<sha>
-```
-
-`MOJOLEARN_XCC_WORKFLOW_REF` names the branch whose workflow file is
-dispatched (default `main`; GitHub dispatches a workflow only once its file is on the default branch). Measured 2026-09-27 on the 0.8.22 diff: 96 jobs
+Measured 2026-09-27 on the 0.8.22 diff: 96 jobs
 (32 per arch), 1 to 5 minutes each (median 2), compiler peak RSS 2.0 GB, 20 runners at a time, 19 minutes wall, all PASS; the same run with the b055fe72e potrf gate reverted failed by name on gp, kernel_methods and mixture (gfx942, both tiers).
 
 Five steps, one finish line: the file is on PyPI and installs. The longer
@@ -679,17 +666,11 @@ sha256sum <sm89>/build/sets/cuda/sm_89/host/*.so <sm90a>/build/sets/cuda/sm_90a/
 differ across legs, and requires every manifest binding in every set; the
 lines above say WHICH leg is wrong before the packer says that one is.
 
-## 2c. The CPU build route: the merged layout's default (`--build-backend cpu-box`)
+## 2c. Rented CPU build (`--build-backend cpu-box`)
 
-**Which route builds Linux is decided in ONE place: the LINUX BUILD BACKENDS
-table at the top of `tools/release.py`.** In short: the default follows the
-source commit's binding layout (`packaging/linux/merged_layout.py enabled` at
-that commit). A merged-layout source (MOJOLEARN_MERGED_BINDINGS=1, the default
-since 2026-10-20) builds here, on RunPod CPU pods, with or without
-`--gpu-smoke`, and `--build-backend github` is refused for it: one merged
-compile per tier peaked at 46.4 GB (identical + byte LM; fast 36.6 GB, host
-6.9 GB; DO MI325X, 2026-10-20) and a free runner has 15. A per-binding source
-keeps GitHub (2d) as its default and this route behind `--gpu-smoke`.
+Selecting `cpu-box` rents a RunPod CPU pod per release set. This backend
+accepts either binding layout, with or without `--gpu-smoke`. The release
+driver waits for the cross-compile check in section 0b before renting.
 
 ```sh
 bash tools/release_linux_build.sh $REF                        # dry run: nothing rented
@@ -950,7 +931,7 @@ slot (`gpu_plugins.PTX_ARCH`). The release builds it as the leg `cuda-sm_80`
 on every build backend, through the same route as any arch
 (`tools/release061_remote_build.sh` gives cuda/sm_80 the `ptx` code format, so
 `packaging/linux/build_sets.sh` keeps the rounding-pinned PTX and writes
-`PTX_BASELINE.json`), cross-compiles it in `cross-compile-check`, and packs it
+`PTX_BASELINE.json`), and packs it
 into the vendor wheel with its build proof. The vendor marker binds the PTX
 manifest by its SHA256. `pack_wheel.py` checks every wheel against PyPI's
 100 MiB file limit at pack time and fails with the per-set sizes.
