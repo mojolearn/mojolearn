@@ -144,24 +144,41 @@ Every output is reported as `MATCH` or `DIFFER`. On a GPU machine, `--device cpu
 on this machine's CPU against the report the GPU wrote. See
 [Verify a model on another GPU](autograd.md#verify-a-model-on-another-gpu).
 
-To check how a model is made, not only a fitted one, write a recipe and fit it from scratch on every
-device of this machine:
+### Compare two independent fits of your model
+
+This example trains a regression network with four hidden units. Six rows are used for training
+and two for prediction. Save the recipe once so both machines read the same data bytes.
 
 ```python
-import mojolearn
-recipe = mojolearn.recipe(model, data={"generator": "sequence", "args": {"rows": 64, "test_rows": 16,
-                                                                          "shape": [8, 4]}},
-                          fit_params={"epochs": 2, "batch_size": 16, "seed": 0},
-                          parameters=True, path="r.json")
+import mojolearn as ml
+import numpy as np
+
+X = np.arange(16, dtype="float32").reshape(8, 2) / 16
+y = X[:, 0] - X[:, 1] / 2
+net = ml.Sequential(numeric_mode="identical")
+net.linear(4).relu().linear(1)
+net.compile(loss="mse", optimizer="sgd", lr=0.01)
+ml.recipe(net, X[:6], y[:6], X_test=X[6:],
+          fit_params={"epochs": 2, "seed": 7},
+          parameters=True, path="fit.json")
 ```
+
+On the first machine, fit the model and save the record:
 
 ```sh
-python -m mojolearn verify --recipe r.json                               # CPU and GPU here; writes r.record.json
-python -m mojolearn verify --recipe r.json --against other.record.json   # a record from another machine
+python -m mojolearn verify --recipe fit.json --record-out first.json
 ```
 
-The recipe selects what is compared: the fitted parameters (`parameters`), `digest_`, the predictions
-and the score. A difference names the output and its first differing value.
+Copy `fit.json`, `fit.data.npz` and `first.json` to a machine running the same Mojolearn release.
+From the directory containing the three files, run:
+
+```sh
+python -m mojolearn verify --recipe fit.json --against first.json
+```
+
+The verifier fits the model from scratch on each available device and compares the fitted digest,
+the two weight matrices, the two bias vectors and predictions on the held-out rows. A CPU-only
+installation can produce a record to compare with one from another machine.
 
 ## Sharing a report
 

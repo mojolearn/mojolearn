@@ -2,24 +2,6 @@
 # Rule (CLAUDE.md "Public docs and docstrings"): broken, unverified or unfinished = not documented.
 # "Unverified" = no matching NVIDIA and AMD reference records in `python -m mojolearn verify --coverage`
 # for the shipped release, or (multi-GPU) no cross-vendor qualification. Remove a line once it qualifies.
-# Checked against 0.8.41 on 2026-10-12.
-Conv2d	CNN lanes (x-cnn-*): no NVIDIA+AMD reference records in 0.8.41
-Conv1d	CNN lanes: no NVIDIA+AMD reference records
-MaxPool2d	CNN lanes: no NVIDIA+AMD reference records
-AvgPool2d	CNN lanes: no NVIDIA+AMD reference records
-MaxPool1d	CNN lanes: no NVIDIA+AMD reference records
-AvgPool1d	CNN lanes: no NVIDIA+AMD reference records
-CNNClassifier	CNN lanes: no NVIDIA+AMD reference records
-BatchNorm2d	CNN lanes: no NVIDIA+AMD reference records
-BatchNorm1d	CNN lanes: no NVIDIA+AMD reference records
-Dropout2d	CNN lanes: no NVIDIA+AMD reference records
-AdaptiveAvgPool2d	CNN lanes: no NVIDIA+AMD reference records
-AdaptiveMaxPool2d	CNN lanes: no NVIDIA+AMD reference records
-BasicBlock	CNN lanes: no NVIDIA+AMD reference records
-GCNConv	CNN/GNN lanes: no NVIDIA+AMD reference records
-SAGEConv	CNN/GNN lanes: no NVIDIA+AMD reference records
-Adafactor	sequence-adafactor lane: no NVIDIA+AMD reference records
-LAMB	sequence-lamb lane: no NVIDIA+AMD reference records
 ParallelByteLanguageModelTrainer	multi-GPU: no cross-vendor qualification
 ParallelNeuralTrainer	multi-GPU: no cross-vendor qualification
 parallel_forecasting	multi-GPU: physical qualification pending
@@ -277,7 +259,7 @@ _gradcheck.gradcheck	gradcheck of custom_op backward rules: not compiled or run 
 _gradcheck.GradcheckError	gradcheck of custom_op backward rules: not compiled or run yet
 # gradcheck end
 # batch-source begin
-BatchSource	batch-source streamed shard batches: not yet in a release verification
+ops.BatchSource	batch-source streamed shard batches: not yet in a release verification
 Program.save_training	batch-source one-call training checkpoint: not yet in a release verification
 Session.load_training	batch-source one-call training checkpoint: not yet in a release verification
 # batch-source end

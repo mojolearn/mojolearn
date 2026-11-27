@@ -561,10 +561,10 @@ class CNNClassifier(_Layer, _CheckMixin):
 
 class BatchNorm2d(_Layer):
     """PyTorch `nn.BatchNorm2d` (affine, track_running_stats): training mode
-    normalizes by the batch statistics and updates running_mean_/running_var_
+    normalizes by the batch statistics and updates `running_mean_` and `running_var_`
     (momentum, the unbiased variance); eval mode (`.eval()`) uses the running
     statistics. Each channel's statistics are one fixed-order fold.
-    `backward` returns grad_x and sets grad_weight_ (gamma), grad_bias_ (beta).
+    `backward` returns grad_x and sets `grad_weight_` (gamma) and `grad_bias_` (beta).
     `BatchNorm1d` is the same over (N, C) or (N, C, L)."""
 
     # lane gap-neural-io (2026-10-08, plan gaps-2026-10-08 Section 4): the
@@ -863,7 +863,7 @@ class GCNConv(_Layer):
     fill 1, or 2 when improved). The propagation is a CSR SpMM in fixed row
     and column order, the transform the pinned GEMM. `forward(x,
     edge_index, edge_weight=None)`; `backward(grad_out)` returns grad_x and
-    sets grad_weight_, grad_bias_.
+    sets `grad_weight_` and `grad_bias_`.
 
     The normalized graph is built on the first forward and reused while the
     same `edge_index` (and `edge_weight`) arrays are passed again.

@@ -97,7 +97,7 @@ def import_model(source, *, shapes=None, numeric_mode=None, device=None):
 
     Raises
     ------
-    UnsupportedModel
+    mojolearn.importers.UnsupportedModel
         The artifact contains unsupported operations, attributes or shapes.
     TypeError
         The source is not an exported artifact or a native reader graph.
