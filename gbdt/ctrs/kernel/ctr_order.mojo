@@ -123,15 +123,25 @@ def launch_grouped_ctr_order(
     var ends = ctx.enqueue_create_buffer[DType.uint32](n)
     var scratch = ctx.enqueue_create_buffer[DType.uint32]((n + SCAN_BLOCK - 1) // SCAN_BLOCK)
     var ids = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-    launch_ctr_estimation_order(ctx, shuffled, n, 0, seed)
-    launch_gather_with_mask_u32(ctx, lengths, groups.sizes, shuffled, n, UInt32(0xFFFFFFFF))
-    launch_scan_vector_u32(ctx, n, True, lengths, ends, scratch)
-    ctx.enqueue_function[expand_query_order_kernel](
-        shuffled.unsafe_ptr(), ends.unsafe_ptr(), groups.offsets.unsafe_ptr(), Int32(n), Int32(n_rows),
-        rows_order.unsafe_ptr(), ids.unsafe_ptr(), grid_dim=(n_rows + CTR_ORDER_BLOCK - 1) // CTR_ORDER_BLOCK,
-        block_dim=CTR_ORDER_BLOCK,
-    )
-    ctx.synchronize()
+    try:
+        launch_ctr_estimation_order(ctx, shuffled, n, 0, seed)
+        launch_gather_with_mask_u32(ctx, lengths, groups.sizes, shuffled, n, UInt32(0xFFFFFFFF))
+        launch_scan_vector_u32(ctx, n, True, lengths, ends, scratch)
+        ctx.enqueue_function[expand_query_order_kernel](
+            shuffled.unsafe_ptr(), ends.unsafe_ptr(), groups.offsets.unsafe_ptr(), Int32(n), Int32(n_rows),
+            rows_order.unsafe_ptr(), ids.unsafe_ptr(), grid_dim=(n_rows + CTR_ORDER_BLOCK - 1) // CTR_ORDER_BLOCK,
+            block_dim=CTR_ORDER_BLOCK,
+        )
+        ctx.synchronize()
+    except err:
+        ctx.synchronize()
+        _ = len(groups.offsets) + len(shuffled) + len(lengths) + len(ends) + len(scratch)
+        raise err
+    _ = groups^
+    _ = shuffled^
+    _ = lengths^
+    _ = ends^
+    _ = scratch^
     return ids^
 
 

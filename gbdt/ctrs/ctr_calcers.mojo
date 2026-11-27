@@ -968,6 +968,7 @@ def compute_simple_ctrs_gpu_resident(
             out.append(grouped^)
         ctx.synchronize()
         _ = anchors^
+        _ = len(bufs)  # the gathered source columns belong to this list
     else:
         for c in range(len(ctr_configs)):
             out.append(bufs[slot_buf[c]])
