@@ -210,7 +210,7 @@ def rank_row[phase: Int](a: RankView, row: Int, arg: Int, width: Int, col: Int):
             a.plane(1)[row] = ftz(a.plane(1)[row] + a.plane(1)[row + arg])
         return
     elif phase == RR_METRIC_OUT:
-        a.direction[arg] = identical_div(a.plane(1)[0], Float32(a.groups))
+        a.direction[0] = identical_div(a.plane(1)[0], Float32(a.groups))
         return
     elif phase == RR_QUERY_NDCG or phase == RR_SAVE_IDCG:
         var first = Int(a.offsets[row])
@@ -350,7 +350,7 @@ def xe_derivatives[R: RankStages](mut r: R, a: RankView, largest: Int) raises:
     r.rows[RR_XE_THIRD](a, a.n, 0, 0, 1)
 
 
-def rank_ndcg[R: RankStages](mut r: R, a: RankView, largest: Int, result_index: Int) raises:
+def rank_ndcg[R: RankStages](mut r: R, a: RankView, largest: Int) raises:
     r.order_by[False](a)
     r.rows[RR_DCG](a, a.n, 0, 0, 0)
     rank_fold[R, RR_SUM](r, a, largest, 1, 0)
@@ -359,4 +359,4 @@ def rank_ndcg[R: RankStages](mut r: R, a: RankView, largest: Int, result_index: 
     while step < a.groups:  # driver-loop: over levels of the metric reduction
         r.rows[RR_METRIC_FOLD](a, a.groups, step, 0, 0)
         step *= 2
-    r.rows[RR_METRIC_OUT](a, 1, result_index, 0, 0)
+    r.rows[RR_METRIC_OUT](a, 1, 0, 0, 0)
