@@ -241,6 +241,10 @@ def format_human(report):
                  " The JSON lists the arms. Detection requires a faulted build.")
     endpoints = report['public_endpoints']
     lines.append('Public endpoint source mapping: ' + ', '.join(f'{v} {k}' for k, v in sorted(endpoints['counts'].items())))
+    endpoint_faults = endpoints.get('endpoint_native_fault_counts', {})
+    if endpoint_faults:
+        lines.append('Public numerical endpoints linked to declared native faults: ' + ', '.join(
+            f'{count} {sides}' for sides, count in sorted(endpoint_faults.items()) if sides != 'not_numerical'))
     lines.append('Unmapped endpoints need review; source mapping is not runtime verification. See public_endpoints in JSON.')
     if not report['endpoint_snapshot_matches_sources']:
         lines.append('Endpoint inventory is stale for these package/harness sources; regenerate before claiming coverage.')

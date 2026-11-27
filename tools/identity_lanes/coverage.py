@@ -63,6 +63,20 @@ def _(ml, X, yc, yr, Xh=None):
         parts[f"lml{i}"] = d(np.asarray([lml], dtype=np.float64))
         parts[f"grad{i}"] = d(np.asarray(grad, dtype=np.float64))
     parts["lml_only"] = d(np.asarray([m.log_marginal_likelihood((theta - 0.125).tolist())], dtype=np.float64))
+    # Each public kernel is the left operand of both + and *. Score the
+    # resulting kernels on actual observations; just hashing their node lists
+    # would miss a backend that interpreted an operator incorrectly.
+    constant = ml.ConstantKernel(1.5)
+    radial = ml.RBF(0.75)
+    matern = ml.Matern(1.25, nu=1.5)
+    noise = ml.WhiteKernel(0.125)
+    composed = (constant + (radial * (matern + (noise * radial))),
+                noise + (matern * (radial + (constant * radial))))
+    tiny_x = np.array([[-1.0], [0.0], [1.0]], np.float32)
+    tiny_y = np.array([0.25, -0.5, 0.75], np.float32)
+    for index, kernel in enumerate(composed):
+        small = ml.GaussianProcessRegressor(kernel=kernel, optimizer=None).fit(tiny_x, tiny_y)
+        parts[f"composed_{index}"] = d(small.predict(np.array([[0.5]], np.float32)))
     return _fit(parts)
 
 

@@ -97,7 +97,8 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.AdaBoostClassifier(ml.DecisionTreeClassifier(max_depth=2), n_estimators=8, learning_rate=0.8,
                               random_state=7).fit(X, yc)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
-                     weights=_h(np.asarray(m.estimator_weights_, dtype=np.float64))),
+                     weights=_h(np.asarray(m.estimator_weights_, dtype=np.float64)),
+                     score=_h(np.float64(m.score(X[:16], yc[:16])))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 

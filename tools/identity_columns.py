@@ -642,6 +642,13 @@ def is_placeholder_part(ent):
     return str((ent or {}).get("ref") or "").startswith("n/a:")
 
 
+def incomplete_table_lanes(cells, lanes, fixtures, required_parts):
+    """A lane can only reuse a table that carries all required parts of every fixture."""
+    return {lane for lane in lanes
+            if any(not isinstance(cell := cells.get(f"{lane}/{fixture}"), dict)
+                   or not required_parts.issubset(cell) for fixture in fixtures)}
+
+
 def harness_sha256(h):
     """sha256 of the harness source `h` was loaded from (None for a stand-in)."""
     path = getattr(h, "__file__", None)
@@ -766,16 +773,14 @@ def reuse_points(h, lanes, table, cls, record_dirs, log=lambda s: None):
             t = records[col].get("commit_time") or 0
             if c and (lane not in oldest or t < oldest[lane][1]):
                 oldest[lane] = (c, t)
-    lane_fixtures = {}
-    for key in (table.get("cells") or {}):
-        lane, _, fixture = key.partition("/")
-        lane_fixtures.setdefault(lane, set()).add(fixture)
+    uncovered.update(incomplete_table_lanes(table.get("cells") or {}, wanted, h.FIXTURES,
+                                            set(getattr(v, "PARTS", ()))))
     stale = set(v.stale_reference_lanes(table, h))
     want_harness = harness_sha256(h)
     admitted = table.get("lane_admission") or {}
     other_harness = 0
     for lane, (c, _t) in oldest.items():
-        if lane in uncovered or lane in stale or set(h.FIXTURES) - lane_fixtures.get(lane, set()):
+        if lane in uncovered or lane in stale:
             continue
         witness = (admitted.get(lane) or {}).get("harness_sha256") or table.get("harness_sha256")
         if not witness or witness != want_harness:
@@ -882,6 +887,8 @@ def cmd_changed_lanes(args):
                     c, t = records[idx].get("commit"), records[idx].get("commit_time") or 0
                     if c and (lane not in since or t < since[lane][1]):
                         since[lane] = (c, t)
+        uncovered.update(incomplete_table_lanes(table.get("cells") or {}, lanes, getattr(h, "FIXTURES", ()),
+                                                set(getattr(vref(), "PARTS", ()))))
         for lane in uncovered:
             since.pop(lane, None)
         if tcls:

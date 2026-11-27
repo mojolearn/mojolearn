@@ -1273,7 +1273,7 @@ def endpoint_rows(walker, reach):
     import lane_select
     from verification_endpoint_calls import lane_calls, source_calls
     harness = lane_select.identity_break()
-    direct = lane_calls(harness, rows)
+    fixture_modules = {}
     supplemental = defaultdict(set)
     from light_verifier_reference import load
     for module in load('_verification_sources').SUPPLEMENTAL_CHECKS:
@@ -1286,8 +1286,10 @@ def endpoint_rows(walker, reach):
         for n in tree.body:
             if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'EXPECTED_CASES' for t in n.targets):
                 roots = ast.literal_eval(n.value)
+        fixture_modules['mojolearn.' + module] = functions
         for endpoint, cases in source_calls(functions, rows, roots).items():
             supplemental[endpoint].update(module + ':' + case for case in cases)
+    direct = lane_calls(harness, rows, supplemental=fixture_modules)
     declared_lanes = endpoints_declared()
     known_lanes = set(harness.LANES)
     for row in rows:

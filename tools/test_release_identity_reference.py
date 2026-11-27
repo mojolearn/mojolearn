@@ -64,7 +64,7 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
 '''
 HARNESS = 'FIXTURES = ["base"]\nLANES = {"ols": None, "ridge": None}\nLANE_REVISIONS = {}\n'
 CLASSES = ("apple", "nvidia", "amd", "cpu")
-PARTS = ("train", "infer", "model", "batch")
+PARTS = ("train", "infer", "model", "batch", "stepfull")
 
 
 def h16(*parts):
@@ -193,6 +193,18 @@ def test_unchanged_closure_passes_with_the_admission_as_evidence(repo, tmp_path)
     ledger.sync(manifest(repo, freeze))
     assert ledger.begin("identity-nvidia/ols") is None
     assert ledger.gate(stage="pre")[0]
+
+
+def test_missing_required_part_cannot_reuse_other_parts(repo, tmp_path):
+    repo.admit(repo.record)
+    path = repo.root / IR.TABLE_PATH
+    table = json.loads(path.read_text())
+    del table["cells"]["ols/base"]["train"]
+    repo.write(IR.TABLE_PATH, json.dumps(table))
+    freeze = repo.commit("remove an entire mandatory reference part")
+    rows = plan(repo, tmp_path, freeze)
+    assert rows["identity-nvidia/ols"]["status"] != "passed"
+    assert rows["identity-nvidia/ridge"]["status"] == "passed"
 
 
 def test_changed_closure_is_untested_with_the_first_five_files(repo, tmp_path):
