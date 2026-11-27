@@ -84,7 +84,7 @@ from std.sys.compile import is_defined
 comptime FIXTURE_DIR = "checks/native_tests/fixtures/gbdt/"
 comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites); including the grouped CTR and held-out loss examples
-comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS + 5
+comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS + 6
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
 comptime GBDT_HOST_UNITS = 55
 
@@ -1236,11 +1236,41 @@ def _grouped_validation_example[I: GbdtImage](unit: Int) raises:
         require_fails_with(err, "Cannot generate pairs", "held-out queries have no contrasting grades")
 
 
+def _heldout_ctr_model_example[I: GbdtImage]() raises:
+    # Column 0 is continuous, column 1 crosses the one-hot limit. Code 3
+    # appears only in validation; the persistent model must score it from its prior.
+    var inp = GbdtInputs([0, 1, 2, 3, 4, 5, 0, 1, 2, 0, 1, 2], 6, 2, [2, 1, 0, 0, 1, 2])
+    inp.group_sizes = [3, 3]
+    inp.eval_x = [0, 3, 4, 5, 3, 0, 1, 3]
+    inp.eval_y = [0, 2, 10, 12]
+    inp.eval_group_sizes = [2, 2]
+    var opts = GbdtOpts("QueryRMSE", 2, 1)
+    opts.cat_features = [1]
+    opts.deterministic()
+    opts.use_best_model = 0
+    var model = fit[I](opts, inp)
+    var pred = predict(model.text, inp.eval_x, 4)
+    # With two rows per query, its mean squared centered error is (r0-r1)^2/4.
+    var d0 = (Float64(inp.eval_y[0]) - Float64(pred[0])) - (Float64(inp.eval_y[1]) - Float64(pred[1]))
+    var d1 = (Float64(inp.eval_y[2]) - Float64(pred[2])) - (Float64(inp.eval_y[3]) - Float64(pred[3]))
+    require(len(model.test) == 2 and abs(model.test[1] - (d0 * d0 + d1 * d1) / 8) < 2.0e-6,
+            "held-out score disagrees with the saved model on known and unseen categories")
+    inp.eval_x[0] = bitcast[DType.float32](UInt32(0x7FC00000))
+    var err = String("")
+    try:
+        _ = fit[I](opts, inp)
+    except error:
+        err = String(error)
+    require_fails_with(err, "There are NaNs in feature number 0", "unseen validation NaN beside a CTR column")
+
+
 def common_unit[I: GbdtImage](unit: Int) raises:
     if unit == GBDT_COMMON_UNITS - 1:
+        _heldout_ctr_model_example[I]()
+    elif unit == GBDT_COMMON_UNITS - 2:
         _query_prior_example()
-    elif unit >= GBDT_COMMON_UNITS - 4:
-        _grouped_validation_example[I](unit - (GBDT_COMMON_UNITS - 4))
+    elif unit >= GBDT_COMMON_UNITS - 5:
+        _grouped_validation_example[I](unit - (GBDT_COMMON_UNITS - 5))
     elif unit == 26 + FF_UNITS + QW_UNITS:
         fit_loop_rounds[I]()
     elif unit >= 26 + FF_UNITS:
