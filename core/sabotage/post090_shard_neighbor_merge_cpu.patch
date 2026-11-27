@@ -1,0 +1,12 @@
+diff --git a/core/array_helpers_run.mojo b/core/array_helpers_run.mojo
+--- a/core/array_helpers_run.mojo
++++ b/core/array_helpers_run.mojo
+@@ -34,4 +34,7 @@
+     var tp = _addr_ptr[DType.int64](ta)
+     var dp = _addr_ptr[DType.uint32](od)
+     var ip = _addr_ptr[DType.uint32](oi)
+-    return shard_topk_merge_f32(tp, dp, ip, s_count, nq, kk)
++    var status = shard_topk_merge_f32(tp, dp, ip, s_count, nq, kk)
++    if status == 0:
++        dp[unsafe_offset=0] = dp[unsafe_offset=0] ^ UInt32(1)
++    return status

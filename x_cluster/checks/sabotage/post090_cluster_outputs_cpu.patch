@@ -1,0 +1,83 @@
+diff --git a/x_cluster/entries.mojo b/x_cluster/entries.mojo
+--- a/x_cluster/entries.mojo
++++ b/x_cluster/entries.mojo
+@@ -6,6 +6,7 @@
+ their Python arguments, call ONE of these with their own `ClusterOps`, and
+ hand the `ClusterOut` back. The integer and float parameter lists are
+ documented per entry and mirrored in `python/mojolearn/_x_cluster_impl.py`."""
++from std.sys.compile import is_defined
+ from x_cluster.affinity import affinity_fit
+ from x_cluster.agglo import agglo_tree
+ from x_cluster.bgmm import BgmmPriors, BgmmState, bgmm_fit, bgmm_score
+@@ -89,6 +90,9 @@
+     var counts = List[Float32]()
+     var r = minibatch_fit(ops, x, n, d, p, centers, labels, counts, weights)
+     var out = ClusterOut()
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        if len(centers) > 0:
++            centers[0] = centers[0] + Float32(1.0)
+     out.f.append(centers^)
+     out.f.append(counts^)
+     out.i.append(labels^)
+@@ -123,6 +127,9 @@
+     var out = ClusterOut()
+     out.f.append(centers^)
+     out.f.append(tree.centers.copy())
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        if len(labels) > 0:
++            labels[0] = Int32(-1) if labels[0] >= 0 else Int32(0)
+     out.i.append(labels^)
+     out.i.append(nodes^)
+     out.s.append(inertia)
+@@ -163,6 +170,9 @@
+     var out = ClusterOut()
+     var kc = len(centers) // d
+     out.f.append(centers^)
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        if len(labels) > 0:
++            labels[0] = Int32(-1) if labels[0] >= 0 else Int32(0)
+     out.i.append(labels^)
+     out.s.append(Float64(bw))
+     out.s.append(Float64(n_iter))
+@@ -205,6 +215,11 @@
+     var out = ClusterOut()
+     out.f.append(core^)
+     out.f.append(reach^)
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        if len(ordering) > 1:
++            var first = ordering[0]
++            ordering[0] = ordering[1]
++            ordering[1] = first
+     out.i.append(_i32(ordering))
+     out.i.append(_i32(pred))
+     out.i.append(labels^)
+@@ -250,6 +265,9 @@
+                 rows.append(x[r * d + f])
+     var out = ClusterOut()
+     out.i.append(centers^)
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        if len(labels) > 0:
++            labels[0] = Int32(-1) if labels[0] >= 0 else Int32(0)
+     out.i.append(labels^)
+     out.f.append(aff^)
+     out.f.append(ar_diag^)
+@@ -406,6 +424,9 @@
+     )
+     var out = ClusterOut()
+     out.f.append(_f32_of(best.weights))
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        if len(best.means) > 0:
++            best.means[0] = best.means[0] + Float64(1.0)
+     out.f.append(_f32_of(best.means))
+     out.f.append(_f32_of(best.cov))
+     out.f.append(_f32_of(best.pchol))
+@@ -564,6 +585,9 @@
+     out.f.append(dist^)
+     out.s.append(Float64(n_cc))
+     if cut >= 0:
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++            if len(labels) > 0:
++                labels[0] = Int32(-1) if labels[0] >= 0 else Int32(0)
+         out.i.append(labels^)
+         out.s.append(Float64(k))
+     return out^

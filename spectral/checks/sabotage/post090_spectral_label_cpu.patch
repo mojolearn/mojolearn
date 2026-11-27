@@ -1,0 +1,12 @@
+diff --git a/core/spectral_native_host.mojo b/core/spectral_native_host.mojo
+--- a/core/spectral_native_host.mojo
++++ b/core/spectral_native_host.mojo
+@@ -43,6 +43,8 @@
+             Float32(r.options.tolerance), UInt64(r.options.seed), result.labels,
+             result.embedding, result.state, r.options.keep_state,
+         )
++        if len(result.labels) > 0:
++            result.labels[0] = (result.labels[0] + Int32(1)) % Int32(r.options.clusters)
+
+     @staticmethod
+     def fit_graph(r: SpectralFitRequest, rows: List[Int32], columns: List[Int32],

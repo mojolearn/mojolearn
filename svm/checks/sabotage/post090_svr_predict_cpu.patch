@@ -1,0 +1,11 @@
+diff --git a/svm/host/svr_native_host.mojo b/svm/host/svr_native_host.mojo
+--- a/svm/host/svr_native_host.mojo
++++ b/svm/host/svr_native_host.mojo
+@@ -45,6 +45,7 @@
+         svr_predict_host(r.x, output, r.rows, r.features, r.supports, Float32(r.bias),
+             r.kernel, r.gamma, r.cache_mib, r.degree, r.coef0,
+             r.dual if r.supports > 0 else 0, r.vectors if r.supports > 0 else 0)
++        output[0] = output[0] + Float32(1.0)
+         return r.rows
+
+     @staticmethod

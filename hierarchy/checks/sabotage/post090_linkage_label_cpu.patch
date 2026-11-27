@@ -1,0 +1,16 @@
+diff --git a/core/mojolearn_solver_host_impl.mojo b/core/mojolearn_solver_host_impl.mojo
+--- a/core/mojolearn_solver_host_impl.mojo
++++ b/core/mojolearn_solver_host_impl.mojo
+@@ -94,11 +94,11 @@
+     if len(children) != (n_rows - 1) * 2 or len(labels) != n_rows:
+         raise Error("linkage_fit: the host dendrogram or labels have an unexpected length; nothing written")
+     for i in range((n_rows - 1) * 2):
+         chp[i] = children[i]
+     for i in range(n_rows):
+-        lp[i] = labels[i]
++        lp[i] = (labels[i] + Int32(1)) % Int32(n_clusters)
+     ip[0] = Int32(-1)
+     ip[1] = Int32(1)
+
+
+ def cd_predict_host_into(

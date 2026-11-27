@@ -1,0 +1,11 @@
+diff --git a/core/core_host_impl.mojo b/core/core_host_impl.mojo
+--- a/core/core_host_impl.mojo
++++ b/core/core_host_impl.mojo
+@@ -610,6 +610,7 @@
+     host_kmeans_predict(x, ns, nf, centroids, nc, mm, labels)
+     for i in range(ns):
+         lp[i] = labels[i]
++    lp[0] = (lp[0] + UInt32(1)) % UInt32(nc)
+
+
+ def kmeans_score_host(
