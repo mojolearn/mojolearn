@@ -15,10 +15,11 @@
 #                                      own result (<outdir>/results/<name>.txt, the compile's first errors) and no
 #                                      binary, and its group's other files build on. The plan's singles (a file that
 #                                      cannot share a program) compile alone, as before.
-#                                      G and the compiles at once = min(cores, memory available x 0.8 /
+#                                      G defaults to 14, the existing full-column cache layout. Compiles at once
+#                                      = min(allocation cores, remaining allocation memory x 0.8 /
 #                                      NC_TS_GROUP_PEAK_MB) (the measured peak of one group compile: 7.0 GB host column,
 #                                      13.2 GB device column on cpc2; defaults 7500 / 13500 MB);
-#                                      NC_TS_GROUPS / NC_TS_JOBS pin them; a single file's compile is budgeted at
+#                                      NC_TS_GROUPS / NC_TS_JOBS override groups / concurrent group compiles; a single file's compile is budgeted at
 #                                      NC_TS_PEAK_MB (default 1200: 0.2-1.1 GB measured on cpc1). The step prepares
 #                                      what the files need itself: the generated sources (tools/generated_sources.py),
 #                                      the fixture packs (tools/fixture_packs.py unpack), the column's defines
@@ -44,8 +45,8 @@
 #                                      build's result stands.
 #   is <name>                          exit 0 when <name> is a TestSuite check file
 #
-# Parallel plan (AGENTS.md hard rules): G group compiles (G about the allocation's cores, fewer when memory says so) at
-# once, each a multi-threaded `mojo build` of 1/G of the files; the runs are
+# Parallel plan (AGENTS.md hard rules): stable groups are compiled concurrently up to the allocation's core and memory limits.
+# Each group is a multi-threaded `mojo build`; the runs are
 # one process per file, dealt across the cores by the caller (cpu_box_checks_job.sh slices, native-checks.yml shards,
 # native_checks_gpu_job.sh xargs). Inside a file TestSuite runs its tests in order (the library's loop); a case table
 # inside one test runs across the cores (checks/native_tests/testsuite_cases.mojo check_cases).
@@ -140,20 +141,25 @@ build)
     # (nvc1-0003, 2026-11-22). Same helper the other box jobs use.
     . "$(dirname "$0")/box_cores_lib.sh"
     cores=$(alloc_cores)
-    avail_kb=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2> /dev/null)
-    [ -n "$avail_kb" ] || avail_kb=$(( 16 * 1048576 ))
-    # one group compile's measured peak (cpc2, 2026-11-22, 16 groups: host column 7.0 GB, device column 13.2 GB)
+    # Peaks measured on cpc2: 7.0 GB for a host group and 13.2 GB for a device group.
     gdef=7500; [ "$column" = cpu ] || gdef=13500
     gpeak=${NC_TS_GROUP_PEAK_MB:-$gdef}
-    bymem=$(( avail_kb * 8 / 10 / (gpeak * 1024) ))
-    jobs=${NC_TS_JOBS:-$(( bymem < cores ? bymem : cores ))}
+    compile_slots() {
+        local avail_kb slots
+        avail_kb=$(alloc_mem_kb)
+        # Retain the build's previous fallback on hosts with no memory probe.
+        slots=$(( ${avail_kb:-16777216} * 8 / 10 / ($1 * 1024) ))
+        (( slots > cores )) && slots=$cores
+        (( slots < 1 )) && slots=1
+        echo "$slots"
+    }
+    jobs=${NC_TS_JOBS:-$(compile_slots "$gpeak")}
     [ "$jobs" -ge 1 ] || jobs=1
-    groups=${NC_TS_GROUPS:-$jobs}
     gen="$bindir/tsgen"
-    $PY tools/ops/native_testsuite_groups.py plan --column "$column" --list "$list" --groups "$groups" --gen "$gen" \
+    $PY tools/ops/native_testsuite_groups.py plan --column "$column" --list "$list" --gen "$gen" \
         > "$out/logs/testsuite-plan-$column.txt" || { echo "testsuite: group plan failed"; exit 2; }
     ng=$(grep -c '^group ' "$gen/plan.txt"); ns=$(grep -c '^single ' "$gen/plan.txt")
-    echo "testsuite: building $n files on the $column column as $ng group programs and $ns single files, $jobs compiles at once ($cores cores; memory allows $bymem at $gpeak MB a group)"
+    echo "testsuite: building $n files on the $column column as $ng group programs and $ns single files, $jobs compiles at once ($cores cores; $gpeak MB budget per group)"
     export TS_BIN="$bindir" TS_OUT="$out" TS_PY="$PY" TS_FLAGS="$TS_DEFINES $TS_TARGET" TS_GEN="$gen"
     # NC_TS_CACHE (a directory on the box; unset = every program compiles): one key per planned unit. A failure to
     # key is not a build failure: the units compile.
@@ -179,11 +185,9 @@ build)
         printf 'single %s\n' $members >> "$out/logs/testsuite-regroup-$column.txt"
     done < <(grep '^group ' "$gen/plan.txt")
     # (a file alone is smaller than a group: its own memory budget, NC_TS_PEAK_MB)
-    bymem1=$(( avail_kb * 8 / 10 / (${NC_TS_PEAK_MB:-1200} * 1024) ))
-    jobs1=$(( bymem1 < cores ? bymem1 : cores )); [ "$jobs1" -ge 1 ] || jobs1=1
     : > "$out/logs/testsuite-units-regroup-$column.txt"
     [ -s "$out/logs/testsuite-regroup-$column.txt" ] && \
-        xargs -P "$jobs1" -n 2 bash -c 'compile_unit "$0" "$1"' < "$out/logs/testsuite-regroup-$column.txt" \
+        xargs -P "$(compile_slots "${NC_TS_PEAK_MB:-1200}")" -n 2 bash -c 'compile_unit "$0" "$1"' < "$out/logs/testsuite-regroup-$column.txt" \
         | tee "$out/logs/testsuite-units-regroup-$column.txt"
     # bin/ts/<name>: the group members' wrappers (singles are their own binary there already)
     while read -r _ k members; do

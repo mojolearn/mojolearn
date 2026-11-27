@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -332,3 +334,27 @@ def test_grouped_build_deal_is_deterministic_balanced_and_keeps_families():
     for f in range(6):  # a small family never splits
         assert sum(1 for grp in a if any(n.startswith(f"fam{f}_") for n in grp)) == 1
     assert len(g.deal(["one"], {"one": 1.0}, 8)) == 1
+
+
+def test_group_plan_survives_a_change_in_builder_allocation(tmp_path, monkeypatch):
+    listing = tmp_path / "checks.txt"
+    source = tmp_path / "check.mojo"
+    source.write_text("def test_a() raises:\n    pass\n\ndef main() raises:\n"
+                      "    TestSuite.discover_tests[__functions_in_module()]().run()\n")
+    listing.write_text("".join(f"family{i}_check {source}\n" for i in range(32)))
+    monkeypatch.delenv("NC_TS_GROUPS", raising=False)
+
+    def plan(cores):
+        monkeypatch.setenv("MOJOLEARN_ALLOC_CORES", str(cores))
+        monkeypatch.setenv("NC_TS_JOBS", str(cores))
+        gen = tmp_path / f"plan{cores}"
+        subprocess.run([sys.executable, str(ROOT / "tools/ops/native_testsuite_groups.py"), "plan",
+                        "--column", "cpu", "--list", str(listing), "--gen", str(gen)],
+                       check=True, capture_output=True)
+        return (gen / "plan.txt").read_bytes()
+
+    small = plan(4)
+    assert small == plan(32)
+    assert small.count(b"group ") == 14
+    monkeypatch.setenv("NC_TS_GROUPS", "3")
+    assert plan(4).count(b"group ") == 3
