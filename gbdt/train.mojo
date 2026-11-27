@@ -309,7 +309,7 @@ border builder and quantize kernel, so the model is bitwise the default's
 by construction. Checks, one per side: `pixi run check-gbdt-per-round`
 (the default, ON) and `check-gbdt-per-round-2550-host-copy` (the opt-out)
 print one MODEL_HASH per lane, which must agree across the two builds."""
-from gbdt.targets.ranking_options import is_lightgbm_ranking, check_rank_grade, check_rank_estimator, check_rank_inputs
+from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF, is_lightgbm_ranking, check_rank_grade, check_rank_estimator
 from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_CROSSENTROPY,
     OBJECTIVE_LOGLOSS,
@@ -1274,6 +1274,7 @@ def train(
     # default) and passed to the Plain and the Ordered fit.
     device_plan: DevicePlan = plan_for_single(),
     eval_group_sizes: List[UInt32] = List[UInt32](),
+    eval_at: Int = DEFAULT_NDCG_CUTOFF,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -1577,12 +1578,6 @@ def train(
         targets, weights, 31 if lightgbm_rank else 0,
     )
     if lightgbm_rank:
-        var categorical = False
-        for flag in cat_features:  # small-loop: feature options at fit admission
-            categorical = categorical or flag
-        for flag in one_hot:  # small-loop: feature options at fit admission
-            categorical = categorical or flag
-        check_rank_inputs(categorical, len(eval_y) > 0)
         check_rank_grade(tscan.first_bad_label() < 0)
         if len(group_sizes) == 0:
             raise Error("lambdarank and rank_xendcg require group_id")
@@ -1717,7 +1712,7 @@ def train(
                 query_sizes.resize(n_rows, UInt32(1))
         # what the querywise arm of this implementation does not restate yet,
         # refused by name
-        if policy != GROW_SYMMETRIC:
+        if not lightgbm_rank and policy != GROW_SYMMETRIC:
             raise Error(
                 "loss='" + loss + "' is implemented on SymmetricTree only here;"
                 " grow_policy=" + grow_policy_name(policy) + " is refused"
@@ -1948,6 +1943,8 @@ def train(
                 break
 
     var grouped_ctr = is_querywise and has_permutation_features
+    if grouped_ctr and lightgbm_rank:
+        query_sizes = group_sizes.copy()
     if grouped_ctr and (permutation_count > 1 or cat_params.max_tensor_complexity > 1):
         raise Error("grouped categorical ranking supports one query permutation and single-feature CTRs")
     var ordered_ctr_column = False
@@ -3198,7 +3195,13 @@ def train(
     var test_targets = ctx.enqueue_create_buffer[DType.float32](t_rows)
     # the caller's eval targets straight into the device buffer (one H2D),
     # or the one-row zero placeholder
-    if eval_rows > 0:
+    if eval_rows > 0 and lightgbm_rank:
+        var eval_weights = ctx.enqueue_create_buffer[DType.float32](eval_rows)
+        var scan = upload_and_scan_targets(
+            ctx, eval_y, List[Float32](), eval_rows, 1, False, test_targets, eval_weights, 31,
+        )
+        check_rank_grade(scan.first_bad_label() < 0)
+    elif eval_rows > 0:
         ctx.enqueue_copy(dst_buf=test_targets, src_ptr=eval_y.unsafe_ptr())
     else:
         enqueue_fill(ctx, test_targets, Float32(0.0))
@@ -3258,7 +3261,7 @@ def train(
     var test_arm = make_test_arm(
         ctx, eval_rows, test_cindex^, test_targets^,
         approx_dim, 1 + approx_dim, min(max_depth, MAX_FULL_TREE_DEPTH),
-        objective=objective, group_sizes=eval_group_sizes,
+        objective=objective, group_sizes=eval_group_sizes, eval_at=eval_at,
     )
 
     # TREE CTRS: the fit's state (`TreeCtrFit`), one entry when on.

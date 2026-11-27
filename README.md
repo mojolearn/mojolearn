@@ -214,10 +214,14 @@ settings and Mojolearn release on both machines.
 ## Rank items within queries
 
 Pass one contiguous group of rows per query and supply one query ID per row.
-With numeric features and integer relevance grades from 0 to 30, use
+For integer relevance grades from 0 to 30, use
 `GradientBoosting(loss="lambdarank")` or `GradientBoosting(loss="rank_xendcg")`.
-Both objectives use Mojolearn's Plain symmetric trees. `predict` returns a
-score for each item, and `loss_curve_` reports one minus mean NDCG@30.
+Both objectives support symmetric, depth-wise and leaf-wise trees. Set
+`grow_policy="Lossguide"` for leaf-wise growth and `cat_features` for categorical
+columns. Pass `eval_set=(X_valid, relevance_valid, query_ids_valid)` and
+`eval_at=k` to select the best iteration by mean held-out NDCG@k. The default
+cutoff is 30. `test_loss_curve_` reports one minus this score. `predict` returns
+a score per item and `loss_curve_` reports one minus training NDCG@30.
 
 For `QueryRMSE`, `PairLogit`, and `YetiRank`, specify categorical columns on the
 estimator and supply the validation set's own query IDs when fitting.

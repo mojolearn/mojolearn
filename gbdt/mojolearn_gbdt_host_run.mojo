@@ -47,7 +47,7 @@ from gbdt.host.gbdt_oracle import (
     gbdt_host_fit_eval,
     gbdt_host_model_text,
 )
-from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG, is_lightgbm_ranking, is_lightgbm_ranking_name, check_rank_estimator, check_rank_inputs
+from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG, is_lightgbm_ranking, is_lightgbm_ranking_name, check_rank_estimator
 from gbdt.host.gbdt_oracle_pointwise_rank import gbdt_ranking_pointwise_host_fit
 from gbdt.host.gbdt_oracle_losses import (
     GBDT_LEAF_EXACT,
@@ -1223,15 +1223,9 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # `gbdt/train.mojo::train` uses, so the CPU column refuses exactly where
     # the device column does and QueryRMSE sees the same queries
     var eval_group_sizes = List[Int]()
-    if len(params) == fixed_and_weights + 7 or len(params) == fixed_and_weights + 10:
-        var count = params.i(len(params) - 1)
-        if count < 1 or count > params.i(20) or params.i(len(params) - 2) == 0:
-            raise Error("gbdt_fit: invalid held-out query count or group buffer")
-        if params.strs[0] != "QueryRMSE" and params.strs[0] != "PairLogit" and params.strs[0] != "YetiRank":
-            raise Error("gbdt_fit: only grouped ranking objectives take eval_group_id")
-        if (len(params) == fixed_and_weights + 10) != (params.strs[0] == "PairLogit"):
-            raise Error("gbdt_fit: invalid held-out group and training pair layout")
-        eval_group_sizes = gbdt_host_group_sizes(u32_ptr(params.i(len(params) - 2)), count, params.i(20))
+    var tail = params.group_tail(fixed_and_weights)
+    if tail.eval_count > 0:
+        eval_group_sizes = gbdt_host_group_sizes(u32_ptr(tail.eval_sizes), tail.eval_count, params.i(20))
     var tail_loss = params.strs[0]
     var tail_rows = params.i(0)
     var host_group_sizes = List[Int]()
@@ -1257,7 +1251,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     var host_pair_winners = List[UInt32]()
     var host_pair_losers = List[UInt32]()
     var host_pair_weights = List[Float32]()
-    if len(params) == fixed_and_weights + 8 or len(params) == fixed_and_weights + 10:
+    if tail.training_pairs:
         var n_pairs = params.i(fixed_and_weights + 6)
         if n_pairs != -1 and n_pairs < 1:
             raise Error(
@@ -1456,7 +1450,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # (gbdt_oracle_depthwise.mojo); the grouped ones are SymmetricTree only
     # on both columns, in `train`'s words
     var pw_grouped = pw_grouped_loss
-    if pw_grouped and grow_code != 0:
+    if pw_grouped and not is_lightgbm_ranking(pw_objective) and grow_code != 0:
         raise Error(
             "loss='" + loss + "' is implemented on SymmetricTree only here;"
             " grow_policy=" + String("Depthwise" if grow_code == 1 else "Lossguide")
@@ -1660,11 +1654,11 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # (`train`'s `fold_class_weights` at the binarized target `y > 0.5`,
     # the same `class_weight_body` the host column calls); RMSE, the grouped
     # losses and MultiRMSE refuse them on both columns in `train`'s words
+    if pw_grouped and n_class_weights != 0:
+        raise Error("class_weights do not apply to loss='" + loss + "'")
     if grow_code == 0 and n_class_weights != 0:
         if is_multi_rmse:
             raise Error("class_weights do not apply to loss='MultiRMSE'")
-        if pw_grouped:
-            raise Error("class_weights do not apply to loss='" + loss + "'")
         if is_rmse:
             raise Error(
                 "class weights take effect only with a classification loss,"
@@ -1693,8 +1687,6 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             any_cat_flag = True
         if (flags[f] & UInt32(2)) != UInt32(0):
             any_one_hot_flag = True
-    if is_lightgbm_ranking(pw_objective):
-        check_rank_inputs(any_cat_flag or any_one_hot_flag, n_eval_rows != 0)
     if is_multi_rmse and any_cat_flag:
         raise Error(
             "loss='MultiRMSE' with cat_features is not carried here:"
@@ -2173,7 +2165,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 var pw_cat = gbdt_ctr_host_fit_non_symmetric(
                     x, y, n_rows, n_features, pw_tp, flags, permutation_count,
                     ctr_permutation_id, pw_ev^, max_ctr_complexity, pw_start,
-                    row_weights,
+                    row_weights, host_group_sizes, eval_group_sizes, tail.eval_at,
                 )
                 text = gbdt_text_with_bias(
                     gbdt_ctr_host_ns_model_text(pw_cat),
@@ -2186,7 +2178,8 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 test_losses = pw_cat.model.test_losses.copy()
                 return _fit_outcome(text^, best_iteration, stopped_early, losses^, test_losses^, fit_loop)
             var pw_ns = gbdt_host_fit_non_symmetric(
-                x, y, n_rows, n_features, pw_tp, pw_ev^, pw_start, row_weights
+                x, y, n_rows, n_features, pw_tp, pw_ev^, pw_start, row_weights,
+                host_group_sizes, eval_group_sizes, tail.eval_at,
             )
             text = gbdt_text_with_bias(
                 gbdt_host_ns_model_text(pw_ns), len(pw_ns.losses), pw_start
@@ -2209,14 +2202,14 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 score_function == GBDT_HOST_SCORE_NEWTON_COSINE or score_function == GBDT_HOST_SCORE_NEWTON_L2,
                 score_function == GBDT_HOST_SCORE_COSINE or score_function == GBDT_HOST_SCORE_NEWTON_COSINE,
                 random_strength, row_weights, feature_fraction, pw_sym_ev^, eval_group_sizes,
-                flags, permutation_count, ctr_permutation_id, max_ctr_complexity,
+                flags, permutation_count, ctr_permutation_id, max_ctr_complexity, tail.eval_at,
             )
         else:
             pw_fit = gbdt_losses_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, pw_sym_ev^,
                 host_group_sizes, host_pair_winners, host_pair_losers, host_pair_weights,
                 pw_start, random_strength, row_weights, feature_fraction, score_function,
-                flags, permutation_count, ctr_permutation_id, max_ctr_complexity, eval_group_sizes,
+                flags, permutation_count, ctr_permutation_id, max_ctr_complexity, eval_group_sizes, tail.eval_at,
             )
         losses = pw_fit.fit.model.losses.copy()
         best_iteration = pw_fit.fit.eval.best_iteration

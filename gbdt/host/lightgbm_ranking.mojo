@@ -3,7 +3,7 @@
 from cluster.host.host_cells import host_cells
 from core.sort_ops_host import FRS_BINS, FRS_TILE, stable_radix_pairs_u32_host
 from gbdt.targets.lightgbm_ranking import (
-    LR_PLANES, RF, RU, RankStages, RankView, lambda_derivatives, rank_ideal, rank_ndcg, rank_row, rank_sort_key,
+    LR_CUTOFF, LR_PLANES, RF, RU, RankStages, RankView, lambda_derivatives, rank_ideal, rank_ndcg, rank_row, rank_sort_key,
     xe_derivatives,
 )
 from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG
@@ -22,7 +22,7 @@ def _u(x: List[UInt32]) -> RU:
 struct HostLightGBMRank(RankStages, Movable):
     var n: Int
     var largest: Int
-    var ready: Bool
+    var ideal_cutoff: Int
     var sizes: List[UInt32]
     var offsets: List[UInt32]
     var qids: List[UInt32]
@@ -37,7 +37,7 @@ struct HostLightGBMRank(RankStages, Movable):
         if n_rows < 1 or n_rows > 2147483647 or len(group_sizes) == 0:
             raise Error("LightGBM ranking needs positive query sizes covering the input rows")
         self.n = n_rows
-        self.ready = False
+        self.ideal_cutoff = 0
         self.sizes = List[UInt32](capacity=len(group_sizes))
         self.offsets = [UInt32(0)]
         var total = 0
@@ -113,21 +113,21 @@ struct HostLightGBMRank(RankStages, Movable):
         var a = self._view(targets, scores, weights, seed, iteration, _f(directions), _f(hessians))
         var largest = self.largest
         if objective == OBJECTIVE_LAMBDARANK:
-            if not self.ready:
+            if self.ideal_cutoff != LR_CUTOFF:
                 rank_ideal(self, a, largest)
-                self.ready = True
+                self.ideal_cutoff = LR_CUTOFF
             lambda_derivatives(self, a, largest)
         elif objective == OBJECTIVE_RANK_XENDCG:
             xe_derivatives(self, a, largest)
         else:
             raise Error("unknown grouped LightGBM objective")
 
-    def ndcg(mut self, targets: List[Float32], scores: List[Float32]) raises -> Float32:
+    def ndcg(mut self, targets: List[Float32], scores: List[Float32], cutoff: Int = LR_CUTOFF) raises -> Float32:
         var result: List[Float32] = [0]
         var a = self._view(targets, scores, List[Float32](), 0, 0, _f(result), _f(result))
         var largest = self.largest
-        if not self.ready:
-            rank_ideal(self, a, largest)
-            self.ready = True
-        rank_ndcg(self, a, largest)
+        if self.ideal_cutoff != cutoff:
+            rank_ideal(self, a, largest, cutoff)
+            self.ideal_cutoff = cutoff
+        rank_ndcg(self, a, largest, cutoff)
         return result[0]

@@ -1,5 +1,6 @@
 """Device-independent options of the grouped LightGBM ranking objectives."""
 
+comptime DEFAULT_NDCG_CUTOFF = 30
 comptime OBJECTIVE_LAMBDARANK = 18
 comptime OBJECTIVE_RANK_XENDCG = 19
 
@@ -27,8 +28,6 @@ def check_rank_grade(valid: Bool) raises:
         raise Error("lambdarank and rank_xendcg require integer relevance grades in [0, 30]")
 
 
-def check_rank_inputs(categorical: Bool, validation: Bool) raises:
-    if categorical:
-        raise Error("lambdarank and rank_xendcg accept numeric features only")
-    if validation:
-        raise Error("lambdarank and rank_xendcg do not support eval_set")
+def check_eval_at(cutoff: Int) raises:
+    if cutoff < 1 or cutoff > 2_147_483_647:
+        raise Error("eval_at must be a positive 32-bit integer")

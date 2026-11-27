@@ -137,8 +137,9 @@ from gbdt.host.gbdt_oracle_query import (
     query_rmse_search_pass,
     query_rmse_value,
 )
-from gbdt.host.ranking_fit import HostRankingFit
-from gbdt.targets.ranking_options import is_lightgbm_ranking, ranking_seed
+from gbdt.host.lightgbm_ranking import HostLightGBMRank
+from gbdt.host.ranking_fit import HostRankingFit, check_host_rank_grades
+from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF, is_lightgbm_ranking, ranking_seed
 from gbdt.host.gbdt_oracle_yeti import yeti_rank_eval, yeti_rank_search_pass
 from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.data.permutation import TRandom
@@ -1155,7 +1156,10 @@ struct GroupedTestLoss(Movable):
     var groups: List[Int]
     var pairs: Optional[HostPairs]
 
-    def __init__(out self, objective: Int, sizes: List[Int], target: List[Float32]) raises:
+    var metric: Optional[HostLightGBMRank]
+    var eval_at: Int
+
+    def __init__(out self, objective: Int, sizes: List[Int], target: List[Float32], eval_at: Int = DEFAULT_NDCG_CUTOFF) raises:
         var rows = 0
         var sizes_u32 = List[UInt32](capacity=len(sizes))
         for q in range(len(sizes)):
@@ -1167,10 +1171,17 @@ struct GroupedTestLoss(Movable):
             raise Error("held-out queries must cover every eval row")
         self.groups = sizes.copy()
         self.pairs = None
-        if objective != GBDT_OBJ_QUERY_RMSE:
+        self.metric = None
+        self.eval_at = eval_at
+        if is_lightgbm_ranking(objective):
+            check_host_rank_grades(target)
+            self.metric = Optional(HostLightGBMRank(sizes, rows))
+        elif objective != GBDT_OBJ_QUERY_RMSE:
             self.pairs = Optional(host_pair_groups(sizes_u32, target, List[Float32](), rows))
 
-    def value(self, targets: List[Float32], cursor: List[Float32]) -> Float64:
+    def value(mut self, targets: List[Float32], cursor: List[Float32]) raises -> Float64:
+        if self.metric:
+            return 1.0 - Float64(self.metric.value().ndcg(targets, cursor, self.eval_at))
         var parts = List[Float32]()
         var weight = Float64(len(targets))
         if self.pairs:
@@ -1206,6 +1217,7 @@ def gbdt_losses_host_fit(
     ctr_estimation_permutation_id: Int = -1,
     max_ctr_complexity: Int = 1,
     eval_group_sizes: List[Int] = List[Int](),
+    eval_at: Int = DEFAULT_NDCG_CUTOFF,
 ) raises -> GbdtCtrHostFit:
     """`train` then `fit_with_test` on the covered configurations (see the
     module docstring). `group_sizes` is read by QueryRMSE alone, already
@@ -1341,7 +1353,7 @@ def gbdt_losses_host_fit(
         if len(eval.y) != eval.n_rows:
             raise Error("eval_set y size mismatch")
         if grouped:
-            rank_test = Optional(GroupedTestLoss(loss.objective, eval_group_sizes, eval.y))
+            rank_test = Optional(GroupedTestLoss(loss.objective, eval_group_sizes, eval.y, eval_at))
     var n_eval = eval.n_rows if has_test else 1
 
     # ---- the columns, the grid, the layout and one compressed index per

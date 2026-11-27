@@ -84,6 +84,7 @@ An image method that computes releases the GIL around its work itself (the
 caller holds it); the caller owns every buffer until the synchronous call
 returns.
 """
+from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF, check_eval_at, is_lightgbm_ranking_name
 from std.memory import alloc, unsafe_memcpy
 from core.fit_loop_clock import FitLoop
 
@@ -138,6 +139,14 @@ comptime GBDT_ARG_NO_INT = 1
 comptime GBDT_ARG_NO_FLOAT = 2
 
 
+@fieldwise_init
+struct GbdtGroupTail(Copyable, Movable):
+    var eval_sizes: Int
+    var eval_count: Int
+    var eval_at: Int
+    var training_pairs: Bool
+
+
 struct GbdtFitArgs(Movable, Sized):
     """The fit's request as plain values (see the module docstring)."""
 
@@ -177,6 +186,27 @@ struct GbdtFitArgs(Movable, Sized):
         if self.bad[k] & GBDT_ARG_NO_INT:
             raise Error("gbdt_fit: params[" + String(k) + "] must be an integer")
         return self.ints[k]
+
+    def group_tail(self, fixed_and_weights: Int) raises -> GbdtGroupTail:
+        """Resolve eval groups and the optional NDCG cutoff before either backend reads pointers."""
+        var words = len(self) - fixed_and_weights
+        var loss = self.strs[0]
+        var rank = is_lightgbm_ranking_name(loss)
+        var ndcg_cutoff = rank and words == 8
+        var pair_tail = (words == 8 and not ndcg_cutoff) or words == 10
+        if words != 7 and words != 10 and not ndcg_cutoff:
+            return GbdtGroupTail(0, 0, DEFAULT_NDCG_CUTOFF, pair_tail)
+        if not rank and loss != "QueryRMSE" and loss != "PairLogit" and loss != "YetiRank":
+            raise Error("gbdt_fit: only grouped ranking objectives take eval_group_id")
+        if (words == 10) != (loss == "PairLogit"):
+            raise Error("gbdt_fit: invalid held-out group and training pair layout")
+        var cutoff = self.i(fixed_and_weights + 5) if ndcg_cutoff else DEFAULT_NDCG_CUTOFF
+        check_eval_at(cutoff)
+        var count = self.i(len(self) - 1)
+        var address = self.i(len(self) - 2)
+        if count < 1 or count > self.i(20) or address == 0:
+            raise Error("gbdt_fit: invalid held-out query count or group buffer")
+        return GbdtGroupTail(address, count, cutoff, pair_tail)
 
     def f(self, k: Int) raises -> Float64:
         """Slot k as a float (the former `Float64(py=params[k])`)."""

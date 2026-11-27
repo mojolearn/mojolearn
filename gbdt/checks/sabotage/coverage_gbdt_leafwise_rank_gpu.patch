@@ -1,0 +1,12 @@
+diff --git a/gbdt/methods/doc_parallel_boosting.mojo b/gbdt/methods/doc_parallel_boosting.mojo
+--- a/gbdt/methods/doc_parallel_boosting.mojo
++++ b/gbdt/methods/doc_parallel_boosting.mojo
+@@ -5377,7 +5377,7 @@
+                     objective, alpha, estimator_alpha, logloss_border,
+                     l2_leaf_reg, est_sm, leaf_estimation_method,
+                     num_classes, leaf_estimation_iterations,
+-                    learning_rate,
++                    learning_rate * Float32(0.5) if rank.__bool__() else learning_rate,
+                     pv, not_pd_total,
+                     trace, stage_times,
+                     _tree_tag(iteration) + ".perm" + String(p)

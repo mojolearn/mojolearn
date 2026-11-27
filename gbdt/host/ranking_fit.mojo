@@ -7,6 +7,27 @@ from gbdt.host.lightgbm_ranking import HostLightGBMRank
 from gbdt.targets.ranking_options import check_rank_grade
 
 
+def check_host_rank_grades(targets: List[Float32]) raises:
+    var n = len(targets)
+    var units = _gbdt_units(n, n)
+    var chunk = (n + units - 1) // units
+    var labels = rebind[HostF32Ptr](targets.unsafe_ptr())
+    var failed = List[Int](length=units, fill=0)
+    var bad = rebind[MutPointer[Int, MutUntrackedOrigin]](failed.unsafe_ptr())
+
+    @parameter
+    def check(unit: Int) {imm n, imm chunk, imm labels, imm bad}:
+        for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            var y = labels[i]
+            if not (y >= 0 and y <= 30) or Float32(Int(y)) != y:
+                bad[unit] = 1
+                return
+
+    host_parallelize(check, units)
+    for unit in range(units):
+        check_rank_grade(failed[unit] == 0)
+
+
 struct HostRankingFit(Movable):
     var workspace: HostLightGBMRank
     var directions: List[Float32]
@@ -14,23 +35,7 @@ struct HostRankingFit(Movable):
 
     def __init__(out self, group_sizes: List[Int], targets: List[Float32]) raises:
         var n = len(targets)
-        var units = _gbdt_units(n, n)
-        var chunk = (n + units - 1) // units
-        var labels = rebind[HostF32Ptr](targets.unsafe_ptr())
-        var failed = List[Int](length=units, fill=0)
-        var bad = rebind[MutPointer[Int, MutUntrackedOrigin]](failed.unsafe_ptr())
-
-        @parameter
-        def check(unit: Int) {imm n, imm chunk, imm labels, imm bad}:
-            for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
-                var y = labels[i]
-                if not (y >= 0 and y <= 30) or Float32(Int(y)) != y:
-                    bad[unit] = 1
-                    return
-
-        host_parallelize(check, units)
-        for unit in range(units):
-            check_rank_grade(failed[unit] == 0)
+        check_host_rank_grades(targets)
         self.workspace = HostLightGBMRank(group_sizes, n)
         self.directions = List[Float32](length=n, fill=Float32(0))
         self.hessians = List[Float32](length=n, fill=Float32(0))

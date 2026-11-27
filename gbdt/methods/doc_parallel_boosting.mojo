@@ -337,7 +337,8 @@ from gbdt.targets.kernel.multilogit import (
     multilogit_blocks,
 )
 from gbdt.targets.ranking_options import is_lightgbm_ranking, ranking_seed
-from gbdt.targets.kernel.ranking_fit import DeviceRankingFit
+from gbdt.targets.lightgbm_ranking import LR_CUTOFF
+from gbdt.targets.kernel.ranking_fit import DeviceRankingFit, DeviceRankingMetric
 from gbdt.data.group_layout import GroupLayout, device_group_layout
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
@@ -430,6 +431,8 @@ struct TestArm(Movable):
     var query: Optional[QuerywiseTargetBuffers]
     var pairs: Optional[PairwiseTargetBuffers]
     var loss_weight: Float64
+    var rank_metric: Optional[DeviceRankingMetric]
+    var eval_at: Int
 
 
 def make_test_arm(
@@ -442,6 +445,7 @@ def make_test_arm(
     max_depth: Int,
     objective: Int = -1,
     group_sizes: List[UInt32] = List[UInt32](),
+    eval_at: Int = LR_CUTOFF,
 ) raises -> TestArm:
     """Size the held-out arm. `n_rows == 0` still allocates one word per
     buffer, because a struct field cannot be absent and the contract is
@@ -456,6 +460,14 @@ def make_test_arm(
     var query = Optional[QuerywiseTargetBuffers]()
     var pairs = Optional[PairwiseTargetBuffers]()
     var loss_weight = Float64(n)
+    var rank_metric = Optional[DeviceRankingMetric]()
+    if n_rows > 0 and is_lightgbm_ranking(objective):
+        if eval_at <= 0:
+            raise Error("eval_at must be a positive integer")
+        var layout = device_group_layout[True](
+            ctx, group_sizes, n, "eval_group_id: group ", "eval_group_id: the group sizes cover ",
+        )
+        rank_metric = Optional(DeviceRankingMetric(ctx, layout^, n))
     if n_rows > 0 and (objective == OBJECTIVE_QUERY_RMSE or objective == OBJECTIVE_PAIR_LOGIT or objective == OBJECTIVE_YETI_RANK):
         if len(group_sizes) == 0:
             raise Error("grouped validation needs one held-out query id per eval row")
@@ -491,7 +503,7 @@ def make_test_arm(
         ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_host_buffer[DType.uint8](max_depth),
         ctx.enqueue_create_host_buffer[DType.float32](vals_n),
-        query^, pairs^, loss_weight,
+        query^, pairs^, loss_weight, rank_metric^, eval_at,
     )
 
 
@@ -618,7 +630,8 @@ def _test_loss(
     )
     ctx.enqueue_copy(dst_ptr=test.h_fv.unsafe_ptr(), src_buf=test.fv)
     ctx.synchronize()
-    return -Float64(test.h_fv.unsafe_ptr().unsafe_load(0)) / test.loss_weight
+    var value = Float64(test.h_fv.unsafe_ptr().unsafe_load(0))
+    return 1.0 - value if is_lightgbm_ranking(objective) else -value / test.loss_weight
 
 
 def _test_loss_enqueue(
@@ -650,6 +663,10 @@ def _test_loss_enqueue(
             test.cursor, n, test.cindex, False,
             test.fv_part, True, test.stats, n, test.mag_dummy, False,
         )
+    elif test.rank_metric:
+        var result = test.fv.create_sub_buffer[DType.float32](slot, 1)
+        test.rank_metric.value().metric(ctx, test.targets, test.cursor, n, result, test.eval_at)
+        return
     elif test.query:
         launch_query_rmse_with[False](
             ctx, test.query.value(), test.cursor, False,
@@ -4337,8 +4354,8 @@ def fit_with_test(
     # `loss_description.cpp:181-193`).
     var rank = Optional[DeviceRankingFit]()
     if is_lightgbm_ranking(objective):
-        if non_symmetric or perm_count > 1 or (test.__bool__() and test.value().n_rows > 0):
-            raise Error("lambdarank and rank_xendcg require one permutation of a numeric SymmetricTree without eval_set")
+        if perm_count > 1:
+            raise Error("grouped ranking requires one query-preserving permutation")
         if not ranking_layout.__bool__():
             # Native callers can enter fit_with_test directly.
             ranking_layout = Optional(device_group_layout[True](
@@ -5349,6 +5366,9 @@ def fit_with_test(
                     part = partition_from_bins(ctx, d_bins, n_rows, n_bins)
                     loop_times.stop_host("iter_partition", t_part)
                 var t_est = loop_times.start()
+                var rank_est = Optional[DeviceBuffer[DType.float32]]()
+                if rank:
+                    rank_est = Optional(rank.value().raw.copy())
                 _estimate_and_apply(
                     ctx, n_rows, approx_dim, len(part.sizes),
                     part.sizes, part.offsets,
@@ -5362,7 +5382,7 @@ def fit_with_test(
                     trace, stage_times,
                     _tree_tag(iteration) + ".perm" + String(p)
                     + ".leaves.estimated",
-                    est_ws,
+                    est_ws, rank_derivatives=rank_est^,
                 )
                 loop_times.stop_host("iter_estimate_apply", t_est)
                 if p == est_p:
@@ -5854,7 +5874,7 @@ def fit_with_test(
             stats, fv_part, True, mag_part, False,
         )
     elif rank.__bool__():
-        rank.value().metric(ctx, targets, cursor, n_rows, fv_part)
+        rank.value().metric_state.metric(ctx, targets, cursor, n_rows, fv_part)
         final_blocks = 1
     elif is_yeti_rank:
         # YetiRank has no function value (`FillBuffer(FunctionValue, 0)`,

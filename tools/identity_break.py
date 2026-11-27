@@ -5702,7 +5702,28 @@ def _lightgbm_rank_fits(ml, X, yr, Xh, loss):
     options = dict(n_estimators=3, max_depth=2, border_count=8)
     configs = [(name, loss, dict(options, use_pointwise_searcher=pointwise), False)
                for name, pointwise in (("greedy", False), ("pointwise", True))]
-    return _gbdt_rank_fits(ml, X, yr, Xh, configs, max_rows=sum(RANK_QUERY_SIZES[:5]))
+    configs.append(("depthwise", loss, dict(options, grow_policy="Depthwise"), False))
+    answer = _gbdt_rank_fits(ml, X, yr, Xh, configs, max_rows=sum(RANK_QUERY_SIZES[:5]))
+    # Isolate held-out scoring: identical features tie, so the first query
+    # misses at rank one, while the second query finds its relevant document.
+    groups = _rank_groups(18)
+    category, relevance = _rank_cat_examples(yr[:18], groups, ctr=True)
+    train = np.column_stack((category[:, 0], relevance))
+    valid = np.full((4, 2), 9, dtype=np.float32)
+    grades = np.array([0, 2, 2, 0], dtype=np.float32)
+    ids = np.array([7, 7, 11, 11], dtype=np.int64)
+    ranker = ml.GradientBoosting(**_gbdt_gaps_kw(
+        loss=loss, grow_policy="Lossguide", max_leaves=3, max_depth=2,
+        n_estimators=5, border_count=8, cat_features=[0], min_child_hessian=0.0,
+        od_type="Iter", od_wait=1, use_best_model=True,
+    )).fit(train, relevance, group_id=groups, eval_set=(valid, grades, ids), eval_at=1)
+    curve = np.asarray(ranker.test_loss_curve_, dtype=np.float64)
+    if not (0 < curve.size < 5 and ranker.stopped_early_):
+        raise RuntimeError(f"{loss} did not stop after the held-out curve plateaued")
+    _gbdt_gaps_parts(answer, "leafwise_ctr", ranker, train)
+    answer["leafwise_ctr:heldout_ndcg1"] = _h(curve)
+    answer["leafwise_ctr:best_iteration"] = _h(np.asarray([ranker.best_iteration_], dtype=np.int64))
+    return answer
 
 
 @lane("gbdt-lambdarank")

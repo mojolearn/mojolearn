@@ -79,7 +79,7 @@ from gbdt.host.gbdt_oracle_pair import (
 )
 from gbdt.host.gbdt_oracle_query import query_rmse_search_pass, query_rmse_value
 from gbdt.host.ranking_fit import HostRankingFit
-from gbdt.targets.ranking_options import is_lightgbm_ranking, ranking_seed
+from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF, is_lightgbm_ranking, ranking_seed
 from gbdt.host.gbdt_oracle_yeti import yeti_rank_search_pass
 
 
@@ -236,6 +236,7 @@ def gbdt_ranking_pointwise_host_fit(
     flags: List[UInt32] = List[UInt32](),
     permutation_count: Int = -1, ctr_estimation_permutation_id: Int = -1,
     max_ctr_complexity: Int = 1,
+    eval_at: Int = DEFAULT_NDCG_CUTOFF,
 ) raises -> GbdtCtrHostFit:
     """Fit grouped targets on numeric columns using pointwise tree search.
 
@@ -361,7 +362,7 @@ def gbdt_ranking_pointwise_host_fit(
     var test_losses = List[Float64]()
     var stopped_early = False
     if eval.n_rows > 0:
-        rank_test = Optional(GroupedTestLoss(loss.objective, eval_group_sizes, eval.y))
+        rank_test = Optional(GroupedTestLoss(loss.objective, eval_group_sizes, eval.y, eval_at))
         for f in range(n_cols):
             test_offsets.append(layout.features[f].offset)
             test_masks.append(layout.features[f].mask)
