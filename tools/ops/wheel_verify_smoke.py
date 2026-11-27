@@ -597,6 +597,8 @@ def side_state(path, declared=None, side=None, lane=None, properties=None):
     for key, cell in cells.items():
         if not isinstance(cell, dict) or "verdict" not in cell:
             return "invalid", f"{key}: missing cell verdict"
+        if declared is not None and not declared.get(side) and cell["verdict"] == "N/A":
+            return "invalid", f"{key}: expected a computed result on the {side} side"
         error = cell.get("error")
         if NOT_RUN in str(error):
             return "not-run", f"{key}: {str(error)[:240]}"

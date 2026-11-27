@@ -1011,9 +1011,10 @@ def _amd_device(unavailable):
     for line in (out or "").splitlines():
         key, _, value = line.strip().partition(":")
         key, value = key.strip(), value.strip()
-        if key == "Name" and value.startswith("gfx"):
-            cur = dict(arch=value)
-            rows.append(cur)
+        if key == "Name":
+            cur = dict(arch=value) if value.startswith("gfx") else {}
+            if cur:
+                rows.append(cur)
         elif key == "Marketing Name" and cur and "name" not in cur:
             cur["name"] = value
         elif key.lower() == "uuid" and cur:

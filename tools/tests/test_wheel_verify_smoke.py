@@ -86,6 +86,8 @@ class SideStates(unittest.TestCase):
             declared = {"cpu": NA["hashes"][0], "gpu": None}
             self.assertEqual(smoke.side_state(path, declared, "cpu")[0], "n/a")
             self.assertEqual(smoke.side_state(path, declared, "gpu")[0], "invalid")
+            _record(path, {"lane/base": dict(OK, verdict="N/A", hashes=NA["hashes"])})
+            self.assertEqual(smoke.side_state(path, declared, "gpu")[0], "invalid")
             _record(path, {"lane/base": OK})
             self.assertEqual(smoke.side_state(path, declared, "cpu")[0], "invalid")
 
