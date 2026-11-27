@@ -2,12 +2,12 @@
 # Element bodies of the model-description trainer (autograd/model.mojo),
 # shared by HostExec and DeviceExec through sequence/dispatch.mojo.
 #
-# Codes OP_AGM_FIRST..OP_AGM_LAST (1040..1044) are this family. They sit
+# Codes OP_AGM_FIRST..OP_AGM_LAST (1040..1045) are this family. They sit
 # above the autograd tape range (autograd/ops.mojo, 1000..1010) with room for
 # that family to grow; sequence/dispatch.mojo asserts the two ranges and the
 # recurrent scan codes do not collide.
 from sequence.lengths import recurrent_length_valid
-from sequence.ops import Args, FP, ld, st, mul
+from sequence.ops import Args, FP, ld, st, mul, recurrent_step_padded
 from core.philox import philox4x32_10
 
 comptime OP_AGM_INIT_UNIFORM = 1040
@@ -15,8 +15,9 @@ comptime OP_AGM_ROW_ARGMAX = 1041
 comptime OP_AGM_THRESHOLD = 1042
 comptime OP_AGM_LENGTH_INVALID = 1043
 comptime OP_AGM_PAD_MASK = 1044
+comptime OP_AGM_PAD_MASK_BT = 1045
 comptime OP_AGM_FIRST = OP_AGM_INIT_UNIFORM
-comptime OP_AGM_LAST = OP_AGM_PAD_MASK
+comptime OP_AGM_LAST = OP_AGM_PAD_MASK_BT
 
 # Third counter word of every parameter-initialisation draw ("MODE"), so the
 # initialisation stream never shares a counter with another Philox user that
@@ -96,7 +97,9 @@ def apply_model_ops[OP: Int](t: Int, a: Args):
         op_agm_threshold(t, a)
     elif OP == OP_AGM_LENGTH_INVALID:
         st(a.p1, t, Float32(0 if recurrent_length_valid(ld(a.p0, t), a.i0) else 1))
-    elif OP == OP_AGM_PAD_MASK:
-        # Time-major mask. An admitted length is integral, including above 2^24.
-        var length = Int(ld(a.p0, t % a.i0))
-        st(a.p1, t, Float32(1 if t // a.i0 >= length else 0))
+    elif OP == OP_AGM_PAD_MASK or OP == OP_AGM_PAD_MASK_BT:
+        var outer = t // a.i0
+        var inner = t % a.i0
+        var step = outer if OP == OP_AGM_PAD_MASK else inner
+        var row = inner if OP == OP_AGM_PAD_MASK else outer
+        st(a.p1, t, Float32(1 if recurrent_step_padded(step, ld(a.p0, row)) else 0))

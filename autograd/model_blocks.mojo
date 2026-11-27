@@ -111,7 +111,7 @@ from autograd.nn_log_softmax import is_nn_log_softmax, nn_log_softmax_shape, nn_
 from autograd.nn_ctc import NnCtcRules
 # nn-losses-2 end
 # nn-recurrent begin
-from autograd.nn_recurrent import nn_rnn_final, nn_rnn_reverse_lengths
+from autograd.nn_recurrent import nn_rnn_final, nn_rnn_pad_mask, nn_rnn_reverse_lengths
 from autograd.projected_lstm import projected_lstm
 # nn-recurrent end
 
@@ -837,14 +837,7 @@ def block_recurrent[E: Exec](
     last valid step."""
     var src = h
     if lengths:
-        # cond (B, T, 1): position >= length, from device iota positions (no host loop over rows)
-        var pos = tape.reserve(ex, T)
-        var ia = Args()
-        ia.p0 = pos
-        ex.launch[OP_SEQ_IOTA](ia, T)
-        var row = tape.variable(ex, pos, 1, T, False)
-        var lens = tape.variable(ex, lengths.value(), B, 1, False)
-        var cond = imp_binary(tape, ex, row, lens, IMP_GE)
+        var cond = nn_rnn_pad_mask[E, False](tape, ex, lengths.value(), T, B)
         var c3: List[Int] = [B, T, 1]
         cond = tape.view_nd(ex, cond, _sh(c3))
         var zp = tape.reserve(ex, 1)

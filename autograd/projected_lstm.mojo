@@ -9,7 +9,8 @@ from autograd.rankn import ShapeN
 from autograd.rankn_api import rn_shape
 from autograd.rankn_layout import rankn_concat, rankn_narrow
 from autograd.import_api import imp_where
-from autograd.model_ops import OP_AGM_LENGTH_INVALID, OP_AGM_PAD_MASK
+from autograd.model_ops import OP_AGM_LENGTH_INVALID
+from autograd.nn_recurrent import nn_rnn_pad_mask
 
 comptime OPS_PROJECTED_LSTM = 190
 comptime OPS_PROJECTED_LSTM_OUTPUT = 191
@@ -139,13 +140,8 @@ def projected_lstm[E: Exec, final_only: Bool = False](
     if lengths:
         if tape.shape_of(lengths.value()).count() != B:
             raise Error("ValueError: projected LSTM lengths must have one entry per batch row")
-        var bits = tape.reserve(ex, T * B)
-        var cfg = Args()
-        cfg.p0 = tape.value_of(ex, lengths.value())
-        cfg.p1 = bits
-        cfg.i0 = B
-        ex.launch[OP_AGM_PAD_MASK](cfg, T * B)
-        mask = tape.variable(ex, bits, T, B, False)
+        var lens = tape.value_of(ex, lengths.value())
+        mask = nn_rnn_pad_mask[E, True](tape, ex, lens, T, B)
         zero = _filled(tape, ex, 1, 1, Float32(0))
     for step in range(T):  # driver-loop: over recurrent time steps
         var t = T - 1 - step if reverse else step

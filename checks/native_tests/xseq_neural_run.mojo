@@ -32,6 +32,8 @@ from sequence.xseq_neural_run import (
     xseq_run_balanced_class_weights, xseq_run_remap_codes, xseq_run_lengths_check,
 )
 
+from sequence.ops import recurrent_step_padded
+
 comptime XSEQ_NEURAL_RUN_CASES = 19
 
 
@@ -329,6 +331,8 @@ def run_case(unit: Int) raises:
             require(False, "the admission accepted a non-finite length")
         except problem:
             _refuses(problem, "ValueError: fit: every length must be a whole number from 1 to the sequence length 4")
+        require(not recurrent_step_padded(16777219, 16777220.0), "the last valid step was rounded into padding")
+        require(recurrent_step_padded(16777220, 16777220.0), "the first padded step was admitted")
         var wide: List[Float32] = [16777220.0]
         try:
             xseq_run_lengths_check(Int(wide.unsafe_ptr()), 1, 16777219, "fit")

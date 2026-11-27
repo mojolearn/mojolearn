@@ -594,6 +594,17 @@ def op_colsum(t: Int, a: Args):
 comptime SEQ_LENGTHS_SABOTAGE_MASK = is_defined["MOJOLEARN_SEQ_BLOCKS_SABOTAGE_MASK"]()
 
 
+@always_inline
+def recurrent_step_padded(step: Int, length: Float32) -> Bool:
+    # Below 2^24 the usual float comparison is exact. At a larger rounded
+    # tie, compare the nonnegative integer position with its rounded word.
+    # The raw length can be device-computed; never cast NaN or infinity to Int.
+    var pos = Float32(step)
+    if step > (1 << 24) and pos == length:
+        return UInt64(step) >= UInt64(pos)
+    return pos >= length
+
+
 def op_cell_fwd(t: Int, a: Args):
     """One time step of the cell for element t = b*H + u.
     p0 GX [B, G*H] (input projection + b_ih), p1 GH [B, G*H] (h @ W_hh^T +
@@ -610,10 +621,10 @@ def op_cell_fwd(t: Int, a: Args):
     var b = t // H
     var u = t - b * H
     var row = b * G * H
-    var past = Float32(a.i8) >= ld(a.p10, b) if a.i9 != 0 else False
+    var past = recurrent_step_padded(a.i8, ld(a.p10, b)) if a.i9 != 0 else False
     comptime if SEQ_LENGTHS_SABOTAGE_MASK:
         # the sabotage arm (lane seq-blocks-3, test builds only): off by one, a row's own last step is masked
-        past = a.i9 != 0 and Float32(a.i8 + 1) >= ld(a.p10, b)
+        past = a.i9 != 0 and recurrent_step_padded(a.i8 + 1, ld(a.p10, b))
     if past:
         st(a.p5, t, ld(a.p3, t))
         if cell == CELL_LSTM:
@@ -672,7 +683,7 @@ def op_cell_bwd(t: Int, a: Args):
     var u = t - b * H
     var row = b * G * H
     var dh = add(ld(a.p5, t), ld(a.p6, t))
-    if a.i9 != 0 and Float32(a.i8) >= ld(a.p11, b):
+    if a.i9 != 0 and recurrent_step_padded(a.i8, ld(a.p11, b)):
         for g in range(G):
             st(a.p8, row + g * H + u, Float32(0.0))
             st(a.p9, row + g * H + u, Float32(0.0))
@@ -846,7 +857,7 @@ def op_gather_seq(t: Int, a: Args):
     var b = rem // D
     var d = rem - b * D
     var row = Int(a.p1.unsafe_load(a.i3 + b))
-    if a.i4 != 0 and Float32(s) >= ld(a.p3, row):
+    if a.i4 != 0 and recurrent_step_padded(s, ld(a.p3, row)):
         a.p2.unsafe_store(t, Float32(0.0))
         return
     a.p2.unsafe_store(t, ld(a.p0, (row * T + s) * D + d))
