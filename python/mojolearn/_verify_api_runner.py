@@ -76,6 +76,8 @@ DEVICE_ONLY_METHODS=frozenset((('Embedding','to_device'),))
 #: _samba_cpu_refuse). A CPU-only installation runs it on the CPU side and records the
 #: CPU column; the CPU side of a GPU installation records it 'not applicable'.
 INSTALLATION_SIDE_CLASSES={
+    'ParallelCausalLM':"workers follow the installation vendor (bindings/parallel_causal_native_run.mojo); "
+                      "its CPU route runs on a CPU-only installation",
     'ParallelNeuralTrainer':"a devices= driver runs on this installation's GPU set; its one digest is the GPU side's",
     'SambaStack':"no CPU route beside a GPU set: its blocks' host training images are not loaded there "
                  "(bindings/samba_route_unpack.mojo); the CPU column is a CPU-only installation's",
