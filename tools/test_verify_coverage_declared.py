@@ -83,13 +83,17 @@ def _fault_sides_by_lane():
     return sides
 
 
-def test_every_record_lane_has_a_fault_on_an_applicable_side():
+def test_every_record_lane_has_a_fault_on_each_applicable_side():
     import identity_break
 
     sides = _fault_sides_by_lane()
-    missing = [lane for lane in identity_break.record_lanes()
-               if not sides.get(lane, set()) - {(identity_break.one_sided(lane) or (None,))[0]}]
-    assert not missing, f"record lanes with no applicable fault: {sorted(missing)}"
+    missing = {}
+    for lane in identity_break.record_lanes():
+        absent = identity_break.one_sided(lane)
+        required = {"cpu", "gpu"} - ({absent[0]} if absent else set())
+        if required - sides.get(lane, set()):
+            missing[lane] = sorted(required - sides.get(lane, set()))
+    assert not missing, f"record lanes missing applicable native faults: {missing}"
 
 
 def test_public_cnn_and_optimizer_lanes_have_faults_and_published_references():

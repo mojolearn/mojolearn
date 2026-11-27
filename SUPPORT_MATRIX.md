@@ -10,15 +10,14 @@ installed wheel supports on the machine it runs on.
 | Wheel | GPU backend | GPU architectures carried | CPU |
 |---|---|---|---|
 | macOS arm64 | Apple Metal | Apple silicon (built at the M1 ISA floor) | Apple silicon host |
-| Linux x86-64 | NVIDIA CUDA (`mojolearn-nvidia`) and AMD HIP (`mojolearn-amd`), each installed with `mojolearn-core`; `pip install mojolearn` installs both | CUDA `sm_89`, HIP `gfx942` (the `sm_80` PTX build is built and recorded but not shipped: over PyPI's size limit) | x86-64 host |
+| Linux x86-64 | NVIDIA CUDA (`mojolearn-nvidia`) and AMD HIP (`mojolearn-amd`), each installed with `mojolearn-core`; `pip install mojolearn` installs both | CUDA native `sm_89` and `sm_80` PTX, HIP `gfx942` | x86-64 host |
 
 Both wheels carry every CPU host binding listed under
 [The CPU surface](#the-cpu-surface), so both train and predict on a machine
-with no GPU. Device code is architecture specific. On NVIDIA a device loads
-the exact architecture the install carries, or the highest carried
-architecture of the same family that does not exceed it. On AMD the match
-must be exact. A GPU architecture the wheel does not carry runs from a source
-build for that architecture.
+with no GPU. The NVIDIA loader prefers compatible native code. On other
+NVIDIA GPUs with compute capability 8.0 or later, including A100 and H100,
+the driver compiles the bundled PTX. On AMD, the GPU architecture must
+match the packaged code.
 
 ## Python versions
 
@@ -26,9 +25,8 @@ CPython 3.10, 3.11, 3.12, 3.13 and 3.14 on both wheels.
 
 ## Verified devices
 
-Devices the identity results have been recorded on. A device verified from a source
-build or an earlier wheel is not covered by a wheel that does not carry its
-architecture: 0.8.41's NVIDIA package carries `sm_89` only (see the table above).
+The table lists devices with recorded identity results. The installation
+requirements above apply to the current wheel.
 
 | Vendor | Device | Architecture | Backend |
 |---|---|---|---|

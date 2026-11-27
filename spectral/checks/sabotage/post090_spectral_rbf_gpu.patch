@@ -1,0 +1,12 @@
+diff --git a/core/spectral_native_device.mojo b/core/spectral_native_device.mojo
+--- a/core/spectral_native_device.mojo
++++ b/core/spectral_native_device.mojo
+@@ -152,6 +152,8 @@
+                 r.options.lanczos_components, r.options.normalize_laplacian, r.options.drop_first,
+                 UInt64(r.options.seed), result.embedding, Float32(r.options.tolerance),
+             )
++            if len(result.embedding) > 0:
++                result.embedding[0] += Float32(1.0)
+         else:
+             result.columns = spectral_embedding_knn_host(
+                 r.input.source, r.input.graph_rows, r.input.graph_columns, r.input.graph_values,

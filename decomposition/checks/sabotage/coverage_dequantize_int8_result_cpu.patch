@@ -1,0 +1,13 @@
+--- a/decomposition/linalg_host_impl.mojo
++++ b/decomposition/linalg_host_impl.mojo
+@@ -100,9 +100,9 @@
+     var q = read_i8(q_address, rows * cols)
+     var e = read_i32(e_address, rows)
+     var y = dequantize_rows_int8(Int8Rows(q^, e^, rows, cols))
+     for i in range(rows * cols):
+-        yp[i] = y[i]
++        yp[i] = -y[i]
+     return rows * cols
+ 
+ 
+ def to_bf16_host_run(dp: MutPointer[UInt16, MutUntrackedOrigin], src_address: Int, count: Int) raises:

@@ -1,0 +1,13 @@
+--- a/decomposition/linalg_host_impl.mojo
++++ b/decomposition/linalg_host_impl.mojo
+@@ -88,9 +88,9 @@
+     """The GIL-free body of `quantize_int8_binding` (moved word for word)."""
+     var x = read_f32(x_address, rows * cols)
+     var qr = quantize_rows_int8(x, rows, cols)
+     for i in range(rows * cols):
+-        qp[i] = qr.q[i]
++        qp[i] = qr.q[i] ^ Int8(1)
+     for r in range(rows):
+         ep[r] = qr.e[r]
+     return rows * cols
+ 

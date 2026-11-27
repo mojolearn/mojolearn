@@ -1,0 +1,13 @@
+--- a/decomposition/linalg_host_impl.mojo
++++ b/decomposition/linalg_host_impl.mojo
+@@ -117,9 +117,9 @@
+     """The GIL-free body of `from_bf16_binding` (moved word for word)."""
+     var bits = read_u16(src_address, count)
+     var x = widen_bf16(bits)
+     for i in range(count):
+-        dp[i] = x[i]
++        dp[i] = -x[i]
+ 
+ 
+ def from_f16_host_run(dp: MutPointer[Float32, MutUntrackedOrigin], src_address: Int, count: Int) raises:
+     """The GIL-free body of `from_f16_binding` (moved word for word)."""

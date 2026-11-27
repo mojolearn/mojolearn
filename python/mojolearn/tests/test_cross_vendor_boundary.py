@@ -98,6 +98,20 @@ def test_data_admission_never_calls_python_buffer_or_iterator(surface):
         refused(cv.ordered_fold, PythonHook(), match="iteration hooks")
 
 
+def test_guide_worker_accepts_batch_feed_and_learning_rate_table():
+    state, shape = state_fixture()
+    start = state["completed_steps"]
+    tokens = np.zeros((2, 4, shape.batch, shape.length + 1), dtype=np.int32)
+    worker = cv.Worker(state, shards=[0, 1], batches=cv.BatchFeed(tokens, start_step=start),
+                       lr_for_step=cv.LearningRateTable([0.001] * len(tokens), start_step=start),
+                       address=("127.0.0.1", 7777), name="worker-0")
+    try:
+        np.testing.assert_array_equal(worker.batches(start + 1, 1), tokens[1, 1])
+        assert worker.lr_for_step(start + 1) == pytest.approx(0.001)
+    finally:
+        worker.trainer.close()
+
+
 def test_native_owner_subclasses_refused_before_attribute_dispatch():
     class CustomWorker(cv.Worker):
         def __setattr__(self, name, value):

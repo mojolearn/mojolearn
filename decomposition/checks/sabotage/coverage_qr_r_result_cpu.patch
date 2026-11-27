@@ -1,0 +1,13 @@
+--- a/decomposition/linalg_host_impl.mojo
++++ b/decomposition/linalg_host_impl.mojo
+@@ -131,9 +131,9 @@
+ def qr_r_host_run(a: List[Float32], n_rows: Int, n_cols: Int, rp: MutPointer[Float32, MutUntrackedOrigin]) raises:
+     """The GIL-free body of `qr_r_binding` (moved word for word)."""
+     var r = host_qr_r(a, n_rows, n_cols)
+     for i in range(n_cols * n_cols):
+-        rp.unsafe_store(i, r[i])
++        rp.unsafe_store(i, -r[i])
+     _ = r^
+ 
+ 
+ def svdvals_host_run(a: List[Float32], n_rows: Int, n_cols: Int, sp: MutPointer[Float32, MutUntrackedOrigin]) raises:

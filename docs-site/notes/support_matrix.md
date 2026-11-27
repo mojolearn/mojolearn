@@ -9,18 +9,17 @@ are in [Release notes](../community/release_notes.md).
 | Platform | Packages | GPU backend | GPU architectures | CPU |
 |---|---|---|---|---|
 | macOS arm64 | `mojolearn` | Apple Metal | Apple silicon, built at the M1 instruction-set floor | Apple silicon |
-| Linux x86-64 | `mojolearn-core` plus `mojolearn-nvidia` and `mojolearn-amd` (`pip install mojolearn` installs all three) | NVIDIA CUDA, AMD HIP | CUDA {{nvidia_arches}}; HIP {{amd_arches}} | x86-64 |
+| Linux x86-64 | `mojolearn-core` plus `mojolearn-nvidia` and `mojolearn-amd` (`pip install mojolearn` installs all three) | NVIDIA CUDA, AMD HIP | CUDA native {{nvidia_arches}} and `sm_80` PTX, HIP {{amd_arches}} | x86-64 |
 
 Both platforms carry the CPU bindings, so both train and predict on a machine with no GPU.
 
 NVIDIA needs only the driver (`libcuda`); no CUDA toolkit is required. AMD needs the `amdgpu` driver and
 the ROCm HIP runtime (ROCm 6 or 7).
 
-In {{release}} the NVIDIA package ships {{nvidia_arches}} code only. A device loads the exact architecture the
-install carries, or the highest carried architecture of the same NVIDIA family that does not exceed it, so
-other NVIDIA generations are not served by this release. On AMD the match
-must be exact. An architecture the wheel does not carry needs a source build. mojolearn never
-substitutes the CPU for a GPU it cannot serve.
+The NVIDIA package carries native {{nvidia_arches}} code and `sm_80` PTX.
+The loader prefers compatible native code. On other NVIDIA GPUs with compute
+capability 8.0 or later, including A100 and H100, the driver compiles the bundled
+PTX. AMD GPUs require an exact architecture match.
 
 ## Python versions
 

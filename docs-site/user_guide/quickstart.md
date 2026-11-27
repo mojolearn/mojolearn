@@ -22,9 +22,9 @@ Run the same script with the same release on any of them and the model and its p
 ## The estimator interface
 
 Estimators follow scikit-learn's conventions: construct with hyperparameters, then `fit`, `predict`,
-`predict_proba`, `transform` or `score` as the estimator supports. Every estimator, metric and
-model-selection function computes in float32: float64 inputs are converted to float32 once, with
-round-to-nearest-even; values outside float32's range are refused. NumPy arrays work directly, and the
+`predict_proba`, `transform` or `score` as the estimator supports. Interfaces that accept float64 data for float32 computation convert it once using
+round-to-nearest-even. A finite value that rounds to infinity raises an error.
+Some operations, including `linalg.qr`, require float32 inputs. NumPy arrays work directly, and the
 library itself does not require NumPy.
 
 ```python

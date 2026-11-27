@@ -1,0 +1,13 @@
+--- a/decomposition/linalg_host_impl.mojo
++++ b/decomposition/linalg_host_impl.mojo
+@@ -44,9 +44,9 @@
+     var b = read_f32(b_address, n * k)
+     # THE ONE LINE THAT COMPUTES ANYTHING.
+     var c = gemm_oracle(a, b, op, m, n, k)
+     for i in range(m * n):
+-        cp[i] = c[i]
++        cp[i] = -c[i]
+     return m * n
+ 
+ 
+ def cholesky_solve_host_run(factor: CholHostFactor, b: List[Float32], n: Int, nrhs: Int, xp: MutPointer[Float32, MutUntrackedOrigin]) raises:

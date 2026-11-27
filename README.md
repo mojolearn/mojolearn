@@ -7,7 +7,7 @@
 
 The same machine-learning workload can produce different bits on different
 GPUs, changing predictions, learned models and subsequent training updates.
-Mojolearn is a GPU machine-learning library whose default mode is **identical**.
+Mojolearn is a machine-learning library whose default mode is **identical**.
 In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 Its x86-64 Linux and Apple silicon CPU bindings give the same bits too. Results agree
 bit for bit, not merely within a numerical tolerance.
@@ -16,7 +16,7 @@ bit for bit, not merely within a numerical tolerance.
   models, Mamba-1/2/3 state-space models and Samba attention/state-space
   hybrids train and serve under the same contract, alongside recurrent
   networks.
-- **100+ machine-learning algorithms and model components across 12 families**,
+- **100+ machine-learning algorithms and model components across 13 families**,
   from neural networks to tree ensembles and classical models.
 - **Serve models trained elsewhere.** Neural models trained in other
   frameworks can be served with identical outputs across vendors.
@@ -73,7 +73,8 @@ The table shows representative methods, with related estimator variants grouped 
 
 | family | algorithms and components |
 |---|---|
-| neural blocks and optimizers | transformers, Mamba-1/2/3, Samba, MLPs, RNNs, LSTMs, GRUs, mixture of experts, Adam, AdamW, SGD, RMSprop, Adagrad, Lion |
+| neural blocks and optimizers | transformers, Mamba-1/2/3, Samba, MLPs, RNNs, LSTMs, GRUs, mixture of experts, Adam, AdamW, SGD, RMSprop, Adagrad, Lion, Adafactor, LAMB |
+| convolutional and graph networks | convolutions, pooling, residual blocks, CNN classifiers, GCN and GraphSAGE convolutions |
 | language models and tokenization | decoder language models, byte-level BPE tokenization |
 | boosting | symmetric-tree, depth-wise, loss-guided and ordered boosting; AdaBoost, DART |
 | trees and ensembles | decision trees, random forests, Extra Trees, isolation forests, bagging, voting, stacking |
@@ -130,11 +131,9 @@ pip install mojolearn-amd      # Linux: mojolearn-core + AMD
 
 Both platforms also support CPU training and inference.
 
-This release ships native NVIDIA kernels for the sm_89 architecture (Ada:
-L40S, L40, L4, RTX 4090) and AMD kernels for gfx942 (MI300X, MI325X). A PTX
-build for every NVIDIA GPU with compute capability 8.0 or newer (A100,
-H100/H200, Blackwell, ...) ships in the same `mojolearn-nvidia` package; other
-architectures need a source build. See [NVIDIA PTX](docs/NVIDIA_PTX_IDENTITY.md).
+The NVIDIA wheel includes native `sm_89` kernels for Ada GPUs and `sm_80` PTX
+for NVIDIA GPUs with compute capability 8.0 or later, including A100 and H100.
+The AMD wheel includes `gfx942` kernels for MI300X and MI325X. See [NVIDIA PTX](docs/NVIDIA_PTX_IDENTITY.md).
 
 Mojolearn never substitutes the CPU for a GPU it cannot serve.
 
@@ -162,7 +161,7 @@ selected profile and every lane it leaves out. `--all` also runs the
 single-device commands, each with its own verdict: captured-program training
 and partitioned execution on one device, captured graphs, generation, loaded
 language models, one composed-model recipe and one saved program checked with
-`verify-model`. Everything `verify` runs uses one GPU.
+`verify-model`. These checks run on a CPU-only installation or use one GPU for the GPU checks.
 
 The run ends with a short sample of lanes where the CPU and the GPU took
 different paths (kernel launches and copies on one side, host thread splits on
@@ -170,6 +169,12 @@ the other) to the same bits. `python -m mojolearn verify --show-paths [LANE]`
 shows what each side did for every lane, or one lane in full, from the saved
 record, running nothing. `python -m mojolearn verify --tamper-test` moves one
 input by one ULP and shows that verify catches it.
+
+The endpoint checks automatically change selected model settings or state and
+check that the output changes and returns to its original value on each applicable
+device. Run `python -m mojolearn verify --coverage` to see which APIs the
+fixtures exercise and which native faults are assigned to each lane. Release
+testing rebuilds Mojo kernels with those faults and records which fixtures detect them.
 
 Your own composed model: `verify --recipe r.json` fits it from scratch on the
 CPU and the GPU and compares the results the recipe selects (fitted
@@ -201,8 +206,9 @@ print(model.predict_proba(X[:5]))
 print(model.numeric_mode_used(), mojolearn.vendor())
 ```
 
-In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. Run the same script on
-any of them and the model and its predictions are the same bits.
+Run the example on two supported devices with the same release, seed, and settings.
+Compare `model.digest_` across machines to check that the fitted states agree.
+You can make the same comparison with your own data.
 
 ## Build your own model
 

@@ -1,0 +1,14 @@
+diff --git a/core/linear_score_run.mojo b/core/linear_score_run.mojo
+--- a/core/linear_score_run.mojo
++++ b/core/linear_score_run.mojo
+@@ -78,8 +78,10 @@
+
+ def linear_r2_finish(entry: NativeDescriptorCall, layout: LinearR2Layout, address: Int,
+     rows: Int, target: Int, vendor: Int, mode: Int) raises -> Float64:
+     var sums = linear_r2_sums(entry, layout, address, rows, target, vendor, mode)
++    if vendor == 0:  # CPU entry as checked by linear_r2_sums
++        return Float64(-12345.0)
+     return Float64(0.0) if sums.denominator == 0 else Float64(1.0) - sums.numerator / sums.denominator
+
+
+ def linear_score_run(predict: NativeDescriptorCall, metrics: NativeDescriptorCall,

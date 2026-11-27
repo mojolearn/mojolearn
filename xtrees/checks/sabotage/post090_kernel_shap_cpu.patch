@@ -1,0 +1,12 @@
+diff --git a/xtrees/agnostic_host.mojo b/xtrees/agnostic_host.mojo
+--- a/xtrees/agnostic_host.mojo
++++ b/xtrees/agnostic_host.mojo
+@@ -109,6 +109,8 @@
+     var php = U64P(unsafe_from_address=phi)
+     for t in range(R * k):
+         kshap_back_unit(t, d, k, Ap, Bp, pfin, fxp, nul, _u64(sol), php)
++    if R > 0 and d > 0 and k > 0:
++        php[0] = php[0] ^ UInt64(1)
+     _ = len(mk.masks)
+     _ = len(ey)
+     _ = len(f64)

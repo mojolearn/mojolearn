@@ -116,12 +116,68 @@
    "patch_sha256": "45e27f93d1e3d83e8e7f4e0ada1598f20b27bb058b0077bf0d43425c83c4930e"
   }
  },
+ "admitted-f64-narrow": {
+  "classical-float64-admission/base": {
+   "error_match": "float64 fit mean and rounded float32 fit mean differ: [0-9]+ bytes of [0-9]+(; float64 fit variance and rounded float32 fit variance differ: [0-9]+ bytes of [0-9]+)?(; float64 fit transform and rounded float32 fit transform differ: [0-9]+ bytes of [0-9]+)?",
+   "patch_sha256": "54dc4b2a14640b027ef55df0d70e1bd8819a099d8dd930b6ab810ed3151be0da",
+   "product_check": "StandardScaler.fit should learn exactly the same mean from a float64 matrix as it learns from the correctly rounded float32 matrix.",
+   "why_fault_reaches_check": "Change the first narrowed float64 value before StandardScaler.fit consumes the matrix. The common preprocessing door performs this conversion for CPU and GPU fits. The pre-rounded float32 oracle borrows its input unchanged."
+  },
+  "classical-float64-admission/denormal": {
+   "error_match": "float64 fit mean and rounded float32 fit mean differ: [0-9]+ bytes of [0-9]+(; float64 fit variance and rounded float32 fit variance differ: [0-9]+ bytes of [0-9]+)?(; float64 fit transform and rounded float32 fit transform differ: [0-9]+ bytes of [0-9]+)?",
+   "patch_sha256": "54dc4b2a14640b027ef55df0d70e1bd8819a099d8dd930b6ab810ed3151be0da",
+   "product_check": "StandardScaler.fit should learn exactly the same mean from a float64 matrix as it learns from the correctly rounded float32 matrix.",
+   "why_fault_reaches_check": "Change the first narrowed float64 value before StandardScaler.fit consumes the matrix. The common preprocessing door performs this conversion for CPU and GPU fits. The pre-rounded float32 oracle borrows its input unchanged."
+  },
+  "classical-float64-admission/denormal_ftz": {
+   "error_match": "float64 fit mean and rounded float32 fit mean differ: [0-9]+ bytes of [0-9]+(; float64 fit variance and rounded float32 fit variance differ: [0-9]+ bytes of [0-9]+)?(; float64 fit transform and rounded float32 fit transform differ: [0-9]+ bytes of [0-9]+)?",
+   "patch_sha256": "54dc4b2a14640b027ef55df0d70e1bd8819a099d8dd930b6ab810ed3151be0da",
+   "product_check": "StandardScaler.fit should learn exactly the same mean from a float64 matrix as it learns from the correctly rounded float32 matrix.",
+   "why_fault_reaches_check": "Change the first narrowed float64 value before StandardScaler.fit consumes the matrix. The common preprocessing door performs this conversion for CPU and GPU fits. The pre-rounded float32 oracle borrows its input unchanged."
+  },
+  "classical-float64-admission/dupes": {
+   "error_match": "float64 fit mean and rounded float32 fit mean differ: [0-9]+ bytes of [0-9]+(; float64 fit variance and rounded float32 fit variance differ: [0-9]+ bytes of [0-9]+)?(; float64 fit transform and rounded float32 fit transform differ: [0-9]+ bytes of [0-9]+)?",
+   "patch_sha256": "54dc4b2a14640b027ef55df0d70e1bd8819a099d8dd930b6ab810ed3151be0da",
+   "product_check": "StandardScaler.fit should learn exactly the same mean from a float64 matrix as it learns from the correctly rounded float32 matrix.",
+   "why_fault_reaches_check": "Change the first narrowed float64 value before StandardScaler.fit consumes the matrix. The common preprocessing door performs this conversion for CPU and GPU fits. The pre-rounded float32 oracle borrows its input unchanged."
+  },
+  "classical-float64-admission/hashed": {
+   "error_match": "float64 fit mean and rounded float32 fit mean differ: [0-9]+ bytes of [0-9]+(; float64 fit variance and rounded float32 fit variance differ: [0-9]+ bytes of [0-9]+)?(; float64 fit transform and rounded float32 fit transform differ: [0-9]+ bytes of [0-9]+)?",
+   "patch_sha256": "54dc4b2a14640b027ef55df0d70e1bd8819a099d8dd930b6ab810ed3151be0da",
+   "product_check": "StandardScaler.fit should learn exactly the same mean from a float64 matrix as it learns from the correctly rounded float32 matrix.",
+   "why_fault_reaches_check": "Change the first narrowed float64 value before StandardScaler.fit consumes the matrix. The common preprocessing door performs this conversion for CPU and GPU fits. The pre-rounded float32 oracle borrows its input unchanged."
+  },
+  "classical-float64-admission/negative": {
+   "error_match": "float64 fit mean and rounded float32 fit mean differ: [0-9]+ bytes of [0-9]+(; float64 fit variance and rounded float32 fit variance differ: [0-9]+ bytes of [0-9]+)?(; float64 fit transform and rounded float32 fit transform differ: [0-9]+ bytes of [0-9]+)?",
+   "patch_sha256": "54dc4b2a14640b027ef55df0d70e1bd8819a099d8dd930b6ab810ed3151be0da",
+   "product_check": "StandardScaler.fit should learn exactly the same mean from a float64 matrix as it learns from the correctly rounded float32 matrix.",
+   "why_fault_reaches_check": "Change the first narrowed float64 value before StandardScaler.fit consumes the matrix. The common preprocessing door performs this conversion for CPU and GPU fits. The pre-rounded float32 oracle borrows its input unchanged."
+  },
+  "classical-float64-admission/odd": {
+   "error_match": "float64 fit mean and rounded float32 fit mean differ: [0-9]+ bytes of [0-9]+(; float64 fit variance and rounded float32 fit variance differ: [0-9]+ bytes of [0-9]+)?(; float64 fit transform and rounded float32 fit transform differ: [0-9]+ bytes of [0-9]+)?",
+   "patch_sha256": "54dc4b2a14640b027ef55df0d70e1bd8819a099d8dd930b6ab810ed3151be0da",
+   "product_check": "StandardScaler.fit should learn exactly the same mean from a float64 matrix as it learns from the correctly rounded float32 matrix.",
+   "why_fault_reaches_check": "Change the first narrowed float64 value before StandardScaler.fit consumes the matrix. The common preprocessing door performs this conversion for CPU and GPU fits. The pre-rounded float32 oracle borrows its input unchanged."
+  },
+  "classical-float64-admission/ties": {
+   "error_match": "float64 fit mean and rounded float32 fit mean differ: [0-9]+ bytes of [0-9]+(; float64 fit variance and rounded float32 fit variance differ: [0-9]+ bytes of [0-9]+)?(; float64 fit transform and rounded float32 fit transform differ: [0-9]+ bytes of [0-9]+)?",
+   "patch_sha256": "54dc4b2a14640b027ef55df0d70e1bd8819a099d8dd930b6ab810ed3151be0da",
+   "product_check": "StandardScaler.fit should learn exactly the same mean from a float64 matrix as it learns from the correctly rounded float32 matrix.",
+   "why_fault_reaches_check": "Change the first narrowed float64 value before StandardScaler.fit consumes the matrix. The common preprocessing door performs this conversion for CPU and GPU fits. The pre-rounded float32 oracle borrows its input unchanged."
+  },
+  "classical-float64-admission/wide": {
+   "error_match": "float64 fit mean and rounded float32 fit mean differ: [0-9]+ bytes of [0-9]+(; float64 fit variance and rounded float32 fit variance differ: [0-9]+ bytes of [0-9]+)?(; float64 fit transform and rounded float32 fit transform differ: [0-9]+ bytes of [0-9]+)?",
+   "patch_sha256": "54dc4b2a14640b027ef55df0d70e1bd8819a099d8dd930b6ab810ed3151be0da",
+   "product_check": "StandardScaler.fit should learn exactly the same mean from a float64 matrix as it learns from the correctly rounded float32 matrix.",
+   "why_fault_reaches_check": "Change the first narrowed float64 value before StandardScaler.fit consumes the matrix. The common preprocessing door performs this conversion for CPU and GPU fits. The pre-rounded float32 oracle borrows its input unchanged."
+  }
+ },
  "coverage-core-scaler_fit_impl": {
   "classical-float16-sequences/base": {
    "product_check": "tools/identity_lanes/coverage.py:1349, the lane's byte oracle: StandardScaler statistics fitted on a list of float16 rows must be the bytes of the fit on the float32 ndarray of the same values (the half -> float32 widening is exact).",
-   "why_fault_reaches_check": "The list input is not float32 C-order, so the scaler admission casts it through core/scaler_fit_impl.mojo scaler_cast (providers/python/preprocessing_input_pyapi_door.mojo:136-140), where the patch adds 1.0 to the first cast value; the float32 C-order ndarray skips scaler_cast (the same branch), so only the listed fit's mean_/var_/scale_ move and the oracle refuses.",
+   "why_fault_reaches_check": "The native-order float16 list goes through admitted_cast_f32_words in the common scaler admission binding. Raise its first decoded value by one; the comparison fit takes the float32 direct path.",
    "error_match": "ValueError: standard scaler statistics from a list of float16 rows and standard scaler statistics from the float32 ndarray differ: [0-9]+ bytes of [0-9]+",
-   "patch_sha256": "8811346a2f9948a8f9508eb435b843fa9ddca236676f7c21831a5b4a49710049"
+   "patch_sha256": "ca6173450b972edf52fde5879665252f3f9b5f4f4551bb391d9c6e3b2f4699d9"
   }
  },
  "coverage-core-sequential_inputs_impl": {
@@ -398,6 +454,30 @@
    "why_fault_reaches_check": "The patch scales every matrix-vector product of batched_kalman_loop_kernel (arima/impl/batched_kalman.mojo _mv) by 1 + 2^-10 on the GPU bindings only (not under MOJOLEARN_COLUMN_CPU). ARIMA is the only class of the generic other group; its GPU-side fit and forecast run that kernel and its CPU twin does not, so the forecast the check compares differs and the check names ARIMA alone; the clean build matches.",
    "error_match": "AssertionError: check-generic-other \\(gpu side\\): ARIMA: MISMATCH: output \\d+, first differing element at index \\[\\d+(, \\d+)*\\] \\(flat \\d+\\): gpu=\\S+ cpu=\\S+",
    "patch_sha256": "3d77f2847bbf1120320bcc76f0a9ca222bebcebccf730625cb0f99fe877758da"
+  }
+ },
+ "coverage-gate-isolation_forest-score_label-gpu": {
+  "check-generic-trees/base": {
+   "product_check": "tools/identity_lanes/checks_generic.py calls IsolationForest.check with predict. Its separate CPU and GPU answers must agree byte for byte.",
+   "why_fault_reaches_check": "isolation_forest/impl/isolation_forest.mojo anomaly_score_kernel (every score_samples, decision_function and predict path: _score_samples_device -> compute_anomaly_scores) stores each score one ulp up, and if_predict_epilogue_kernel flips row 0's label (the labels-only fit_predict lane); IsolationForest computes in _mojolearn_svm, the file is gated because the host svm binding imports it too. Post-release side coverage: The registry includes IsolationForest.check with a public predict method. Its GPU epilogue flips the first label, which the generic check compares with the CPU answer.",
+   "error_match": "AssertionError: check-generic-trees \\(gpu side\\): IsolationForest: MISMATCH: output \\d+, first differing element at index \\[0\\] \\(flat 0\\): gpu=\\S+ cpu=\\S+",
+   "patch_sha256": "83e08b1abc0ef2453daffa0ba3472e1200d9461bc637a8f769c594fe87c6d670"
+  }
+ },
+ "post090-kmeans-prediction-cpu": {
+  "check-generic-cluster/base": {
+   "product_check": "tools/identity_lanes/checks_generic.py calls KMeans.check with predict. Its separate CPU and GPU answers must agree byte for byte.",
+   "why_fault_reaches_check": "Rotate only the first host KMeans.predict label after its nearest-centroid assignment. KMeans.check predicts on both sides and its mismatch identifies the public method under test. The fixture has multiple clusters.",
+   "error_match": "AssertionError: check-generic-cluster \\(cpu side\\): KMeans: MISMATCH: output \\d+, first differing element at index \\[0\\] \\(flat 0\\): gpu=\\S+ cpu=\\S+",
+   "patch_sha256": "9f23dfdcb8e9edb254b6f9315bb1dbcc07e76219c36f92e11693fea6e99b66b4"
+  }
+ },
+ "post090-shard-neighbor-merge-cpu": {
+  "neighbors-reference-shard/base": {
+   "product_check": "tools/identity_lanes/coverage.py compares the one-device reference-sharded distances against unsharded kneighbors on the same query.",
+   "why_fault_reaches_check": "The CPU shard merger changes exactly one bit in the first returned distance. The plain query bypasses the merger.",
+   "error_match": "ReferenceShardedNeighbors distances and plain distances differ: 1 bytes of 2048",
+   "patch_sha256": "9ba5d1b7e39dda64fc176ed1e75e8362584d6f688443e886fa1352eb0a37e2b6"
   }
  }
 }

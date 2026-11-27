@@ -66,6 +66,10 @@ def check_faults(clean,*,retain=None):
     for name,endpoint in FAULTS.items():
         if endpoint not in clean['expected']:continue
         baseline=dict(expected=[endpoint],endpoints={endpoint:clean['endpoints'].get(endpoint,{})},pending=[])
+        row = baseline['endpoints'][endpoint]
+        if row.get('status') == 'not applicable' and row.get('kind') in ('device only', 'installation side'):
+            result[name] = dict(status='NOT_APPLICABLE', endpoint=endpoint, reason=row['reason'])
+            continue
         if baseline['endpoints'][endpoint].get('status')!='captured':
             result[name]={'status':'FAILED','reason':'clean endpoint did not execute'};continue
         # The clean capture has already loaded and hashed every native owner

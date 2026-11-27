@@ -1,0 +1,11 @@
+--- a/bindings/metrics_exp_common_run.mojo
++++ b/bindings/metrics_exp_common_run.mojo
+@@ -85,7 +85,7 @@
+         num = -eps if -eps < num else num
+     else:
+         num = eps if eps > num else num
+-    return num / den
++    return (num + 0.25) / den
+
+
+ def contingency_dtype_code(name: String) -> Int:

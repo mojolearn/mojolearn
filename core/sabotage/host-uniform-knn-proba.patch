@@ -1,0 +1,9 @@
+--- a/core/knn_host_predict.mojo
++++ b/core/knn_host_predict.mojo
+@@ -1037,5 +1037,5 @@
+         for j in range(k):
+             var out_label = Int(labels[Int(idx[i + j])])
+             var out_idx = row * n_uniq + out_label
+-            out[out_idx] = ftz(out[out_idx] + n_neigh_inv)
++            out[out_idx] = ftz(out[out_idx] + n_neigh_inv * Float32(0.5))
+     return out^

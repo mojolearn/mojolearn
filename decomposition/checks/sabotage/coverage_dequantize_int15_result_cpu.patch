@@ -1,0 +1,13 @@
+--- a/decomposition/linalg_host_impl.mojo
++++ b/decomposition/linalg_host_impl.mojo
+@@ -213,9 +213,9 @@
+     var q = join_int15(read_i8(h_address, rows * cols), read_i8(l_address, rows * cols))
+     var e = read_i32(e_address, rows)
+     var y = dequantize_rows_int15(Int15Rows(q^, e^, rows, cols))
+     for i in range(rows * cols):
+-        yp[i] = y[i]
++        yp[i] = -y[i]
+     return rows * cols
+ 
+ 
+ def cholesky_factor_host_run(

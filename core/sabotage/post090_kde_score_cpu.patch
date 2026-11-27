@@ -1,0 +1,14 @@
+diff --git a/core/estimators_host_impl.mojo b/core/estimators_host_impl.mojo
+--- a/core/estimators_host_impl.mojo
++++ b/core/estimators_host_impl.mojo
+@@ -104,9 +104,9 @@
+     if want_total:
+         var scores = List[Float32](capacity=n_query)
+         for i in range(n_query):
+             scores.append(op[i])
+-        return Float64(host_sum_f32_fixed(scores, n_query))
++        return -Float64(host_sum_f32_fixed(scores, n_query))
+     return 0.0
+
+
+ def pca_fit_host_run(

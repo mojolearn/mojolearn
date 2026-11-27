@@ -1,0 +1,13 @@
+--- a/decomposition/linalg_host_impl.mojo
++++ b/decomposition/linalg_host_impl.mojo
+@@ -139,9 +139,9 @@
+ def svdvals_host_run(a: List[Float32], n_rows: Int, n_cols: Int, sp: MutPointer[Float32, MutUntrackedOrigin]) raises:
+     """The GIL-free body of `svdvals_binding` (moved word for word)."""
+     var s = host_svdvals(a, n_rows, n_cols)
+     for i in range(n_cols):
+-        sp.unsafe_store(i, s[i])
++        sp.unsafe_store(i, -s[i])
+     _ = s^
+ 
+ 
+ def read_f32_transposed(address: Int, rows: Int, cols: Int) raises -> List[Float32]:
