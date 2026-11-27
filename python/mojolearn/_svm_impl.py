@@ -347,7 +347,7 @@ class SVC(NumericModeMixin):
     the lowest class. `X` is converted to float32 (sparse input is
     densified), and non-finite values in `X` raise an error naming the
     first bad cell. Supports the `'identical'` (default) and `'fast'`
-    numeric modes; `'fast'` is available on Apple GPUs only.
+    numeric modes.
 
     Defaults that differ from scikit-learn: `gamma='auto'` (scikit-learn
     uses 'scale'); `cache_size` is the prediction buffer in MiB and does not
@@ -418,7 +418,6 @@ class SVC(NumericModeMixin):
         vote. Must be False with 'ovo' (scikit-learn's rule).
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator; None uses the process default.
-        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -911,7 +910,7 @@ class SVR(NumericModeMixin):
     remove rows from the support set. `X` is converted to float32 (sparse
     input is densified); non-finite values in `X` or `y` raise an error
     naming the first bad cell. Supports the `'identical'` (default) and
-    `'fast'` numeric modes; `'fast'` is available on Apple GPUs only.
+    `'fast'` numeric modes.
 
     The parameters keep scikit-learn's order and meaning, with two
     defaults that differ: `gamma='auto'` (scikit-learn uses 'scale') and
@@ -964,7 +963,6 @@ class SVR(NumericModeMixin):
         Only None is accepted; results are mojolearn Arrays.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator; None uses the process default.
-        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------

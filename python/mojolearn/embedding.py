@@ -72,7 +72,7 @@ class Embedding(_NumericModeMixin):
         How the backward groups the positions of each row. Both plans give the same bits;
         'auto' picks by problem size.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode; 'fast' is Apple only. None uses the process default.
+        Numeric mode. None uses the process default.
         In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 
     Attributes

@@ -126,7 +126,7 @@ class MLPRegressor(_BaseMLP):
     max_fun : int, default 15000
         Accepted for compatibility (lbfgs only); unused.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
@@ -274,7 +274,7 @@ class MLPClassifier(_BaseMLP):
     max_fun : int, default 15000
         Accepted for compatibility (lbfgs only); unused.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.

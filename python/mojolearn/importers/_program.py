@@ -86,7 +86,7 @@ def import_model(source, *, shapes=None, numeric_mode=None, device=None):
         Fixed dimensions for inputs whose sizes the artifact leaves open,
         by input name, for example ``{"input": (8, 3)}``.
     numeric_mode : {'identical', 'fast'} or None, default None
-        None uses the library default. ``'fast'`` is Apple only.
+        None uses the library default.
 
     Returns
     -------

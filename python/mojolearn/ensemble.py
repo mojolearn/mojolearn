@@ -1358,7 +1358,7 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
     l2_leaf_reg : float, default 3.0
     random_state : int, default 0
     numeric_mode : {'identical', 'fast'} or None, default None
-        ``'identical'`` or ``'fast'`` (Apple GPUs only); None uses the
+        ``'identical'`` or ``'fast'``; None uses the
         process default.
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and predicts. None uses this
@@ -1418,7 +1418,7 @@ class OrderedRMSE(GradientBoosting):
     border_count : int, default 128
         1 to 255.
     numeric_mode : {'identical', 'fast'} or None, default None
-        ``'identical'`` or ``'fast'`` (Apple GPUs only); None uses the
+        ``'identical'`` or ``'fast'``; None uses the
         process default.
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and predicts. None uses this

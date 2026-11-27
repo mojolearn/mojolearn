@@ -135,8 +135,7 @@ class Session:
         Record each operation so :meth:`backward` can differentiate the
         composition. Values are the same bits either way.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available
-        on Apple GPUs only.
+        Numeric mode. None uses the library default.
 
     Every operation takes tensor handles and returns the integer handle of a
     new tensor; nothing is copied back to the host until you call

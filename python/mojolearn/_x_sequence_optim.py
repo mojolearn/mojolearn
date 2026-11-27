@@ -117,7 +117,7 @@ class RMSprop(_SeqOptimizer):
     centered : bool, default False
         Normalize by the estimated gradient variance.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode of the update. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -184,7 +184,7 @@ class Adagrad(_SeqOptimizer):
     eps : float, default 1e-10
         Term added to the denominator.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode of the update. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -246,7 +246,7 @@ class Lion(_SeqOptimizer):
     weight_decay : float, default 0.0
         Decoupled weight decay.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode of the update. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -309,7 +309,7 @@ class Adamax(_SeqOptimizer):
     weight_decay : float, default 0.0
         L2 penalty added to the gradient.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode of the update. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
@@ -370,7 +370,7 @@ class NAdam(_SeqOptimizer):
     decoupled_weight_decay : bool, default False
         Apply weight decay to the parameters directly instead of the gradient.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode of the update. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device, 'cpu' runs on
         the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.

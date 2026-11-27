@@ -18,7 +18,7 @@ silently accepted and ignored. Inputs are checked here: non-finite values are
 refused where the docstring says so.
 
 Functions that take ``numeric_mode`` accept ``'identical'`` (the same bits
-on Apple, NVIDIA and AMD GPUs) or ``'fast'`` (Apple only); None
+on Apple, NVIDIA and AMD GPUs) or ``'fast'``; None
 uses the library default. Other functions run in the library default mode.
 
 Examples
@@ -207,7 +207,7 @@ def accuracy_score(
         total; negative weights, which scikit-learn accepts, raise
         ``ValueError``.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -619,7 +619,7 @@ def r2_score(
         False returns scikit-learn's raw values for constant targets
         (``nan`` or ``-inf``).
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -669,7 +669,7 @@ def mean_squared_error(
     multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
         How to combine several outputs, as in scikit-learn.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -713,7 +713,7 @@ def mean_absolute_error(
     multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
         How to combine several outputs, as in scikit-learn.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -758,7 +758,7 @@ def root_mean_squared_error(
     multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
         How to combine several outputs, as in scikit-learn.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -1045,7 +1045,7 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
         The class labels, unique, in column order. Needed when ``y_true``
         holds a single class. At least two labels are required.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -1112,7 +1112,7 @@ def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
     labels : array-like, default None
         Class labels for multiclass input, as in scikit-learn.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -1168,7 +1168,7 @@ def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=Non
         Drop thresholds that do not change the curve's shape, as in
         scikit-learn.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -1228,7 +1228,7 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
         Normalize over rows, columns or the whole matrix. Rows or columns
         with no mass give zeros.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -1278,7 +1278,7 @@ def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary
     zero_division : {'warn', 0, 1}, default 'warn'
         The value for an undefined ratio; ``'warn'`` gives 0 and a warning.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -1326,7 +1326,7 @@ def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     zero_division : {'warn', 0, 1}, default 'warn'
         The value for an undefined ratio; ``'warn'`` gives 0 and a warning.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,
@@ -1374,7 +1374,7 @@ def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     zero_division : {'warn', 0, 1}, default 'warn'
         The value for an undefined ratio; ``'warn'`` gives 0 and a warning.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        Numeric mode for this call. None uses the
         library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the computation runs. None uses this installation's device,

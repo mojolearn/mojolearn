@@ -93,14 +93,14 @@ weight storage, tokenized corpora and a built-in verifier.
 
 ## Numeric modes
 
-`identical` is the default. `fast` is available on Apple GPUs only, as an
-opt-in for most families. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md#numeric-modes) has
-the table by family.
+`identical` is the default. You can request `fast` on Apple GPUs and on Linux.
+On Linux, Mojolearn uses the identical kernels when the installation has no
+separate fast kernels. See the [support matrix](SUPPORT_MATRIX.md#numeric-modes).
 
 | mode | contract |
 |---|---|
 | `identical` | The default. In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
-| `fast` | Apple GPUs only: throughput, with no repeatability promise. |
+| `fast` | Opt-in mode for throughput. Results can vary across runs and devices. |
 
 The `identical` contract is across hardware within one release. Mojolearn is
 alpha: a release may change `identical` output bits (a faster or more accurate

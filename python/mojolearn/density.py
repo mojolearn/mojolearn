@@ -106,7 +106,7 @@ class DBSCAN(_NumericModeMixin):
         :meth:`save` can be used. Not allowed with
         ``metric='precomputed'``.
     numeric_mode : {'identical', 'fast'} or None, default=None
-        Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
+        Numeric mode; ``None`` uses the package
         default.
 
     Attributes
@@ -403,7 +403,7 @@ class KernelDensity(_NumericModeMixin):
         Only ``p = 2`` is supported; any other value raises
         ``NotImplementedError``.
     numeric_mode : {'identical', 'fast'} or None, default=None
-        Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
+        Numeric mode; ``None`` uses the package
         default.
 
     Attributes

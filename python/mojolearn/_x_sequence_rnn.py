@@ -504,7 +504,7 @@ class LSTMRegressor(_RecurrentRegressor):
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
@@ -642,7 +642,7 @@ class LSTMClassifier(_RecurrentClassifier):
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
@@ -784,7 +784,7 @@ class GRURegressor(_RecurrentRegressor):
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
@@ -921,7 +921,7 @@ class GRUClassifier(_RecurrentClassifier):
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
@@ -1063,7 +1063,7 @@ class RNNRegressor(_RecurrentRegressor):
     nonlinearity : {'tanh', 'relu'}, default 'tanh'
         Activation of the recurrence, as `nn.RNN`.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
@@ -1201,7 +1201,7 @@ class RNNClassifier(_RecurrentClassifier):
     nonlinearity : {'tanh', 'relu'}, default 'tanh'
         Activation of the recurrence, as `nn.RNN`.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this installation's device, 'cpu'
         runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.

@@ -17,10 +17,9 @@ and the post-step parameters and both Adam moments. Both are one model profile
 at one batch shape; identity is claimed per shape, because the weight gradients
 contract over the token count.
 
-The tree and classical estimators additionally offer ``fast`` (Apple GPUs
-only). The neural surface (``TransformerBlock``, the
-Mamba blocks, the training ops and the byte LM) offers ``identical`` and, on
-Apple GPUs, ``fast``; asking it for another mode raises.
+The default numeric mode is ``identical``. On Apple GPUs, ``fast`` uses
+the installed fast kernels for the operation. On Linux, ``fast`` uses
+the identical kernels when the installation has no separate fast kernels.
 
 The API uses familiar scikit-learn shapes but is not a drop-in replacement.
 Defaults may follow the mirrored GPU implementation, and unsupported behavior

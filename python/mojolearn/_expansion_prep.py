@@ -299,7 +299,7 @@ class RobustScaler(_PrepBase):
         Also divide the scale by ``norm.ppf(q_max) - norm.ppf(q_min)``, so that normally distributed
         data ends with unit variance. Requires ``0 < q_min < q_max < 100`` (``ValueError`` otherwise).
     numeric_mode : {"fast", "identical"} or None, default None
-        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode; None uses the library default.
 
     Attributes
     ----------
@@ -397,7 +397,7 @@ class MaxAbsScaler(_PrepBase):
     copy : bool, default True
         Accepted for scikit-learn compatibility; transform always returns a new array.
     numeric_mode : {"fast", "identical"} or None, default None
-        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode; None uses the library default.
 
     Attributes
     ----------
@@ -1181,7 +1181,7 @@ class GaussianNB(_Classifier):
     var_smoothing : float, default 1e-9
         Fraction of the largest feature variance added to every variance.
     numeric_mode : {"fast", "identical"} or None, default None
-        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode; None uses the library default.
 
     Attributes
     ----------

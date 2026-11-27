@@ -24,8 +24,7 @@ python -m mojolearn verify --all       # every classic and neural lane on all ni
 ```
 
 The verifier selects the `identical` mode itself when `MOJOLEARN_NUMERIC_MODE` is unset. A mode you
-set explicitly is respected, and a process in `fast` (an Apple GPU mode) is refused (exit 3), because
-`fast` makes no identity promise to check.
+set explicitly is respected. If the loaded kernels use fast arithmetic, the verifier exits with code 3.
 
 ## Scopes
 

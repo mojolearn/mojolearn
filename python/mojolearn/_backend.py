@@ -2598,17 +2598,16 @@ def set_default_mode(mode):
     loaded immediately, so a mode that cannot be used fails here rather than at
     a later fit.
 
-    - ``"identical"`` (default): in ``identical`` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
-    - ``"fast"``: the fastest arithmetic, available on Apple GPUs only; no
-      bitwise promise.
+    - In ``identical`` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+    - ``"fast"`` uses the installed fast kernels. Linux installations without
+      a separate fast kernel set use identical arithmetic for this setting.
 
     Using a family under a mode it does not ship raises ImportError.
 
     Parameters
     ----------
     mode : {"identical", "fast"} or None
-        The new default; None keeps the current one. ``'fast'`` is available on
-        Apple GPUs only.
+        The new default. None keeps the current one.
 
     Returns
     -------

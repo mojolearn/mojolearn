@@ -44,21 +44,12 @@ same code. Use [`verify`](../user_guide/verify.md) to check them.
 
 | Mode | Contract |
 |---|---|
-| `identical` | The default. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
-| `fast` | Apple GPUs only. Tuned for throughput. No identity or repeatability promise. |
+| `identical` | The default. In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
+| `fast` | Opt-in mode for throughput. Results can vary across runs and devices. |
 
-| Family | `identical` | `fast` |
-|---|---|---|
-| Gradient boosting | yes | Apple GPUs |
-| Random forests | yes | Apple GPUs |
-| Extra Trees | yes | Apple GPUs |
-| Other tree models (decision trees, AdaBoost, random-trees embedding, isolation forest) | yes | Apple GPUs |
-| Neural networks, GPU surface | yes | Apple GPUs |
-| Every other family | yes | Apple GPUs |
-| CPU bindings (all families) | yes | no |
-
-`fast` is opt-in and tuned on Apple. `fast` is available on Apple GPUs only. Asking a family for a mode it does not ship raises
-a named error. Bits may change between releases. See [Numeric modes](../user_guide/numeric_modes.md).
+On Apple GPUs, `fast` requires fast kernels for the selected operation. On Linux,
+including CPU-only installs, `fast` uses the identical kernels when the installation
+has no separate fast kernels. See [Numeric modes](../user_guide/numeric_modes.md).
 
 ## The CPU surface
 

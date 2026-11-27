@@ -52,7 +52,7 @@ class AutoTheta(ParamsMixin):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and forecasts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
@@ -200,7 +200,7 @@ class Theta(AutoTheta):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and forecasts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
@@ -260,7 +260,7 @@ class OptimizedTheta(AutoTheta):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and forecasts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
@@ -320,7 +320,7 @@ class DynamicTheta(AutoTheta):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and forecasts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
@@ -380,7 +380,7 @@ class DynamicOptimizedTheta(AutoTheta):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+        :func:`mojolearn.set_numeric_mode`).
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and forecasts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU

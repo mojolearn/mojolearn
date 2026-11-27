@@ -202,4 +202,4 @@ print(lstm.predict(X_seq[:5]))
 ## Related pages
 
 - [Language models](language_models.md): decoder language models, tokenizers and checkpoints.
-- [Numeric modes](numeric_modes.md): what `identical` and `fast` (Apple GPUs only) promise.
+- [Numeric modes](numeric_modes.md): what `identical` and `fast` promise.

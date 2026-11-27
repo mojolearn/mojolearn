@@ -552,7 +552,7 @@ class CheckMixin:
         Raises
         ------
         AttributeError
-            If the model is not fitted or runs in `fast` mode (Apple only).
+            If the model is not fitted or runs in `fast` mode.
 
         Examples
         --------
@@ -944,7 +944,7 @@ class NumericModeMixin(ParamsMixin):
         Returns
         -------
         str
-            ``'identical'`` or ``'fast'`` (Apple only), read from the compiled
+            ``'identical'`` or ``'fast'``, read from the compiled
             binary the estimator uses, not from the argument it was given.
         """
         return _MODE_METADATA(self, "numeric_mode_used", _MODE_METADATA_CONTEXT)

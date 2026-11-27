@@ -43,17 +43,12 @@ requirements above apply to the current wheel.
 
 | Mode | Contract |
 |---|---|
-| `identical` | The default. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. CPU host-binding coverage is documented per API. |
-| `fast` | Apple GPUs only. Performance oriented; no repeatability or cross-vendor promise. |
+| `identical` | The default. In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. CPU coverage is documented per API. |
+| `fast` | Opt-in mode for throughput. Results can vary across runs and devices. |
 
-| Family | `identical` | `fast` |
-|---|---|---|
-| Gradient boosting | yes | Apple only (opt-in) |
-| Random Forest | yes | Apple only (opt-in) |
-| Extra Trees | yes | Apple only (opt-in) |
-| Other tree models (decision trees, AdaBoost, random-trees embedding, isolation forest) | yes | Apple only (opt-in) |
-| Neural networks, GPU surface (LanguageModelTrainer, TransformerBlock, Mamba1/2/3Block, SambaStack, SmallMLPTrainer, Embedding, linalg GEMMs) | yes | Apple only (opt-in) |
-| Every other family (the rest of classical ML and the expansion lanes) | yes | Apple only (opt-in) |
+On Apple GPUs, `fast` requires fast kernels for the selected operation. On Linux
+(NVIDIA, AMD or CPU only), a request for `fast` uses the identical kernels when the
+installation has no separate fast kernels.
 
 Select a process mode with `mojolearn.set_numeric_mode(...)` or the
 `MOJOLEARN_NUMERIC_MODE` environment variable. Estimators that accept

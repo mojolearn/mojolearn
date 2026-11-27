@@ -30,9 +30,9 @@ Compare runs made with the same release, and record `mojolearn.__version__` with
 
 ## Is `identical` slower than `fast`?
 
-`fast` is available on Apple GPUs only. There it can be faster: `identical` pins the operations that decide the
-bits, while `fast` is tuned for Apple GPUs and makes no identity or repeatability promise. `identical` is
-the default and the mode to report results in; `fast` is opt-in.
+It depends on which kernels run. Apple GPU fast kernels can use a different order of operations.
+On a Linux install with no separate fast kernels, both settings run the same arithmetic.
+See [Numeric modes](../user_guide/numeric_modes.md).
 
 ## Which GPUs are supported?
 
@@ -70,7 +70,7 @@ the project's recorded table. See [Verify on your hardware](../user_guide/verify
 ## How do I report a mismatch?
 
 1. Confirm both runs used `identical` and the same release: compare `numeric_mode_used()` and
-   `mojolearn.__version__`. Differences under `fast` (Apple GPUs only) are expected and are not defects.
+   `mojolearn.__version__`. Fast kernels can produce different bits.
 2. Save a verifier report on each machine:
    `python -m mojolearn verify --all --json-out report.json`.
 3. Run `mojolearn bug-report reproducer.py` with a minimal reproducer to build a support bundle, and

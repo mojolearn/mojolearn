@@ -202,7 +202,7 @@ class SambaStack(object):
     accumulation_steps : int, default 1
         Number of microbatches per optimizer step; must divide the batch rows.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+        Numeric mode. None uses the library default.
     device : {'gpu', 'cpu'} or None, default None
         Where the stack runs. None uses this installation's device. A stack runs on
         the device of its installation: ``'gpu'`` requires a GPU build and ``'cpu'``

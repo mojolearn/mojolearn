@@ -93,8 +93,7 @@ class Sequential(_CheckMixin):
     Parameters
     ----------
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default. ``'fast'`` is available
-        on Apple GPUs only.
+        Numeric mode. None uses the library default.
     input_shape : tuple of int or None, default None
         The shape of one sample, for example ``(channels, height, width)``.
         None takes it from ``X`` at fit. With an input shape, ``fit`` and
@@ -2149,7 +2148,6 @@ class Sequential(_CheckMixin):
             A file written by :meth:`save_checkpoint` or :meth:`export`.
         numeric_mode : {'identical', 'fast'} or None, default None
             Numeric mode of the loaded model. None uses the library default.
-            ``'fast'`` is available on Apple GPUs only.
 
         Returns
         -------

@@ -185,7 +185,7 @@ class ElasticNet(ParamsMixin):
         ``selection='cyclic'``.
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
-        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        or ``'fast'``); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
     Attributes

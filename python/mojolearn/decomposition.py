@@ -385,7 +385,6 @@ class TruncatedSVD(_NumericModeMixin):
         raises ``NotImplementedError``.
     numeric_mode : {'fast', 'identical'} or None, default None
         Numeric mode for this estimator; None uses the package default.
-        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------

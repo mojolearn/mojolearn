@@ -737,7 +737,7 @@ class ExponentialSmoothing:
         Raises
         ------
         AttributeError
-            If the model is not fitted, or runs in `fast` mode (Apple only).
+            If the model is not fitted, or runs in `fast` mode.
         """
         return _digest_read(self)
 
@@ -750,7 +750,7 @@ class ExponentialSmoothing:
         Raises
         ------
         AttributeError
-            If it is not fitted, or runs in `fast` mode (Apple only).
+            If it is not fitted, or runs in `fast` mode.
         """
         return _digest_read(self, _DIGEST_TRAINING_ARGUMENTS)
 
