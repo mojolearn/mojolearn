@@ -4,10 +4,10 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased (0.9.0)
 
-0.9.0 is a large release: the public calls run in compiled Mojo from argument checks to results, `fast` mode is offered again beside `identical`, and `verify` is rebuilt.
+0.9.0 is a large release: the public calls run in compiled Mojo from argument checks to results, `fast` can be named on every vendor, and `verify` is rebuilt.
 
 - **Python only at the boundary.** Every public method hands its arguments to compiled Mojo in one call and gets its result back the same way. Argument checks, fitted-state checks, data preparation, training loops and output processing run natively on every vendor and on the CPU. Python callbacks, custom trainers and other Python hooks are refused by name before a call starts, with the native alternative named in the error.
-- **`fast` and `identical`.** `fast` mode is available again beside `identical`. In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+- **`fast` and `identical`.** On Apple GPUs, `fast` loads its own build for most families ([SUPPORT_MATRIX.md](SUPPORT_MATRIX.md#numeric-modes)), with no repeatability promise. On NVIDIA, AMD and the CPU there is no separate `fast` build yet: `mojolearn.set_numeric_mode("fast")` and `MOJOLEARN_NUMERIC_MODE=fast` run the `identical` build, so results there equal `identical`'s. In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 - **Toolchain.** Built with Mojo 1.2; the `max` extra installs MAX 26.7.0.
 - **Python 3.10.** Calls that crashed or raised the wrong error type on Python 3.10 work there as on later versions.
 - **Bits change.** Results of this version differ in bits from 0.8.66 for many methods; they are the same across vendors within 0.9.0.
