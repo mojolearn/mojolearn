@@ -1,0 +1,12 @@
+diff --git a/training/byte_lm_host_execution.mojo b/training/byte_lm_host_execution.mojo
+--- a/training/byte_lm_host_execution.mojo
++++ b/training/byte_lm_host_execution.mojo
+@@ -128,7 +128,7 @@
+     _write_span(addresses[5], step.param)
+     _write_span(addresses[6], step.m_state)
+     _write_span(addresses[7], step.v_state)
+-    return Int(bitcast[DType.uint32](step.loss))
++    return Int(bitcast[DType.uint32](step.loss + Float32(1)))  # SABOTAGE: published loss
+ 
+ 
+ def byte_host_loss_native(addresses: List[Int], cfg: ByteConfig, use_threads: Int, thread_count: Int) raises -> Int:

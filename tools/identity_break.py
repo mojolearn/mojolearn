@@ -4161,6 +4161,14 @@ def _lane_refuses(fn, text):
 # The saved-model readers it checks (HostForest, HostGBDT, host_predict,
 # host_predict_proba) are the CPU inference surface: no GPU side (vd-verify,
 # 2026-11-24).
+for _host_infer_lane in ("byte-lm-host-infer", "byte-lm-host-infer-threaded"):
+    _one_sided(_host_infer_lane, missing="gpu",
+               reason="LanguageModelInference is a CPU inference class on every installation")
+_one_sided("byte-lm-host-train", missing="gpu",
+           reason="this fixture explicitly requests LanguageModelTrainer(device='cpu'); byte-lm exercises the GPU")
+del _host_infer_lane
+
+
 _one_sided("saved-model-host-infer", missing="gpu",
            reason="the saved-model readers HostForest, HostGBDT, host_predict and host_predict_proba "
                   "are the CPU inference surface and take no device")

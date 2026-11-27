@@ -1,0 +1,10 @@
+diff --git a/training/neural_session_mlp_host.mojo b/training/neural_session_mlp_host.mojo
+--- a/training/neural_session_mlp_host.mojo
++++ b/training/neural_session_mlp_host.mojo
+@@ -48,5 +48,5 @@
+             raise Error("neural MLP sessions: nonfinite logits")
+     # All admission/output status completes before exposing any session result.
+     for i in range(total * out_width):
+-        output[i] = y[i]
++        output[i] = y[i] + Float32(1)  # SABOTAGE: biased session logits
+     return total * out_width
