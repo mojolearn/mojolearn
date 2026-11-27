@@ -1,4 +1,4 @@
-# mojolearn
+# Mojolearn
 
 [![PyPI](https://img.shields.io/pypi/v/mojolearn.svg)](https://pypi.org/project/mojolearn/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23829035.svg)](https://doi.org/10.5281/zenodo.23829035)
@@ -7,8 +7,8 @@
 
 The same machine-learning workload can produce different bits on different
 GPUs, changing predictions, learned models and subsequent training updates.
-mojolearn is a GPU machine-learning library whose default mode is **identical**.
-In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+Mojolearn is a GPU machine-learning library whose default mode is **identical**.
+In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 Its x86-64 Linux and Apple silicon CPU bindings give the same bits too. Results agree
 bit for bit, not merely within a numerical tolerance.
 
@@ -21,17 +21,18 @@ bit for bit, not merely within a numerical tolerance.
 - **Serve models trained elsewhere.** Neural models trained in other
   frameworks can be served with identical outputs across vendors.
 - **Move training between vendors.** A training run can be handed off from
-  one GPU vendor to another mid-run, or shared by Apple, NVIDIA and AMD GPUs
-  working on one model at once, and the training state after every step is
-  bitwise identical to a single GPU's.
+  one GPU vendor to another mid-run, and the training state after every step
+  is bitwise identical to an uninterrupted run's.
 - **A language model trained twice, the same bits.** The
   [training experiment](https://mojolearn.org/#experiment) on mojolearn.org.
-- **Full FP32.** Neural training and inference run in full FP32
-  floating-point arithmetic, without reducing the computation to integers.
+- **Full FP32 training.** Neural training runs in full FP32 floating-point
+  arithmetic. Transformer inference uses a 15-bit integer profile with exact
+  sums by default, and full FP32 is one setting away
+  ([numeric profiles](https://docs.mojolearn.org/user_guide/numeric_modes.html#numeric-profiles)).
 - **Every algorithm runs on the Mac's own GPU**, where XGBoost, LightGBM,
   CatBoost and cuML have no supported GPU path.
 
-To the author's knowledge, mojolearn is the first system to enable these
+To the author's knowledge, Mojolearn is the first system to enable these
 capabilities.
 
 One Mojo codebase implements these algorithms across Metal, CUDA and HIP
@@ -49,7 +50,7 @@ learner one rounding difference can change the winning split and every node
 beneath it. In a training loop it perturbs a gradient, then the optimizer
 state, then every step after that.
 
-mojolearn removes hardware from that list. A team can test a deployed model
+Mojolearn removes hardware from that list. A team can test a deployed model
 on different hardware, replay a recorded decision during an audit, replace
 serving hardware without numerical change, and resume a checkpoint on
 another vendor's GPU on the same trajectory as uninterrupted training.
@@ -59,11 +60,11 @@ another vendor's GPU on the same trajectory as uninterrupted training.
 Floating-point addition is not associative, and GPU vendors differ in
 reduction order, fused multiply-add contraction, denormal handling, square
 root, tie-breaking and elementary functions. Recompiling does not fix any of
-that. mojolearn's numerical contract fixes the operations that determine
+that. Mojolearn's numerical contract fixes the operations that determine
 model bits, including reduction order, rounding and elementary functions,
 and leaves tiling, thread layout, memory placement and kernel scheduling
 free, so each backend can be tuned for its own hardware without changing a
-bit. The kernels are mojolearn's own, written in Mojo, and replace vendor
+bit. The kernels are Mojolearn's own, written in Mojo, and replace vendor
 math routines wherever their results would depend on the backend.
 
 ## Algorithms
@@ -97,10 +98,10 @@ the table by family.
 
 | mode | contract |
 |---|---|
-| `identical` | The default. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
+| `identical` | The default. In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
 | `fast` | Apple GPUs only: throughput, with no repeatability promise. |
 
-The `identical` contract is across hardware within one release. mojolearn is
+The `identical` contract is across hardware within one release. Mojolearn is
 alpha: a release may change `identical` output bits (a faster or more accurate
 route), provided the new bits agree on every supported vendor and the CPU.
 Compare runs made with the same release.
@@ -135,7 +136,7 @@ build for every NVIDIA GPU with compute capability 8.0 or newer (A100,
 H100/H200, Blackwell, ...) ships in the same `mojolearn-nvidia` package; other
 architectures need a source build. See [NVIDIA PTX](docs/NVIDIA_PTX_IDENTITY.md).
 
-mojolearn never substitutes the CPU for a GPU it cannot serve.
+Mojolearn never substitutes the CPU for a GPU it cannot serve.
 
 ```sh
 mojolearn doctor
@@ -200,58 +201,48 @@ print(model.predict_proba(X[:5]))
 print(model.numeric_mode_used(), mojolearn.vendor())
 ```
 
-In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. Run the same script on
+In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. Run the same script on
 any of them and the model and its predictions are the same bits.
 
 ## Build your own model
 
-The autograd engine behind mojolearn's neural trainers is public. `mojolearn.Sequential` builds and
+The autograd engine behind Mojolearn's neural trainers is public. `mojolearn.Sequential` builds and
 trains a feed-forward model layer by layer, and `mojolearn.ops.Session` gives you the operations,
 losses, metrics and data steps themselves, with gradients, so you can compose your own algorithm on
 the GPU. What you build keeps the same bits on Apple, NVIDIA and AMD in `identical` mode. See
 [Build your own model](https://docs.mojolearn.org/user_guide/autograd.html).
 
-## Verify it yourself
+## Check it yourself
 
-The wheel ships the reference results recorded on Apple, NVIDIA, AMD and
-CPU, and a verifier that checks your machine against them.
-
-Install verification support with
-`python -m pip install "mojolearn[verify]"`: the same library plus its optional
-verification dependency.
-Optional ANN and sequence APIs that use NumPy are supported by
-`mojolearn[numpy]`; the verification extra includes that same dependency.
-The base install does not require NumPy. See [verification support](docs/VERIFY.md).
+You do not have to take the claim on trust. The wheel ships the results
+recorded on Apple, NVIDIA, AMD and the CPU, and a verifier that checks your
+machine against them:
 
 ```sh
-python -m mojolearn verify          # inference and classical training, base fixture
-python -m mojolearn verify --quick  # representative checks from the same scope
-python -m mojolearn verify --all    # every lane on all nine fixtures, plus the single-device commands
+python -m pip install "mojolearn[verify]"
+python -m mojolearn verify --all            # every lane on all nine fixtures, plus the single-device commands
+python -m mojolearn verify --tamper-test    # moves one input by one ULP and shows that verify catches it
+python -m mojolearn verify --show-paths     # what the CPU and the GPU each did to reach the same bits
 ```
 
-`--all` also includes applicable gradient, batch-size, ragged-batch and
-sampler/replay checks, and the single-device commands (programs, graphs,
-generation, loaded models, a composed recipe, a saved program).
-`--quick` keeps its smaller scope.
-
-Each part reports its comparison with the recorded references; missing
-references read OWED and inapplicable properties are named explicitly.
-[docs/VERIFY.md](docs/VERIFY.md) describes the verifier and
-[docs/VERIFY_EXTERNALLY.md](docs/VERIFY_EXTERNALLY.md) shows how to check
-the claims from outside the project.
+Each check reports its comparison with the recorded references; a missing
+reference reads OWED and an inapplicable property is named. The base install
+does not need NumPy; the `verify` extra adds it. [docs/VERIFY.md](docs/VERIFY.md)
+describes the verifier and [docs/VERIFY_EXTERNALLY.md](docs/VERIFY_EXTERNALLY.md)
+shows how to check the claims from outside the project.
 
 ## Scope
 
 The guarantee holds for the same code revision, numerical profile, input
 bytes, hyperparameters and seed, in identical mode, on configurations the
-verification record covers. It is an FP32 guarantee. Weights trained in
-another framework reproduce under mojolearn's arithmetic, not that
+verification record covers. Weights trained in
+another framework reproduce under Mojolearn's arithmetic, not that
 framework's. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md) lists the verified
 devices and configurations.
 
 ## Runtime rule
 
-mojolearn's numerical kernels are implemented in Mojo, with GPU execution on GPU paths. The Python package provides the public API and PyPI distribution.
+Mojolearn's numerical kernels are implemented in Mojo, with GPU execution on GPU paths. The Python package provides the public API and PyPI distribution.
 
 ## Benchmark boards
 
@@ -277,7 +268,7 @@ These are the canonical pages. Update them in place; don't start new ones.
 
 ## Trademarks and affiliation
 
-mojolearn is an independent project by Andrew Hendel, licensed under
+Mojolearn is an independent project by Andrew Hendel, licensed under
 Apache-2.0. It is not affiliated with, sponsored by, or endorsed by Modular,
 Inc. MAX® and Mojo® are trademarks of Modular, Inc. Binary wheels include
 unmodified Modular runtime components redistributed under Modular's own
