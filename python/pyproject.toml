@@ -56,7 +56,7 @@ keywords = [
     "time series",
     "metrics",
     "bitwise reproducibility",
-    "determinism",
+    "bitwise-identical",
     "reproducibility",
     "cuda",
     "rocm",

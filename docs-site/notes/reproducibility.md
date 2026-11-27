@@ -32,7 +32,7 @@ For each pathway that can move a bit, `identical` does one of three things:
 
 | Move | When | Example |
 |---|---|---|
-| Pin | The operation is deterministic once a parameter is fixed | The same reduction width on every vendor |
+| Pin | The operation gives one result once a parameter is fixed | The same reduction width on every vendor |
 | Replace | The operation is order-dependent in itself | Floating-point atomics become fixed-point integer accumulation |
 | Refuse | Neither applies | A configuration without an identity path raises a named error |
 
