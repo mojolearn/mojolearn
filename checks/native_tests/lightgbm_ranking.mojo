@@ -71,6 +71,11 @@ def test_grouped_derivatives_and_query_metric() raises:
     _close(next[0], [-0.36807267, 0.20481625, -0.08311968, 0, 0.31828584, -0.31828584])
 
 
+def test_perfect_ranking_has_exactly_unit_ndcg() raises:
+    var result = _evaluate(OBJECTIVE_LAMBDARANK, [2], [2, 1], [2, 1], [], 0)
+    require(result[2] == Float32(1), "a perfectly ordered query must have zero ranking loss")
+
+
 def test_cutoff_and_stable_ties() raises:
     # The documents at ranks 30 and 31 interact with each top-30 document but never each other.
     var labels = List[Float32](length=32, fill=0)
