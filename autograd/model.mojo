@@ -11,9 +11,9 @@ and AMD. Host loops run over layers, batches and epochs only.
 """
 from std.memory import bitcast, unsafe_memcpy
 from sequence.exec_trait import Exec
-from sequence.lengths import check_recurrent_lengths
 from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from sequence.fit_loop_words import fit_loop_publish
+from sequence.lengths import check_recurrent_lengths
 from sequence.ops import (
     FP, Args, OP_COPY, OP_FILL, OP_GATHER_ROWS, OP_MLP_PERM, OP_ONE_HOT, OP_PROBA2, OP_SEQ_IOTA,
     OPT_ADAM, OPT_ADAMW, OPT_SGD, dummy_ptr,
