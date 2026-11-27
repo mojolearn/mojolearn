@@ -1722,7 +1722,7 @@ def host_nonsym_rest[I: GbdtImage](part: Int) raises:
         _ns_refused[I](rcw, reg, "class weights take effect only", "Depthwise RMSE class weights")
         var mch = _ns_opts("Poisson", "Depthwise", "NewtonL2")
         mch.min_child_hessian = 1.0
-        _ns_refused[I](mch, reg, "min_child_hessian currently supports", "Depthwise Poisson min_child_hessian")
+        _ns_refused[I](mch, reg, "min_child_hessian supports RMSE, Logloss, CrossEntropy", "Depthwise Poisson min_child_hessian")
         var pb = _ns_opts("Poisson", "Lossguide", "NewtonL2")
         pb.boost_from_average = 1
         _ns_refused[I](pb, reg, "You can use boost_from_average only", "Lossguide Poisson boost_from_average")
