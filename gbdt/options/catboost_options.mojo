@@ -38,7 +38,7 @@ not always the line that names the option.
 # `loss_description.h` and `loss_description.cpp` includes nothing of
 # theirs back, so this edge points one way and the graph stays acyclic.
 from gbdt.options.loss_description import TLossDescription
-from gbdt.targets.ranking_options import is_lightgbm_ranking
+from gbdt.targets.ranking_options import uses_grouped_rank_workspace
 from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_CROSSENTROPY,
     OBJECTIVE_EXPECTILE,
@@ -1452,7 +1452,7 @@ def get_estimation_method_defaults(
         method = LEAF_ESTIMATION_NEWTON
         newton = 1
         gradient = 1
-    elif f == OBJECTIVE_QUERY_RMSE or is_lightgbm_ranking(f):
+    elif f == OBJECTIVE_QUERY_RMSE or uses_grouped_rank_workspace(f):
         # `:94-98`
         method = LEAF_ESTIMATION_NEWTON
         newton = 1

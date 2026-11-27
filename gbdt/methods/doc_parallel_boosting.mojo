@@ -336,7 +336,7 @@ from gbdt.targets.kernel.multilogit import (
     launch_one_vs_all_value_and_der,
     multilogit_blocks,
 )
-from gbdt.targets.ranking_options import is_lightgbm_ranking, ranking_seed
+from gbdt.targets.ranking_options import uses_grouped_rank_workspace, ranking_loss, ranking_seed
 from gbdt.targets.kernel.ranking_fit import DeviceRankingFit
 from gbdt.data.group_layout import GroupLayout, device_group_layout
 from gbdt.targets.kernel.pointwise_targets import (
@@ -4336,7 +4336,7 @@ def fit_with_test(
     # at the reference's loss defaults (permutations 10, decay 0.85,
     # `loss_description.cpp:181-193`).
     var rank = Optional[DeviceRankingFit]()
-    if is_lightgbm_ranking(objective):
+    if uses_grouped_rank_workspace(objective):
         if non_symmetric or perm_count > 1 or (test.__bool__() and test.value().n_rows > 0):
             raise Error("lambdarank and rank_xendcg require one permutation of a numeric SymmetricTree without eval_set")
         if not ranking_layout.__bool__():
@@ -5789,7 +5789,7 @@ def fit_with_test(
                 # lane fix-g1-gbdt: this tree's model is appended later
                 trees_so_far += 1
             if trees_so_far > 1:
-                losses.append(1.0 - v if rank.__bool__() else -v / loss_norm)
+                losses.append(ranking_loss(objective, v) if rank.__bool__() else -v / loss_norm)
 
     # lane fix-g1-gbdt (`IDN_GBDT_SYM_EST_DEFER_DRAIN`): the last tree's
     # deferred estimation
@@ -5854,7 +5854,7 @@ def fit_with_test(
             stats, fv_part, True, mag_part, False,
         )
     elif rank.__bool__():
-        rank.value().metric(ctx, targets, cursor, n_rows, fv_part)
+        rank.value().metric(ctx, targets, cursor, n_rows, fv_part, objective, weights, has_weights)
         final_blocks = 1
     elif is_yeti_rank:
         # YetiRank has no function value (`FillBuffer(FunctionValue, 0)`,
@@ -5919,7 +5919,7 @@ def fit_with_test(
             )
         )
     var final_value = Float64(h_fv.unsafe_ptr().unsafe_load(0))
-    losses.append(1.0 - final_value if rank.__bool__() else -final_value / loss_norm)
+    losses.append(ranking_loss(objective, final_value) if rank.__bool__() else -final_value / loss_norm)
     # DEVIATION 74, MEASURED RATHER THAN ARGUED. A nonzero count means
     # some leaf's Hessian was not positive definite, Cholesky stopped, and
     # that leaf took a gradient step instead of a Newton one -- silently,

@@ -4,9 +4,9 @@ from cluster.host.host_cells import host_cells
 from core.sort_ops_host import FRS_BINS, FRS_TILE, stable_radix_pairs_u32_host
 from gbdt.targets.lightgbm_ranking import (
     LR_PLANES, RF, RU, RankStages, RankView, lambda_derivatives, rank_ideal, rank_ndcg, rank_row, rank_sort_key,
-    xe_derivatives,
+    xe_derivatives, query_softmax,
 )
-from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG
+from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG, OBJECTIVE_QUERY_SOFTMAX
 
 
 @always_inline
@@ -117,10 +117,22 @@ struct HostLightGBMRank(RankStages, Movable):
                 rank_ideal(self, a, largest)
                 self.ready = True
             lambda_derivatives(self, a, largest)
+        elif objective == OBJECTIVE_QUERY_SOFTMAX:
+            query_softmax[HostLightGBMRank, False](self, a, largest)
         elif objective == OBJECTIVE_RANK_XENDCG:
             xe_derivatives(self, a, largest)
         else:
             raise Error("unknown grouped LightGBM objective")
+
+    def training_metric(mut self, objective: Int, targets: List[Float32], scores: List[Float32],
+                        weights: List[Float32]) raises -> Float32:
+        if objective != OBJECTIVE_QUERY_SOFTMAX:
+            return self.ndcg(targets, scores)
+        var result: List[Float32] = [0]
+        var a = self._view(targets, scores, weights, 0, 0, _f(result), _f(result))
+        var largest = self.largest
+        query_softmax[HostLightGBMRank, True](self, a, largest)
+        return result[0]
 
     def ndcg(mut self, targets: List[Float32], scores: List[Float32]) raises -> Float32:
         var result: List[Float32] = [0]

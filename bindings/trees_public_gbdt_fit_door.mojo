@@ -306,7 +306,7 @@ def gbdt_config(fields: PythonObject, model: PythonObject, texts: Bool, context:
     if explicit is not None:
         c.explicit = _str(explicit)
     c.plain_forced = (not c.grow_symmetric or multi_output or multi_regression or not cosine or c.pointwise
-                      or below_one or _eq(loss, "lambdarank") or _eq(loss, "rank_xendcg"))
+                      or below_one or _eq(loss, "QuerySoftMax") or _eq(loss, "lambdarank") or _eq(loss, "rank_xendcg"))
     c.ordered_max_rows = Int(py=py_item(t, nk[].k_ordered_max_rows))
     c.ordered_min_iterations = Int(py=py_item(t, nk[].k_ordered_min_iterations))
     c.fold_len = _float(py_get(fields, nk[].k_fold_len_multiplier, PythonObject(2.0)))

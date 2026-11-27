@@ -84,7 +84,14 @@ def target_scan_kernel(
         _ = Atomic.min(words.unsafe_offset(0), Int32(i))
     if i >= n:
         return
-    if label_limit != 0:
+    if label_limit < 0:
+        # QuerySoftMax accepts real relevance. Word 3 records whether any
+        # row has positive weighted relevance, irrespective of its query.
+        if v > 0 and (use_sw == 0 or sw.unsafe_load(i) > 0):
+            _ = Atomic.max(words.unsafe_offset(3), Int32(1))
+        if v < 0:
+            _ = Atomic.min(words.unsafe_offset(1), Int32(i))
+    elif label_limit > 0:
         # Class IDs are below n_rows. A ranking grade has its own fixed
         # upper bound, independent of the number of training rows.
         if not (v >= Float32(0.0) and v < Float32(label_limit)):
@@ -98,7 +105,8 @@ def target_scan_kernel(
             else:
                 _ = Atomic.max(words.unsafe_offset(3), iv)
     if use_sw != 0:
-        if sw.unsafe_load(i) < Float32(0.0):
+        var weight = sw.unsafe_load(i)
+        if weight < 0 or (label_limit < 0 and not (weight >= 0 and weight <= _F32_MAX)):
             _ = Atomic.min(words.unsafe_offset(4), Int32(i))
 
 

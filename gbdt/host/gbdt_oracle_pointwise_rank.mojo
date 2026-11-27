@@ -79,7 +79,7 @@ from gbdt.host.gbdt_oracle_pair import (
 )
 from gbdt.host.gbdt_oracle_query import query_rmse_search_pass, query_rmse_value
 from gbdt.host.ranking_fit import HostRankingFit
-from gbdt.targets.ranking_options import is_lightgbm_ranking, ranking_seed
+from gbdt.targets.ranking_options import uses_grouped_rank_workspace, ranking_loss, ranking_seed
 from gbdt.host.gbdt_oracle_yeti import yeti_rank_search_pass
 
 
@@ -265,7 +265,7 @@ def gbdt_ranking_pointwise_host_fit(
         raise Error(
             String("maxDepth must be non-negative, got ") + String(params.max_depth)
         )
-    if loss.objective != GBDT_OBJ_PAIR_LOGIT and loss.objective != GBDT_OBJ_YETI_RANK and loss.objective != GBDT_OBJ_QUERY_RMSE and not is_lightgbm_ranking(loss.objective):
+    if loss.objective != GBDT_OBJ_PAIR_LOGIT and loss.objective != GBDT_OBJ_YETI_RANK and loss.objective != GBDT_OBJ_QUERY_RMSE and not uses_grouped_rank_workspace(loss.objective):
         raise Error("pointwise ranking needs a grouped objective")
     if loss.method != GBDT_LEAF_NEWTON and loss.method != GBDT_LEAF_GRADIENT:
         raise Error("pointwise grouped targets require Newton or Gradient leaves")
@@ -280,7 +280,7 @@ def gbdt_ranking_pointwise_host_fit(
         raise Error("pointwise ranking queries must cover every row")
     # KEPT SERIAL: admission, once per fit, a compare per row and the
     # refusal at the first bad row
-    if not is_lightgbm_ranking(loss.objective):
+    if not uses_grouped_rank_workspace(loss.objective):
         for r in range(n_rows):
             if not isfinite(y[r]):
                 raise Error("pointwise ranking targets must be finite")
@@ -310,8 +310,8 @@ def gbdt_ranking_pointwise_host_fit(
             loss_norm = hp.total_weight()
             pairs = Optional(hp^)
     var rank = Optional[HostRankingFit]()
-    if is_lightgbm_ranking(loss.objective):
-        rank = Optional(HostRankingFit(group_sizes, y))
+    if uses_grouped_rank_workspace(loss.objective):
+        rank = Optional(HostRankingFit(group_sizes, y, loss.objective, weights))
     var yeti_tasks = Optional[YetiRankTasks]()
     var yeti_rand = TRandom(params.random_seed ^ UInt64(0x5945544952414E4B))
     if loss.objective == GBDT_OBJ_YETI_RANK:
@@ -516,11 +516,11 @@ def gbdt_ranking_pointwise_host_fit(
                 stopped_early = True
                 break
         if iteration > 0:
-            losses.append(1.0 - Float64(fv) if rank.__bool__() else -Float64(fv) / loss_norm)
+            losses.append(ranking_loss(loss.objective, Float64(fv)) if rank.__bool__() else -Float64(fv) / loss_norm)
     var fit_loop = fit_loop_stop(fit_loop_t0, len(tree_split_offsets) - 1)
 
     if rank.__bool__():
-        losses.append(1.0 - Float64(rank.value().workspace.ndcg(y, cursor)))
+        losses.append(ranking_loss(loss.objective, Float64(rank.value().workspace.training_metric(loss.objective, y, cursor, weights))))
     elif loss.objective == GBDT_OBJ_YETI_RANK:
         # No extra RNG draw: the GPU final loss pass writes zero partials.
         losses.append(-Float64(Float32(0)) / Float64(n_rows))

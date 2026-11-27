@@ -53,6 +53,13 @@ comptime RR_QUERY_NDCG = 14
 comptime RR_METRIC_FOLD = 15
 comptime RR_METRIC_OUT = 16
 comptime RR_SUM = 17
+comptime QS_SCORE = 30
+comptime QS_MAX = 31
+comptime QS_MASSES = 32
+comptime QS_DERIVATIVES = 33
+comptime QS_LOSS = 34
+comptime QS_TOTAL = 35
+comptime QS_OUT = 36
 
 @fieldwise_init
 struct RankView(ImplicitlyCopyable, Movable):
@@ -205,7 +212,17 @@ def _xe_correction[third: Bool](a: RankView, row: Int, first: Int, winner: Int):
 
 @always_inline
 def rank_row[phase: Int](a: RankView, row: Int, arg: Int, width: Int, col: Int):
-    comptime if phase == RR_METRIC_FOLD:
+    comptime if phase == QS_TOTAL:
+        if row % (2 * arg) == 0 and row + arg < a.n:
+            for i in range(2):
+                var plane = a.plane(4 + i)
+                plane[row] = ftz(plane[row] + plane[row + arg])
+        return
+    elif phase == QS_OUT:
+        var mass = a.plane(5)[0]
+        a.direction[0] = identical_div(a.plane(4)[0], mass) if mass > 0 else Float32(0)
+        return
+    elif phase == RR_METRIC_FOLD:
         if row % (2 * arg) == 0 and row + arg < a.groups:
             a.plane(1)[row] = ftz(a.plane(1)[row] + a.plane(1)[row + arg])
         return
@@ -228,7 +245,36 @@ def rank_row[phase: Int](a: RankView, row: Int, arg: Int, width: Int, col: Int):
     var first = Int(a.offsets[q])
     var size = Int(a.sizes[q])
     var pos = row - first
-    comptime if phase == RR_SUM or phase == RR_TOP_MERGE:
+    comptime if phase == QS_SCORE:
+        a.plane(0)[row] = a.scores[row] if not a.weighted or a.weights[row] > 0 else -Float32.MAX_FINITE
+    elif phase == QS_MAX:
+        if pos % (2 * arg) == 0 and pos + arg < size:
+            a.plane(0)[row] = max(a.plane(0)[row], a.plane(0)[row + arg])
+    elif phase == QS_MASSES:
+        var w = a.weights[row] if a.weighted else Float32(1)
+        var e = identical_mul(w, routed_exp(a.scores[row] - a.plane(0)[first])) if w > 0 else Float32(0)
+        a.plane(1)[row] = e
+        a.plane(2)[row] = identical_mul(w, a.labels[row])
+        a.plane(3)[row] = e
+    elif phase == QS_DERIVATIVES or phase == QS_LOSS:
+        var w = a.weights[row] if a.weighted else Float32(1)
+        var target = identical_mul(w, a.labels[row])
+        var mass = a.plane(2)[first]
+        var denom = a.plane(1)[first]
+        comptime if phase == QS_DERIVATIVES:
+            var p = identical_div(a.plane(3)[row], denom) if w > 0 and mass > 0 else Float32(0)
+            a.direction[row] = ftz(target - identical_mul(mass, p))
+            # CatBoost QuerySoftMax defaults: beta=1 and lambda=0.01.
+            a.hessian[row] = identical_mul(mass, identical_mul(p, 1 - p) + Float32(0.01)) if w > 0 and mass > 0 else Float32(0)
+        else:
+            var loss = Float32(0)
+            if target > 0:
+                # log(p) from the shifted score stays finite when exp underflows.
+                var log_p = ftz(a.scores[row] - a.plane(0)[first]) + ftz(routed_log(w) - routed_log(denom))
+                loss = -identical_mul(target, log_p)
+            a.plane(4)[row] = loss
+            a.plane(5)[row] = target
+    elif phase == RR_SUM or phase == RR_TOP_MERGE:
         if pos % (2 * arg) != 0 or pos + arg >= size:
             return
         comptime if phase == RR_TOP_MERGE:
@@ -360,3 +406,19 @@ def rank_ndcg[R: RankStages](mut r: R, a: RankView, largest: Int) raises:
         r.rows[RR_METRIC_FOLD](a, a.groups, step, 0, 0)
         step *= 2
     r.rows[RR_METRIC_OUT](a, 1, 0, 0, 0)
+
+
+def query_softmax[R: RankStages, metric: Bool](mut r: R, a: RankView, largest: Int) raises:
+    r.rows[QS_SCORE](a, a.n, 0, 0, 0)
+    rank_fold[R, QS_MAX](r, a, largest, 0, 0)
+    r.rows[QS_MASSES](a, a.n, 0, 0, 0)
+    rank_fold[R, RR_SUM](r, a, largest, 2, 1)
+    comptime if metric:
+        r.rows[QS_LOSS](a, a.n, 0, 0, 0)
+        var step = 1
+        while step < a.n:  # driver-loop: over levels of the global loss reduction
+            r.rows[QS_TOTAL](a, a.n, step, 0, 0)
+            step *= 2
+        r.rows[QS_OUT](a, 1, 0, 0, 0)
+    else:
+        r.rows[QS_DERIVATIVES](a, a.n, 0, 0, 0)

@@ -219,6 +219,10 @@ With numeric features and integer relevance grades from 0 to 30, use
 Both objectives use Mojolearn's Plain symmetric trees. `predict` returns a
 score for each item, and `loss_curve_` reports one minus mean NDCG@30.
 
+Use `loss="QuerySoftMax"` for nonnegative, real-valued relevance. Pass query IDs
+and optional per-row weights. The training curve reports the weighted mean
+negative log probability at CatBoost's default scale and curvature regularization.
+
 For `QueryRMSE`, `PairLogit`, and `YetiRank`, specify categorical columns on the
 estimator and supply the validation set's own query IDs when fitting.
 

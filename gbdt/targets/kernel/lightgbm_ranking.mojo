@@ -10,9 +10,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.stable_radix_sort import key_bits_for, stable_radix_bsum_len, stable_radix_counts_len, stable_radix_sort_pairs_u32
 from gbdt.targets.lightgbm_ranking import (
     LR_PLANES, RF, RU, RankStages, RankView, lambda_derivatives, rank_ideal, rank_ndcg, rank_row, rank_sort_key,
-    xe_derivatives,
+    xe_derivatives, query_softmax,
 )
-from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG
+from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG, OBJECTIVE_QUERY_SOFTMAX
 
 comptime RANK_THREADS = 128
 
@@ -111,6 +111,8 @@ def launch_lightgbm_ranking(
             rank_ideal(ws, a, largest)
             ws.ready = True
         lambda_derivatives(ws, a, largest)
+    elif objective == OBJECTIVE_QUERY_SOFTMAX:
+        query_softmax[LightGBMRankWorkspace, False](ws, a, largest)
     elif objective == OBJECTIVE_RANK_XENDCG:
         xe_derivatives(ws, a, largest)
     else:
@@ -133,3 +135,21 @@ def launch_lightgbm_ndcg(
         rank_ideal(ws, a, largest)
         ws.ready = True
     rank_ndcg(ws, a, largest)
+
+
+def launch_ranking_metric(
+    ctx: DeviceContext, mut ws: LightGBMRankWorkspace, objective: Int, mut targets: DeviceBuffer[DType.float32],
+    mut scores: DeviceBuffer[DType.float32], mut weights: DeviceBuffer[DType.float32], weighted: Bool,
+    mut offsets: DeviceBuffer[DType.uint32], mut sizes: DeviceBuffer[DType.uint32], mut qids: DeviceBuffer[DType.uint32],
+    n: Int, groups: Int, mut result: DeviceBuffer[DType.float32],
+) raises:
+    if objective != OBJECTIVE_QUERY_SOFTMAX:
+        launch_lightgbm_ndcg(ctx, ws, targets, scores, offsets, sizes, qids, n, groups, result)
+        return
+    if n != ws.n or groups != ws.groups:
+        raise Error("ranking workspace does not match this pool")
+    var a = RankView(targets.unsafe_ptr(), scores.unsafe_ptr(), weights.unsafe_ptr(), offsets.unsafe_ptr(),
+                     sizes.unsafe_ptr(), qids.unsafe_ptr(), ws.order.unsafe_ptr(), ws.other.unsafe_ptr(),
+                     ws.scratch.unsafe_ptr(), result.unsafe_ptr(), result.unsafe_ptr(), n, groups, 0, 0, weighted)
+    var largest = ws.largest
+    query_softmax[LightGBMRankWorkspace, True](ws, a, largest)

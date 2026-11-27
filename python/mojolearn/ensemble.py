@@ -162,6 +162,7 @@ LOSSES = (
     "MultiRMSE",
     "lambdarank",
     "rank_xendcg",
+    "QuerySoftMax",
 )
 
 #: Their GPU target keeps numClasses - 1 planes for MultiClass and
@@ -257,7 +258,7 @@ _ORDERED_MIN_ITERATIONS = 500
 #: The greedy searcher's ranking targets form grouped gradients first, then
 #: multiply both statistic planes by row bootstrap weights, as CatBoost's
 #: querywise_targets_impl.h::StochasticDer and weak_objective_impl.h do.
-_QUERYWISE_LOSSES = ("QueryRMSE", "PairLogit", "YetiRank", "lambdarank", "rank_xendcg")
+_QUERYWISE_LOSSES = ("QueryRMSE", "PairLogit", "YetiRank", "lambdarank", "rank_xendcg", "QuerySoftMax")
 
 #: `TAutoLRParamsGuesser` (`libs/train_lib/options_helper.cpp:176-243`), the
 #: GPU rows (`:221-243`), keyed (target type, use_best_model,
@@ -601,7 +602,8 @@ class GradientBoosting(_NumericModeMixin):
         ``MultiClassOneVsAll``, ``RMSE``, ``Logloss``, ``CrossEntropy``,
         ``Quantile``, ``MAE``, ``LogLinQuantile``, ``MAPE``, ``Poisson``, ``Lq``,
         ``Expectile``, ``Tweedie``, ``Huber``, ``QueryRMSE``, ``PairLogit``,
-        ``YetiRank``, ``MultiRMSE``. Four require a parameter: ``Lq`` needs
+        ``YetiRank``, ``QuerySoftMax``, ``MultiRMSE``. QuerySoftMax uses real-valued nonnegative
+        relevance and optional row weights (beta=1, lambda=0.01). Four require a parameter: ``Lq`` needs
         ``loss_q``, ``Huber`` needs ``loss_delta``, ``Tweedie`` needs
         ``loss_variance_power`` and ``Expectile`` needs ``loss_alpha``; a
         missing one raises ``ValueError``. ``MultiRMSE`` is multi-target

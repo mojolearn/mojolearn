@@ -10,8 +10,8 @@ from max.gpu.host import DeviceContext
 from checks.native_tests.kit import upload, download
 from checks.native_tests.testsuite_cases import require
 from gbdt.host.lightgbm_ranking import HostLightGBMRank
-from gbdt.targets.kernel.lightgbm_ranking import LightGBMRankWorkspace, launch_lightgbm_ndcg, launch_lightgbm_ranking
-from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG
+from gbdt.targets.kernel.lightgbm_ranking import LightGBMRankWorkspace, launch_ranking_metric, launch_lightgbm_ranking
+from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG, OBJECTIVE_QUERY_SOFTMAX
 
 
 def _evaluate(objective: Int, groups: List[Int], labels: List[Float32], scores: List[Float32],
@@ -22,7 +22,7 @@ def _evaluate(objective: Int, groups: List[Int], labels: List[Float32], scores: 
         var d = List[Float32]()
         var h = List[Float32]()
         ws.derivatives(objective, labels, scores, weights, 5, iteration, d, h)
-        return (d^, h^, ws.ndcg(labels, scores))
+        return (d^, h^, ws.training_metric(objective, labels, scores, weights))
     else:
         var ctx = DeviceContext()
         var ws = LightGBMRankWorkspace(ctx, n, len(groups))
@@ -44,7 +44,7 @@ def _evaluate(objective: Int, groups: List[Int], labels: List[Float32], scores: 
         var m = ctx.enqueue_create_buffer[DType.float32](1)
         launch_lightgbm_ranking(ctx, ws, objective, dl, ds, dw, len(weights) > 0, doff, dsize, dq,
                                n, len(groups), 5, iteration, d, h)
-        launch_lightgbm_ndcg(ctx, ws, dl, ds, doff, dsize, dq, n, len(groups), m)
+        launch_ranking_metric(ctx, ws, objective, dl, ds, dw, len(weights) > 0, doff, dsize, dq, n, len(groups), m)
         var metric = download[DType.float32](ctx, m, 1)
         return (download[DType.float32](ctx, d, n), download[DType.float32](ctx, h, n), metric[0])
 
@@ -93,6 +93,19 @@ def test_saturated_softmax_and_zero_relevance() raises:
     for i in range(3):
         require(isfinite(xe[0][i]) and isfinite(xe[1][i]), "a saturated softmax must have finite derivatives")
     require(abs(xe[0][0] + xe[0][1] + xe[0][2]) < Float32(0.000005), "query derivatives sum to zero")
+
+
+def test_query_softmax_weighted_targets_and_empty_query() raises:
+    # Probabilities [1/4, 3/4, 0], total relevance 1.5. An irrelevant
+    # singleton contributes neither loss nor curvature. Zero weight masks
+    # the largest score, so it cannot shift the active softmax below range.
+    var result = _evaluate(OBJECTIVE_QUERY_SOFTMAX, [3, 1], [1.5, 0, 3, 0],
+                           [0, 0, 1000, 0], [1, 3, 0, 1], 0)
+    _close(result[0], [1.125, -1.125, 0, 0])
+    _close(result[1], [0.29625, 0.29625, 0, 0])
+    require(abs(result[2] - Float32(1.38629436)) < Float32(0.000002), "weighted negative log probability")
+    var underflow = _evaluate(OBJECTIVE_QUERY_SOFTMAX, [2], [0, 1], [1000, 0], [], 0)
+    require(underflow[2] == 1000, "finite log loss for an underflowed probability")
 
 
 def main() raises:

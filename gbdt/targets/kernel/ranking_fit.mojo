@@ -5,7 +5,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from gbdt.data.group_layout import GroupLayout
 from gbdt.gpu_data.kernel.query_helper import launch_compute_group_ids
 from gbdt.targets.kernel.lightgbm_ranking import (
-    LightGBMRankWorkspace, launch_lightgbm_ranking, launch_lightgbm_ndcg,
+    LightGBMRankWorkspace, launch_lightgbm_ranking, launch_ranking_metric,
 )
 from gbdt.targets.kernel.pointwise_targets import MSE_BLOCK_SIZE, pinned_block_sum
 
@@ -54,9 +54,10 @@ struct DeviceRankingFit(Movable):
 
     def metric(mut self, ctx: DeviceContext, mut targets: DeviceBuffer[DType.float32],
                mut scores: DeviceBuffer[DType.float32], n: Int,
-               mut result: DeviceBuffer[DType.float32]) raises:
-        launch_lightgbm_ndcg(ctx, self.workspace, targets, scores, self.layout.offsets,
-                             self.layout.sizes, self.qids, n, self.layout.n_groups, result)
+               mut result: DeviceBuffer[DType.float32], objective: Int,
+               mut weights: DeviceBuffer[DType.float32], has_weights: Bool) raises:
+        launch_ranking_metric(ctx, self.workspace, objective, targets, scores, weights, has_weights,
+                              self.layout.offsets, self.layout.sizes, self.qids, n, self.layout.n_groups, result)
 
     def search(mut self, ctx: DeviceContext, objective: Int, mut targets: DeviceBuffer[DType.float32],
                mut scores: DeviceBuffer[DType.float32], mut weights: DeviceBuffer[DType.float32],
@@ -66,7 +67,7 @@ struct DeviceRankingFit(Movable):
         launch_lightgbm_ranking(ctx, self.workspace, objective, targets, scores, weights,
                                 has_weights, self.layout.offsets, self.layout.sizes, self.qids,
                                 n, self.layout.n_groups, seed, iteration, self.directions, self.hessians)
-        self.metric(ctx, targets, scores, n, fv)
+        self.metric(ctx, targets, scores, n, fv, objective, weights, has_weights)
         ctx.enqueue_function[_search_planes](
             self.raw.unsafe_ptr(), weights.unsafe_ptr(), stats.unsafe_ptr(), mags.unsafe_ptr(),
             Int32(n), Int32(1) if second_order else Int32(0), Int32(1) if compute_mags else Int32(0),
