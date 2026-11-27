@@ -1,0 +1,12 @@
+diff --git a/bindings/tokenizer_public_native_door.mojo b/bindings/tokenizer_public_native_door.mojo
+--- a/bindings/tokenizer_public_native_door.mojo
++++ b/bindings/tokenizer_public_native_door.mojo
+@@ -1306,7 +1306,7 @@
+     var text = String("")
+     with open(String(merge_file), "r") as file:
+         text = file.read()
+-    var table = _table_from_spelled(vocab, PythonObject(text), True, False)
++    var table = _table_from_spelled(vocab, PythonObject(""), True, False)
+     var handle = PythonObject(alloc=_handle_from_table(table^))
+     var result = _new(cls)
+     _ = _bpe_adopt(result, handle, path + PythonObject(" + ") + merge_file, context, device)

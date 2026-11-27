@@ -6,6 +6,29 @@ from pathlib import Path
 from ._verify_api import resolve, encode
 
 
+def catalog_graph_digests(models):
+    """Check the catalog's native-graph route using the MNIST entry's pinned input and one ReLU."""
+    import hashlib
+    import numpy as np
+    from ._verify_onnx import field as F, value_info
+    from .importers.onnx import read
+
+    x = np.random.default_rng(0).standard_normal((1, 1, 28, 28), dtype=np.float32)
+    node = F(1, 2, "x") + F(2, 2, "y") + F(4, 2, "Relu")
+    graph = (F(1, 2, node) + F(2, 2, "catalog-check")
+             + F(11, 2, value_info("x", x.shape)) + F(12, 2, value_info("y", x.shape)))
+    model = F(1, 0, 8) + F(8, 2, F(2, 0, 17)) + F(7, 2, graph)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "relu.onnx"
+        path.write_bytes(model)
+        report = models.verify_catalog_entry("mnist-12", source=read(str(path)), inputs=[x],
+                                             numeric_mode="identical")
+    expected = hashlib.sha256(np.maximum(x, np.float32(0)).tobytes()).hexdigest()[:16]
+    if report["digest"] != expected or report["input_digest"] != hashlib.sha256(x.tobytes()).hexdigest()[:16]:
+        raise AssertionError("catalog input or supplied graph output differs from its bytes")
+    return {"input_digest": report["input_digest"], "digest": report["digest"]}
+
+
 def applicable(public,method):return public.startswith('mojolearn.models.')
 
 
@@ -19,10 +42,10 @@ def model_checks(recorder,public,methods):
             entries=models.catalog();assert isinstance(entries,(dict,list))
             return entries
         if name=='verify_catalog_entry':
-            # This command can download multi-GB models. The normal verifier
-            # checks its admission boundary; model arithmetic is covered below.
-            try:models.verify_catalog_entry('__verifier_unknown_model__')
-            except KeyError:return {'unknown_catalog_name_refused':True}
+            try:
+                models.verify_catalog_entry('__verifier_unknown_model__')
+            except KeyError:
+                return catalog_graph_digests(models)
             raise AssertionError('unknown catalog name was admitted')
         if name=='Tokenizer':
             import unicodedata
@@ -77,5 +100,4 @@ def model_checks(recorder,public,methods):
             finally:
                 if name=='ParallelCausalLM':m.close()
     for method in methods:
-        kind='admission only' if name=='verify_catalog_entry' else 'numerical'
-        recorder.check(public+'.'+method,lambda method=method:check(method),kind=kind)
+        recorder.check(public+'.'+method,lambda method=method:check(method))

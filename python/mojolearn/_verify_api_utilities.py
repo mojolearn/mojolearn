@@ -94,13 +94,16 @@ def check(public, method):
         obj=cls(**kwargs)
         return [obj.lr_at(t) for t in (1,2,3)]
     if name in ('BootstrapResult','PermutationTestResult','MonteCarloResult'):
-        values={'point_estimate':.5,'distribution':np.array([.25,.75],np.float32),
-            'sorted_distribution':np.array([.25,.75],np.float32),'standard_error':.25,'low':.25,'high':.75,
-            'order_low':0,'order_high':1,'statistic':.5,'null_distribution':np.array([.25,.75],np.float32),
-            'pvalue':.5,'count_less':1,'count_greater':1,'integral':.5,'mean':.5,'volume':1.,
-            'closed_form':.5,'error':0.,'standard_error':.25,'n_samples':2}
-        obj=cls(**{k:values[k] for k in inspect.signature(cls).parameters})
-        return {k:getattr(obj,k) for k in inspect.signature(cls).parameters if hasattr(obj,k)}
+        if name == 'BootstrapResult':
+            dist = np.array([.75, .25], np.float32)
+            obj = cls(.55, dist, dist[::-1].copy(), .18, .25, .75, 0, 1)
+            return [obj.point_estimate, obj.distribution, obj.sorted_distribution,
+                    obj.standard_error, tuple(obj.confidence_interval), obj.order_low, obj.order_high]
+        if name == 'PermutationTestResult':
+            obj = cls(.625, np.array([.25, .5, .75], np.float32), .375, 2, 1)
+            return [obj.statistic, obj.null_distribution, obj.pvalue, obj.count_less, obj.count_greater]
+        obj = cls(.75, .375, 2., .625)
+        return [obj.integral, obj.mean, obj.volume, obj.closed_form]
     if name=='set_numeric_mode':
         before=ml.runtime_report()['default_mode']
         try:

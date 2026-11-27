@@ -8083,6 +8083,8 @@ def _(ml, X, yc, yr, Xh=None):
             tj = fh.read()
         from_file = ml.tokenizer.BpeTokenizer.from_ranks_file(rp)
         ids_file = np.asarray(from_file.encode_bytes(held), dtype=np.int32)
+        from mojolearn._verify_api_misc import bpe_file_ids
+        file_pair = np.asarray(bpe_file_ids(ml.tokenizer.BpeTokenizer), dtype=np.int32)
     tok = v.tokenizer()
     ids = np.asarray(tok.encode_bytes(held), dtype=np.int32)
     back = tok.decode_bytes(ids.tolist())
@@ -8090,7 +8092,7 @@ def _(ml, X, yc, yr, Xh=None):
     flags = np.asarray([ranks == v.render_ranks().encode("ascii"), tj == v.render_tokenizer_json().encode("ascii"),
                         tok.identity == v.identity, from_file.identity == v.identity,
                         ids.tobytes() == ids_file.tobytes()], dtype=np.int64)
-    return _fit(dict(ranks=_h(np.frombuffer(ranks, dtype=np.uint8)), tokenizer_json=_h(np.frombuffer(tj, dtype=np.uint8)),
+    return _fit(dict(gpt2_files=_h(file_pair), ranks=_h(np.frombuffer(ranks, dtype=np.uint8)), tokenizer_json=_h(np.frombuffer(tj, dtype=np.uint8)),
                      identity=_h(np.frombuffer(ident, dtype=np.uint8)), ids=_h(ids),
                      decoded=_h(np.frombuffer(back, dtype=np.uint8)),
                      roundtrip=_h(np.int64(1 if back == held else 0)), flags=_h(flags)))

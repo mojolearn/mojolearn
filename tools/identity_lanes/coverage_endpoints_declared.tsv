@@ -1429,3 +1429,6 @@ mojolearn.parallel_preprocessing.transform_scaler.call	psd-scaler,psd-scaler-min
 mojolearn.parallel_training.ordered_sum_gradients.call	psd-byte-lm-worker	the driver on devices=(0,) with logical shards, held in the cell to its plain one-device path (one-sided, no CPU form)
 mojolearn.MLPClassifier.partial_fit	sequence-mlp-classifier-partial	Two epochs through the public incremental entry, compared with an uninterrupted fit.
 mojolearn.MLPRegressor.partial_fit	sequence-mlp-regressor-partial	Two epochs through the public incremental entry, compared with an uninterrupted fit.
+mojolearn.BpeTokenizer.from_files	bpe-vocabulary	Load a two-file GPT-2 vocabulary and hash the merge IDs for aba.
+mojolearn.model_selection.ParameterSampler.__iter__	x-metrics-splitters	Iterate seeded ParameterSampler and hash the emitted parameter tuples in order.
+mojolearn.models.verify_catalog_entry.call	sequence-onnx-import	Verify the pinned input and the output of a caller-supplied one-node native graph through the catalog API.
