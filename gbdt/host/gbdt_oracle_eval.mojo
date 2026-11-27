@@ -24,7 +24,7 @@ AN EVAL SET DOES NOT CHANGE THE FIT. On the Plain doc-parallel path the
 learn cursor, the borders, the splits and the leaves are what they were
 without a held-out set (`doc_parallel_boosting.mojo::fit_with_test`: the
 test arm is read only by `_apply_last_tree_to_test`, `_test_loss` and the
-detector, and only the querywise losses refuse it outright). So the model
+detector). So the model
 text a CPU column produces for a fit WITH an eval set is the model text it
 produces without one, and what this file adds to the comparison is the
 held-out curve, `best_iteration_` and `stopped_early_`.

@@ -1719,8 +1719,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # non-symmetric driver, whose held-out arm reads `_loss_value`
     # lane gbdt-cpu-rest-2 (2026-11-23): and the symmetric pointwise losses
     # (gbdt_oracle_losses.mojo::gbdt_losses_host_fit, the held-out arm of
-    # gbdt_host_boost); the grouped losses refuse an eval set on both
-    # columns, in `train`'s words
+    # gbdt_host_boost); grouped losses score their own held-out queries.
     if is_multi_rmse and n_eval_rows != 0:
         raise Error(
             "loss='MultiRMSE' with eval_set is not carried here: the"
@@ -1728,9 +1727,6 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         )
     if pw_grouped and n_eval_rows != 0 and len(eval_group_sizes) == 0:
         raise Error("grouped validation needs one held-out query id per eval row")
-    # (lane gbdt-cpu-rest-4, 2026-11-23: the by-name refusal here had no case
-    # left: an eval set on MultiRMSE and the grouped losses refuses above in
-    # `train`'s words; every other loss has its held-out arm)
     var od = load_overfitting_detector_options(od_type, od_pvalue, od_wait)
     var od_kind = od.od_type
     # (lane gbdt-cpu-rest-4, 2026-11-23: the by-name refusal here had no case

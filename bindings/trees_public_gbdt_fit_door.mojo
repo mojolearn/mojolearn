@@ -812,27 +812,20 @@ def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject,
               cat_columns: List[Int], category_map: PythonObject,
               context: PythonObject) raises -> PythonObject:
     """`GradientBoosting._eval_arrays`: (X_eval column-major, y_eval, rows)
-    as (keep_x, x_addr, keep_y, y_addr, rows), or None. With a category map
+    as (keep_x, x_addr, keep_y, y_addr, rows, held-out group sizes), or None. With a category map
     (a fit with `cat_features`), the held-out categorical columns are
     admitted like the fit's and encoded through the fit's map; a value the
     fit did not see takes the unseen code."""
     var b = _b()
     if eval_set is None:
         return PythonObject(None)
-    var pair = eval_set
-    if Bool(py=py_call(b.isinstance, eval_set, b.list)):
+    var items = eval_set
+    if py_type(eval_set) is b.list:
         if len(eval_set) != 1:
-            raise Error("mojolearn: eval_set takes ONE (X, y) pair; the "
-                        + "boosting carries a single test cursor. CatBoost "
-                        + "accepts a list, this takes " + String(len(eval_set)) + " as an "
-                        + "error rather than scoring the first and dropping "
-                        + "the rest")
-        pair = eval_set[0]
-    var items = PythonObject(None)
-    try:
-        items = py_call(b.tuple, pair)
-    except:
-        raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
+            raise Error("mojolearn: eval_set takes ONE (X, y) pair or grouped (X, y, group_id) tuple; received " + String(len(eval_set)))
+        items = eval_set[0]
+    if py_type(items) is not b.tuple and py_type(items) is not b.list:
+        raise Error("mojolearn: eval_set must be a tuple of held-out arrays or a list containing one tuple")
     var nk = trees_keys()
     var loss = _field(fields, model, nk[].k_loss, "loss")
     var grouped = _eq(loss, "QueryRMSE") or _eq(loss, "PairLogit") or _eq(loss, "YetiRank")
