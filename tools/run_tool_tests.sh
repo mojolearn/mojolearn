@@ -83,6 +83,7 @@ for d in sorted({os.path.dirname(p) or "." for p in want}):
 # Files split by test id across the workers. Each re-derives the whole lane map (about 5 min of pure-Python Mojo
 # parsing) in every test that edits the tree or patches an edge, by design, so as one process they ran 51 and 29
 # minutes and set the wall time of the whole run (2026-11-17 run: 3264 s at 4 workers, lane_select 3073 s of it).
+# The clean tree's map itself is derived once and shared by the shards on disk (lane_select._LaneMapDisk, 2026-11-26).
 SPLIT = {"tools/test_lane_select.py", "tools/test_lane_select_rebuild.py"}
 workers = int(os.environ["WORKERS"])
 os.makedirs(os.path.join(os.environ["OUT"], "shards"), exist_ok=True)
