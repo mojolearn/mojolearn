@@ -455,5 +455,29 @@
    "error_match": "AssertionError: check-generic-other \\(gpu side\\): ARIMA: MISMATCH: output \\d+, first differing element at index \\[\\d+(, \\d+)*\\] \\(flat \\d+\\): gpu=\\S+ cpu=\\S+",
    "patch_sha256": "3d77f2847bbf1120320bcc76f0a9ca222bebcebccf730625cb0f99fe877758da"
   }
+ },
+ "coverage-gate-isolation_forest-score_label-gpu": {
+  "check-generic-trees/base": {
+   "product_check": "tools/identity_lanes/checks_generic.py calls IsolationForest.check with predict. Its separate CPU and GPU answers must agree byte for byte.",
+   "why_fault_reaches_check": "isolation_forest/impl/isolation_forest.mojo anomaly_score_kernel (every score_samples, decision_function and predict path: _score_samples_device -> compute_anomaly_scores) stores each score one ulp up, and if_predict_epilogue_kernel flips row 0's label (the labels-only fit_predict lane); IsolationForest computes in _mojolearn_svm, the file is gated because the host svm binding imports it too. Post-release side coverage: The registry includes IsolationForest.check with a public predict method. Its GPU epilogue flips the first label, which the generic check compares with the CPU answer.",
+   "error_match": "AssertionError: check-generic-trees \\(gpu side\\): IsolationForest: MISMATCH: output \\d+, first differing element at index \\[0\\] \\(flat 0\\): gpu=\\S+ cpu=\\S+",
+   "patch_sha256": "83e08b1abc0ef2453daffa0ba3472e1200d9461bc637a8f769c594fe87c6d670"
+  }
+ },
+ "post090-kmeans-prediction-cpu": {
+  "check-generic-cluster/base": {
+   "product_check": "tools/identity_lanes/checks_generic.py calls KMeans.check with predict. Its separate CPU and GPU answers must agree byte for byte.",
+   "why_fault_reaches_check": "Rotate only the first host KMeans.predict label after its nearest-centroid assignment. KMeans.check predicts on both sides and its mismatch identifies the public method under test. The fixture has multiple clusters.",
+   "error_match": "AssertionError: check-generic-cluster \\(cpu side\\): KMeans: MISMATCH: output \\d+, first differing element at index \\[0\\] \\(flat 0\\): gpu=\\S+ cpu=\\S+",
+   "patch_sha256": "9f23dfdcb8e9edb254b6f9315bb1dbcc07e76219c36f92e11693fea6e99b66b4"
+  }
+ },
+ "post090-shard-neighbor-merge-cpu": {
+  "neighbors-reference-shard/base": {
+   "product_check": "tools/identity_lanes/coverage.py compares the one-device reference-sharded distances against unsharded kneighbors on the same query.",
+   "why_fault_reaches_check": "The CPU shard merger changes exactly one bit in the first returned distance. The plain query bypasses the merger.",
+   "error_match": "ReferenceShardedNeighbors distances and plain distances differ: 1 bytes of 2048",
+   "patch_sha256": "9ba5d1b7e39dda64fc176ed1e75e8362584d6f688443e886fa1352eb0a37e2b6"
+  }
  }
 }
