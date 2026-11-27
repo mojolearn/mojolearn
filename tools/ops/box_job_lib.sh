@@ -106,6 +106,8 @@ disk_gate() {   # <what> <races> <board processes> <MB per race>
 }
 
 # busy cores of total every 60 s (job/cores.log) and a BUSY line in job.log every 5 minutes.
+# rel-fix-3: cpu_sample now reads box_cores_lib.sh cpu_usage (python/mojolearn/_allocation.py cpu_usage_seconds), the
+# one counter every sampler uses; the history below is the reason it is the cgroup's.
 # BUSY-NEGATIVE FIX (2026-11-14, L40S pod nvc1: `busy=-18.3 total=128`): the old sampler took (all - idle - iowait)
 # over the /proc/stat deltas and scaled by nproc. iowait is not monotonic (the kernel documents that it can go down),
 # and a container's /proc/stat and nproc describe the host, not the pod. Now: the pod's own CPU time from its cgroup
@@ -117,14 +119,11 @@ disk_gate() {   # <what> <races> <board processes> <MB per race>
 # alloc_cores, alloc_reason, export_alloc: the one allocation function (tools/ops/box_cores_lib.sh, which runs
 # python/mojolearn/_allocation.py; rel-fix-3 removed the copy that was here).
 . "$(dirname "${BASH_SOURCE[0]}")/box_cores_lib.sh"
-cpu_sample() {   # "<wall_usec> <cpu_usec> cgroup" or "<total ticks> <busy ticks> <cpus> procstat"
+cpu_sample() {   # "<wall_usec> <cpu_usec> cgroup": the allocation's own counter (box_cores_lib.sh cpu_usage, rel-fix-3)
     local u
-    u=$(awk '$1 == "usage_usec" {print $2}' /sys/fs/cgroup/cpu.stat 2> /dev/null)
-    # %.0f, not %d: mawk's %d is 32-bit, so cpuacct.usage (ns since the container started) / 1000 stuck at
-    # 2147483647 after about 36 CPU-minutes and every later sample read busy=0.0 (L40S nvc1, 2026-11-14).
-    [ -n "$u" ] || u=$(awk '{printf "%.0f", $1 / 1000}' /sys/fs/cgroup/cpuacct/cpuacct.usage 2> /dev/null)
-    if [ -n "$u" ]; then echo "$(( $(date +%s%N) / 1000 )) $u cgroup"; return; fi
-    awk '/^cpu / {b=$2+$3+$4+$7+$8+$9; t=b+$5+$6} /^cpu[0-9]/ {c++} END {printf "%.0f %.0f %d procstat\n", t, b, c}' /proc/stat
+    u=$(cpu_usage)
+    # nothing readable: a sample whose delta is never valid, so busy_line logs busy=NA
+    case $u in none|"") echo "0 0 0 procstat" ;; *) set -- $u; echo "$1 $2 cgroup" ;; esac
 }
 busy_line() {   # <allocated cores> <phase> <previous cpu_sample> <current cpu_sample>: one cores.log line
     echo "$3 $4" | awk -v n="$1" -v t="$(date -u +%H:%M:%S)" -v ph="$2" '

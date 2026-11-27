@@ -141,8 +141,8 @@ for ((i = 0; i < ${#GATE_ARGV[@]}; i++)); do
 done
 { uname -a; nproc; free -g 2>/dev/null || true; df -h /root; } > "$J/box.txt" 2>&1 || true
 # BOX FACTS (release evidence, 2026-11-06; tools/release_evidence_set.py box-facts): the GPU and CPU model, the
-# core count and memory in job/box-facts.txt, and every 30 s the cores more than half busy over the interval, of
-# the total, in job/busy-cores.tsv (epoch, busy, total), so the committed evidence states busy cores of total.
+# core count and memory in job/box-facts.txt, and (from the tree step on, below) every 30 s the allocation's busy
+# cores of its total in job/busy-cores.tsv (epoch, busy, total), so the committed evidence states busy cores of total.
 {
     echo "nproc=$(nproc)"
     echo "cpu_model=$(grep -m 1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^ *//')"
@@ -155,22 +155,6 @@ done
         rocm-smi --showproductname 2>/dev/null | grep -E 'Card (Series|series|SKU)' | sed 's/^/gpu=/'
     fi
 } > "$J/box-facts.txt" 2>/dev/null || true
-busy_cores_sampler() {
-    local prev cur
-    prev="$(grep -E '^cpu[0-9]+ ' /proc/stat)" || return 0
-    while sleep 30; do
-        cur="$(grep -E '^cpu[0-9]+ ' /proc/stat)" || return 0
-        paste -d' ' <(echo "$prev") <(echo "$cur") | awk -v t="$(date -u +%s)" '
-            { n = NF / 2; t0 = 0; t1 = 0
-              for (i = 2; i <= n; i++) { t0 += $i; t1 += $(n + i) }
-              d = t1 - t0; idle = ($(n + 5) + $(n + 6)) - ($5 + $6)
-              if (d > 0 && (d - idle) * 2 >= d) busy++; total++ }
-            END { printf "%s\t%d\t%d\n", t, busy, total }'
-        prev="$cur"
-    done
-}
-busy_cores_sampler >> "$J/busy-cores.tsv" 2>/dev/null &
-SAMPLER=$!
 
 PHASE=tree
 if [ -n "$GATE_FETCH_URL" ]; then
@@ -190,6 +174,21 @@ git config --global --add safe.directory "$GATE_TREE" 2>/dev/null || true
 . "$GATE_TREE/tools/ops/box_cores_lib.sh"
 say "allocation: $(alloc_cores) core(s) of $(nproc) visible ($(alloc_reason))"
 echo "alloc_cores=$(alloc_cores)" >> "$J/box-facts.txt"
+# every 30 s: "<epoch>\t<busy cores>\t<allocated cores>" in job/busy-cores.tsv (tools/release_evidence_set.py
+# box-facts). rel-fix-3: the busy cores are the allocation's CPU time per wall second (box_cores_lib.sh cpu_usage,
+# the pod's own cgroup counter) and the total is alloc_cores. Before, it counted the HOST's per-CPU /proc/stat lines
+# more than half busy, of the host's visible CPUs (128 on the L40S pod for a 14-core quota). It starts here, once
+# the tree holds the shared allocation code.
+busy_cores_sampler() {
+    local prev cur b n
+    n=$(alloc_cores); prev=$(cpu_usage)
+    while sleep 30; do
+        cur=$(cpu_usage); b=$(busy_between "$prev" "$cur"); prev=$cur
+        [ -n "$b" ] && printf '%s\t%.0f\t%s\n' "$(date -u +%s)" "$b" "$n"
+    done
+}
+busy_cores_sampler >> "$J/busy-cores.tsv" 2>/dev/null &
+SAMPLER=$!
 [ "$(git rev-parse HEAD)" = "$GATE_SOURCE_COMMIT" ] && [ -z "$(git status --porcelain --untracked-files=no)" ] \
     || { say "$GATE_TREE is not a clean tree at $GATE_SOURCE_COMMIT (HEAD $(git rev-parse HEAD 2>/dev/null))"; exit 3; }
 if [ "${GATE_REUSE:-0}" = 1 ]; then

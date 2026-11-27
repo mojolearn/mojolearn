@@ -252,18 +252,23 @@ def line(rid, verdict, reason):
 
 
 # --------------------------------------------------------------------------------------------- the box
+def _allocation():
+    """python/mojolearn/_allocation.py of this tree (the one allocation function, rel-fix-3), loaded by path."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("mojolearn_allocation_by_path",
+                                                  ROOT / "python" / "mojolearn" / "_allocation.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+ALLOCATION = _allocation()
+
+
 def box_cores():
-    try:
-        cores = len(os.sched_getaffinity(0))
-    except AttributeError:
-        cores = os.cpu_count() or 1
-    try:  # a container's CPU quota (cgroup v2), when one is set
-        quota, period = Path("/sys/fs/cgroup/cpu.max").read_text().split()[:2]
-        if quota != "max":
-            cores = min(cores, max(1, int(int(quota) // int(period))))
-    except (OSError, ValueError):
-        pass
-    return cores
+    """The allocation's cores (python/mojolearn/_allocation.py `cores`; rel-fix-3: this copy read cgroup v2 only, so a
+    RunPod pod's v1 quota counted as its host's visible CPUs)."""
+    return ALLOCATION.cores()[0]
 
 
 def host_available_gb():
@@ -308,20 +313,18 @@ class DevicePeak(threading.Thread):
 
 
 def cpu_jiffies():
-    """(busy, total) jiffies of all CPUs from /proc/stat, or None (not Linux)."""
-    try:
-        f = [int(x) for x in Path("/proc/stat").read_text().splitlines()[0].split()[1:]]
-    except (OSError, ValueError, IndexError):
-        return None
-    idle = f[3] + (f[4] if len(f) > 4 else 0)
-    return sum(f) - idle, sum(f)
+    """(wall seconds, CPU seconds) of this allocation now (`_allocation.usage_sample`: the pod's cgroup v2 or v1
+    counter, else a bare host's /proc/stat), or None where nothing is readable. rel-fix-3: it was the host's
+    /proc/stat (busy, total) jiffies, so a RunPod pod reported its host's busy CPUs."""
+    wall, cpu, _source = ALLOCATION.usage_sample()
+    return None if cpu is None else (wall, cpu)
 
 
-def busy_cores(before, after, cores):
-    """Cores busy between two cpu_jiffies() samples (busy fraction of the whole host times its cores)."""
-    if not before or not after or after[1] <= before[1]:
-        return None
-    return round((after[0] - before[0]) / float(after[1] - before[1]) * cores, 1)
+def busy_cores(before, after, cores=None):
+    """Busy cores between two cpu_jiffies() samples: the allocation's CPU seconds over wall seconds (at most
+    `cores` when given), or None."""
+    busy = ALLOCATION.busy_cores(before, after)
+    return None if busy is None else (min(busy, float(cores)) if cores else busy)
 
 
 class BusyCores(threading.Thread):

@@ -8,8 +8,9 @@
 #   alloc_mem_kb           memory available to this allocation in kB (MemAvailable, capped by the cgroup's memory.max)
 #   alloc_mem_total_kb     memory of this allocation in kB (MemTotal, capped by the cgroup's memory.max)
 #   busy_sampler FILE [S]  starts a background sampler (prints its pid): one line every S seconds (default 15) with the
-#                          busy cores of that interval (the cgroup's CPU time per wall second, else the host's /proc/stat
-#                          busy share times its CPUs). Part of the job that starts it, not a watcher.
+#                          busy cores of that interval (the allocation's CPU time per wall second: cpu_usage, from
+#                          python/mojolearn/_allocation.py). Part of the job that starts it, not a watcher.
+#   cpu_usage, busy_between  one counter sample, and the busy cores between two samples
 #   busy_of FILE           "mean X, max Y" of a sampler's file
 #
 # Lifted from tools/ops/native_checks_gpu_job.sh (lane fx-pod-job, 2026-11-18), which now sources this file, so
@@ -43,31 +44,20 @@ _alloc_cap_kb() {  # <kB>: capped by the cgroup's memory.max
 }
 alloc_mem_kb() { _alloc_cap_kb "$(awk '/MemAvailable/ {print $2}' /proc/meminfo)"; }
 alloc_mem_total_kb() { _alloc_cap_kb "$(awk '/MemTotal/ {print $2}' /proc/meminfo)"; }
+# THE POD'S OWN CPU COUNTER (rel-fix-3): every busy-core sampler differences python/mojolearn/_allocation.py
+# `cpu_usage_seconds` (cgroup v2 cpu.stat, else v1 cpuacct.usage, else on a bare host /proc/stat) over wall time, so
+# busy cores are the allocation's. Before, on cgroup v1 (the RunPod L40S pods) this fell to the HOST's /proc/stat
+# and wrote "busy cores mean 40.7, max 65.0 of 14" for a record whose own CPU seconds were 9.8 cores.
+cpu_usage() { python3 -I "$_ALLOC_PY" usage 2> /dev/null || echo none; }   # "<wall us> <cpu us> <source>" | none
+busy_between() {   # <earlier cpu_usage> <later cpu_usage>: busy cores between them, or nothing
+    echo "$1 $2" | awk 'NF == 6 { dw = $4 - $1; dc = $5 - $2; if (dw > 0 && dc >= 0) printf "%.1f\n", dc / dw }'
+}
 busy_sampler() {   # file [seconds]
     local every=${2:-15}
-    # cgroup v1 (the RunPod L40S pods) has no cpu.stat: its own counter is cpuacct.usage (ns). Before rel-fix-3 the
-    # sampler fell to the HOST's /proc/stat there and wrote the host's busy CPUs ("busy cores mean 40.7, max 65.0
-    # of 14" for a record whose own CPU seconds were 9.8 cores).
-    ( v1=; for d in cpuacct cpu,cpuacct cpuacct,cpu; do [ -r "/sys/fs/cgroup/$d/cpuacct.usage" ] && { v1=/sys/fs/cgroup/$d/cpuacct.usage; break; }; done
-      if [ -r /sys/fs/cgroup/cpu.stat ]; then
-          prev=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat)
-          while sleep "$every"; do
-              cur=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat)
-              awk -v a="$prev" -v b="$cur" -v s="$every" 'BEGIN {printf "%.1f\n", (b - a) / (s * 1e6)}'; prev=$cur
-          done
-      elif [ -n "$v1" ]; then
-          prev=$(cat "$v1")
-          while sleep "$every"; do
-              cur=$(cat "$v1")
-              awk -v a="$prev" -v b="$cur" -v s="$every" 'BEGIN {printf "%.1f\n", (b - a) / (s * 1e9)}'; prev=$cur
-          done
-      else
-          host=$(grep -c '^cpu[0-9]' /proc/stat); prev=$(awk '/^cpu / {print $2+$3+$4+$7+$8, $5+$6}' /proc/stat)
-          while sleep "$every"; do
-              cur=$(awk '/^cpu / {print $2+$3+$4+$7+$8, $5+$6}' /proc/stat)
-              echo "$prev $cur" | awk -v h="$host" '{b=$3-$1; i=$4-$2; if (b+i>0) printf "%.1f\n", b/(b+i)*h}'; prev=$cur
-          done
-      fi ) > "$1" 2>/dev/null &
+    ( prev=$(cpu_usage)
+      while sleep "$every"; do
+          cur=$(cpu_usage); busy_between "$prev" "$cur"; prev=$cur
+      done ) > "$1" 2>/dev/null &
     echo $!
 }
 busy_of() { awk '{s+=$1; if ($1>m) m=$1; n++} END {if (n) printf "mean %.1f, max %.1f", s/n, m; else print "not sampled"}' "$1" 2>/dev/null; }

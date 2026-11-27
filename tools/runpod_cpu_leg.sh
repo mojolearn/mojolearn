@@ -402,14 +402,16 @@ ph portable_math_end
 ph run_start
 export MOJOLEARN_COMMIT=@COMMIT@ PYTHONPATH="$R/python" LEG_OUT="$OUT"
 unset MOJOLEARN_BINCACHE_OUT
-# busy cores of total while the command runs (Andrew's rule: every report on a rented host states it): one
-# /proc/stat sample per minute, "<epoch>\t<busy cores x10>\t<cores>" lines in $OUT/busy.tsv
-( exec > /dev/null 2>&1 < /dev/null; n=$(nproc); read -r _ a < /proc/stat
+# busy cores of total while the command runs (Andrew's rule: every report on a rented host states it): one sample per
+# minute, "<epoch>\t<busy cores x10>\t<cores>" lines in $OUT/busy.tsv. rel-fix-3: busy is the pod's own CPU time per
+# wall second and the total its allocation (python/mojolearn/_allocation.py `usage` and `cores`: the cgroup v2/v1
+# counter and quota); it was the host's /proc/stat share times nproc, the host's visible CPUs.
+( exec > /dev/null 2>&1 < /dev/null; AP="$R/python/mojolearn/_allocation.py"; n=$(python3 -I "$AP" cores || nproc)
+  a=$(python3 -I "$AP" usage)
   while [ ! -f "$OUT/cmd.exit" ]; do
-      sleep 60; read -r _ b < /proc/stat
-      set -- $a; t0=0; for x in $a; do t0=$((t0 + x)); done; i0=$(($4 + $5))
-      set -- $b; t1=0; for x in $b; do t1=$((t1 + x)); done; i1=$(($4 + $5))
-      [ $((t1 - t0)) -gt 0 ] && printf '%s\t%s\t%s\n' "$(date +%s)" $((n * 10 * ((t1 - t0) - (i1 - i0)) / (t1 - t0))) "$n" >> "$OUT/busy.tsv"
+      sleep 60; b=$(python3 -I "$AP" usage)
+      echo "$a $b" | awk -v t="$(date +%s)" -v n="$n" 'NF == 6 && $4 > $1 && $5 >= $2 {
+          printf "%s\t%d\t%s\n", t, 10 * ($5 - $2) / ($4 - $1), n }' >> "$OUT/busy.tsv"
       a=$b
   done ) &
 bash /root/leg_user_cmd.sh > "$OUT/cmd.log" 2>&1

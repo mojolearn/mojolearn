@@ -489,7 +489,9 @@ def test_identity_admit_never_waits_on_the_smoke():
 
 
 def test_the_busy_cores_figure():
-    assert MS.busy_cores((100, 1000), (600, 2000), 20) == 10.0
+    # (wall seconds, CPU seconds): 10 CPU seconds over 2 wall seconds is 5 busy cores, capped by the allocation
+    assert MS.busy_cores((100.0, 1000.0), (102.0, 1010.0), 20) == 5.0
+    assert MS.busy_cores((100.0, 1000.0), (102.0, 1010.0), 4) == 4.0
     assert MS.busy_cores(None, (1, 2), 4) is None and MS.busy_cores((5, 10), (5, 10), 4) is None
 
 

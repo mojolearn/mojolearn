@@ -1202,13 +1202,14 @@ def unit_workers(count, *, jobs=None, env=None, cores=None, free=None, per_unit=
 
 
 def busy_cores_sample(window=5.0):
-    """Busy cores of the whole host now: /proc/stat over WINDOW seconds on Linux; elsewhere (macOS) the
-    summed %CPU of every process from ps. None when neither can be read."""
+    """Busy cores of this allocation now: its CPU time over WINDOW seconds (release_measurement_smoke.cpu_jiffies,
+    the pod's own cgroup counter through python/mojolearn/_allocation.py; rel-fix-3: it was the host's /proc/stat);
+    elsewhere (macOS) the summed %CPU of every process from ps. None when neither can be read."""
     import release_measurement_smoke as smoke
     before = smoke.cpu_jiffies()
     if before is not None:
         time.sleep(window)
-        return smoke.busy_cores(before, smoke.cpu_jiffies(), os.cpu_count() or 1)
+        return smoke.busy_cores(before, smoke.cpu_jiffies())
     try:
         listing = subprocess.run(["ps", "-A", "-o", "%cpu="], capture_output=True, text=True, timeout=30).stdout
         return round(sum(float(value) for value in listing.split()) / 100.0, 1)

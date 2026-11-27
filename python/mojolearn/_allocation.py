@@ -23,6 +23,7 @@ load it by path (`load()` below) without importing the package. Python 3.8 or ne
 
     python3 -I python/mojolearn/_allocation.py cores       the core count
     python3 -I python/mojolearn/_allocation.py describe    the core count, a tab, and where it came from
+    python3 -I python/mojolearn/_allocation.py usage       "<wall us> <cpu us> <source>": the allocation's CPU time
 """
 import os
 import shutil
@@ -46,6 +47,14 @@ def _words(path):
     try:
         with open(path, encoding="ascii") as stream:
             return stream.read().split()
+    except (OSError, UnicodeDecodeError):
+        return []
+
+
+def _lines(path):
+    try:
+        with open(path, encoding="ascii") as stream:
+            return stream.read().splitlines()
     except (OSError, UnicodeDecodeError):
         return []
 
@@ -172,6 +181,59 @@ def gpu_free_mb(timeout=30):
     return None
 
 
+#: the cgroup v1 cpuacct controller's mount names
+V1_CPUACCT_DIRS = ("cpuacct", "cpu,cpuacct", "cpuacct,cpu")
+
+
+def cpu_usage_seconds(root=CGROUP):
+    """(CPU seconds, source): the CPU time this allocation has used, the counter every busy-core sampler differences
+    over wall time (rel-fix-3). The pod's own cgroup counter: v2 cpu.stat usage_usec, else v1 cpuacct.usage (ns).
+    Only without a cgroup counter (a bare host, whose allocation is the host) the host's /proc/stat busy jiffies
+    (user, nice, system, irq, softirq, steal). Before, the samplers read /proc/stat on every box, so a RunPod pod
+    (cgroup v1) reported its host's busy CPUs: "busy cores mean 40.7, max 65.0 of 14" for a record whose own CPU
+    seconds were 9.8 cores. (None, "none") where nothing is readable (macOS)."""
+    for line in _lines(os.path.join(root, "cpu.stat")):
+        parts = line.split()
+        if len(parts) == 2 and parts[0] == "usage_usec":
+            try:
+                return int(parts[1]) / 1e6, "cgroup v2 cpu.stat"
+            except ValueError:
+                break
+    for d in V1_CPUACCT_DIRS:
+        w = _words(os.path.join(root, d, "cpuacct.usage"))
+        if w:
+            try:
+                return int(w[0]) / 1e9, "cgroup v1 %s/cpuacct.usage" % d
+            except ValueError:
+                break
+    first = (_lines("/proc/stat") or [""])[0].split()
+    if first[:1] == ["cpu"] and len(first) >= 9:
+        try:
+            f = [int(x) for x in first[1:9]]
+            tick = os.sysconf("SC_CLK_TCK")
+            return (f[0] + f[1] + f[2] + f[5] + f[6] + f[7]) / float(tick), "host /proc/stat"
+        except (ValueError, OSError, AttributeError):
+            pass
+    return None, "none"
+
+
+def busy_cores(before, after):
+    """Busy cores between two (wall seconds, CPU seconds) samples: CPU seconds over wall seconds, or None."""
+    if not before or not after or before[1] is None or after[1] is None:
+        return None
+    wall, cpu = after[0] - before[0], after[1] - before[1]
+    if wall <= 0 or cpu < 0:
+        return None
+    return round(cpu / wall, 1)
+
+
+def usage_sample(root=CGROUP):
+    """(wall seconds, CPU seconds or None, source) now, for `busy_cores`."""
+    import time
+    cpu, source = cpu_usage_seconds(root)
+    return time.time(), cpu, source
+
+
 def interpreter_threads():
     """Threads one worker interpreter with Mojolearn imported starts: its runtime starts one per VISIBLE CPU, 193
     on the 128-CPU L40S pod (tests/proving/_proving.py, 2026-11-22), so the visible count plus 72."""
@@ -262,8 +324,11 @@ def main(argv):
         print(n)
     elif what == "describe":
         print("%d\t%s" % (n, why))
+    elif what == "usage":   # "<wall us> <cpu us> <source>" for the shell samplers, or "none"
+        wall, cpu, source = usage_sample()
+        print("none" if cpu is None else "%d %d %s" % (wall * 1e6, cpu * 1e6, source.replace(" ", "_")))
     else:
-        print("usage: _allocation.py cores|describe", file=sys.stderr)
+        print("usage: _allocation.py cores|describe|usage", file=sys.stderr)
         return 2
     return 0
 

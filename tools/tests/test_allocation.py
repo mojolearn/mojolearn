@@ -147,3 +147,25 @@ def test_the_shell_alloc_cores_runs_this_function_and_exports_it_once():
     assert out.stdout.strip() == "14"
     # box_job_lib.sh has no copy of its own
     assert "cfs_quota_us" not in (ROOT / "tools" / "ops" / "box_job_lib.sh").read_text()
+
+
+def test_busy_cores_read_the_pods_own_counter_v2_then_v1(tmp_path):
+    """rel-fix-3: every sampler differences this counter; on cgroup v1 it is cpuacct.usage, never the host's
+    /proc/stat (the record's "40.7 of 14" was its host's busy CPUs)."""
+    write(tmp_path, "cpuacct/cpuacct.usage", "9800000000\n")             # ns
+    assert A.cpu_usage_seconds(str(tmp_path)) == (9.8, "cgroup v1 cpuacct/cpuacct.usage")
+    write(tmp_path, "cpu.stat", "usage_usec 25000000\nuser_usec 1\n")
+    assert A.cpu_usage_seconds(str(tmp_path)) == (25.0, "cgroup v2 cpu.stat")
+    assert A.busy_cores((100.0, 25.0), (110.0, 123.0)) == 9.8
+    assert A.busy_cores((100.0, 25.0), (100.0, 30.0)) is None and A.busy_cores(None, (1.0, 2.0)) is None
+    assert A.busy_cores((100.0, 30.0), (110.0, 25.0)) is None             # a counter that went backwards
+
+
+def test_the_shell_samplers_difference_the_shared_counter():
+    lib = ROOT / "tools" / "ops" / "box_cores_lib.sh"
+    out = subprocess.run(["bash", "-c", '. "$1"; busy_between "100000000 5000000 x" "110000000 103000000 x"; '
+                          'busy_between none "1 2 x"; echo end', "_", str(lib)], capture_output=True, text=True,
+                         timeout=60)
+    assert out.stdout.split() == ["9.8", "end"]
+    for job in ("tools/ops/release_gate_job.sh", "tools/runpod_cpu_leg.sh", "tools/bisect_hang_group.sh"):
+        assert "/proc/stat)" not in (ROOT / job).read_text() and "< /proc/stat" not in (ROOT / job).read_text()

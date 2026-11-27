@@ -42,7 +42,7 @@
 #
 # --parallel default: every core, lowered to 0.8 * MemAvailable / BISECT_GIB_PER_COMPILE (default 3; one compile of
 # the group peaks near 2.5 GiB), at most the candidate count. The chosen count and its reason go to <out>/summary.txt.
-# <out>/load.tsv: one sample per minute (busy cores from /proc/stat, cores, MemAvailable, candidates running).
+# <out>/load.tsv: one sample per minute (the allocation's busy cores from python/mojolearn/_allocation.py usage, cores, MemAvailable, candidates running).
 #
 # HISTORY MODE (--history <dir>): one candidate per first-parent commit C from --base (index 0) to --head. The tree
 # is this checkout (it must be --head's tree) with every path of `git diff --name-only <base> <head>` that matches
@@ -312,7 +312,7 @@ else {
 } > "$PLAN"; fi
 NCAND=$(wc -l < "$PLAN" | tr -d ' ')
 
-CORES=$(nproc 2> /dev/null || sysctl -n hw.ncpu)
+CORES=$(python3 -I "$ROOT/python/mojolearn/_allocation.py" cores 2> /dev/null || nproc 2> /dev/null || sysctl -n hw.ncpu)   # the allocation (rel-fix-3)
 GIB=${BISECT_GIB_PER_COMPILE:-3}
 if [ -z "$PARALLEL" ]; then
     PARALLEL=$CORES REASON="every core ($CORES)"
@@ -407,21 +407,21 @@ elif [ ! -f "$BASED/.ready" ]; then
     touch "$BASED/.ready"
 fi
 
-# the busy-cores sampler, one sample per minute (same arithmetic as tools/cpu_box_dev_build_and_tests.sh)
+# the busy-cores sampler, one sample per minute: the allocation's own CPU time per wall second
+# (python/mojolearn/_allocation.py `usage`: the cgroup v2/v1 counter, else /proc/stat on a bare host; rel-fix-3, it
+# was the host's /proc/stat busy share times $CORES)
 sample_load() {
-    [ -r /proc/stat ] || return 0
+    local ap="$ROOT/python/mojolearn/_allocation.py" a b
     [ -f "$OUT/load.tsv" ] || printf 'utc\tbusy_cores\tcores\tmem_available_kib\trunning\n' > "$OUT/load.tsv"
-    local a1 b1 c1 d1 e1 f1 g1 h1 a2 b2 c2 d2 e2 f2 g2 h2 busy total
-    read -r _ a1 b1 c1 d1 e1 f1 g1 h1 _ < /proc/stat
+    a=$(python3 -I "$ap" usage 2> /dev/null)
     while :; do
         sleep 60
-        read -r _ a2 b2 c2 d2 e2 f2 g2 h2 _ < /proc/stat
-        busy=$(( (a2 + b2 + c2 + f2 + g2 + h2) - (a1 + b1 + c1 + f1 + g1 + h1) ))
-        total=$(( busy + (d2 + e2) - (d1 + e1) ))
-        awk -v b="$busy" -v t="$total" -v n="$CORES" -v m="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)" \
+        b=$(python3 -I "$ap" usage 2> /dev/null)
+        echo "$a $b" | awk -v n="$CORES" -v m="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2> /dev/null)" \
             -v r="$(find "$OUT/cand" -maxdepth 1 -name '*.running' 2> /dev/null | wc -l | tr -d ' ')" -v u="$(date -u +%H:%M:%SZ)" \
-            'BEGIN { printf "%s\t%.1f\t%d\t%s\t%s\n", u, (t > 0 ? n * b / t : 0), n, m, r }' >> "$OUT/load.tsv"
-        a1=$a2 b1=$b2 c1=$c2 d1=$d2 e1=$e2 f1=$f2 g1=$g2 h1=$h2
+            '{ busy = (NF == 6 && $4 > $1 && $5 >= $2) ? ($5 - $2) / ($4 - $1) : 0
+               printf "%s\t%.1f\t%d\t%s\t%s\n", u, busy, n, m, r }' >> "$OUT/load.tsv"
+        a=$b
     done
 }
 sample_load &
