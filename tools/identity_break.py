@@ -974,18 +974,13 @@ def _visible_device(var):
 
 
 def _pick_row(rows, visible, uuid_of=None):
-    """The row of the device this process sees: by index, then by UUID, else the first."""
-    if not rows:
-        return None
-    if visible is not None and visible.isdigit():
-        for r in rows:
-            if str(r.get("index")) == visible:
-                return r
-    if visible is not None and uuid_of is not None:
-        for r in rows:
-            if uuid_of(r) == visible:
-                return r
-    return rows[0]
+    """Resolve the selected index or unique UUID prefix in the device probe."""
+    if visible is None:
+        return rows[0] if rows else None
+    if visible.isdigit():
+        return next((r for r in rows if str(r.get("index")) == visible), None)
+    matches = [r for r in rows if uuid_of and (uuid_of(r) or "").startswith(visible)]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _nvidia_device(unavailable):
@@ -999,8 +994,8 @@ def _nvidia_device(unavailable):
     visible = _visible_device("CUDA_VISIBLE_DEVICES")
     row = _pick_row(rows, visible, uuid_of=lambda r: r["uuid"])
     if row is None:
-        unavailable["device.model"] = why or "nvidia-smi listed no GPU"
-        unavailable["driver.nvidia_driver"] = why or "nvidia-smi listed no GPU"
+        unavailable["device.model"] = why or f"nvidia-smi could not identify the selected GPU ({visible})"
+        unavailable["driver.nvidia_driver"] = unavailable["device.model"]
     plain, why2 = _run_command(["nvidia-smi"])
     m = re.search(r"CUDA Version:\s*([0-9.]+)", plain or "")
     if not m:
@@ -1021,16 +1016,21 @@ def _amd_device(unavailable):
             rows.append(cur)
         elif key == "Marketing Name" and cur and "name" not in cur:
             cur["name"] = value
+        elif key.lower() == "uuid" and cur:
+            cur["uuid"] = value
     for i, r in enumerate(rows):
         r["index"] = str(i)
-    row = _pick_row(rows, _visible_device("HIP_VISIBLE_DEVICES") or _visible_device("ROCR_VISIBLE_DEVICES"))
+    visible = _visible_device("HIP_VISIBLE_DEVICES") or _visible_device("ROCR_VISIBLE_DEVICES")
+    row = _pick_row(rows, visible, uuid_of=lambda r: r.get("uuid"))
     model = (row or {}).get("name")
-    if not model:
+    if not model and visible is None:
         smi, why2 = _run_command(["rocm-smi", "--showproductname"])
         m = re.search(r"Card (?:Series|series|SKU|Model)\s*:\s*(.+)", smi or "")
         model = m.group(1).strip() if m else None
         if not model:
             unavailable["device.model"] = why or why2 or "rocminfo and rocm-smi named no GPU"
+    elif not model:
+        unavailable["device.model"] = why or f"rocminfo could not identify the selected GPU ({visible})"
     rocm = None
     for p in (os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), ".info", "version"), "/opt/rocm/.info/version"):
         try:

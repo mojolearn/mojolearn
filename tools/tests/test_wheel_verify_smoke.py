@@ -56,6 +56,18 @@ class LaneUnits(unittest.TestCase):
 
 
 class SideStates(unittest.TestCase):
+    def test_record_cannot_shorten_the_requested_smoke_profile(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "lane.gpu.json"
+            data = _document({"lane/base": OK}, "gpu")
+            data['parts_omitted'] = ['batch', 'rlpair']
+            p.write_text(json.dumps(data))
+            self.assertEqual(smoke.side_state(p, {}, "gpu", "lane", ["ragged"])[0], "invalid")
+            data["cells"]["lane/base"] = dict(OK, ragged=["ab" * 8], ragged_verdict="STABLE")
+            data['parts_collected'] = ['ragged']
+            p.write_text(json.dumps(data))
+            self.assertEqual(smoke.side_state(p, {}, "gpu", "lane", ["ragged"])[0], "ok")
+
     def test_lane_scope_requires_its_own_finished_record_and_probes(self):
         with tempfile.TemporaryDirectory() as td:
             p = Path(td) / "lane.gpu.json"

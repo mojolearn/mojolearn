@@ -335,6 +335,10 @@ def test_default_ptx_record_label_uses_the_detected_device():
     with pytest.raises(SystemExit, match="GPU model"):
         ib.default_vendor_label(ml, "gpu", "ptx")
 
+    rows = [dict(index=0, uuid="GPU-ab0"), dict(index=1, uuid="GPU-ac1")]
+    for selector, expected in (("1", rows[1]), ("GPU-ac", rows[1]), ("GPU-a", None), ("2", None)):
+        assert ib._pick_row(rows, selector, uuid_of=lambda r: r["uuid"]) == expected
+
 
 @pytest.mark.parametrize('ptx_loaded,label,refused', [
     (True, 'nvidia-ptx-l40s-sm80', False),
