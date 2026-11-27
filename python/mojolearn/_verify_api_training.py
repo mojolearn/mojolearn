@@ -48,6 +48,14 @@ def tiny_mlp():
 def training_checks(recorder,public,methods):
     import numpy as np
     cls=resolve(public);name=public.rsplit('.',1)[-1]
+    if name=='ParallelByteLanguageModelTrainer':
+        # gs-fix-7 (2026-11-26): the byte-LM driver keeps `devices=` and has no `device=`, and the
+        # member it takes is a state dict that carries no side, so the view refused every method
+        # ("takes devices= and no device=, and no member argument carries device='gpu'",
+        # _verify_device.members). It runs on ONE GPU here (devices=(0,)) and only on the GPU side
+        # (device only: the CPU side records it not applicable). Imported from its module, as the
+        # single-device lanes take the drivers (tools/identity_lanes/parallel_single.py, SIDES).
+        from .parallel_training import ParallelByteLanguageModelTrainer as cls
     def schedule_check(source,shape,ids,schedule,method):
         model=cls(source.state_dict(),devices=(0,),logical_shards=1,schedule=schedule,
                   **({'pool_optimizer':False} if schedule=='replica' else {}))
