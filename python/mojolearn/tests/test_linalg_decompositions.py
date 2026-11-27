@@ -33,7 +33,6 @@ def test_the_three_doors_ship_in_the_linalg_family():
     assert "decomposition/host/linalg_public.mojo" in fam["host_modules"]
 
 
-
 @needs_host
 def test_eigh_triangle_argument():
     a = np.array([[2, 7], [1, 3]], dtype="f4")
