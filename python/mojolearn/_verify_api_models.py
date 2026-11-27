@@ -44,7 +44,8 @@ def model_checks(recorder,public,methods):
             # (docs/plans/NUMERIC_PROFILE_PARTS.md); these endpoints' bits changed then, RECORD OWED.
             if name=='ParallelCausalLM':
                 m=models.ParallelCausalLM.load(tmp,layer_devices=(0,))
-            else:m=models.CausalLM.load(tmp)
+            else:
+                m=resolve('mojolearn.models.CausalLM').load(tmp)
             try:
                 ids=np.array([[1,2]],np.int32)
                 if name=='GenerationStream':

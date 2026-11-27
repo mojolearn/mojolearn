@@ -320,22 +320,61 @@ def test_device_only_endpoints_are_not_applicable_only_where_the_build_declares_
 
 
 @pytest.mark.parametrize('cpu_only',[True,False])
-def test_samba_stack_cpu_side_is_installation_side_beside_a_gpu_set(monkeypatch,cpu_only):
-    # gs-fix-7 (2026-11-26): the product refuses SambaStack(device='cpu') beside a GPU set
-    # (bindings/samba_route_unpack.mojo _samba_cpu_refuse); the CPU side of a GPU install records
-    # it 'not applicable' (installation side) and a CPU-only install still runs it on the CPU side.
+@pytest.mark.parametrize(('family','public','method','route'),[
+    ('neural','mojolearn.SambaStack','load_weights','samba_route_unpack.mojo'),
+    ('models','mojolearn.models.ParallelCausalLM','generate','parallel_causal_native_run.mojo'),
+])
+def test_installation_side_cpu_endpoints(monkeypatch,cpu_only,family,public,method,route):
     import mojolearn
-    endpoint='mojolearn.SambaStack.load_weights'
+    endpoint=public+'.'+method
     ran=[]
-    module=SimpleNamespace(neural_checks=lambda recorder,public,methods:[ran.append(m) or recorder.check(
-        public+'.'+m,lambda:1.0) for m in methods])
-    monkeypatch.setattr(api,'registry',lambda:{endpoint:('neural',module,'mojolearn.SambaStack','load_weights')})
+    def checks(recorder,public,methods):
+        for op in methods:
+            ran.append(op)
+            recorder.check(public+'.'+op,lambda:1.0)
+    module=SimpleNamespace(neural_checks=checks,model_checks=checks)
+    monkeypatch.setattr(api,'registry',lambda:{endpoint:(family,module,public,method)})
     monkeypatch.setattr(mojolearn,'runtime_report',lambda:{'cpu_only':cpu_only,'vendor':'cpu' if cpu_only
         else 'cuda','default_mode':'identical'})
     report=api.capture(endpoints=[endpoint],artifacts=[],side='cpu')
     if cpu_only:
-        assert ran==['load_weights'] and report['endpoints'][endpoint]['status']=='captured'
+        assert ran==[method] and report['endpoints'][endpoint]['status']=='captured'
     else:
         row=report['endpoints'][endpoint]
         assert ran==[] and row['status']=='not applicable' and row['kind']=='installation side'
-        assert 'samba_route_unpack.mojo' in row['reason']
+        assert route in row['reason']
+
+
+@pytest.mark.parametrize('side',['cpu','gpu'])
+def test_language_model_fixtures_forward_the_capture_device(monkeypatch,tmp_path,side):
+    import mojolearn
+    from mojolearn import _causal_lm_fixtures, _verify_api_models, _verify_api_training, _verify_device
+    from mojolearn._verify_api import Recorder
+
+    class Trainer:
+        @staticmethod
+        def parameter_registry(shape):
+            return []
+
+        def __init__(self,parameters,*,shape,data_schedule,lr,device=None):
+            self.device=device
+
+    loaded=[]
+    class Model:
+        @classmethod
+        def load(cls,path,*,device=None):
+            loaded.append(device)
+            return lambda ids: ids
+
+    monkeypatch.setattr(mojolearn,'LanguageModelTrainer',Trainer)
+    monkeypatch.setattr(mojolearn.models,'CausalLM',Model)
+    monkeypatch.setattr(_causal_lm_fixtures,'_write_checkpoint',lambda *args,**kwargs:None)
+    public_model='mojolearn.models.CausalLM'
+    endpoint=public_model+'.__call__'
+    recorder=Recorder(tmp_path/'capture.json',[endpoint])
+    with _verify_device.side(side):
+        trainer,_,_=_verify_api_training.tiny_lm()
+        _verify_api_models.model_checks(recorder,public_model,['__call__'])
+    assert trainer.device==side
+    assert loaded==[side]
+    assert recorder.rows[endpoint]['status']=='captured'

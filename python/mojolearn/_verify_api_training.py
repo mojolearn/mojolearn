@@ -20,7 +20,8 @@ def applicable(public,method):
 
 def tiny_lm():
     import numpy as np
-    from . import LanguageModelConfig, LanguageModelTrainer
+    from . import LanguageModelConfig
+    LanguageModelTrainer = resolve('mojolearn.LanguageModelTrainer')
     shape=LanguageModelConfig(batch=1,length=2,d_model=4,n_heads=1,n_kv=1,head_dim=4,
                               intermediate=4,n_layers=1,vocab_size=4)
     named={entry['name']:((np.arange(entry['size'],dtype=np.float32).reshape(entry['shape'])%7-3)/32)
@@ -168,4 +169,7 @@ def training_checks(recorder,public,methods):
             return {schedule:schedule_check(source,shape,ids,schedule,method) for schedule in SCHEDULES}
         finally:source.close()
     for method in methods:
-        recorder.check(public+'.'+method,lambda method=method:check(method))
+        # The inference endpoint hashes packed parameter bytes on the host.
+        # Neither that hash nor a config accessor runs inference on a device.
+        kind = 'metadata/state contract' if name in ('LanguageModelConfig','LanguageModelInference') else 'numerical'
+        recorder.check(public+'.'+method,lambda method=method:check(method),kind=kind)
