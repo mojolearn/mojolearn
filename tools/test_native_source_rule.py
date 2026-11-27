@@ -44,8 +44,12 @@ class NativeSourceRule(unittest.TestCase):
         rel = 'build/generated-sources/1795798918547688684-283/generated-inputs/core/native_archive_unicode_names.mojo'
         self.assertFalse(gate.is_native_source(rel))
         self.assertTrue(gate.is_native_source('core/native_archive_unicode_names.mojo'))
+        # left out of the inventory only after its bytes are checked (tools/test_generated_source_check.py)
+        import generated_source_check
+        self.assertEqual(gate.GENERATED_EVIDENCE_PREFIX, generated_source_check.PREFIX)
         shell = (ROOT / 'tools/linux_surface_qualification.sh').read_text()
-        self.assertIn("rel.startswith('%s')" % gate.GENERATED_EVIDENCE_PREFIX, shell)
+        self.assertIn("rel.startswith(generated_source_check.PREFIX)", shell)
+        self.assertIn("generated_source_check.verify_copy(root, rel, path)", shell)
 
 
 if __name__ == '__main__':

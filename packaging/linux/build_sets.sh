@@ -466,6 +466,10 @@ build_one() {
       say "FINDING: $tier bindings/$s${group:+ $group} TIMED OUT after ${bound}s (RELEASE_BINDING_TIMEOUT_SECONDS, merged: RELEASE_MERGED_TIMEOUT_SECONDS); log $log"
       return 1
     fi
+    if [[ "$rc" = 125 ]]; then
+      say "FINDING: $tier bindings/$s${group:+ $group} STALLED: $(grep -m1 '^STALLED: ' "$log" | cut -c10-200); log $log"
+      return 1
+    fi
     say "FINDING: $tier bindings/$s${group:+ $group} did not build; first error:"
     grep -m2 -E 'error:|constraint failed|REFUSED' "$log" | cut -c1-200 | sed 's/^/      /'
     return 1

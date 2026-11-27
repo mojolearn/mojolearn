@@ -234,7 +234,8 @@ class StepTableTests(unittest.TestCase):
         # no resource: it runs beside cross-compile (GitHub), and before the Mac build by NEEDS
         self.assertIsNone(release.RESOURCE["readiness"])
         self.assertNotIn("readiness", release.NEEDS["cross-compile"])
-        # cross-compile runs beside the Linux builds on github (lane post-cross-compile-redundant); linux-wait needs it
+        # the module table is the rented form: linux-wait needs cross-compile; on github Release.__init__ drops it
+        # and step_cross_compile is not run (lane xcc-retire-1, tools/test_release_cross_compile.py)
         self.assertEqual(release.NEEDS["linux-builds"], ["reuse-plan", "readiness"])
         self.assertIn("cross-compile", release.NEEDS["linux-wait"])
         self.assertEqual(release.NEEDS["macos-build"], ["reuse-plan", "readiness"])

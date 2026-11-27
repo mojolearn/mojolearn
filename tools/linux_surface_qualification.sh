@@ -89,6 +89,8 @@ PYCOUNTS
     "$PY" - "$ROOT" "$DEST" <<'PYPROVENANCE'
 import hashlib, json, os, pathlib, sys
 root, out = map(pathlib.Path, sys.argv[1:])
+sys.path.insert(0, str(root / 'tools'))
+import generated_source_check
 files = []
 for directory, dirs, names in os.walk(root):
     dirs[:] = sorted(d for d in dirs if d not in ('.git', '.pixi', '.venv', '__pycache__', 'results', 'dist', 'archive', 'upstream') and not d.startswith('.'))
@@ -98,8 +100,13 @@ for directory, dirs, names in os.walk(root):
         # python/mojolearn/tests/ neither ships nor builds (native_inventory).
         if rel.startswith('python/mojolearn/tests/'):
             continue
-        # tools/generated_sources.py's per-invocation evidence copies are not inputs (native_inventory).
-        if rel.startswith('build/generated-sources/'):
+        # tools/generated_sources.py's per-invocation copies are checked by bytes, then not listed (native_inventory):
+        # generated-inputs/<rel> equals the tracked <rel>, generated/<rel> what the tracked generator writes.
+        if rel.startswith(generated_source_check.PREFIX):
+            try:
+                generated_source_check.verify_copy(root, rel, path)
+            except generated_source_check.GeneratedCopyError as exc:
+                sys.exit('Generated source copy differs: ' + str(exc))
             continue
         if (name.endswith('.mojo') or rel.startswith(('bindings/', 'packaging/linux/', 'python/mojolearn/', 'tokenizer/tools/')) and name.endswith(('.py', '.sh'))
                 or rel.startswith('packaging/adapters/') and not rel.startswith('packaging/adapters/test_')

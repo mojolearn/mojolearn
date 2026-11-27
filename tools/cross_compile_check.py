@@ -78,6 +78,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import release_limits  # noqa: E402
+import compile_watch  # noqa: E402
 
 TIER_DEFINES = {
     "identical": ["-D", "MOJOLEARN_NUMERIC_IDENTICAL=1"],
@@ -211,7 +212,8 @@ def run_one(cmd, out, timeout, stall, cwd=ROOT, poll=2.0, cpu_probe=group_cpu_se
             record.update(verdict="FAIL", error=str(exc))
             (retain / "execution.json").write_text(json.dumps(record, indent=2) + "\n")
         raise
-    last_cpu, last_move = -1.0, t0
+    # THE ONE STALL RULE (tools/compile_watch.py, shared with every release build leg's watchdog)
+    clock_ = compile_watch.StallClock(stall, t0)
     verdict = None
     interrupted = None
     try:
@@ -229,15 +231,9 @@ def run_one(cmd, out, timeout, stall, cwd=ROOT, poll=2.0, cpu_probe=group_cpu_se
                 if now - t0 >= timeout:
                     verdict = "TIMEOUT"
                     break
-                if stall:
-                    cpu = cpu_probe(p.pid)
-                    # A completed child can lower the sum of live-child CPU.
-                    # Start the next phase's activity clock from that new sum.
-                    if cpu is not None and (cpu > last_cpu + 0.5 or cpu < last_cpu):
-                        last_cpu, last_move = cpu, now
-                    elif cpu is not None and now - last_move >= stall:
-                        verdict = "STALLED"
-                        break
+                if stall and clock_.observe(now, cpu_probe(p.pid), os.fstat(log.fileno()).st_size):
+                    verdict = "STALLED"
+                    break
                 sleep(poll)
     except BaseException as error:
         interrupted = error
@@ -257,11 +253,9 @@ def run_one(cmd, out, timeout, stall, cwd=ROOT, poll=2.0, cpu_probe=group_cpu_se
     log.close()
     if interrupted is not None:
         raise interrupted
-    tail = [ln for ln in text.splitlines() if "error" in ln][:6] if verdict == "FAIL" else []
-    if verdict == "FAIL" and not tail:
-        tail = text.splitlines()[-6:]
+    tail = compile_watch.first_error_lines(text) if verdict == "FAIL" else []
     if verdict == "STALLED":
-        tail = [f"compiler CPU flat at {max(last_cpu, 0):.0f} s for {stall:.0f} s"]
+        tail = [clock_.describe()]
     return verdict, secs, tail
 
 
