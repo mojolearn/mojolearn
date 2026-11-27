@@ -73,9 +73,10 @@ def test_installed_endpoint_faults_change_outputs_and_restore_them(side):
 
     if side not in api.sides():
         pytest.skip("GPU plugin unavailable on this installation")
-    clean = api.capture(endpoints=list(controls.FAULTS.values()), side=side)
+    clean = api.capture(endpoints=controls.fault_endpoints(), side=side)
     assert not clean["pending"]
-    faults = controls.check_faults(clean)
+    retained = {}
+    faults = controls.check_faults(clean, retain=retained.__setitem__)
     assert faults.keys() == controls.FAULTS.keys()
     for name, endpoint in controls.FAULTS.items():
         row = clean["endpoints"][endpoint]
@@ -84,6 +85,14 @@ def test_installed_endpoint_faults_change_outputs_and_restore_them(side):
             assert faults[name]["status"] == "NOT_APPLICABLE"
         else:
             assert faults[name]["status"] == "CAUGHT_AND_RESTORED", (side, name, faults[name])
+    for name, result in faults.items():
+        if result["status"] == "NOT_APPLICABLE":
+            continue
+        endpoints = set(controls.fault_endpoints(name)) - result["not_applicable"].keys()
+        assert set(result["differences"]) == {"output differs: " + e for e in endpoints}
+        restored = retained[name + "-restored"]
+        assert retained[name + "-faulty"]["side"] == restored["side"] == side
+        assert restored["endpoints"] == {e: clean["endpoints"][e] for e in endpoints}
     assert faults["estimator-regularization"]["status"] == "CAUGHT_AND_RESTORED"
 
 
@@ -380,3 +389,29 @@ def test_samba_stack_cpu_side_is_installation_side_beside_a_gpu_set(monkeypatch,
         row=report['endpoints'][endpoint]
         assert ran==[] and row['status']=='not applicable' and row['kind']=='installation side'
         assert 'samba_route_unpack.mojo' in row['reason']
+
+
+def test_unchanged_vjp_derivative_fails_even_when_forward_changes(monkeypatch):
+    from contextlib import nullcontext
+    from mojolearn import _verify_api_faults as faults
+
+    endpoint = faults.FAULTS['program-product'].rsplit('.', 1)[0] + '.vjp_if'
+
+    def capture(output, derivative):
+        return dict(expected=[endpoint], pending=[], endpoints={
+            endpoint: dict(status='captured', kind='numerical', output={
+                'outputs': output, 'input_gradients': derivative, 'parameter_gradient': derivative,
+            }),
+        })
+
+    clean = capture(1, 2)
+    replays = iter((capture(3, 2), clean))
+    monkeypatch.setattr(faults, 'inject', lambda name: nullcontext())
+    monkeypatch.setattr(api, 'capture', lambda **kwargs: next(replays))
+    result = faults.check_faults(clean)['program-product']
+    assert result['status'] == 'FAILED'
+    assert result['differences'] == ['output differs: ' + endpoint]
+    assert result['observation_errors'] == [
+        endpoint + ' did not detect the fault in input_gradients',
+        endpoint + ' did not detect the fault in parameter_gradient',
+    ]
