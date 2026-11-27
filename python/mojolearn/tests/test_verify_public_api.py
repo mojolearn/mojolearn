@@ -67,6 +67,26 @@ def test_normal_public_checks_include_faults_and_propagate_failures(monkeypatch,
     assert not result['release_qualified']
 
 
+@pytest.mark.parametrize("side", ["cpu", "gpu"])
+def test_installed_endpoint_faults_change_outputs_and_restore_them(side):
+    from mojolearn import _verify_api_faults as controls
+
+    if side not in api.sides():
+        pytest.skip("GPU plugin unavailable on this installation")
+    clean = api.capture(endpoints=list(controls.FAULTS.values()), side=side)
+    assert not clean["pending"]
+    faults = controls.check_faults(clean)
+    assert faults.keys() == controls.FAULTS.keys()
+    for name, endpoint in controls.FAULTS.items():
+        row = clean["endpoints"][endpoint]
+        if row["status"] == "not applicable":
+            assert side == "cpu" and row["kind"] in {"device only", "installation side"}
+            assert faults[name]["status"] == "NOT_APPLICABLE"
+        else:
+            assert faults[name]["status"] == "CAUGHT_AND_RESTORED", (side, name, faults[name])
+    assert faults["estimator-regularization"]["status"] == "CAUGHT_AND_RESTORED"
+
+
 def test_fault_controls_report_each_side_and_fail_on_cpu_only_miss(monkeypatch):
     from mojolearn import _verify_api_faults as controls
 

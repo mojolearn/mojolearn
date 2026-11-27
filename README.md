@@ -170,9 +170,11 @@ shows what each side did for every lane, or one lane in full, from the saved
 record, running nothing. `python -m mojolearn verify --tamper-test` moves one
 input by one ULP and shows that verify catches it.
 
-To inspect the public verification inventory without fitting models, run
-`python -m mojolearn verify --coverage`. Release testing also rebuilds selected
-Mojo kernels with deliberate faults and checks that the affected fixtures detect them.
+The endpoint checks automatically change selected model settings or state and
+check that the output changes and returns to its original value on each applicable
+device. Run `python -m mojolearn verify --coverage` to see which APIs the
+fixtures exercise and which native faults are assigned to each lane. Release
+testing rebuilds Mojo kernels with those faults and records which fixtures detect them.
 
 Your own composed model: `verify --recipe r.json` fits it from scratch on the
 CPU and the GPU and compares the results the recipe selects (fitted
