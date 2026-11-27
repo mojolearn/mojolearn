@@ -11,9 +11,13 @@ def _mlp_partial_result(incremental, full, prediction, full_prediction):
     mismatch = _mismatch_bytes("incremental MLP weights", weights, "uninterrupted MLP weights", expected)
     if mismatch:
         raise NumericalMismatch(mismatch, parts)
-    if (incremental.training_digest_ != full.training_digest_
-            or incremental.digest_ != full.digest_ or not np.array_equal(prediction, full_prediction)):
-        raise NumericalMismatch("incremental MLP state or prediction differs from uninterrupted training", parts)
+    if prediction.shape != full_prediction.shape or prediction.dtype != full_prediction.dtype:
+        raise NumericalMismatch("incremental and uninterrupted MLP prediction shapes or dtypes differ", parts)
+    mismatch = _mismatch_bytes("incremental MLP prediction", prediction, "uninterrupted MLP prediction", full_prediction)
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    if incremental.training_digest_ != full.training_digest_ or incremental.digest_ != full.digest_:
+        raise NumericalMismatch("incremental MLP state differs from uninterrupted training", parts)
     return _fit(parts)
 
 

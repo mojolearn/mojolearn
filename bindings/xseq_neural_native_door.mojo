@@ -21,7 +21,6 @@ from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 from std.memory import unsafe_memcpy
 from std.python._cpython import GILReleased
-from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.optimizer_real_unpack import optimizer_real
 from bindings.native_identity_key_door import NativeIdentityKey
@@ -35,7 +34,7 @@ from bindings.optimizer_admission_door import opt_schedule
 from bindings.optimizer_schedule_native_door import schedule_run
 from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_SCHEDULE_VALUES
 from bindings.xseq_native_common_door import (
-    XF32P, XI32P, xseq_route, XseqRoute, xseq_base, xseq_input, xseq_is_f64, xseq_refuse_f64, xseq_zeros,
+    XF32P, XI32P, xseq_route, XseqRoute, xseq_base, xseq_input, xseq_zeros,
     xseq_addr, xseq_f32p, xseq_reshape, xseq_curve_list, xseq_int, xseq_float, xseq_truth, xseq_is_int,
     XseqStream, xseq_neural_provider, xseq_zeros_i64,
 )
@@ -995,6 +994,27 @@ def _arg(args: PythonObject, i: Int) raises -> PythonObject:
     return args[i] if len(args) > i else PythonObject(None)
 
 
+def _class_keys(classes: PythonObject, context: PythonObject) raises -> PythonObject:
+    """Exact builtin keys in the encoder's order, including large integers and text ending in NUL."""
+    var nk = xseq_keys()
+    var ndarray = py_item(context, nk[].k_xseq_ndarray)
+    if py_type(classes) is not ndarray or Int(py=classes.ndim) != 1:
+        raise Error("TypeError: fitted classes must be a native one-dimensional label array")
+    var kind = String(py=classes.dtype.kind)
+    if kind != "b" and kind != "i" and kind != "u" and kind != "f" and kind != "S" and kind != "U" and kind != "O":
+        raise Error("TypeError: invalid fitted class dtype")
+    var keys = py_call(ndarray.tolist, classes)
+    if kind == "O":
+        # The neural encoder uses object slots for exact text with trailing NULs.
+        # Restored object arrays may also hold exact numeric labels.
+        var b = native_loaded_module("builtins")
+        for i in range(len(keys)):  # driver-loop: admit each distinct object label before hashing or equality
+            var cls = py_type(keys[i])
+            if cls is not b.str and cls is not b.bytes and cls is not b.int and cls is not b.bool and cls is not b.float:
+                raise Error("TypeError: object classes must contain exact numeric, text or bytes labels")
+    return keys
+
+
 def _codes_against[T: DType = DType.float32](classes: PythonObject, source: PythonObject, route: XseqRoute, n: Int, steps: Int,
                    lengths: PythonObject, context: PythonObject) raises -> PythonObject:
     """The float32 codes of labels `source` (n sequences of `steps` labels; steps 1 for one label a sequence)
@@ -1004,7 +1024,7 @@ def _codes_against[T: DType = DType.float32](classes: PythonObject, source: Pyth
     "sequence") only valid steps count (lane rnn-review-fixes, P1-b): a label seen only on padded steps is not
     looked up, and every padded step gets code 0, which the loss weighs 0."""
     var encoded = xseq_labels(source, route.entries, context)
-    var own = encoded[0]
+    var own = _class_keys(encoded[0], context)
     var codes = encoded[1]
     var count = Int(py=codes.shape[0])
     if count != n * steps:
@@ -1013,16 +1033,18 @@ def _codes_against[T: DType = DType.float32](classes: PythonObject, source: Pyth
     if lengths is not None:
         seen = xseq_run_class_counts[DType.int32](Int(py=xseq_addr(codes)), n, steps, Int(py=xseq_addr(lengths)),
                                                   len(own))
+    var fitted = _class_keys(classes, context)
+    var b = native_loaded_module("builtins")
+    var index = py_call(b.dict, py_call(b.zip, fitted, py_call(b.range, PythonObject(len(fitted)))))
+    if len(index) != len(fitted):
+        raise Error("ValueError: fitted classes must be unique")
+    var missing = PythonObject(-1)
     var mapping = List[Int]()
-    for j in range(len(own)):  # small-loop(classes)
+    for j in range(len(own)):  # driver-loop: one lookup per distinct incoming label
         if lengths is not None and seen[j] == 0:
             mapping.append(-1)  # on padded steps only: never read (xseq_run_remap_codes writes 0 there)
             continue
-        var at = -1
-        for i in range(len(classes)):  # small-loop(classes)
-            if Bool(py=own[j] == classes[i]):
-                at = i
-                break
+        var at = Int(py=py_get(index, own[j], missing))
         if at < 0:
             raise Error("ValueError: y holds the label " + _repr(own[j]) + ", which is not one of the fitted classes "
                         + _repr(classes))
@@ -1565,6 +1587,19 @@ def _mlp_layer_copy(params: PythonObject, offset: Int, shape: PythonObject, coun
     return out
 
 
+def _mlp_checkpoint_vector(value: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
+    """Pin the checkpoint's original words. Optimizer state always has a one-dimensional native layout."""
+    var nk = xseq_keys()
+    var ndarray = py_item(context, nk[].k_xseq_ndarray)
+    if py_type(value) is not ndarray:
+        raise Error("TypeError: MLP optimizer checkpoint vectors must be native ndarrays")
+    var view = py_call(ndarray.view, value)
+    if (Int(py=view.ndim) != 1 or not Bool(py=view.dtype == dtype)
+            or not Bool(py=view.flags.c_contiguous) or not Bool(py=view.flags.aligned)):
+        raise Error("ValueError: invalid MLP optimizer checkpoint vector layout")
+    return view
+
+
 def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, target: PythonObject,
              out_act: Int, n_out: Int, partial: Bool, context: PythonObject) raises -> PythonObject:
     """`_BaseMLP._fit(X, Y, out_act, n_out)`; `n_out` 0 is None (a float
@@ -1604,6 +1639,8 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
             raise Error("ValueError: this fitted MLP has no saved optimizer state; fit it again before partial_fit")
         if py_type(kept) is not b.tuple or len(kept) != 6:
             raise Error("ValueError: invalid MLP optimizer checkpoint")
+        if py_type(kept[3]) is not b.int or py_type(kept[4]) is not b.int or py_type(kept[5]) is not b.int:
+            raise Error("TypeError: MLP optimizer checkpoint tags must be exact integers")
         if Int(py=kept[3]) != solver or Int(py=kept[4]) != activation or Int(py=kept[5]) != route.mode:
             raise Error("ValueError: partial_fit requires the same solver, activation and numerical mode")
         var packed = _mlp_pack(py_item(fields, nk[].k_coefs_), py_item(fields, nk[].k_intercepts_), d, context)
@@ -1613,18 +1650,17 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
             if Int(py=packed[1][l]) != hidden[l]:
                 raise Error("ValueError: partial_fit requires the same hidden layer sizes")
         params = packed[0]
-        old_moments = admit_nd_f32(xseq_private_input(kept[0], context, "optimizer moments"), "optimizer moments",
-                                    False, context)
-        var old_progress = xseq_private_input(kept[1], context, "optimizer progress")
-        if (Int(py=old_moments.size) != moments_count or Int(py=old_progress.size) != MLP_PROGRESS_WORDS
-                or not Bool(py=old_progress.dtype == progress_words.dtype) or not Bool(py=old_progress.flags.c_contiguous)
-                or not Bool(py=old_progress.flags.aligned)):
-            raise Error("ValueError: invalid MLP optimizer state dimensions or dtype")
+        old_moments = _mlp_checkpoint_vector(kept[0], moments.dtype, context)
+        var old_progress = _mlp_checkpoint_vector(kept[1], progress_words.dtype, context)
+        if Int(py=old_moments.size) != moments_count or Int(py=old_progress.size) != MLP_PROGRESS_WORDS:
+            raise Error("ValueError: invalid MLP optimizer checkpoint vector length")
         var old_progress_ptr = MutPointer[MLPProgress, MutUntrackedOrigin](unsafe_from_address=Int(py=xseq_addr(old_progress)))
         progress[] = old_progress_ptr[]
+        progress[].check_resume(rows, Int(py=py_item(fields, nk[].k_n_iter_)), Int(py=py_item(fields, nk[].k_t_)),
+                                len(py_item(fields, nk[].k_loss_curve_)))
         seed = Int(progress[].seed)
         if order is not None and kept[2] is not None:
-            var previous = admit_nd_f32(xseq_private_input(kept[2], context, "shuffle order"), "shuffle order", False, context)
+            var previous = _mlp_checkpoint_vector(kept[2], moments.dtype, context)
             if Int(py=previous.size) == rows:
                 xseq_run_mlp_check_order(Int(py=xseq_addr(previous)), rows)
                 old_order = previous
@@ -1698,8 +1734,6 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var last_loss = losses[n_iter - 1]
     if continuing:
         losses = py_item(fields, nk[].k_loss_curve_)
-        if py_type(losses) is not b.list:
-            raise Error("ValueError: MLP loss_curve_ must be a list before partial_fit")
     var best_entry_owner = xseq_neural_provider(route.output)
     var best_entry = _entry(best_entry_owner)
     var curve_address = Int(py=xseq_addr(curve))
@@ -1876,11 +1910,8 @@ def xseq_mlp(model: PythonObject, operation: Int, args: PythonObject, context: P
                 classes = xseq_labels(args[2], label_route.entries, context)[0]
                 if continuing:
                     var fitted_classes = py_item(fields, nk[].k_classes_)
-                    if len(classes) != len(fitted_classes):
+                    if not Bool(py=_class_keys(classes, context) == _class_keys(fitted_classes, context)):
                         raise Error("ValueError: classes must match the first partial_fit call")
-                    for i in range(len(classes)):  # small-loop(classes): compare canonical class lists
-                        if not Bool(py=classes[i] == fitted_classes[i]):
-                            raise Error("ValueError: classes must match the first partial_fit call")
                     classes = fitted_classes
             else:
                 classes = py_item(fields, nk[].k_classes_)

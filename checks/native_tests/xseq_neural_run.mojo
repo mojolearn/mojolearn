@@ -18,6 +18,7 @@ from core.native_call_output import NativeCallWorkspace
 from sequence.neural_model_dispatch import (
     RNN_FIT, RNN_PREDICT, MLP_FIT, MLP_PREDICT, MODEL_ARGMAX, MODEL_MIN, MODEL_THRESHOLD, MODEL_UNIFORM,
 )
+from sequence.mlp_progress import MLPProgress
 from sequence.xseq_neural_run import (
     XseqRunF32P, XseqRnnFitRequest, XseqRnnPredictRequest, XseqMlpFitRequest, XseqMlpPredictRequest,
     XseqNeuralEntry, xseq_run_shape_text, xseq_run_size, xseq_run_as_f32_check, xseq_neural_run_call, xseq_run_uniform,
@@ -388,6 +389,17 @@ def test_saved_mlp_shuffle_order_requires_every_row_once() raises:
     except problem:
         _refuses(problem, "ValueError: duplicate row index in saved MLP shuffle order")
     _ = order^
+
+
+def test_saved_mlp_counters_leave_room_for_the_next_schedule_step() raises:
+    var progress = MLPProgress(2, 6, 1, 4, 4, 0.125, 0.5, 0.75, 1.0)
+    progress.check_resume(4, 2, 6, 2)
+    progress.samples = Int64(Int.MAX - 4)
+    try:
+        progress.check_resume(4, 2, Int(progress.samples), 2)
+        require(False, "overflowing invscaling denominator admitted")
+    except problem:
+        _refuses(problem, "ValueError: invalid MLP optimizer checkpoint counters")
 
 
 def test_cases() raises:

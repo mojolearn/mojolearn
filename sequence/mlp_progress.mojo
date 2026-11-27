@@ -16,6 +16,17 @@ struct MLPProgress(ImplicitlyCopyable, Movable):
     var beta2_power: Float64
     var best: Float64
 
+    def check_resume(self, batch_rows: Int, reported_epochs: Int, reported_samples: Int, losses: Int) raises:
+        # The public counters and loss history are written from this same checkpoint.
+        # Reserve space for the next epoch, batch, and the invscaling denominator.
+        var epochs = Int(self.epochs)
+        var samples = Int(self.samples)
+        var no_improvement = Int(self.no_improvement)
+        if (epochs < 1 or samples < epochs or no_improvement < 0 or no_improvement > epochs
+            or epochs != reported_epochs or samples != reported_samples or epochs != losses
+            or samples >= Int.MAX - batch_rows):
+            raise Error("ValueError: invalid MLP optimizer checkpoint counters")
+
 
 comptime MLP_PROGRESS_WORDS = 9
 

@@ -179,7 +179,11 @@ class MLPRegressor(_BaseMLP):
         return _XSEQ(self, "mlp_fit", (X, y), _XSEQ_CONTEXT)
 
     def partial_fit(self, X, y):
-        """Train one epoch on this batch, continuing the fitted weights and optimizer."""
+        """Train one epoch on this batch, continuing the fitted weights and optimizer.
+
+        Use the same feature columns and output width on each call. Finish one
+        training call before starting the next on this estimator.
+        """
         return _XSEQ(self, "mlp_fit", (X, y, None), _XSEQ_CONTEXT)
 
     def predict(self, X):
@@ -217,7 +221,8 @@ class MLPClassifier(_BaseMLP):
     `random_state` differ from scikit-learn's.
 
     `X` is 2-D float32 (float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused); `y` is a 1-D array of labels
-    with at least two classes. Not supported: multilabel targets, ``solver='lbfgs'``,
+    with at least two classes across training. A batch passed to `partial_fit` may contain
+    a single class. Not supported: multilabel targets, ``solver='lbfgs'``,
     ``early_stopping=True``, `warm_start` and `verbose`.
 
     Parameters
@@ -323,7 +328,11 @@ class MLPClassifier(_BaseMLP):
         return _XSEQ(self, "mlp_fit", (X, y), _XSEQ_CONTEXT)
 
     def partial_fit(self, X, y, classes=None):
-        """Train one epoch. An unfitted classifier requires all possible labels in `classes`."""
+        """Train one epoch on this batch. On the first call, pass every possible label in `classes`.
+
+        Later batches may contain any subset of those labels. Finish one training
+        call before starting the next on this estimator.
+        """
         return _XSEQ(self, "mlp_fit", (X, y, classes), _XSEQ_CONTEXT)
 
     def predict_proba(self, X):

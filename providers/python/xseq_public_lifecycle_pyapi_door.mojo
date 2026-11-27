@@ -121,7 +121,7 @@ def _owner_record_put(mut mods: NativeModules, model: PythonObject, fields: Pyth
     _owner_stamp_put(model, fields)
 
 
-def xseq_public_owner(model: PythonObject, context: PythonObject, fitting: Bool = True) raises -> PythonObject:
+def xseq_public_owner(model: PythonObject, context: PythonObject, fitting: Bool = True, append_loss: Bool = False) raises -> PythonObject:
     var nk = xseq_keys()
     # Reuse the connected constructor's native storage/ancestry contract, not
     # its execution: methods must reject replaced hooks before any field read.
@@ -161,9 +161,17 @@ def xseq_public_owner(model: PythonObject, context: PythonObject, fitting: Bool 
             classical_admit_value(value, lifecycle)
     for name in ["_mojolearn_fitted", "_mojolearn_fitting", "_y_1d", "_LOSS_CODE", "n_features_in_",  # driver-loop: over consumed or replaced fitted state owners
                  "n_outputs_", "n_layers_", "n_timesteps_", "out_activation_", "params_", "coefs_",
-                 "intercepts_", "n_iter_", "loss_curve_", "loss_", "best_loss_", "t_", "feature_names_in_"]:
+                 "intercepts_", "n_iter_", "loss_", "best_loss_", "t_", "feature_names_in_"]:
         if py_contains(fields, name):
             classical_admit_value(fields[PythonObject(name)], lifecycle)
+    if py_contains(fields, nk[].k_loss_curve_):
+        var curve = py_item(fields, nk[].k_loss_curve_)
+        if append_loss:
+            # partial_fit appends to an exact list and never consumes its earlier elements.
+            if py_type(curve) is not b.list:
+                raise Error("ValueError: MLP loss_curve_ must be a list before partial_fit")
+        else:
+            classical_admit_value(curve, lifecycle)
     if not fitting:
         _owner_record_put(mods, model, fields, lifecycle)
     return fields
@@ -263,6 +271,7 @@ struct XseqPublicLifecycle(Movable):
     var arguments: PythonObject
     var lifecycle: PythonObject
     var fitting: Bool
+    var continuing_mlp: Bool
     var classifier: Bool
     var nested: Bool
     var name: String
@@ -282,13 +291,15 @@ struct XseqPublicLifecycle(Movable):
             var text = String(py=name)
             fitting = text.endswith("_fit")
             perceptron = text.startswith("mlp_")
-        var fields = xseq_public_owner(model, context, fitting)
+        var incremental_mlp = operation == XSEQ_OPN_MLP_FIT and len(args) == 3
+        var fields = xseq_public_owner(model, context, fitting, incremental_mlp)
         self.source = args[0]
         self.original_arguments = args  # retain every original owner through finish
         self.arguments = args
         var nk = xseq_keys()
         self.lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
         self.fitting = fitting
+        self.continuing_mlp = incremental_mlp and py_contains(fields, nk[].k_coefs_)
         self.method = _xseq_method(operation, name, fitting)
         self.name = classical_estimator_name(model)
         self.shape = List[Int]()
@@ -338,8 +349,7 @@ struct XseqPublicLifecycle(Movable):
                     + " (shape=" + String(py=py_call(b.repr, dimensions)) + ") while a minimum of 1 is required by " + self.name + ".")
         if perceptron:
             _finite(x, "X", self.name, context)
-        if rank == 2 and (not self.fitting or (operation == XSEQ_OPN_MLP_FIT and len(args) == 3
-                                               and py_contains(fields, nk[].k_coefs_))):
+        if rank == 2 and (not self.fitting or self.continuing_mlp):
             var columns = py_get(fields, nk[].k_n_features_in_)
             if py_type(columns) is b.int:
                 classical_check_width(self.shape[1], Int(py=columns), self.name)
@@ -351,6 +361,11 @@ struct XseqPublicLifecycle(Movable):
             var y = prepared[1]
             if self.classifier:
                 lda_native_labels(y, self.lifecycle, True, self.name)
+                if incremental_mlp and prepared[2] is not None:
+                    var classes = prepared[2]
+                    if len(labels_shape_of(classes, self.lifecycle)) != 1:
+                        raise Error("ValueError: classes must be a one-dimensional list of possible labels")
+                    lda_native_labels(classes, self.lifecycle, True, self.name)
             var target_shape = labels_shape_of(y, self.lifecycle)
             if rank > 0 and len(target_shape) > 0 and self.shape[0] != target_shape[0]:
                 raise Error("Found input variables with inconsistent numbers of samples: [" + String(self.shape[0]) + ", " + String(target_shape[0]) + "]")
@@ -389,7 +404,8 @@ struct XseqPublicLifecycle(Movable):
     def finish(self, model: PythonObject, result: PythonObject, context: PythonObject) raises -> PythonObject:
         var nk = xseq_keys()
         if self.fitting:
-            if self.nested:
+            # A later incremental batch checks the original feature names, then preserves them.
+            if self.nested or self.continuing_mlp:
                 py_setitem(py_fields(model), nk[].k__mojolearn_fitted, PythonObject(True))
             else:
                 estimator_fit_complete(model, self.source, self.classifier, self.lifecycle)
