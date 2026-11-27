@@ -30,8 +30,7 @@ Status of an entry, from its newest version's `identical` cell:
   refused: <ops>    the import refuses the model (the ops it does not support, from the run);
   unverified: ...   ok but not yet run on both NVIDIA and AMD (left out of the docs page).
 
-Only revisions, hashes and numbers are written: never weights, model files or evaluation images (the
-catalog ships in the wheel; no third-party data in the distribution).
+The catalog stores metadata. The wheel also includes the pinned MNIST-12 model for offline verification.
 """
 import argparse
 import copy
