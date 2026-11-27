@@ -597,9 +597,7 @@ def check_sides(arm, records, evidence=None, root=ROOT, batch_bindings=(), no_gp
     side the arm faults with no records fails, except the GPU side of an
     installation without a GPU (`no_gpu`, the batch's probe): that side was
     never run there, so it is OWED to a GPU box, not judged. Such an arm whose
-    CPU side passes reads GPU-OWED (never CAUGHT: the GPU plan,
-    tools/identity_lanes/coverage_sabotage_gpu_plan.json, proves its other
-    half); any failure on the sides it has still reads MISSED. The other side
+    CPU side passes reads GPU-OWED (the GPU job must run its other half); any failure on the sides it has still reads MISSED. The other side
     with no records is reported not applicable."""
     # HARNESS FIX (lane w3f7-b, 2026-11-24): the host-only gate at f200804327 read 31 cpu+gpu arms MISSED with
     # "gpu side: no records" although their CPU side moved: a host run judged the GPU side it never ran.
@@ -779,7 +777,7 @@ def apply_check(table):
     def one(arm):
         return subprocess.run(["git", "-C", ROOT, "apply", "--check", arm["patch"]], capture_output=True, text=True)
 
-    with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as pool:
+    with ThreadPoolExecutor(max_workers=int(os.environ.get("SAB_CORES") or os.cpu_count() or 1)) as pool:
         results = list(pool.map(one, table.values()))
     bad = 0
     for (name, arm), r in zip(table.items(), results):
@@ -788,24 +786,6 @@ def apply_check(table):
             print(f"{name}: {arm['patch']} does not apply: {r.stderr.strip().splitlines()[:1]}")
     print(f"apply-check: {len(table) - bad} of {len(table)} patches apply")
     return 1 if bad else 0
-
-PROVEN = os.path.join(ROOT, "tools", "identity_lanes", "coverage_sabotage_proven.tsv")
-
-
-def proven(path=PROVEN):
-    """{arm: verdict} from the proven table (`#` comments skipped)."""
-    out = {}
-    try:
-        with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                if line.strip() and not line.startswith("#"):
-                    cols = line.rstrip("\n").split("\t")
-                    if len(cols) >= 3:
-                        out[cols[0]] = cols[2]
-    except OSError:
-        pass
-    return out
-
 
 def _family(stem):
     """`build_x_decomp_host` -> `x_decomp`; `build` and `build_core_host` -> `core`."""
@@ -822,13 +802,28 @@ def may_move(arm_table, audit, triage=None):
         import verify_coverage_audit as audit_tool
         triage = audit_tool.triage
     by_patch = {}
+    unresolved = set()
     for row in audit.get("native", ()):
         status, lanes, _ = triage(row)
         if status.startswith("n/a"):
             continue
+        # A broad source match is sufficient to prohibit co-batching. It
+        # never qualifies a lane's runtime result.
+        candidates = lanes or row.get("lanes_wide") or row.get("lanes_closure") or ()
         for patch in row.get("sabotage_patches", ()):
-            by_patch.setdefault(patch, set()).update(lanes)
-    return {name: set(by_patch.get(arm["patch"], ())) | set(arm["lanes"]) for name, arm in arm_table.items()}
+            by_patch.setdefault(patch, set()).update(candidates)
+            if not candidates:
+                unresolved.add(patch)
+    # With no mapped native reach, a second patch could cause this arm's
+    # observed failure. Keep the unknown patch as the only fault in its build.
+    all_lanes = {lane for arm in arm_table.values() for lane in arm["lanes"]}
+    for arm in arm_table.values():
+        patch = arm["patch"]
+        if not by_patch.get(patch) or patch in unresolved:
+            by_patch[patch] = all_lanes
+        else:
+            by_patch[patch].update(arm["lanes"])
+    return {name: by_patch[arm["patch"]] for name, arm in arm_table.items()}
 
 
 def _co_apply(patches, root=ROOT):
@@ -836,6 +831,41 @@ def _co_apply(patches, root=ROOT):
         return True
     r = subprocess.run(["git", "-C", root, "apply", "--check", *patches], capture_output=True, text=True)
     return r.returncode == 0
+
+
+def batch_record(table, names, family, batch_id):
+    def collect(key):
+        return list(dict.fromkeys(value for name in names for value in table[name][key]))
+    builds = collect("bindings")
+    return dict(id=batch_id, family=family, arms=names, patches=list(dict.fromkeys(table[n]["patch"] for n in names)),
+                arm_lanes={n: table[n]["lanes"] for n in names}, builds=builds, lanes=collect("lanes"),
+                columns=sorted({"cpu" if b.endswith("_host") else "device" for b in builds}),
+                sides=sorted({side for n in names for side in arm_sides(table[n])}))
+
+
+def reuse_full_plan(plan, table, selected, head, tree, manifest_hash, patch_hashes):
+    """Validate the CPU producer's full plan before preserving its conflict-free groups."""
+    if ((plan.get("audit_head") != head and plan.get("source_tree") != tree)
+            or plan.get("manifest_sha256") != manifest_hash or plan.get("patch_sha256") != patch_hashes
+            or plan.get("scope") != "full"):
+        raise ValueError("precomputed plan has different source, manifest, patch bytes or scope")
+    batches = plan["batches"]
+    names = [n for b in batches for n in b["arms"]]
+    if len(names) != len(table) or set(names) != set(table) or len({b["id"] for b in batches}) != len(batches):
+        raise ValueError("precomputed plan must cover each current arm exactly once")
+    from concurrent.futures import ThreadPoolExecutor
+    def validate(b):
+        owners = {}
+        for name in b["arms"]:
+            arm = table[name]
+            if any(owners.setdefault(lane, arm["patch"]) != arm["patch"] for lane in arm["lanes"]):
+                raise ValueError(f"{b['id']}: multiple faults reach the same declared lane")
+        if not b["arms"] or b != batch_record(table, b["arms"], b["family"], b["id"]) or not _co_apply(b["patches"]):
+            raise ValueError(f"{b['id']}: stale per-arm lanes, binding map or co-applied patches")
+        keep = [n for n in b["arms"] if n in selected]
+        return batch_record(table, keep, b["family"], b["id"]) if keep else None
+    with ThreadPoolExecutor(max_workers=int(os.environ.get("SAB_CORES") or os.cpu_count() or 1)) as pool:
+        return [b for b in pool.map(validate, batches) if b]
 
 
 def batch_plan(arm_table, audit, triage=None, co_apply=_co_apply):
@@ -849,8 +879,11 @@ def batch_plan(arm_table, audit, triage=None, co_apply=_co_apply):
     groups = {}
     for name in sorted(arm_table, key=lambda a: (_family(arm_table[a]["bindings"][0]), a)):
         groups.setdefault(_family(arm_table[name]["bindings"][0]), []).append(name)
-    batches = []
-    for family, names in groups.items():
+    # Families never share a batch. Preserve first-fit order within a family
+    # while checking independent families' patches concurrently.
+    def pack_family(group):
+        family, names = group
+        batches = []
         open_batches = []
         for name in names:
             arm = arm_table[name]
@@ -866,18 +899,13 @@ def batch_plan(arm_table, audit, triage=None, co_apply=_co_apply):
             else:
                 open_batches.append([name])
         for k, batch in enumerate(open_batches, 1):
-            builds, lanes = [], []
-            for o in batch:
-                builds += [b for b in arm_table[o]["bindings"] if b not in builds]
-                lanes += [x for x in arm_table[o]["lanes"] if x not in lanes]
-            batches.append(dict(id=f"{family}-{k}", family=family, arms=batch,
-                                patches=list(dict.fromkeys(arm_table[o]["patch"] for o in batch)),
-                                arm_lanes={o: arm_table[o]["lanes"] for o in batch},
-                                builds=builds, lanes=lanes,
-                                columns=sorted({"cpu" if b.endswith("_host") else "device" for b in builds}),
-                                # the sides the batch's arms fault; the run records both sides on a GPU box
-                                sides=sorted({s for o in batch for s in arm_sides(arm_table[o])})))
-    return batches
+            batches.append(batch_record(arm_table, batch, family, f"{family}-{k}"))
+        return batches
+
+    from concurrent.futures import ThreadPoolExecutor
+    cores = int(os.environ.get("SAB_CORES") or os.cpu_count() or 1)
+    with ThreadPoolExecutor(max_workers=min(cores, len(groups) or 1)) as pool:
+        return [batch for family in pool.map(pack_family, groups.items()) for batch in family]
 
 
 def print_batch_plan(batches, branch, plan_path, box="apple"):
@@ -889,6 +917,43 @@ def print_batch_plan(batches, branch, plan_path, box="apple"):
               f"{len(b['lanes'])} lane(s)")
         print(f"lq add {box} CMD {branch} sab-{b['id']} "
               f"'bash tools/coverage_sabotage_batch.sh {plan_path or '<plan.json>'} {b['id']}'")
+
+
+def batch_receipt(plan, selected, full, rows, table, job_status):
+    """A current job's retained rows must cover each requested arm exactly once."""
+    from collections import Counter
+
+    failures = []
+    by_id = {batch["id"]: batch for batch in plan["batches"]}
+    if not selected or len(set(selected)) != len(selected) or not set(selected) <= by_id.keys():
+        raise ValueError("empty, duplicate or unknown batch IDs")
+    expected = [arm for batch in selected for arm in by_id[batch]["arms"]]
+    if len(set(expected)) != len(expected) or not set(expected) <= table.keys():
+        raise ValueError("duplicate or unknown arms in selected batches")
+    if full and (set(selected) != by_id.keys() or set(expected) != table.keys()):
+        failures.append("full run does not contain every current manifest arm")
+    counts = Counter()
+    caught = set()
+    for line in rows:
+        fields = line.rstrip("\n").split("\t")
+        if len(fields) != 7:
+            failures.append("malformed fault result")
+            continue
+        name, _, verdict, lanes, _, restored, _ = fields
+        counts[name] += 1
+        if name not in table:
+            failures.append(f"{name}: unknown arm")
+        elif lanes.split(",") != table[name]["lanes"] or verdict != "CAUGHT" or restored != "restored":
+            failures.append(f"{name}: incomplete lane set, detection or restoration ({verdict}, {restored})")
+        else:
+            caught.add(name)
+    missing = sorted(set(expected) - counts.keys())
+    extra = sorted(counts.keys() - set(expected))
+    duplicate = sorted(name for name, count in counts.items() if count != 1)
+    ok = bool(expected) and not (missing or extra or duplicate or failures or job_status)
+    return dict(scope="full" if full else "targeted", complete_current_manifest=full and ok, selection_passed=ok,
+                requested=len(expected), caught=len(caught & set(expected)), missing=missing, duplicate=duplicate,
+                extra=extra, errors=failures, job_status=job_status)
 
 
 def main(argv=None):
@@ -923,13 +988,36 @@ def main(argv=None):
     r.add_argument("--restored", required=True)
     r.add_argument("--out", required=True)
     b = sub.add_parser("batch-plan", help="group the arms into conflict-free batches, one sabotaged build each")
-    b.add_argument("--audit", required=True, help="tools/verify_coverage_audit.py --all --json output")
-    b.add_argument("--arms", default="", help="comma separated arms (default: every arm not yet proven)")
+    inputs = b.add_mutually_exclusive_group()
+    inputs.add_argument("--audit", help="current native reach audit for packing independent patches")
+    inputs.add_argument("--full-plan", help="reuse the complete source-bound plan from a CPU build")
+    b.add_argument("--arms", default="", help="comma separated arms (default: every arm in the current manifest)")
     b.add_argument("--json", help="write the plan here")
     b.add_argument("--branch", default="<branch>", help="the branch named in the printed lq commands")
     b.add_argument("--box", default="apple", help="the lq box named in the printed commands")
+    result = sub.add_parser("batch-receipt", help="account for all the fault arms selected in this job")
+    result.add_argument("--plan", required=True)
+    result.add_argument("--batches", required=True, help="space-separated chosen batch IDs")
+    result.add_argument("--scope", choices=("full", "targeted"), required=True)
+    result.add_argument("--rows", required=True)
+    result.add_argument("--job-status", type=int, required=True)
+    result.add_argument("--json", required=True)
     args = ap.parse_args(argv)
     table = arms()
+    if args.cmd == "batch-receipt":
+        plan_bytes = Path(args.plan).read_bytes()
+        plan = json.loads(plan_bytes)
+        manifest_hash = hashlib.sha256(Path(MANIFEST).read_bytes()).hexdigest()
+        head = subprocess.check_output(["git", "-C", ROOT, "rev-parse", "HEAD"], text=True).strip()
+        if plan.get("manifest_sha256") != manifest_hash or plan.get("audit_head") != head:
+            raise SystemExit("fault plan differs from the current manifest or source")
+        with open(args.rows) as rows:
+            result = batch_receipt(plan, args.batches.split(), args.scope == "full", rows, table, args.job_status)
+        result.update(head=head, manifest_sha256=manifest_hash, plan_sha256=hashlib.sha256(plan_bytes).hexdigest())
+        Path(args.json).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        print(f"{result['scope']} fault run: {result['caught']}/{result['requested']} arms caught,"
+              f" complete_current_manifest={result['complete_current_manifest']}; evidence: {args.json}")
+        return 0 if result["selection_passed"] else 1
     if args.cmd == "list":
         for name, arm in table.items():
             print(f"{name}\t{arm['patch']}\t{','.join(arm['bindings'])}\t{','.join(arm['lanes'])}\t{arm['side']}")
@@ -937,16 +1025,33 @@ def main(argv=None):
     if args.cmd == "apply-check":
         return apply_check(table)
     if args.cmd == "batch-plan":
-        names = [a for a in args.arms.split(",") if a] or [a for a in table if a not in proven()]
+        names = [a for a in args.arms.split(",") if a] or list(table)
         missing = [a for a in names if a not in table]
         if missing:
             raise SystemExit("no arm " + ", ".join(missing))
-        audit = json.loads(Path(args.audit).read_text())
-        batches = batch_plan({a: table[a] for a in names}, audit)
+        head, tree = subprocess.check_output(["git", "-C", ROOT, "rev-parse", "HEAD", "HEAD^{tree}"], text=True).split()
+        manifest_hash = hashlib.sha256(Path(MANIFEST).read_bytes()).hexdigest()
+        patches = {arm["patch"] for arm in table.values()}
+        patch_hashes = {p: hashlib.sha256((Path(ROOT) / p).read_bytes()).hexdigest() for p in patches}
+        selected = {a: table[a] for a in names}
+        if args.full_plan:
+            original = json.loads(Path(args.full_plan).read_bytes())
+            batches = reuse_full_plan(original, table, selected, head, tree, manifest_hash, patch_hashes)
+            packing = original["packing"]
+        else:
+            audit = json.loads(Path(args.audit).read_text()) if args.audit else {}
+            if args.audit and (audit.get("scope") not in ("all", "all-native") or not audit.get("native")
+                               or (audit.get("head") != head and audit.get("source_tree") != tree)):
+                raise SystemExit("batch planning requires a full native reach audit of this source")
+            if apply_check(selected):
+                return 1
+            batches = batch_plan(selected, audit)
+            packing = "native-reach" if args.audit else "one-distinct-patch-per-batch"
         print_batch_plan(batches, args.branch, args.json, args.box)
         if args.json:
-            Path(args.json).write_text(json.dumps(dict(audit_head=audit.get("head"), batches=batches),
-                                                  indent=1, sort_keys=True) + "\n")
+            plan = dict(audit_head=head, source_tree=tree, scope="subset" if set(names) != set(table) else "full",
+                        packing=packing, batches=batches, manifest_sha256=manifest_hash, patch_sha256=patch_hashes)
+            Path(args.json).write_text(json.dumps(plan, indent=1, sort_keys=True) + "\n")
         return 0
     if args.arm not in table:
         raise SystemExit(f"no arm {args.arm}; `list` names them")

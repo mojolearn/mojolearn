@@ -81,17 +81,28 @@ log "BATCH $BATCH arms=$ARMS builds=$BUILDS columns=$COLUMNS lanes=$LANES head=$
 # the builds. So the batch stops here, before any build, when an arm's patch, bindings or lanes are not the
 # plan's (lane sab-gpu-missed, 2026-11-23); `coverage_sabotage.py batch-plan` writes a current plan.
 if ! stale=$(python3 - "$PLAN" "$BATCH" <<'EOF'
-import json, sys
+import hashlib, json, subprocess, sys
+from pathlib import Path
 sys.path.insert(0, "tools")
 import coverage_sabotage as cs
 plan, bid = sys.argv[1:3]
-b = [x for x in json.load(open(plan))["batches"] if x["id"] == bid][0]
+plan = json.loads(Path(plan).read_bytes())
+b = next(batch for batch in plan["batches"] if batch["id"] == bid)
 table, bad = cs.arms(), []
+if plan.get("manifest_sha256") != hashlib.sha256(Path(cs.MANIFEST).read_bytes()).hexdigest():
+    bad.append("manifest changed")
+if plan.get("audit_head") != subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip():
+    bad.append("source changed")
+for patch in b["patches"]:
+    if plan.get("patch_sha256", {}).get(patch) != hashlib.sha256(Path(patch).read_bytes()).hexdigest():
+        bad.append(patch + ": patch bytes changed")
 for arm in b["arms"]:
     a = table.get(arm)
     if a is None:
         bad.append(arm + ": not in the arm table")
         continue
+    if b.get("arm_lanes", {}).get(arm) != a["lanes"]:
+        bad.append(arm + ": per-arm lane map differs")
     if a["patch"] not in b["patches"]:
         bad.append(arm + ": patch " + a["patch"])
     bad += [arm + ": build " + x for x in a["bindings"] if x not in b["builds"]]

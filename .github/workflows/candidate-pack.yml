@@ -92,13 +92,39 @@ jobs:
       - name: Pack (release.py candidate --pack-here)
         env:
           GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ inputs.commit }}
         run: |
           set -u
           ( while sleep 60; do echo "$(date -u +%H:%M:%S) nproc=$(nproc) load=$(cut -d' ' -f1-3 /proc/loadavg)"; done ) \
             > "$RUNNER_TEMP/cores.txt" 2>&1 & probe=$!
+          # Pack the wheels and plan this source's fault batches concurrently.
+          # The CPU runner retains the native reach and ships the plan with the wheels.
+          prepare_fault_plan() (
+            set -eu
+            git cat-file -e "${SOURCE_COMMIT}^{commit}"
+            if ! git grep -q -e '--native-fault-plan' "$SOURCE_COMMIT" -- tools/verify_coverage_audit.py; then exit 0; fi
+            source_dir=$(git worktree list --porcelain | awk -v rev="$SOURCE_COMMIT" '/^worktree / {p=substr($0,10)} /^HEAD / && $2==rev {print p; exit}')
+            if [ -z "$source_dir" ]; then
+              source_dir="$RUNNER_TEMP/fault-plan-source"
+              git worktree add --detach "$source_dir" "$SOURCE_COMMIT"
+            fi
+            cd "$source_dir"
+            out="$RUNNER_TEMP/out"
+            mkdir -p "$out"
+            py="$RUNNER_TEMP/fault-plan-venv/bin/python"
+            python3 -m venv "$RUNNER_TEMP/fault-plan-venv"
+            "$py" -m pip install numpy > "$out/fault-plan-dependencies.log" 2>&1
+            "$py" tools/verify_coverage_audit.py --native-fault-plan --json "$out/native-fault-reach.json" > "$out/fault-reach.log" 2>&1
+            "$py" tools/coverage_sabotage.py batch-plan --audit "$out/native-fault-reach.json" --json "$out/fault-plan.json" > "$out/fault-plan.log" 2>&1
+          )
+          prepare_fault_plan & planner=$!
           rc=0
           python3 tools/release_remote_pack.py runner --event "$GITHUB_EVENT_PATH" --out "$RUNNER_TEMP/out" \
             --tmp "$RUNNER_TEMP" || rc=$?
+          wait "$planner" || rc=1
+          if [ -f "$RUNNER_TEMP/out/fault-plan.json" ] && [ -d "$RUNNER_TEMP/out/final" ]; then
+            cp "$RUNNER_TEMP/out/fault-plan.json" "$RUNNER_TEMP/out/final/" || rc=1
+          fi
           kill "$probe" 2>/dev/null || true
           cp "$RUNNER_TEMP/cores.txt" "$RUNNER_TEMP/out/cores.txt" 2>/dev/null || true
           { echo "### candidate pack ${{ inputs.version }}"; echo '```'; tail -n 25 "$RUNNER_TEMP/out/runner.log" 2>/dev/null
