@@ -25,3 +25,10 @@ def check_rank_estimator(method: Int, newton: Int, iterations: Int) raises:
 def check_rank_grade(valid: Bool) raises:
     if not valid:
         raise Error("lambdarank and rank_xendcg require integer relevance grades in [0, 30]")
+
+
+def check_rank_inputs(categorical: Bool, validation: Bool) raises:
+    if categorical:
+        raise Error("lambdarank and rank_xendcg accept numeric features only")
+    if validation:
+        raise Error("lambdarank and rank_xendcg do not support eval_set")

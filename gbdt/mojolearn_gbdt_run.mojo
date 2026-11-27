@@ -273,7 +273,7 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
             + String(n_class_weights)
         )
     var fixed_and_weights = 36 + n_class_weights
-    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 4 and len(params) != fixed_and_weights + 5 and len(params) != fixed_and_weights + 8:
+    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 4 and len(params) != fixed_and_weights + 5 and len(params) != fixed_and_weights + 7 and len(params) != fixed_and_weights + 8 and len(params) != fixed_and_weights + 10:
         raise Error(
             "gbdt_fit: params must hold 36 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction, then the group sizes address and group count, then the pairs address, pair count and pair weights address values ("
             + String(36 + n_class_weights)
@@ -371,6 +371,16 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
 
     # the pool's grouping, `group_id` resolved to run lengths by the wrapper;
     # read here, with the GIL held, like every other Python value
+    var eval_group_sizes = List[UInt32]()
+    if len(params) == fixed_and_weights + 7 or len(params) == fixed_and_weights + 10:
+        var count = params.i(len(params) - 1)
+        if count < 1 or count > params.i(20) or params.i(len(params) - 2) == 0:
+            raise Error("gbdt_fit: invalid held-out query count or group buffer")
+        if params.strs[0] != "QueryRMSE" and params.strs[0] != "PairLogit" and params.strs[0] != "YetiRank":
+            raise Error("gbdt_fit: only grouped ranking objectives take eval_group_id")
+        if (len(params) == fixed_and_weights + 10) != (params.strs[0] == "PairLogit"):
+            raise Error("gbdt_fit: invalid held-out group and training pair layout")
+        eval_group_sizes = list_u32(_u32_ptr(params.i(len(params) - 2)), count)
     var group_sizes = List[UInt32]()
     if len(params) >= fixed_and_weights + 5:
         var n_groups = params.i(fixed_and_weights + 4)
@@ -386,7 +396,7 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
     var pair_winners = List[UInt32]()
     var pair_losers = List[UInt32]()
     var pair_weights = List[Float32]()
-    if len(params) == fixed_and_weights + 8:
+    if len(params) == fixed_and_weights + 8 or len(params) == fixed_and_weights + 10:
         var n_pairs = params.i(fixed_and_weights + 6)
         if n_pairs != -1 and n_pairs < 1:
             raise Error(
@@ -453,7 +463,7 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
     result = gbdt_fit(
         ctx, xp, n_rows, n_features, yp, wp, n_weights,
         cp, n_flags, ep, eyp, n_eval_rows, fp,
-        group_sizes=group_sizes,
+        group_sizes=group_sizes, eval_group_sizes=eval_group_sizes,
         pair_winners=pair_winners,
         pair_losers=pair_losers,
         pair_weights=pair_weights,

@@ -354,6 +354,7 @@ from gbdt.targets.kernel.pointwise_targets import (
 from gbdt.targets.kernel.pair_logit import (
     PairwiseTargetBuffers,
     launch_pair_logit_with,
+    _launch_pair_logit_group_layout,
     make_pairwise_group_buffers,
     make_pairwise_target_buffers,
     pair_blocks,
@@ -426,6 +427,9 @@ struct TestArm(Movable):
     var h_bin: HostBuffer[DType.uint32]
     var h_eq: HostBuffer[DType.uint8]
     var h_vals: HostBuffer[DType.float32]
+    var query: Optional[QuerywiseTargetBuffers]
+    var pairs: Optional[PairwiseTargetBuffers]
+    var loss_weight: Float64
 
 
 def make_test_arm(
@@ -436,6 +440,8 @@ def make_test_arm(
     approx_dim: Int,
     stat_count: Int,
     max_depth: Int,
+    objective: Int = -1,
+    group_sizes: List[UInt32] = List[UInt32](),
 ) raises -> TestArm:
     """Size the held-out arm. `n_rows == 0` still allocates one word per
     buffer, because a struct field cannot be absent and the contract is
@@ -447,6 +453,20 @@ def make_test_arm(
     var max_leaves = 1 << max_depth
     var w = ctx.enqueue_create_buffer[DType.float32](n)
     enqueue_fill(ctx, w, Float32(1.0))
+    var query = Optional[QuerywiseTargetBuffers]()
+    var pairs = Optional[PairwiseTargetBuffers]()
+    var loss_weight = Float64(n)
+    if n_rows > 0 and (objective == OBJECTIVE_QUERY_RMSE or objective == OBJECTIVE_PAIR_LOGIT or objective == OBJECTIVE_YETI_RANK):
+        if len(group_sizes) == 0:
+            raise Error("grouped validation needs one held-out query id per eval row")
+        if objective == OBJECTIVE_QUERY_RMSE:
+            query = Optional(make_querywise_target_buffers(ctx, group_sizes, n, targets, w, False))
+        else:
+            # YetiRank's training gradients have no scalar loss. Its held-out
+            # metric is PairLogit over unequal grades within each test query.
+            pairs = Optional(make_pairwise_group_buffers[True](ctx, group_sizes, n, targets, w))
+            blocks = max(blocks, len(group_sizes))
+            loss_weight = pairs.value().pairs_total_weight
     var fv_n = 1
     var h_fv_n = blocks
     var vals_n = max_leaves * approx_dim
@@ -471,6 +491,7 @@ def make_test_arm(
         ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_host_buffer[DType.uint8](max_depth),
         ctx.enqueue_create_host_buffer[DType.float32](vals_n),
+        query^, pairs^, loss_weight,
     )
 
 
@@ -592,13 +613,12 @@ def _test_loss(
     """
     # lane t1-tree-builder-ops: `_test_loss_enqueue`'s launches at slot 0
     # (they were a verbatim copy here), then the one readback.
-    var n = test.n_rows
     _test_loss_enqueue(
         ctx, test, objective, num_classes, alpha, logloss_border, approx_dim, 0,
     )
     ctx.enqueue_copy(dst_ptr=test.h_fv.unsafe_ptr(), src_buf=test.fv)
     ctx.synchronize()
-    return -Float64(test.h_fv.unsafe_ptr().unsafe_load(0)) / Float64(n)
+    return -Float64(test.h_fv.unsafe_ptr().unsafe_load(0)) / test.loss_weight
 
 
 def _test_loss_enqueue(
@@ -630,6 +650,17 @@ def _test_loss_enqueue(
             test.cursor, n, test.cindex, False,
             test.fv_part, True, test.stats, n, test.mag_dummy, False,
         )
+    elif test.query:
+        launch_query_rmse_with[False](
+            ctx, test.query.value(), test.cursor, False,
+            test.stats, test.fv_part, True, test.mag_dummy, False,
+        )
+    elif test.pairs:
+        blocks = -test.pairs.value().n_pairs
+        _launch_pair_logit_group_layout[False, False](
+            ctx, test.pairs.value(), test.cursor, False,
+            test.stats, test.fv_part, True, test.mag_dummy, False,
+        )
     else:
         launch_approximate[False](
             ctx, objective, test.targets, test.weights, Int32(n),
@@ -647,10 +678,10 @@ def _test_loss_enqueue(
 def _test_loss_div_kernel(
     fv: MutPointer[Float32, MutAnyOrigin],
     pending_in: Int32,
-    n_in: Int32,
+    denominator_bits: UInt64,
     losses: MutPointer[UInt64, MutAnyOrigin],
 ):
-    """One thread a pending slot: `-double(fv[j]) / double(n)` in
+    """One thread a pending slot: `-double(fv[j]) / test_weight` in
     soft-float64 (`checks/soft_f64.mojo`: negation flips the sign bit, the
     divide is correctly rounded), the bits of the host expression it
     replaces, written as double bit patterns."""
@@ -660,7 +691,7 @@ def _test_loss_div_kernel(
             j,
             sf64_div(
                 sf64_neg(sf64_from_f32(fv.unsafe_load(j))),
-                sf64_from_int(Int(n_in)),
+                denominator_bits,
             ),
         )
 
@@ -673,13 +704,13 @@ def _test_loss_div_kernel(
 def _heldout_loss_bits_gated_kernel(
     gate: MutPointer[Int32, MutAnyOrigin],
     fv: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
+    denominator_bits: UInt64,
     losses: MutPointer[UInt64, MutAnyOrigin],
 ):
     """`_test_loss_div_kernel` for one slot, behind the executor gate."""
     if gate.unsafe_load(0) != Int32(0):
         return
-    _test_loss_div_kernel(fv, Int32(1), n_in, losses)
+    _test_loss_div_kernel(fv, Int32(1), denominator_bits, losses)
 
 
 def tree_op_heldout_loss(
@@ -697,7 +728,7 @@ def tree_op_heldout_loss(
     """Tree op TREE_OP_HELDOUT_LOSS (gbdt/tree_ops.mojo, lane
     t1-tree-builder-ops): the held-out loss of round `it` (1-based) as a
     program value. `_test_loss`'s launches (same target kernel, same fold
-    into `test.fv[0]`), then `-double(fv) / double(n)` in soft float64
+    into `test.fv[0]`), then `-double(fv) / test_weight` in soft float64
     (`_test_loss_div_kernel`: the bits of `_test_loss`'s host expression)
     stored as `losses[it - 1]`, a binary64 bit pattern. The store is behind
     the gate, so the history past the stopping round is never written;
@@ -708,7 +739,7 @@ def tree_op_heldout_loss(
         ctx, test, objective, num_classes, alpha, logloss_border, approx_dim, 0,
     )
     ctx.enqueue_function[_heldout_loss_bits_gated_kernel](  # small-launch(one word): the round's loss
-        gate.unsafe_ptr(), test.fv.unsafe_ptr(), Int32(test.n_rows),
+        gate.unsafe_ptr(), test.fv.unsafe_ptr(), bitcast[DType.uint64](test.loss_weight),
         losses.unsafe_ptr() + (it - 1),
         grid_dim=(1, 1, 1), block_dim=(64, 1, 1),
     )
@@ -4250,11 +4281,10 @@ def fit_with_test(
     var is_querywise = objective == OBJECTIVE_QUERY_RMSE
     var query_buffers = Optional[QuerywiseTargetBuffers]()
     if is_querywise:
-        var has_test_rows = test.__bool__() and test.value().n_rows > 0
-        if non_symmetric or perm_count > 1 or has_test_rows:
+        if non_symmetric or perm_count > 1:
             raise Error(
                 "QueryRMSE is implemented for a SymmetricTree"
-                " searcher at one permutation with no eval set; this fit asked"
+                " searcher at one permutation; this fit asked"
                 " for another arm"
             )
         query_buffers = Optional(
@@ -4270,11 +4300,10 @@ def fit_with_test(
     var pair_buffers = Optional[PairwiseTargetBuffers]()
     var loss_norm = Float64(n_rows)
     if is_pair_logit:
-        var has_test_rows = test.__bool__() and test.value().n_rows > 0
-        if non_symmetric or perm_count > 1 or has_test_rows:
+        if non_symmetric or perm_count > 1:
             raise Error(
                 "PairLogit is implemented for a SymmetricTree"
-                " searcher at one permutation with no eval set; this fit asked"
+                " searcher at one permutation; this fit asked"
                 " for another arm"
             )
         comptime if PAIRLOGIT_GROUP_FUSED:
@@ -4332,11 +4361,10 @@ def fit_with_test(
     # ======================================================================
     var yeti_rand = TRandom(random_seed ^ UInt64(0x5945544952414E4B))
     if is_yeti_rank:
-        var has_test_rows = test.__bool__() and test.value().n_rows > 0
-        if non_symmetric or perm_count > 1 or has_test_rows:
+        if non_symmetric or perm_count > 1:
             raise Error(
                 "YetiRank is implemented for a SymmetricTree"
-                " searcher at one permutation with no eval set; this fit asked"
+                " searcher at one permutation; this fit asked"
                 " for another arm"
             )
         yeti_buffers = Optional(

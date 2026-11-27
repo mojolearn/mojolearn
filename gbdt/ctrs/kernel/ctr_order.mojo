@@ -8,6 +8,10 @@ column shares."""
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from gbdt.ctrs.index_wrapper import CTR_INDEX_MASK
+from gbdt.data.group_layout import device_group_layout
+from gbdt.gpu_util.kernel.scan import SCAN_BLOCK, launch_scan_vector_u32
+from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_u32
 from gbdt.ctrs.ctr_order import (
     learn_load_key,
     learn_order_row,
@@ -82,3 +86,74 @@ def launch_ctr_estimation_order(
         grid_dim=(blocks, 1, 1),
         block_dim=(CTR_ORDER_BLOCK, 1, 1),
     )
+
+
+def expand_query_order_kernel(
+    ordered_groups: MutPointer[UInt32, MutAnyOrigin], ends: MutPointer[UInt32, MutAnyOrigin],
+    offsets: MutPointer[UInt32, MutAnyOrigin], count: Int32, rows: Int32,
+    order: MutPointer[UInt32, MutAnyOrigin], ids: MutPointer[UInt32, MutAnyOrigin],
+):
+    var pos = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if pos >= Int(rows):
+        return
+    var lo = 0
+    var hi = Int(count)
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if Int(ends.unsafe_load(mid)) <= pos:
+            lo = mid + 1
+        else:
+            hi = mid
+    var group = Int(ordered_groups.unsafe_load(lo))
+    var begin = 0 if lo == 0 else Int(ends.unsafe_load(lo - 1))
+    var row = Int(offsets.unsafe_load(group)) + pos - begin
+    order.unsafe_store(pos, UInt32(row))
+    ids.unsafe_store(row, UInt32(group))
+
+
+def launch_grouped_ctr_order(
+    ctx: DeviceContext, mut rows_order: DeviceBuffer[DType.uint32],
+    sizes: List[UInt32], n_rows: Int, seed: UInt64,
+) raises -> DeviceBuffer[DType.uint32]:
+    """Shuffle whole queries with the same seed as the host. Rows keep their order inside a query."""
+    var groups = device_group_layout(ctx, sizes, n_rows, "group_id: group ", "group_id: the group sizes cover ")
+    var n = len(sizes)
+    var shuffled = ctx.enqueue_create_buffer[DType.uint32](n)
+    var lengths = ctx.enqueue_create_buffer[DType.uint32](n)
+    var ends = ctx.enqueue_create_buffer[DType.uint32](n)
+    var scratch = ctx.enqueue_create_buffer[DType.uint32]((n + SCAN_BLOCK - 1) // SCAN_BLOCK)
+    var ids = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    launch_ctr_estimation_order(ctx, shuffled, n, 0, seed)
+    launch_gather_with_mask_u32(ctx, lengths, groups.sizes, shuffled, n, UInt32(0xFFFFFFFF))
+    launch_scan_vector_u32(ctx, n, True, lengths, ends, scratch)
+    ctx.enqueue_function[expand_query_order_kernel](
+        shuffled.unsafe_ptr(), ends.unsafe_ptr(), groups.offsets.unsafe_ptr(), Int32(n), Int32(n_rows),
+        rows_order.unsafe_ptr(), ids.unsafe_ptr(), grid_dim=(n_rows + CTR_ORDER_BLOCK - 1) // CTR_ORDER_BLOCK,
+        block_dim=CTR_ORDER_BLOCK,
+    )
+    ctx.synchronize()
+    return ids^
+
+
+def grouped_ctr_anchor_kernel(
+    sorted_rows: MutPointer[UInt32, MutAnyOrigin], codes: MutPointer[UInt32, MutAnyOrigin],
+    query: MutPointer[UInt32, MutAnyOrigin], anchors: MutPointer[UInt32, MutAnyOrigin], n: Int32,
+):
+    """The stable category sort puts every (category, query) in one run.
+    Its first row's prefix excludes *all* labels from that query."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n):
+        return
+    var row = Int(sorted_rows.unsafe_load(i) & CTR_INDEX_MASK)
+    var code = codes.unsafe_load(row)
+    var q = query.unsafe_load(row)
+    var lo = 0
+    var hi = i
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        var other = Int(sorted_rows.unsafe_load(mid) & CTR_INDEX_MASK)
+        if codes.unsafe_load(other) == code and query.unsafe_load(other) == q:
+            hi = mid
+        else:
+            lo = mid + 1
+    anchors.unsafe_store(row, sorted_rows.unsafe_load(lo) & CTR_INDEX_MASK)
