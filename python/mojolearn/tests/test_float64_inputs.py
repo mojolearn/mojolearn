@@ -404,11 +404,12 @@ def test_forecaster_refuses_overflow_in_pandas_object_storage():
 def test_value_that_rounds_to_float32_max_is_kept():
     x64 = _wide(32, 3, 26)
     x64[4, 1] = _KEPT
-    # MinMaxScaler: StandardScaler's variance of a float32 max overflows float32 arithmetic for both inputs
-    wide = ml.MinMaxScaler().fit(x64)
-    narrow = ml.MinMaxScaler().fit(x64.astype(np.float32))
-    assert _same(wide.data_max_, narrow.data_max_)
-    assert np.asarray(wide.data_max_)[1] == np.finfo(np.float32).max
+    # max_error reads the value itself (a scaler's variance or 1/range of float32's max overflows or underflows
+    # float32 arithmetic for the float32 input as well)
+    y64, zeros = x64[:, 1].copy(), np.zeros(32)
+    wide = ml.metrics.max_error(y64, zeros)
+    narrow = ml.metrics.max_error(y64.astype(np.float32), zeros.astype(np.float32))
+    assert _same(wide, narrow) and float(wide) == float(np.finfo(np.float32).max)
 
 
 # ---------------------------------------------------------------- strict entries stay strict
