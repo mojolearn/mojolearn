@@ -127,13 +127,22 @@ ORIG=$(git rev-parse HEAD)
 index=$(git rev-parse --git-path index)
 saved_index=$(mktemp) || exit 2
 cp "$index" "$saved_index" || exit 2
+stop_prebuild() {
+    if [ -n "${PREPID:-}" ]; then
+        kill "$PREPID" 2>/dev/null || true
+        wait "$PREPID" 2>/dev/null || true
+        PREPID=
+    fi
+    if [ -n "${psampler:-}" ]; then
+        kill "$psampler" 2>/dev/null || true
+        psampler=
+    fi
+}
 clean_up() {
     local rc=$?
     trap - EXIT
-    if [ -n "${PREPID:-}" ]; then
-        kill "$PREPID" "$psampler" 2>/dev/null || true
-        wait "$PREPID" 2>/dev/null || true
-    fi
+    trap '' TERM INT HUP
+    stop_prebuild
     if git reset -q --soft "$ORIG" && cp "$saved_index" "$index"; then
         rm -f "$saved_index"
     else
@@ -143,6 +152,9 @@ clean_up() {
     exit "$rc"
 }
 trap clean_up EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+trap 'exit 129' HUP
 added=$(git rev-parse --git-path devpod_added)
 if [ -s "$added" ]; then
     git add --pathspec-from-file="$added" || { say "could not stage the synced source additions"; exit 2; }
@@ -297,14 +309,18 @@ mkdir -p "$PREBUILT"
 rm -f "$PREBUILT/_clean.done" || exit 2
 export SAB_PREBUILT=$PREBUILT
 psampler=$(busy_sampler "$RES/busy_cores_prebuild.txt")
-pixi run -e default python tools/sabotage_prebuild.py --plan "$PLAN" --tree "$TREE" --out "$PREBUILT" \
+python3 tools/sabotage_prebuild.py --plan "$PLAN" --tree "$TREE" --out "$PREBUILT" \
     --batches "$IDS" --cores "$CORES" --mem-kb "$(alloc_mem_kb)" --cache "$DEV_CACHE" \
     --unit-seconds "$(( ${SAB_BUILD_MIN:-40} * 60 ))" > "$RES/prebuild.log" 2>&1 &
 PREPID=$!
 say "PREBUILD started (pid $PREPID, $(echo "$IDS" | wc -w) batches, $CORES cores): $PREBUILT"
 # No batch touches the tree before the prebuild has its snapshot of the clean natives.
-while [ ! -f "$PREBUILT/_clean.done" ] && kill -0 "$PREPID" 2>/dev/null; do sleep 2; done  # driver-loop: one wait
+snapshot_deadline=$(( SECONDS + ${SAB_BUILD_MIN:-40} * 60 ))
+while [ ! -f "$PREBUILT/_clean.done" ] && kill -0 "$PREPID" 2>/dev/null && [ "$SECONDS" -lt "$snapshot_deadline" ]; do
+    sleep 2  # driver-loop: wait for the snapshot before any in-place build
+done
 if [ ! -f "$PREBUILT/_clean.done" ]; then
+    stop_prebuild
     unset SAB_PREBUILT
     say "PREBUILD stopped before its clean snapshot: every batch compiles in place"
 fi
@@ -359,7 +375,7 @@ for b in $IDS; do  # driver-loop: over batches, each owns the tree and the GPU
     say "BATCH $b rc=$brc secs=$(( $(date +%s) - t ))$([ $brc -eq 124 ] || [ $brc -eq 137 ] && echo " TIMEOUT (limit $BATCH_MIN min)")"
     [ $brc -eq 0 ] || rc=1
     proven_rows "$b"
-    rm -rf "${PREBUILT:?}/$b"   # placed and restored (a rerun of this batch compiles it again): the disk keeps only the batches still to run
+    python3 tools/sabotage_prebuild.py retire-consumed "$PREBUILT/$b" "$RES/$b/prebuilt-consumed.json" || exit 2
     persist_now
     # A batch that could not put the tree back leaves every later batch unattributable: stop starting batches.
     if [ "$brc" -eq 7 ] || ! grep -q 'NATIVE RESTORED$' "$RES/$b/summary.txt" || [ -n "$(git status --porcelain --untracked-files=no)" ]; then
@@ -367,8 +383,7 @@ for b in $IDS; do  # driver-loop: over batches, each owns the tree and the GPU
         left=STOPPED; rc=1
     fi
 done
-kill "$PREPID" 2>/dev/null   # batches past the budget are not built for nothing; their `ready` ones stay for RESUME
-kill "$psampler" 2>/dev/null
+stop_prebuild  # Join canceled builds before restoring the tree. Published, unused batches stay for resume.
 say "PREBUILD busy $(busy_of "$RES/busy_cores_prebuild.txt") of $CORES cores; $(grep -c '^PREBUILD ready' "$RES/prebuild.log") batches built here"
 say "VERDICTS $(grep -o 'SABOTAGE batch=.*verdict=[A-Z-]*' "$RES/summary.txt" | sed 's/.*verdict=//' | sort | uniq -c | tr -s ' ' | tr '\n' ' ')"
 python3 tools/coverage_sabotage.py batch-receipt --plan "$PLAN" --batches "$IDS" --scope "$scope" \

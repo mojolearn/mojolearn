@@ -36,15 +36,19 @@ import os
 import re
 from pathlib import Path
 import shlex
+import signal
 import shutil
 import subprocess
 import sys
 import threading
 import time
 
+from build_process import stop_group
+
 NATIVE_SUFFIXES = (".so", ".dylib")
 INDEX = "_mojolearn_merged.json"
 PEAK_HEADROOM = 1.2
+_stop_signal = 0
 _GIT = threading.Lock()  # git worktree add/remove share the tree's administrative files
 
 
@@ -84,14 +88,41 @@ def sha(path):
     return h.hexdigest()
 
 
+def request_stop(signum, _frame):
+    global _stop_signal
+    _stop_signal = signum
+
+
 def run(argv, cwd, log, env=None, timeout=None):
-    with open(log, "ab") as out:
+    """Reap the whole compiler group before its workspace can be harvested or removed."""
+    if _stop_signal:
+        return 128 + _stop_signal
+    deadline = None if timeout is None else time.monotonic() + timeout
+    with open(log, "ab") as out, subprocess.Popen(
+        argv, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+        env=env, start_new_session=True,
+    ) as proc:
         try:
-            return subprocess.run(argv, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                  env=env, timeout=timeout).returncode
-        except subprocess.TimeoutExpired:
-            out.write(f"\nTIMEOUT after {timeout} s\n".encode())
-            return 124
+            while not _stop_signal:
+                interval = 0.25 if deadline is None else min(0.25, deadline - time.monotonic())
+                if interval <= 0:
+                    out.write(f"\nTIMEOUT after {timeout} s\n".encode())
+                    return 124
+                try:
+                    return proc.wait(timeout=interval)
+                except subprocess.TimeoutExpired:
+                    continue
+            return 128 + _stop_signal
+        finally:
+            stop_group(proc.pid)
+
+
+def retire_consumed(directory, staged_receipt):
+    """The fallback has no receipt, even if the producer finishes while it runs."""
+    if staged_receipt.is_file():
+        if (directory / "ready").read_bytes() != staged_receipt.read_bytes():
+            raise ValueError(f"prebuild receipt changed after staging {directory}")
+        shutil.rmtree(directory)
 
 
 class Batch:
@@ -118,6 +149,8 @@ class Batch:
         # Every source is in the job's committed tree. Only the frozen clean
         # native artifacts are copied in alongside it.
         for rel in a.clean_hashes:
+            if _stop_signal:
+                return False
             dst = self.tree / rel
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(Path(a.clean) / rel, dst)
@@ -147,6 +180,8 @@ class Batch:
         changed = {}
         if self.prepared:
             for rel in natives(self.tree):  # driver-loop: over the worktree's native files
+                if _stop_signal:
+                    return
                 digest = sha(self.tree / rel)
                 if self.args.clean_hashes.get(rel) != digest:
                     dst = out / rel
@@ -162,6 +197,8 @@ class Batch:
         shutil.rmtree(self.tree, ignore_errors=True)
         receipt = dict(prepared=bool(self.prepared), rc=self.rc, secs=self.secs,
                        changed=changed, clean_sha256=self.args.clean_sha256)
+        if _stop_signal:
+            return
         pending = self.dir / "ready.pending"
         pending.write_text(json.dumps(receipt, sort_keys=True) + "\n")
         pending.replace(self.dir / "ready")
@@ -177,7 +214,7 @@ def reusable(directory, spec, clean_sha256):
         changed = receipt.get("changed")
         if not isinstance(changed, dict) or not changed or set(natives(directory / "out")) != set(changed):
             return False
-        return all(sha(directory / "out" / rel) == digest for rel, digest in changed.items())
+        return all(not _stop_signal and sha(directory / "out" / rel) == digest for rel, digest in changed.items())
     except (OSError, ValueError, AttributeError):
         return False
 
@@ -215,12 +252,16 @@ def main(argv=None):
     (Path(a.out) / "_clean.done").unlink(missing_ok=True)
     shutil.rmtree(a.clean, ignore_errors=True)
     def snapshot(rel):
+        if _stop_signal:
+            return rel, None
         dst = Path(a.clean) / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(Path(a.tree) / rel, dst)
         return rel, sha(dst)
     with ThreadPoolExecutor(max_workers=a.cores) as pool:
         a.clean_hashes = dict(pool.map(snapshot, natives(a.tree)))
+    if _stop_signal:
+        return 128 + _stop_signal
     if not a.clean_hashes:
         raise SystemExit("no clean native files to snapshot")
     a.clean_sha256 = hashlib.sha256(json.dumps(a.clean_hashes, sort_keys=True).encode()).hexdigest()
@@ -228,6 +269,8 @@ def main(argv=None):
     with ThreadPoolExecutor(max_workers=a.cores) as pool:
         cached = pool.map(lambda x: reusable(Path(a.out) / x, plan[x], a.clean_sha256), ids)
         for x, valid in zip(ids, cached):
+            if _stop_signal:
+                return 128 + _stop_signal
             if valid:
                 print(f"PREBUILD {x} ready from an earlier submission", flush=True)
             else:
@@ -239,6 +282,8 @@ def main(argv=None):
             peak, _ = recorded(a.cache, b)
             need = int(peak * PEAK_HEADROOM) if peak else int(a.default_gib * (1 << 30))
             queue.append((bt, b, min(need, budget)))
+    if _stop_signal:
+        return 128 + _stop_signal
     # The run loop may consume a cached marker as soon as the barrier opens.
     (Path(a.out) / "_clean.done").write_text(a.clean_sha256 + "\n")
     running = {}
@@ -259,6 +304,8 @@ def main(argv=None):
             return bt
 
         while queue or running:  # driver-loop: the scheduler (starts units as cores and memory free up)
+            if _stop_signal:
+                return 128 + _stop_signal
             # Worktrees are prepared a little ahead of the compiles (at most two at once, so a compile never waits
             # behind a queue of preparations in the pool and the disk holds a few worktrees, not 155).
             for bt, _, _ in queue[: a.cores]:
@@ -291,6 +338,8 @@ def main(argv=None):
             if not pending:
                 continue
             done, _ = wait(pending, return_when=FIRST_COMPLETED)
+            if _stop_signal:
+                return 128 + _stop_signal
             for f in done:  # driver-loop: over finished units
                 if f not in running:
                     continue
@@ -306,8 +355,13 @@ def main(argv=None):
                 if bt.left == 0:
                     bt.finish()
                     print(f"PREBUILD ready {bt.id}", flush=True)
-    return 0
+    return 128 + _stop_signal if _stop_signal else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    if len(sys.argv) == 4 and sys.argv[1] == "retire-consumed":
+        retire_consumed(Path(sys.argv[2]), Path(sys.argv[3]))
+    else:
+        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            signal.signal(sig, request_stop)
+        sys.exit(main())

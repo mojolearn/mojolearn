@@ -42,6 +42,7 @@ cd "$ROOT"
 OUT=${OUT:-$HOME/mojolearn-sabotage/$BATCH}
 FIXTURES=${FIXTURES:-base}
 mkdir -p "$OUT"
+rm -f "$OUT/prebuilt-consumed.json" || exit 2
 scratch_parent=${SAB_SCRATCH:-$HOME/mojolearn-sabotage-scratch}
 mkdir -p "$scratch_parent" || exit 4
 SCRATCH=$(mktemp -d "$scratch_parent/$BATCH.XXXXXXXX") || exit 4
@@ -276,6 +277,7 @@ if [ -n "$PRE" ] && [ -f "$PRE/ready" ]; then
         log "BUILD $b rc=$(cat "$OUT/build_$b.rc") secs=$(cat "$PRE/build_$b.secs" 2>/dev/null || echo 0) (prebuilt)"
     done
     if [ -d "$PRE/out" ]; then cp -a "$PRE/out/." "$ROOT/" || exit 5; fi
+    cp "$PRE/ready" "$OUT/prebuilt-consumed.tmp" && mv "$OUT/prebuilt-consumed.tmp" "$OUT/prebuilt-consumed.json" || exit 5
     log "PREBUILT natives placed: $(find "$PRE/out" -type f 2> /dev/null | wc -l) files"
 else
     bsampler=$(busy_sampler "$OUT/busy_cores_build.txt")
