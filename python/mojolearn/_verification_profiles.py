@@ -79,7 +79,7 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # session-ops-pool end
                           # session-ops-rest begin: Sequential's norms, activations, attention, losses and SSM scans as
                           # Session ops, one seeded backward each
-                          'ops-layer-norms', 'ops-layer-activations', 'ops-layer-attention',
+                          'ops-layer-norms', 'ops-layer-activations', 'ops-public-tensor-math', 'ops-public-control-graph', 'ops-layer-attention',
                           'ops-layer-losses', 'ops-layer-ctc', 'ops-layer-ssm',
                           # lane w3i11-endpoints: topk, gather, logsumexp, sequence_mask, checkpoint
                           'ops-select-reduce',

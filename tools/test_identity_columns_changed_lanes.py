@@ -475,3 +475,14 @@ def test_declared_no_gpu_side_is_na_on_a_gpu_class_only(tmp_path, monkeypatch, c
     assert "REUSED 1 RECORD 0 KNOWN-BAD 0 of 2 (all) N/A 1" in err
     assert sorted(doc["not_applicable"]) == ["host-only"]
     assert "host inference only" in doc["not_applicable"]["host-only"]["reason"]
+
+
+def test_table_reuse_requires_every_fixture_and_required_part():
+    rows = {"complete/base": {"train": {}, "infer": {}},
+            "complete/odd": {"train": {}, "infer": {}},
+            "missing-fixture/base": {"train": {}, "infer": {}},
+            "missing-part/base": {"train": {}, "infer": {}},
+            "missing-part/odd": {"infer": {}}}
+    lanes = {"complete", "missing-fixture", "missing-part", "unrecorded"}
+    assert ic.incomplete_table_lanes(rows, lanes, ("base", "odd"), {"train", "infer"}) == {
+        "missing-fixture", "missing-part", "unrecorded"}

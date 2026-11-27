@@ -7035,7 +7035,9 @@ def _(ml, X, yc, yr, Xh=None):
         stateless = s.train_step(ids[2 * k:2 * k + 2])
     _same_bytes("resident export_gradients()['flat_gradients']", flat,
                 "stateless train_step()['flat_gradients']", np.asarray(stateless["flat_gradients"]))
-    return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(m.parameters_)),
+    state = m.export_state()
+    return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(state["parameters"])),
+                     moments=_h(np.asarray(state["m"]), np.asarray(state["v"])),
                      grads=_h(flat, *[named[k] for k in sorted(named)]),
                      logits=_h(np.asarray(m.logits(ids[:2, :-1])))),
                 m, lambda e: (np.asarray(e.logits(_ids(Xh, shape.batch, shape.length))),))

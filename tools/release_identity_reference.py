@@ -338,8 +338,14 @@ def table_rows(frozen, lane, check, present, harness, *, declared=None):
     rows = {cls: set() for cls in check}
     for fixture, cell in sorted(cells.items()):
         key = f"{lane}/{fixture}"
+        if not isinstance(cell, dict):
+            problems.append(f"{key}: malformed fixture record")
+            continue
+        for part in sorted(set(v.PARTS) - cell.keys()):
+            problems.append(f"{key}/{part}: required part missing from the admitted table")
         for part, ent in sorted(cell.items()):
             if not isinstance(ent, dict):
+                problems.append(f"{key}/{part}: malformed reference record")
                 continue
             if ent.get("conflict"):
                 problems.append(f"{key}/{part}: the admitted table records a conflict")
@@ -349,7 +355,7 @@ def table_rows(frozen, lane, check, present, harness, *, declared=None):
                 index = cols.get(cls)
                 if index is None and part in OPTIONAL_PARTS:
                     continue
-                if not isinstance(index, int):
+                if type(index) is not int:
                     problems.append(f"{key}/{part}: no agreeing {cls} column in the admitted table")
                     continue
                 try:

@@ -137,3 +137,20 @@ def test_public_cnn_and_optimizer_lanes_have_faults_and_published_references():
         ref = cells.get(f"{lane}/base", {}).get("train", {})
         assert re.fullmatch(r"[0-9a-f]+", ref.get("ref", "")), f"{name} lacks a recorded training digest"
         assert {"apple", "nvidia", "amd", "cpu"} <= ref["cols"].keys(), f"{name} lacks a device reference"
+
+
+def test_endpoint_arm_debt_keeps_checker_only_and_missing_side_visible():
+    from verification_endpoints import endpoint_fault_scope, require_endpoint_native_faults
+    import pytest
+    rows = [dict(endpoint='solver.fit', status='mapped', lanes=['fit']),
+            dict(endpoint='host.predict', status='mapped', lanes=['fit']),
+            dict(endpoint='new.probe', status='mapped', lanes=[], checks=['supplemental']),
+            dict(endpoint='metadata', status='not_numerical', lanes=[])]
+    counts = endpoint_fault_scope(rows, {'fit': {'cpu': ['real-arm'], 'gpu': []}},
+                                 {'host.predict': ('cpu', 'Host inference')})
+    assert counts == {'cpu': 1, 'owed': 2, 'not_numerical': 1}
+    assert rows[0]['owed_native_fault_sides'] == ['gpu']
+    assert rows[2]['owed_native_fault_sides'] == ['cpu', 'gpu']
+    with pytest.raises(ValueError, match='solver.fit'):
+        require_endpoint_native_faults(rows)
+    require_endpoint_native_faults([rows[1], rows[3]])

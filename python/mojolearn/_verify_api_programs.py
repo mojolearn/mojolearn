@@ -16,12 +16,13 @@ def program_checks(recorder,public,methods):
     from .importers._program import ImportedProgram
     def check(method):
         with ops.Session(device=current_side()) as s, tempfile.TemporaryDirectory() as tmp:
-            a=np.array([[.25]],np.float32);x=s.tensor(a);w=s.tensor([[2.]])
-            captured=s.capture(x,s.matmul(x,w))
-            info=(captured._id,captured.input_shapes,captured.output_shapes,captured.params,captured.input_kinds)
-            p=ImportedProgram(s,info,[('x',(1,1),'float32')],[('out',(1,1),'float32')])
+            a=np.array([[.25]],np.float32);x=s.tensor(a);w=s.tensor([[2.]],requires_grad=True)
+            p=s.capture(x,s.matmul(x,w))
+            if public == 'mojolearn.importers._program.ImportedProgram':
+                info=(p._id,p.input_shapes,p.output_shapes,p.params,p.input_kinds)
+                p=ImportedProgram(s,info,[('x',(1,1),'float32')],[('out',(1,1),'float32')])
             condition=s.capture(x,s.less(x,s.full((1,1),1)))
-            other=s.capture(x,s.add(x,s.full((1,1),.25)))
+            other=s.capture(x,s.add(x,s.full((1,1),.125)))
             if method in ('__init__','run'):return p.run(a)
             if method=='run_dynamic':return p.run_dynamic(np.array([[.25],[.5]],np.float32))
             if method=='inspect':
@@ -55,5 +56,10 @@ def program_checks(recorder,public,methods):
             else:kwargs['logical_shards']=1
             with getattr(p,method)(**kwargs) as owner:
                 owner.fit(a,targets=np.ones_like(a),epochs=1,batch_size=1,shuffle=False)
-                return owner.run(a)
+                before = owner.run(a)
+                checkpoint = str(Path(tmp) / 'trained')
+                owner.save(checkpoint)
+            restore = s.load_partitioned if method == 'partition' else s.load_distributed
+            with restore(checkpoint, devices=(0,)) as restored:
+                return [before, restored.run(a)]
     for method in methods:recorder.check(public+'.'+method,lambda method=method:check(method))

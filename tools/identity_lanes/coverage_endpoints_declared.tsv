@@ -1432,3 +1432,30 @@ mojolearn.MLPRegressor.partial_fit	sequence-mlp-regressor-partial	Two epochs thr
 mojolearn.BpeTokenizer.from_files	bpe-vocabulary	Load a two-file GPT-2 vocabulary and hash the merge IDs for aba.
 mojolearn.model_selection.ParameterSampler.__iter__	x-metrics-splitters	Iterate seeded ParameterSampler and hash the emitted parameter tuples in order.
 mojolearn.models.verify_catalog_entry.call	sequence-onnx-import	Verify the pinned input and the output of a caller-supplied one-node native graph through the catalog API.
+mojolearn.AdaBoostRegressor.score	trees-adaboost-reg-score	m_score.py type-checks the fitted AdaBoostRegressor, then _m_score_fit hashes its public score on training and held-out rows.
+mojolearn.BaggingClassifier.score	trees-bagging-clf-score	m_score.py type-checks the fitted BaggingClassifier, then _m_score_fit hashes its public score on training and held-out rows.
+mojolearn.BaggingRegressor.score	trees-bagging-reg-score	m_score.py type-checks the fitted BaggingRegressor, then _m_score_fit hashes its public score on training and held-out rows.
+mojolearn.ops.Program.run_dynamic	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.ops.Program.profile	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.ops.Program.run_if	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.ops.Program.while_loop	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.ops.Program.vjp_if	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.ops.Program.vjp_while	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.ops.Program.save_control	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.ops.Program.fit_if	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.importers._program.ImportedProgram.run_dynamic	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.importers._program.ImportedProgram.profile	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.importers._program.ImportedProgram.run_if	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.importers._program.ImportedProgram.while_loop	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.importers._program.ImportedProgram.vjp_if	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.importers._program.ImportedProgram.vjp_while	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.importers._program.ImportedProgram.save_control	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.importers._program.ImportedProgram.fit_if	ops-public-control-graph	The lane calls program_checks for this exact public class and method and hashes its returned graph outputs.
+mojolearn.ops.Session.load_control	ops-public-control-graph	The save_control case reloads through Session.load_control and hashes a conditional execution of the restored graph.
+mojolearn.RandomForestClassifier.save	rf-clf	The rf-clf Fit retains the concrete forest and its held-out probe. The harness model part calls its public save, reloads and compares held-out predictions.
+mojolearn.ops.Program.distribute	ops-public-control-graph	The lane constructs this public program type, trains its distribute owner and hashes predictions before and after restoring its checkpoint.
+mojolearn.importers._program.ImportedProgram.distribute	ops-public-control-graph	The lane constructs this public program type, trains its distribute owner and hashes predictions before and after restoring its checkpoint.
+mojolearn.ops.Program.partition	ops-public-control-graph	The lane constructs this public program type, trains its partition owner and hashes predictions before and after restoring its checkpoint.
+mojolearn.importers._program.ImportedProgram.partition	ops-public-control-graph	The lane constructs this public program type, trains its partition owner and hashes predictions before and after restoring its checkpoint.
+mojolearn.ops.Session.load_distributed	ops-public-control-graph	After program.distribute the fixture saves that owner and hashes predictions from the owner reloaded through Session.load_distributed.
+mojolearn.ops.Session.load_partitioned	ops-public-control-graph	After program.partition the fixture saves that owner and hashes predictions from the owner reloaded through Session.load_partitioned.
