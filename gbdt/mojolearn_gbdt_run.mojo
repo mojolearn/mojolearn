@@ -217,7 +217,9 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
     buffer of pairs (winner row then loser row per pair), the pair count, -1
     to generate the pairs from the groups and `y` (both addresses are then
     unread), and the address of a float32 buffer of one weight per pair,
-    36 + n_class_weights + 8 values in all. A MultiRMSE fit sends the three
+    36 + n_class_weights + 8 values in all. Grouped validation appends the
+    held-out group-sizes address and group count after the training group
+    or pair fields. A MultiRMSE fit sends the three
     float tails and then its TARGET DIMENSION, 36 + n_class_weights + 4
     values in all (lane/algos-trees, 2026-09-27); `y_addr` then holds that
     many DIM-MAJOR planes of `n_rows` (`y[dim * n_rows + row]`).
