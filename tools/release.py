@@ -148,8 +148,16 @@ THE STEPS
                      NVIDIA (walking NVIDIA_WALK on no stock) and a DigitalOcean
                      MI325X (--amd-build-provider do|cpu-box or
                      MOJOLEARN_AMD_PROVIDER pins one)
-  macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
-  macos-smoke        default: wheel_self_test.py (fresh venv, verify --tamper-test);
+  macos-build        --macos-build-backend github (the default, lane mac-speed-1 2026-11-27): tools/apple_github_build.py
+                     run, .github/workflows/apple-release-build.yml on GitHub's FREE STANDARD macos-15 runners (never
+                     a larger/xlarge label, a self-hosted runner or a rented Mac): one job per merged file at once,
+                     keys looked up in R2, the pack and its gates there; the wheel, macos-build.log and
+                     macos-bincache/ come home. --macos-build-backend laptop: mac_slot --slots 4 run --
+                     build_release_wheel.sh, byte LM on, in ONE fixed tree (<release root>/macos-build-tree) so the
+                     cache keys (repo_path) hit across freezes
+  macos-smoke        default: wheel_self_test.py (fresh venv, verify --tamper-test); the GitHub runner's PASSED
+                     receipt for the same wheel bytes is taken; the runner's Apple lanes fail this step when the
+                     runner's Metal device was usable and a lane failed;
                      --gpu-smoke: qualify_verifier_wheel.py --scope expanded under the Metal lock;
                      its self-test job is the bundled-table gate (0.8.35 shipped a
                      stale table): no PASSED receipt for these wheel bytes, no
@@ -934,6 +942,9 @@ def github_legs(ctx):
 #: layout too, one compile per shard job with swap); "cpu-box" and "gpu-legs" are
 #: opt-in by name.
 BUILD_BACKENDS = {"cpu-box": cpu_legs, "github": github_legs, "gpu-legs": gpu_legs}
+#: Where macos-build compiles the Apple wheel (--macos-build-backend): "github" (tools/apple_github_build.py on GitHub's
+#: free standard macOS runners, the default since lane mac-speed-1, 2026-11-27) or "laptop" (this Mac).
+MACOS_BUILD_BACKENDS = ("github", "laptop")
 #: Routes that overlay their own box-side files and take no route overlay.
 SELF_OVERLAID = ("cpu-box", "github")
 #: Routes whose linux-builds step rents a box: there linux-builds waits for the free cross-compile
@@ -2198,11 +2209,11 @@ class Release(release_identity_wheels.IdentityOnWheels):
             found = [shared] + [d for d in found if d.resolve() != shared.resolve()]
         return found
 
-    def macos_cache_plan(self, env):
+    def macos_cache_plan(self, env, src=None):
         """One line per merged macOS group, before anything compiles: `hit (<cache>)`
         or `compile: <reason>` (tools/bincache.py explain in the frozen tree, under
         the build's environment). Empty when that tree's bincache has no explain."""
-        src = self.src
+        src = src or self.src
         tool = src / "tools" / "bincache.py"
         if not tool.is_file() or "def cmd_explain" not in tool.read_text(errors="replace"):
             return []
@@ -2787,7 +2798,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
         wf_ref = os.environ.get("MOJOLEARN_XCC_WORKFLOW_REF", "main")
         self.must(["gh", "workflow", "run", self.XCC_WORKFLOW, "--ref", wf_ref, "-f", f"ref={base}",
                    "-f", f"commit={self.commit}", "-f", f"archs={self.XCC_ARCHS}",
-                   "-f", "tiers=" + ",".join(self.release_modes), "-f", f"token={token}"],
+                   "-f", "tiers=" + ",".join(self.release_modes), "-f", f"token={token}",
+                   # macos-build compiles the Darwin files on the same free runners (lane mac-speed-1)
+                   "-f", "apple=false"],
                   what="gh workflow run " + self.XCC_WORKFLOW)
         if self.dry:
             return f"would dispatch {self.XCC_WORKFLOW} on {self.commit[:12]} vs {prev.get('version')} and wait"
@@ -3530,11 +3543,21 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 self.save()
         return moved, receipt
 
+    def macos_backend(self):
+        return getattr(self.args, "macos_build_backend", None) or "github"
+
+    def macos_gha_out(self):
+        """tools/apple_github_build.py run's directory for this freeze (the wheel, the pack's cache and log, the
+        smoke receipts, the group records)."""
+        return self.rel / "macos-gha"
+
     def step_macos_build(self):
         w = self.macos_wheel()
         if w and wheel_commit(w) == self.commit:
             return "have " + w.name
         self.stale_preflight("build")
+        if self.macos_backend() == "github":
+            return self.macos_build_github()
         # Four builds at once, as measured on the 10-core M4, never more than
         # this Mac's slot ceiling (tools/mac_slot.py slot_count), which
         # mac_slot.py would otherwise refuse.
@@ -3560,10 +3583,15 @@ class Release(release_identity_wheels.IdentityOnWheels):
         seeds = self.macos_bincache_seeds()
         if seeds:
             env["MOJOLEARN_BINCACHE_SEED_DIRS"] = os.pathsep.join(str(d) for d in seeds)
-        for line in self.macos_cache_plan(env):
+        # ONE FIXED TREE FOR THE LAPTOP BUILD (lane mac-speed-1, 2026-11-27): the key carries the checkout path
+        # (bincache repo_path: the rpath into .pixi is baked in), and a per-freeze checkout at
+        # <version>/source/<commit12>/ made every group of 0.9.0's f6a2ad489a build miss (the 12 groups whose
+        # closures were unchanged differed in repo_path alone, macos-bincache/provenance/keys). It is also this
+        # pipeline's own tree, so the linux pack never reads a checkout the macOS build is writing in.
+        src = self.macos_build_tree()
+        for line in self.macos_cache_plan(env, src):
             self.say("  " + line)
         plan = self.plan()
-        src = self.src
         reuse = release_reuse.plan_rows(plan, release_reuse.MACOS, "REUSE")
         # A MERGED macOS BUILD (MOJOLEARN_MERGED_BINDINGS, default 1) compiles
         # each merged file whole: per-binding reuse cannot place one member's
@@ -3603,6 +3631,69 @@ class Release(release_identity_wheels.IdentityOnWheels):
         shutil.copy2(built[0], dest)
         return f"{dest.name} sha256 {sha256(dest)}"
 
+    def macos_build_tree(self):
+        """THE LAPTOP macOS BUILD'S FIXED TREE: <release root>/macos-build-tree, one detached worktree of ROOT that
+        every freeze of every version checks its commit out into (git checkout --detach --force, then git clean of
+        everything untracked except .pixi), so the bincache keys (repo_path) of an unchanged group are equal from
+        one freeze and one release to the next. Held under an fcntl lock for the step (one macOS build at a time).
+        Verified a clean, complete checkout of the commit before use (_source_problem)."""
+        c = self.commit
+        p = self.base.parent / "macos-build-tree"
+        if self.dry or self.readonly:
+            return p
+        import fcntl
+        lock = open(p.parent / ".macos-build-tree.lock", "a+")
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        self.__dict__.setdefault("_held_locks", []).append(lock)   # released when this process exits
+        if not (p / ".git").exists():
+            self._add_source(p, c)
+        else:
+            for cmd in (["checkout", "--detach", "--force", c], ["sparse-checkout", "disable"],
+                        ["clean", "-ffdx", "-e", ".pixi", "-q"]):
+                rc = subprocess.run(["git", "-C", str(p), *cmd], capture_output=True, text=True)
+                if rc.returncode != 0:
+                    raise StepFailed(f"the macOS build tree {p}: git {' '.join(cmd[:2])} failed: {rc.stderr.strip()[-300:]}")
+            self._verify_source(p, c)
+        self.say(f"  macOS build tree: {p} at {c[:12]} (one path for every freeze: the cache keys carry it)")
+        return p
+
+    def macos_build_github(self):
+        """macos-build on GitHub's free standard macOS runners (tools/apple_github_build.py run): one job per merged
+        file at once, the pack and its gates, the smoke there; the wheel, the pack's log and cache come home as the
+        laptop build's would (macos/<wheel>, macos-build.log, macos-bincache/), so every later step and the ledger
+        adapter read them unchanged."""
+        out = self.macos_gha_out()
+        cmd = [PY, str(ROOT / "tools" / "apple_github_build.py"), "run", "--commit", self.commit, "--out", str(out),
+               "--modes", " ".join(self.release_modes)]
+        ref = getattr(self.args, "candidate_ref", "") or os.environ.get("MOJOLEARN_APPLE_WORKFLOW_REF", "")
+        if ref:
+            cmd += ["--ref", ref]
+        self.must(cmd, log=self.rel / "macos-gha.log", what="apple_github_build.py run")
+        if self.dry:
+            return "would build the macOS wheel on GitHub (macos-15) and copy it to " + str(self.rel / "macos")
+        built = sorted((out / "apple-wheel" / "wheel").glob(f"mojolearn-*-macosx_*.whl"))
+        if len(built) != 1 or wheel_commit(built[0]) != self.commit:
+            raise StepFailed(f"expected one macOS wheel of {self.commit} from GitHub in {out}, found {built}")
+        shutil.copy2(out / "apple-wheel" / "macos-build.log", self.rel / "macos-build.log")
+        cache = self.macos_bincache()
+        if cache.exists():
+            shutil.rmtree(cache)
+        shutil.copytree(out / "apple-wheel" / "macos-bincache", cache)
+        (self.rel / "macos").mkdir(parents=True, exist_ok=True)
+        dest = self.rel / "macos" / built[0].name
+        shutil.copy2(built[0], dest)
+        return f"{dest.name} sha256 {sha256(dest)} (GitHub macos-15)"
+
+    def macos_runner_lanes(self):
+        """The runner's Apple-lanes record for this wheel ({} when absent or for other bytes)."""
+        w = self.macos_wheel()
+        p = self.macos_gha_out() / "apple-smoke" / "apple-lanes" / "apple-lanes.json"
+        try:
+            d = json.loads(p.read_text())
+        except (OSError, ValueError):
+            return {}
+        return d if w and d.get("wheel_sha256") == sha256(w) else {}
+
     def smoke_python(self):
         for name in ("python3.12", "python3.13", "python3.11", "python3.14", "python3.10"):
             if shutil.which(name):
@@ -3629,8 +3720,24 @@ class Release(release_identity_wheels.IdentityOnWheels):
             # docs/RELEASE_CHECKLIST.md's preverified macOS gate: a fresh venv, `verify --tamper-test`
             # (the bundled reference table reproduces the wheel's own bits). Metal lock: it fits.
             out = self.macos_self_test().parent
+            # THE APPLE LANES ON THE RUNNER (lane mac-speed-1): a lane that failed on a usable runner Metal device is
+            # a product bug for this wheel (0.9.0's record segfaulted in _mojolearn_native_m1.so on the laptop)
+            lanes = self.macos_runner_lanes()
+            if lanes.get("metal_usable") and lanes.get("status") != "PASSED":
+                raise StepFailed(f"the Apple lanes {','.join(lanes.get('lanes') or [])} FAILED on the runner's Metal "
+                                 f"device for this wheel: {self.macos_gha_out() / 'apple-smoke' / 'apple-lanes'}")
             if self.macos_self_test_passed():
                 return "WHEEL-SELF-TEST PASSED (receipt exists)"
+            # the runner's receipt for these exact bytes (GitHub smoke job) is taken; else the self-test runs here
+            runner = self.macos_gha_out() / "apple-smoke" / "self-test-macos" / "results.json"
+            if w and not self.dry and runner.is_file():
+                sys.path.insert(0, str(ROOT / "tools"))
+                import wheel_self_test
+                if wheel_self_test.passed(runner, w):
+                    if out.exists():
+                        out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+                    shutil.copytree(runner.parent, out)
+                    return "WHEEL-SELF-TEST PASSED on the GitHub runner (receipt for these wheel bytes)"
             if not w and not self.dry:
                 raise StepFailed("no macOS wheel; run macos-build")
             self.stale_preflight("smoke")
@@ -6982,6 +7089,12 @@ def release_parser():
                          "is the source commit, else a worktree under the release directory)")
     # default: github for either layout (default_build_backend); cpu-box and gpu-legs by name
     ap.add_argument("--build-backend", default=None, choices=sorted(BUILD_BACKENDS))
+    # THE macOS BUILD BACKEND (lane mac-speed-1, 2026-11-27; Andrew: GitHub's free STANDARD macOS runners may be
+    # used, never a larger/xlarge label, a self-hosted runner or a rented Mac): `github` (the default) builds the
+    # Apple wheel on macos-15 through tools/apple_github_build.py run; `laptop` is the old route on this Mac.
+    ap.add_argument("--macos-build-backend", default="github", choices=MACOS_BUILD_BACKENDS,
+                    help="where macos-build compiles the Apple wheel: github (free standard macOS runners, the "
+                         "default) or laptop (this Mac, tools/mac_slot.py, the route before 2026-11-27)")
     # WHY NO GPU BY DEFAULT (Andrew 2026-10-13): identity and behavior are checked before merge on NVIDIA,
     # AMD, Apple and CPU; the release only builds, checks artifact integrity and publishes.
     ap.add_argument("--identity-on-wheels", action="store_true",

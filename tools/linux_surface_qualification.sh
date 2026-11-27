@@ -98,6 +98,9 @@ for directory, dirs, names in os.walk(root):
         # python/mojolearn/tests/ neither ships nor builds (native_inventory).
         if rel.startswith('python/mojolearn/tests/'):
             continue
+        # tools/generated_sources.py's per-invocation evidence copies are not inputs (native_inventory).
+        if rel.startswith('build/generated-sources/'):
+            continue
         if (name.endswith('.mojo') or rel.startswith(('bindings/', 'packaging/linux/', 'python/mojolearn/', 'tokenizer/tools/')) and name.endswith(('.py', '.sh'))
                 or rel.startswith('packaging/adapters/') and not rel.startswith('packaging/adapters/test_')
                 or rel in ('pixi.toml', 'pixi.lock', 'tools/linux_surface_qualification.sh',

@@ -379,12 +379,28 @@ fi
 case "$BUILD_JOBS" in ''|*[!0-9]*|0) echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2;; esac
 [ "$BUILD_JOBS" -le 16 ] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
 BUILD_LOGS=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-release-builds.XXXXXX")
+# THE APPLE BUILD ON GITHUB'S FREE macOS RUNNERS (lane mac-speed-1, 2026-11-27; .github/workflows/
+# apple-release-build.yml, tools/apple_github_build.py): each runner compiles some merged files through THIS script
+# with MOJOLEARN_RELEASE_MACOS_GROUPS="<dir>:<stem> ..." (merged layout only), so a group's environment, cache key
+# and bytes are exactly the ones the full build below would make, and stops after the build loop: no staging, no
+# gate, no wheel (those run once, in the pack job, over every group placed from the runners' archives). The
+# variable is under MOJOLEARN_RELEASE_ (tools/bincache.py NON_BUILD_PREFIXES): it never reaches a key.
+GROUPS_ONLY="${MOJOLEARN_RELEASE_MACOS_GROUPS:-}"
+if [ -n "$GROUPS_ONLY" ] && [ "$MERGED" != 1 ]; then
+    echo 'MOJOLEARN_RELEASE_MACOS_GROUPS needs the merged layout (MOJOLEARN_MERGED_BINDINGS=1)' >&2; exit 2
+fi
 build_pairs() {
     if [ "$MERGED" = 1 ]; then
         # One job per merged file: "<dir> merged:<stem>", the dir being fast,
         # identical or host.
         for d in $(merged_dirs); do
-            merged_plan "$d" | while read -r stem _cls _members; do printf '%s merged:%s\n' "$d" "$stem"; done
+            merged_plan "$d" | while read -r stem _cls _members; do
+                # ONE GROUP PER RUNNER (MOJOLEARN_RELEASE_MACOS_GROUPS, below): only the named files
+                if [ -n "$GROUPS_ONLY" ]; then
+                    case " $GROUPS_ONLY " in *" $d:$stem "*) ;; *) continue ;; esac
+                fi
+                printf '%s merged:%s\n' "$d" "$stem"
+            done
         done
         return 0
     fi
@@ -557,6 +573,11 @@ ordered_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
         { echo "== $script ($mode) FAILED"; cat "$log"; }
         exit 1
     fi' build_one_pair "$BUILD_LOGS" 2>&1 || { echo "== at least one extension failed to build (logs in $BUILD_LOGS)" >&2; exit 1; }
+if [ -n "$GROUPS_ONLY" ]; then
+    [ -n "$(build_pairs)" ] || { echo "== MOJOLEARN_RELEASE_MACOS_GROUPS named no file of the plan: $GROUPS_ONLY" >&2; exit 2; }
+    echo "== groups only (MOJOLEARN_RELEASE_MACOS_GROUPS): built $(build_pairs | wc -l | tr -d ' ') merged file(s); no staging, gate or wheel here"
+    exit 0
+fi
 
 # THE FILES THE REST OF THIS SCRIPT GATES: EXT_NAMES x MODES (three tree
 # bindings x two tiers = six) plus IDENTICAL_ONLY_NAMES in identical/

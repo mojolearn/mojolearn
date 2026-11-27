@@ -1,0 +1,272 @@
+name: Apple release build
+
+# THE macOS (APPLE) WHEEL ON GITHUB'S FREE STANDARD macOS RUNNERS (lane mac-speed-1, 2026-11-27). tools/release.py
+# macos-build (the default `github` backend) and `tools/release.py candidate` dispatch it through
+# tools/apple_github_build.py run, which mints the binding-cache URL map, polls the run, collects the wheel, the pack's
+# cache and log, the smoke receipts and the group jobs' uploads, and promotes those. The tool's docstring is the full
+# account; in short:
+#   plan   (ubuntu) one row per merged file of the Darwin release plan (the release modes, then host);
+#   group  (macOS, one job per merged file, all at once) packaging/macos/build_release_wheel.sh with
+#          MOJOLEARN_RELEASE_MACOS_GROUPS=<dir>:<stem>: the release build's own environment, cache key and bytes,
+#          every core of the runner as compiler workers; the key is looked up in R2 first; a GPU file with no Metal
+#          kernels fails the job and is never uploaded;
+#   pack   (macOS) every archive placed (each group checked a hit first), then build_release_wheel.sh --build-only:
+#          the release's staging, signing and gates, and the wheel;
+#   smoke  (macOS) tools/wheel_self_test.py (fresh venv, verify --tamper-test) and the Apple lanes from the installed
+#          wheel; the runner's Metal device is reported usable or not (apple-lanes.json metal_usable).
+#
+# RUNNERS (Andrew, 2026-11-27): ONLY GitHub's free STANDARD macOS labels, macos-15 (default) or macos-14: arm64,
+# 3 cores, 7 GB, free for this public repository. The plan job refuses any other label: never a larger/xlarge label
+# (billed), never a self-hosted runner, never a rented Mac (AGENTS.md, HARD RULE on Apple machines).
+#
+# THE BINDING CACHE NEEDS NO SECRET. `map_url` is a presigned GET of a URL map the Mac stored in R2; each job reads
+# it from the event file (never interpolated), masks it, and keeps every GET and only its own PUT slots. Empty
+# map_url: no R2, every group compiles and nothing uploads.
+#
+# MANUAL ONLY (light-checks.yml refuses any other workflow with a push or schedule trigger). No agent dispatches it:
+# the release / candidate controller, or the orchestrator by hand:
+#   gh workflow run apple-release-build.yml --ref main -f commit=<sha40>
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "the source commit (40 hex)"
+        required: true
+      modes:
+        description: "release modes (space or comma separated; the macOS wheel's tiers)"
+        required: false
+        default: "identical"
+      runner:
+        description: "free standard macOS label: macos-15 or macos-14 (any other label is refused)"
+        required: false
+        default: "macos-15"
+      groups:
+        description: "optional comma list of <dir>:<stem> to build (blank: every merged file; pack and smoke then run)"
+        required: false
+        default: ""
+      lanes:
+        description: "verify lanes the smoke runs from the installed wheel"
+        required: false
+        default: "fn-msel-cross-val-predict,x-metrics-permutation-test-score"
+      token:
+        description: "an id the dispatcher finds this run by"
+        required: false
+        default: ""
+      map_url:
+        description: "presigned GET of the binding-cache URL map (read from the event file, never echoed)"
+        required: false
+        default: ""
+
+run-name: "apple-release-build ${{ inputs.commit }} ${{ inputs.runner }} [${{ inputs.token }}]"
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
+      runner: ${{ steps.plan.outputs.runner }}
+      full: ${{ steps.plan.outputs.full }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/apple_github_build.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Plan the merged files; refuse any runner label but the free standard ones
+        id: plan
+        env:
+          IN_RUNNER: ${{ inputs.runner || 'macos-15' }}
+          IN_MODES: ${{ inputs.modes || 'identical' }}
+          IN_GROUPS: ${{ inputs.groups }}
+        run: |
+          set -euo pipefail
+          case "$IN_RUNNER" in
+            macos-15|macos-14) ;;
+            *) echo "::error::runner '$IN_RUNNER' refused: only the free standard labels macos-15 and macos-14 (Andrew, 2026-11-27)"; exit 1 ;;
+          esac
+          # the plan is the SOURCE's (its manifest and tools/merged_bindings.py), read by the workflow's own tool
+          python3 .wf/tools/apple_github_build.py plan --repo . --modes "$IN_MODES" --groups "$IN_GROUPS" > rows.json
+          {
+            echo "matrix=$(python3 -c 'import json; print(json.dumps(dict(include=json.load(open("rows.json")))))')"
+            echo "count=$(python3 -c 'import json; print(len(json.load(open("rows.json"))))')"
+            echo "runner=$IN_RUNNER"
+            echo "full=$([ -z "$IN_GROUPS" ] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+          python3 -c 'import json; [print(r["index"], r["dir"], r["stem"], r["cls"]) for r in json.load(open("rows.json"))]'
+
+  group:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    name: group ${{ matrix.key }}
+    # a free standard label only, validated by the plan job (macos-15 / macos-14)
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/apple_github_build.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          # one writer (the first group job): every other macOS job restores the environment it saved
+          cache-write: ${{ matrix.index == 0 }}
+          environments: >-
+            default
+            pkg
+      - name: The machine
+        run: |
+          mkdir -p out
+          { sw_vers; sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize; xcrun --sdk macosx --show-sdk-version;
+            xcodebuild -version; system_profiler SPDisplaysDataType; pixi run mojo --version; } > out/machine.txt 2>&1 || true
+          head -n 30 out/machine.txt
+      - name: This job's URL map (masked)
+        env:
+          INDEX: ${{ matrix.index }}
+        run: python3 .wf/tools/apple_github_build.py job-map --index "$INDEX" --dest "$RUNNER_TEMP/bincache/urls.tsv"
+      - name: Build ${{ matrix.dir }}/${{ matrix.stem }} (build_release_wheel.sh, one group, every core)
+        env:
+          DIR: ${{ matrix.dir }}
+          STEM: ${{ matrix.stem }}
+          IN_MODES: ${{ inputs.modes || 'identical' }}
+        run: |
+          python3 .wf/tools/apple_github_build.py group --repo . --dir "$DIR" --stem "$STEM" --modes "$IN_MODES" \
+              --out out --cache "$RUNNER_TEMP/bincache/cache" --map "$RUNNER_TEMP/bincache/urls.tsv"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: apple-group-${{ matrix.key }}
+          retention-days: 3
+          path: out/archives/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: apple-records-${{ matrix.key }}
+          retention-days: 7
+          path: |
+            out/*.json
+            out/*.log
+            out/*.txt
+            out/GHA/
+          if-no-files-found: ignore
+
+  pack:
+    needs: [plan, group]
+    if: needs.plan.outputs.full == 'true'
+    name: pack (the macOS wheel)
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/apple_github_build.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          cache-write: false
+          environments: >-
+            default
+            pkg
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: apple-group-*
+          path: archives
+      - name: Place every group, pack, gate
+        env:
+          IN_MODES: ${{ inputs.modes || 'identical' }}
+        run: python3 .wf/tools/apple_github_build.py pack --repo . --archives archives --modes "$IN_MODES" --out out
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: apple-wheel
+          retention-days: 7
+          path: |
+            out/wheel/
+            out/macos-build.log
+            out/pack-compiled.txt
+            out/macos-bincache/
+          if-no-files-found: ignore
+
+  smoke:
+    needs: [plan, pack]
+    if: needs.pack.result == 'success'
+    name: smoke (self-test, Apple lanes, Metal)
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: |
+            tools/apple_github_build.py
+            tools/wheel_self_test.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: apple-wheel
+          path: built
+      - name: The Metal device
+        run: |
+          mkdir -p out
+          { sw_vers; sysctl -n hw.ncpu hw.memsize; system_profiler SPDisplaysDataType; } > out/metal.txt 2>&1 || true
+          cat out/metal.txt
+      - name: Wheel self-test (fresh venv, verify --tamper-test)
+        continue-on-error: true
+        run: python3 tools/wheel_self_test.py built/wheel/*.whl --out out/self-test-macos --python python3 --cpu-threads "$(sysctl -n hw.ncpu)"
+      - name: Apple lanes from the installed wheel
+        env:
+          IN_LANES: ${{ inputs.lanes }}
+        run: |
+          python3 tools/apple_github_build.py lanes --wheel built/wheel/*.whl --out out/apple-lanes \
+              --lanes "$IN_LANES" --self-test out/self-test-macos/results.json
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Apple smoke on ${{ needs.plan.outputs.runner }}"
+            echo; echo '```'; grep -m 3 -i -E 'Chipset|Metal|Vendor' out/metal.txt || true; echo '```'
+            echo; echo "self-test: $(python3 -c 'import json;d=json.load(open("out/self-test-macos/results.json"));print(d["status"], {k:(v or {}).get("ran") for k,v in (d.get("sides") or {}).items()})' 2>/dev/null || echo missing)"
+            echo; echo "Apple lanes: $(python3 -c 'import json;d=json.load(open("out/apple-lanes/apple-lanes.json"));print(d["status"], "metal_usable=", d["metal_usable"])' 2>/dev/null || echo missing)"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: apple-smoke
+          retention-days: 7
+          path: out/
