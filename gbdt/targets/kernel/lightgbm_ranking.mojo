@@ -137,7 +137,7 @@ def launch_lightgbm_ndcg(
     rank_ndcg(ws, a, largest)
 
 
-def launch_ranking_metric(
+def launch_ranking_metric[reuse_terms: Bool = False](
     ctx: DeviceContext, mut ws: LightGBMRankWorkspace, objective: Int, mut targets: DeviceBuffer[DType.float32],
     mut scores: DeviceBuffer[DType.float32], mut weights: DeviceBuffer[DType.float32], weighted: Bool,
     mut offsets: DeviceBuffer[DType.uint32], mut sizes: DeviceBuffer[DType.uint32], mut qids: DeviceBuffer[DType.uint32],
@@ -152,4 +152,4 @@ def launch_ranking_metric(
                      sizes.unsafe_ptr(), qids.unsafe_ptr(), ws.order.unsafe_ptr(), ws.other.unsafe_ptr(),
                      ws.scratch.unsafe_ptr(), result.unsafe_ptr(), result.unsafe_ptr(), n, groups, 0, 0, weighted)
     var largest = ws.largest
-    query_softmax[LightGBMRankWorkspace, True](ws, a, largest)
+    query_softmax[LightGBMRankWorkspace, True, reuse_terms](ws, a, largest)

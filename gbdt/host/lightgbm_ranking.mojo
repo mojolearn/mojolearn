@@ -124,14 +124,14 @@ struct HostLightGBMRank(RankStages, Movable):
         else:
             raise Error("unknown grouped LightGBM objective")
 
-    def training_metric(mut self, objective: Int, targets: List[Float32], scores: List[Float32],
+    def training_metric[reuse_terms: Bool = False](mut self, objective: Int, targets: List[Float32], scores: List[Float32],
                         weights: List[Float32]) raises -> Float32:
         if objective != OBJECTIVE_QUERY_SOFTMAX:
             return self.ndcg(targets, scores)
         var result: List[Float32] = [0]
         var a = self._view(targets, scores, weights, 0, 0, _f(result), _f(result))
         var largest = self.largest
-        query_softmax[HostLightGBMRank, True](self, a, largest)
+        query_softmax[HostLightGBMRank, True, reuse_terms](self, a, largest)
         return result[0]
 
     def ndcg(mut self, targets: List[Float32], scores: List[Float32]) raises -> Float32:

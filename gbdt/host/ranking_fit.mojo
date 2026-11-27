@@ -61,7 +61,7 @@ struct HostRankingFit(Movable):
                mut stats: List[Float32], mut fv: List[Float32], mut mags: List[Float32]) raises:
         self.workspace.derivatives(objective, targets, cursor, weights, seed, iteration,
                                    self.directions, self.hessians)
-        fv[0] = self.workspace.training_metric(objective, targets, cursor, weights)
+        fv[0] = self.workspace.training_metric[True](objective, targets, cursor, weights)
         var n = len(targets)
         var blocks = (n + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
         var units = _gbdt_units(blocks, 8 * n)

@@ -52,11 +52,11 @@ struct DeviceRankingFit(Movable):
         launch_compute_group_ids(ctx, self.layout.sizes, self.layout.offsets,
                                  UInt32(0), self.layout.n_groups, self.qids)
 
-    def metric(mut self, ctx: DeviceContext, mut targets: DeviceBuffer[DType.float32],
+    def metric[reuse_terms: Bool = False](mut self, ctx: DeviceContext, mut targets: DeviceBuffer[DType.float32],
                mut scores: DeviceBuffer[DType.float32], n: Int,
                mut result: DeviceBuffer[DType.float32], objective: Int,
                mut weights: DeviceBuffer[DType.float32], has_weights: Bool) raises:
-        launch_ranking_metric(ctx, self.workspace, objective, targets, scores, weights, has_weights,
+        launch_ranking_metric[reuse_terms](ctx, self.workspace, objective, targets, scores, weights, has_weights,
                               self.layout.offsets, self.layout.sizes, self.qids, n, self.layout.n_groups, result)
 
     def search(mut self, ctx: DeviceContext, objective: Int, mut targets: DeviceBuffer[DType.float32],
@@ -67,7 +67,7 @@ struct DeviceRankingFit(Movable):
         launch_lightgbm_ranking(ctx, self.workspace, objective, targets, scores, weights,
                                 has_weights, self.layout.offsets, self.layout.sizes, self.qids,
                                 n, self.layout.n_groups, seed, iteration, self.directions, self.hessians)
-        self.metric(ctx, targets, scores, n, fv, objective, weights, has_weights)
+        self.metric[True](ctx, targets, scores, n, fv, objective, weights, has_weights)
         ctx.enqueue_function[_search_planes](
             self.raw.unsafe_ptr(), weights.unsafe_ptr(), stats.unsafe_ptr(), mags.unsafe_ptr(),
             Int32(n), Int32(1) if second_order else Int32(0), Int32(1) if compute_mags else Int32(0),
