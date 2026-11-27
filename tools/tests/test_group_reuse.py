@@ -186,6 +186,40 @@ class SkipPlan(unittest.TestCase):
         self.assertEqual(plan["keys"]["identical:merged_build.sh:_g_a"], bincache.key_of(self.recs[0]))
         self.assertIn("predicted_hits=1 shard_jobs=1", gr.plan_line(plan))
 
+    def test_two_consecutive_builds_of_one_target_hit_host_and_device_groups(self):
+        # round 19 (2026-11-26) predicted nothing after round 17: one environment over the host records
+        # (MOJOLEARN_TARGET_COLUMN cpu, no GPU_ARCHS) and the device records (nvidia, sm_89) "disagreed"
+        host = lambda tree, g: box_fields(tree, g, env={"MOJOLEARN_TARGET_COLUMN": "cpu"}, gpu="", kind="host")
+        first = [box_fields(self.box, "_g_a"), box_fields(self.box, "_g_b"), host(self.box, "_g_a"),
+                 host(self.box, "_g_b")]
+        roots = [self.td / "work2"]
+        write_leg(roots[0], "0.8.67.dev0+111111111111", first)
+        entries = self.entries + ["host:merged_build.sh:_g_a", "host:merged_build.sh:_g_b"]
+        stored = {bincache.key_of(r) for r in first}
+        plan = gr.skip_plan(self.mac, ARCH, entries, stored, roots)
+        self.assertEqual(sorted(plan["skip"]), sorted(entries), plan["why"])
+        self.assertTrue(all(w.startswith("no shard job") for w in plan["why"].values()))
+        # the second build's legs record the same keys (placed, not compiled); the third build hits again
+        write_leg(roots[0], "0.8.67.dev0+222222222222", first)
+        self.assertEqual(sorted(gr.skip_plan(self.mac, ARCH, entries, stored, roots)["skip"]), sorted(entries))
+        lines = gr.why_lines(plan)
+        self.assertEqual(len(lines), 4)
+
+    def test_every_entry_and_passed_over_record_says_why(self):
+        arm = box_fields(self.box, "_g_a", env={"MOJOLEARN_BUILD_DEFINES": "A=1"})
+        write_leg(self.roots[0], "0.8.67.dev0+aaaaaaaaaaaa.arm", [arm])
+        (self.mac / "core/x.mojo").write_text("fn x(): return\n")
+        plan = gr.skip_plan(self.mac, ARCH, self.entries + ["identical:merged_build.sh:_g_z"],
+                            {bincache.key_of(r) for r in self.recs}, self.roots)
+        why = plan["why"]
+        self.assertIn("not in R2 (changed: source", why["identical:merged_build.sh:_g_a"])
+        self.assertIn("predicted key", why["identical:merged_build.sh:_g_b"])
+        self.assertIn("no record of this group", why["identical:merged_build.sh:_g_z"])
+        self.assertEqual(plan["skipped"].get("a B arm's build (MOJOLEARN_BUILD_DEFINES)"), 1)
+        self.assertTrue(any("records passed over" in l for l in gr.why_lines(plan)))
+        empty = gr.skip_plan(self.mac, ARCH, self.entries, set(), [self.td / "none"])
+        self.assertTrue(all("no earlier sm_89 leg" in w for w in empty["why"].values()))
+
     def test_a_changed_closure_keeps_its_shard_job(self):
         (self.mac / "core/x.mojo").write_text("fn x(): return\n")
         stored = {bincache.key_of(r) for r in self.recs}

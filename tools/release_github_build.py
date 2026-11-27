@@ -1665,8 +1665,8 @@ def predicted_skips(a, creds, modes):
         say(f"group cache plan: no prediction ({type(exc).__name__}: {str(exc)[:200]}); every group gets a shard job")
         return [], {}, None, []
     say(group_reuse.plan_line(plan))
-    for entry in plan["skip"]:
-        say(f"  no shard job (key {plan['keys'][entry][:16]} in R2): {entry}")
+    for line in group_reuse.why_lines(plan):
+        say(line)
     return plan["skip"], plan["keys"], listing, entries
 
 

@@ -64,23 +64,35 @@ def entry_of(fields):
     return "%s:merged_build.sh:%s" % (merged[0]["dir"], merged[0]["stem"])
 
 
-def usable(fields, arch):
-    """True when FIELDS can be the leg half of a production A-set key of ARCH."""
-    if fields.get("key_rule") != bincache.KEY_RULE or fields.get("variant") or fields.get("sabotage_env"):
-        return False
-    if bincache.is_sabotage(fields) or (fields.get("build_env") or {}).get(ARM_DEFINES):
-        return False
-    if "declared" not in fields or entry_of(fields) is None:
-        return False
+def unusable_reason(fields, arch):
+    """'' when FIELDS can be the leg half of a production A-set key of ARCH, else why not."""
+    if fields.get("key_rule") != bincache.KEY_RULE:
+        return "key rule %s, not %s" % (fields.get("key_rule"), bincache.KEY_RULE)
+    if fields.get("variant") or fields.get("sabotage_env") or bincache.is_sabotage(fields):
+        return "a sabotage or fault build"
+    if (fields.get("build_env") or {}).get(ARM_DEFINES):
+        return "a B arm's build (%s)" % ARM_DEFINES
+    if "declared" not in fields:
+        return "not a declared release build"
+    if entry_of(fields) is None:
+        return "not one merged group"
     merged = fields["merged"][0]
     # a device group names its target; a host group rides the leg of its arch (each leg's keys dir is its own)
-    return merged["dir"] == "host" or fields.get("gpu_archs") == arch
+    if merged["dir"] != "host" and fields.get("gpu_archs") != arch:
+        return "another target (%s)" % fields.get("gpu_archs")
+    return ""
 
 
-def leg_records(roots, arch, max_legs=MAX_LEGS):
+def usable(fields, arch):
+    """True when FIELDS can be the leg half of a production A-set key of ARCH."""
+    return not unusable_reason(fields, arch)
+
+
+def leg_records(roots, arch, max_legs=MAX_LEGS, skipped=None):
     """[(leg dir, {entry: fields})] of the newest earlier legs of ARCH under the measurement-build work roots, newest
     first: every <root>/<version>/<c12>/legs/<vendor>-<arch>/GHA/bincache/keys/<key>.json whose fields hash to its
-    name and are usable. Unreadable files are passed over."""
+    name and are usable. SKIPPED (a dict) collects {reason: count} of the record files passed over."""
+    skipped = {} if skipped is None else skipped
     legs = []
     for root in roots:
         for keys in Path(root).expanduser().glob("*/*/legs/*-%s/GHA/bincache/keys" % arch):
@@ -94,25 +106,45 @@ def leg_records(roots, arch, max_legs=MAX_LEGS):
             try:
                 f = json.loads(p.read_text())
             except (OSError, ValueError):
-                continue
-            if not isinstance(f, dict) or bincache.key_of(f) != p.stem or not usable(f, arch):
+                why = "unreadable"
+            else:
+                why = ("not a fields record" if not isinstance(f, dict) else
+                       "does not hash to its name" if bincache.key_of(f) != p.stem else unusable_reason(f, arch))
+            if why:
+                skipped[why] = skipped.get(why, 0) + 1
                 continue
             recs.setdefault(entry_of(f), f)
         if recs:
             out.append((keys.parent.parent.parent, recs))
+        else:
+            skipped["a leg with no usable record"] = skipped.get("a leg with no usable record", 0) + 1
     return out
 
 
-def leg_environ(recs):
-    """The route's exported variables as one leg's records show them: the union of their build_env (closure-v2 keeps
-    only what each group's inputs read; tools/prebuild_changed.py capture), None when two records disagree on a
-    value (no one environment reproduces that leg)."""
+def tier_of(entry):
+    """The directory set a shard entry compiles ("identical", "host", ...)."""
+    return entry.split(":")[0]
+
+
+def leg_environ(recs, tier=None):
+    """The route's exported variables for one directory set (TIER: the merged dir, "host" or the numeric tier) as
+    one leg's records show them: the union of their build_env (closure-v2 keeps only what each group's inputs read;
+    tools/prebuild_changed.py capture), None when two records of that set disagree on a value. The host set and the
+    device sets export different values (MOJOLEARN_TARGET_COLUMN cpu against nvidia, MOJOLEARN_GPU_ARCHS '' against
+    the target), so each set has its own (lane build-reuse-1 fix, 2026-11-26: one union over both made every leg
+    'disagree' and predicted nothing). TIER None takes every record."""
     env = {}
     for f in recs.values():
+        if tier is not None and fields_tier(f) != tier:
+            continue
         for k, v in (f.get("build_env") or {}).items():
             if env.setdefault(k, v) != v:
                 return None
     return env
+
+
+def fields_tier(fields):
+    return tier_of(entry_of(fields) or ":")
 
 
 @contextlib.contextmanager
@@ -176,21 +208,31 @@ def predict(tree, template, environ=None):
 
 
 def skip_plan(tree, arch, entries, stored, roots):
-    """dict(skip=[entries], keys={entry: predicted key}, records=<leg dir> or None, units=N): the shard ENTRIES of
-    this leg whose predicted key is in STORED (the R2 partition's keys). An entry with no record, or whose
-    prediction fails, keeps its shard job. Only the newest leg's records are the leg half (one environment); an
-    entry it lacks takes the newest older leg's record with the same environment."""
-    legs = leg_records(roots, arch)
-    out = dict(skip=[], keys={}, records=None, units=len(entries))
+    """dict(skip=[entries], keys={entry: predicted key}, why={entry: reason}, records=<leg dir> or None, units=N,
+    skipped={reason: count}): the shard ENTRIES of this leg whose predicted key is in STORED (the R2 partition's
+    keys). An entry with no record, or whose prediction fails, keeps its shard job; WHY says which. The newest leg's
+    records of the entry's directory set are the leg half (one environment per set); an entry it lacks takes the
+    newest older leg's record with the same environment."""
+    skipped = {}
+    legs = leg_records(roots, arch, skipped=skipped)
+    out = dict(skip=[], keys={}, why={}, records=None, units=len(entries), skipped=skipped)
     if not legs:
+        for e in entries:
+            out["why"][e] = "shard job: no earlier %s leg with a usable record under %s" % (
+                arch, ", ".join(str(r) for r in roots) or "no records root")
         return out
     newest_dir, newest = legs[0]
-    env = leg_environ(newest)
-    if env is None:
-        return out
     out["records"] = str(newest_dir)
+    envs = {}
     templates = {}
     for entry in entries:
+        tier = tier_of(entry)
+        if tier not in envs:
+            envs[tier] = leg_environ(newest, tier)
+        env = envs[tier]
+        if env is None:
+            out["why"][entry] = "shard job: the %s records of %s disagree on a variable" % (tier, newest_dir)
+            continue
         template = newest.get(entry)
         if template is None:
             for _, recs in legs[1:]:
@@ -198,19 +240,29 @@ def skip_plan(tree, arch, entries, stored, roots):
                 if f is not None and all(env.get(k, v) == v for k, v in (f.get("build_env") or {}).items()):
                     template = f
                     break
-        if template is not None:
-            templates[entry] = template
-    for entry, got in zip(templates, predict_all(tree, list(templates.values()), env)):
-        if got is None:
+        if template is None:
+            out["why"][entry] = "shard job: no record of this group in the last %d %s legs" % (len(legs), arch)
             continue
-        key, _ = got
+        templates[entry] = (template, env)
+    got_all = predict_all(tree, [t for t, _ in templates.values()], None, envs=[e for _, e in templates.values()])
+    for entry, got in zip(templates, got_all):
+        template = templates[entry][0]
+        if got is None:
+            out["why"][entry] = "shard job: not predictable (no such group at this commit, or unkeyable)"
+            continue
+        key, fields = got
         out["keys"][entry] = key
         if key in stored:
             out["skip"].append(entry)
+            out["why"][entry] = "no shard job: predicted key %s is in R2" % key[:16]
+        else:
+            moved = bincache._changed(template, fields)
+            out["why"][entry] = "shard job: predicted key %s not in R2 (%s)" % (
+                key[:16], "changed: " + ", ".join(moved[:6]) if moved else "the record's own key is not stored")
     return out
 
 
-def predict_all(tree, templates, env, workers=None):
+def predict_all(tree, templates, env, workers=None, envs=None):
     """predict() of every template, one process per group (each walks and hashes its closure, about 800 files for
     the big groups; bincache's closure walk keeps module state, so processes, not threads). Workers: half the cores
     (the two legs of a build predict at once on one Mac), at most one per group; the memory per worker is a Python
@@ -220,10 +272,11 @@ def predict_all(tree, templates, env, workers=None):
     if not templates:
         return []
     workers = workers or max(1, min(len(templates), (os.cpu_count() or 2) // 2))
+    envs = list(envs) if envs is not None else [env] * len(templates)
     if workers == 1:
-        return [predict(tree, t, env) for t in templates]
+        return [predict(tree, t, e) for t, e in zip(templates, envs)]
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as pool:
-        return list(pool.map(predict, [tree] * len(templates), templates, [env] * len(templates)))
+        return list(pool.map(predict, [tree] * len(templates), templates, envs))
 
 
 def stored_keys(listing, partition):
@@ -288,6 +341,13 @@ def cache_counts(shard_files, assemble_files):
 def cache_line(counts):
     return "group cache: hits=%(hits)d misses=%(misses)d compiles=%(compiles)d uploads=%(uploads)d secs=%(secs)d" \
         % counts
+
+
+def why_lines(plan):
+    """One line per entry (why it has or has not a shard job) and one per reason records were passed over."""
+    rows = ["  %s: %s" % (e, w) for e, w in sorted(plan.get("why", {}).items())]
+    rows += ["  records passed over: %d %s" % (n, why) for why, n in sorted((plan.get("skipped") or {}).items())]
+    return rows
 
 
 def plan_line(plan):
