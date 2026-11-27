@@ -219,10 +219,19 @@ def test_batch_plan_separates_arms_whose_patches_reach_each_others_lanes():
 
 def test_batch_plan_splits_patches_that_do_not_apply_together():
     table = {n: dict(arm=n, patch=n + '.patch', bindings=['build'], lanes=['l' + n]) for n in ('a', 'b')}
-    batches = gate.batch_plan(table, {'native': []}, triage=lambda r: ('covered', [], ''),
+    audit = {'native': [dict(sabotage_patches=[a['patch']], lanes=a['lanes']) for a in table.values()]}
+    batches = gate.batch_plan(table, audit, triage=lambda r: ('covered', r['lanes'], ''),
                               co_apply=lambda patches: len(patches) < 2)
     assert sorted(b['arms'] for b in batches) == [['a'], ['b']]
     assert {b['family'] for b in batches} == {'core'}
+
+
+def test_unmapped_patch_remains_the_only_fault_in_its_batch():
+    table = {n: dict(arm=n, patch=n + '.patch', bindings=['build'], lanes=['l' + n]) for n in ('a', 'b')}
+    audit = {'native': [dict(sabotage_patches=['b.patch'], lanes=['lb'])]}
+    batches = gate.batch_plan(table, audit, triage=lambda r: ('covered', r['lanes'], ''),
+                              co_apply=lambda patches: True)
+    assert [b['arms'] for b in batches] == [['a'], ['b']]
 
 
 def test_batch_plan_keeps_arms_of_one_patch_in_one_build():
@@ -371,3 +380,17 @@ def test_gpu_batch_requires_cpu_only_evidence_for_samba(tmp_path, trial, problem
             path.write_text(json.dumps(record))
             paths[run].append(path)
     assert gate.check_sides(arm, paths, root=tmp_path) == (0 if problem is None else 1)
+
+
+def test_full_fault_receipt_requires_every_current_arm_once():
+    table = {"a": {"lanes": ["alpha"]}, "b": {"lanes": ["beta"]}}
+    plan = {"batches": [{"id": "one", "arms": ["a"]}, {"id": "two", "arms": ["b"]}]}
+    a = "a\tbuild\tCAUGHT\talpha\tjob\trestored\t1"
+    b = "b\tbuild\tCAUGHT\tbeta\tjob\trestored\t1"
+    complete = gate.batch_receipt(plan, ["one", "two"], True, [a, b], table, 0)
+    assert complete["complete_current_manifest"]
+    for rows in ([a], [a, a], [a, b.replace("CAUGHT", "GPU-OWED")], [a, b.replace("beta", "alpha")]):
+        assert not gate.batch_receipt(plan, ["one", "two"], True, rows, table, 0)["selection_passed"]
+    targeted = gate.batch_receipt(plan, ["one"], False, [a], table, 0)
+    assert targeted["selection_passed"] and not targeted["complete_current_manifest"]
+    assert not gate.batch_receipt(plan, ["one"], True, [a], table, 0)["selection_passed"]

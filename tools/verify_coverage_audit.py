@@ -53,6 +53,7 @@ import re
 import subprocess
 import sys
 from collections import defaultdict
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
@@ -2877,7 +2878,11 @@ def main(argv=None):
     ap.add_argument("--all", dest="whole_surface", action="store_true",
                     help="audit the WHOLE public surface: every registration and every public "
                          "operation method, not only those new or changed since --base")
+    ap.add_argument("--native-fault-plan", action="store_true",
+                    help="write the current full native fault reach for batch planning (no endpoint/reference census)")
     args = ap.parse_args(argv)
+    if args.native_fault_plan and (not args.json or args.from_json or args.markdown):
+        ap.error("--native-fault-plan requires --json and computes a fresh native projection")
     if args.from_json:
         audit = json.load(open(args.from_json))
     else:
@@ -2885,6 +2890,14 @@ def main(argv=None):
         walker = Walker()
         reach = lane_reach(ls, walker, NameClosure(walker))
         reach, _ = owner_reach(ls, reach)
+        if args.native_fault_plan:
+            head = git("rev-parse", "HEAD").strip()
+            native = native_rows(ls, head, reach, whole_surface=True)
+            path = Path(args.json)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(dict(head=head, source_tree=git("rev-parse", "HEAD^{tree}").strip(), scope="all-native", native=native), sort_keys=True) + "\n")
+            print(f"Static fault reach: {len(native)} native entries at {head}")
+            return 0
         native = native_rows(ls, args.base, reach, args.whole_surface)
         py = python_rows(ls, walker, reach, args.base, args.whole_surface)
         audit = dict(base=args.base, head=git("rev-parse", "HEAD").strip(),
