@@ -247,11 +247,12 @@ def test_autoarima_float64_is_the_float32_bits():
     assert _same(wide.forecast(3), narrow.forecast(3))
 
 
-def test_prophet_float64_y_is_the_float32_bits():
+@pytest.mark.parametrize("dtype", ["<f8", ">f8"])
+def test_prophet_float64_y_is_the_float32_bits(dtype):
     t = np.arange(120, dtype=np.float64)
     y64 = 10 + 0.01 * t + np.sin(2 * np.pi * t / 7) + 0.001 * np.random.default_rng(22).standard_normal(120)
     future = np.arange(120, 130, dtype=np.float64)
-    wide = ml.ProphetForecaster().fit(t, y64).predict(future)
+    wide = ml.ProphetForecaster().fit(t, y64.astype(dtype)).predict(future)
     narrow = ml.ProphetForecaster().fit(t, y64.astype(np.float32)).predict(future)
     assert _same(np.asarray(wide), np.asarray(narrow))
 
@@ -272,7 +273,7 @@ def _labels(n, seed):
     return (np.random.default_rng(seed).random(n) < 0.5).astype(np.int64)
 
 
-@pytest.mark.parametrize("name", ["mean_squared_error", "mean_absolute_error", "r2_score",
+@pytest.mark.parametrize("name", ["mean_squared_error", "root_mean_squared_error", "mean_absolute_error", "r2_score",
                                   "explained_variance_score", "max_error", "median_absolute_error"])
 def test_regression_metric_float64_is_the_float32_bits(name):
     fn = getattr(ml.metrics, name)
@@ -364,6 +365,15 @@ def test_out_of_range_float64_series_is_refused():
         ml.Theta(season_length=1).fit(y[1])
 
 
+@pytest.mark.parametrize("dtype", ["<f8", ">f8"])
+def test_prophet_refuses_overflow_in_fit_targets(dtype):
+    t = np.arange(12, dtype=np.float64)
+    y = np.ones((2, 12), dtype=dtype)
+    y[1, 4] = _REFUSED
+    with pytest.raises(ValueError, match="column 4 holds a float64 value"):
+        ml.ProphetForecaster().fit(t, y)
+
+
 def test_out_of_range_float64_sequence_x_is_refused():
     x = np.zeros((4, 3, 2))
     x[1, 2, 1] = -1e39
@@ -376,6 +386,13 @@ def test_out_of_range_float64_pandas_column_is_refused():
     frame = pd.DataFrame({"a": [1.0, 2.0, 3.0, 4.0], "b": [1.0, _REFUSED, 3.0, 4.0]})
     with pytest.raises(ValueError, match="column 1 holds a float64 value"):
         ml.LinearRegression().fit(frame, np.ones(4))
+
+
+def test_forecaster_refuses_overflow_in_pandas_object_storage():
+    pd = pytest.importorskip("pandas")
+    y = pd.Series([1.0, _REFUSED, 3.0, 4.0], dtype=object)
+    with pytest.raises(ValueError, match="column 0 holds a float64 value"):
+        ml.Theta(season_length=1).fit(y)
 
 
 def test_value_that_rounds_to_float32_max_is_kept():

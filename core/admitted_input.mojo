@@ -132,11 +132,17 @@ def admitted_f64_rounds_to_inf(raw: UInt64, bits: UInt32, wide: Bool) -> Bool:
 
 
 @always_inline
-def admitted_raw_word(address: Int, item: Int) -> UInt64:
-    """The little-endian item of `item` bytes at `address`, zero-extended
+def admitted_raw_word[SWAP: Bool = False](address: Int, item: Int) -> UInt64:
+    """The `item` bytes at `address` (big-endian when SWAP), zero-extended
     to 64 bits: one typed unaligned load for a 1, 2, 4 or 8-byte item (the
     word the byte-by-byte assembly built, as the inputs are checked to be in
     native little-endian order), the byte assembly otherwise."""
+    comptime if SWAP:
+        var bytes = _AI_U8P(unsafe_from_address=address)
+        var raw = UInt64(0)
+        for byte in range(item):  # native input marshaling: one big-endian word
+            raw = (raw << 8) | UInt64(bytes[byte])
+        return raw
     if item == 4:
         return UInt64(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=address).unsafe_load[alignment=1](0))
     if item == 8:
@@ -152,7 +158,7 @@ def admitted_raw_word(address: Int, item: Int) -> UInt64:
     return raw
 
 
-def admitted_cast_f32(
+def admitted_cast_f32[SWAP: Bool = False](
     addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int, dst: _AI_F32P,
     transposed: Bool = False,
 ) raises -> Bool:
@@ -161,13 +167,13 @@ def admitted_cast_f32(
     True when every written word is finite. `transposed`: the view is the
     transpose of the caller's matrix (an F-order cast), so the caller's
     column is the view's row."""
-    var status = admitted_cast_f32_words(addr, s0, s1, rows, cols, item, kind, dst, transposed)
+    var status = admitted_cast_f32_words[SWAP](addr, s0, s1, rows, cols, item, kind, dst, transposed)
     if status >= 0:
         admitted_f64_overflow_refuse(status)
     return status == ADMITTED_ALL_FINITE
 
 
-def admitted_cast_f32_words(
+def admitted_cast_f32_words[SWAP: Bool = False](
     addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int, dst: _AI_F32P,
     transposed: Bool = False,
 ) -> Int:
@@ -203,17 +209,16 @@ def admitted_cast_f32_words(
     # before. Not keyed on any shape: any rows, cols and row stride. Owed
     # re-time beside the board row: a 1,000,000 x 10 column slice and a
     # non-board 300,000 x 7 slice of random float32.
-    var row_runs = kind == CAST_KIND_FLOAT and item == 4 and (s1 == 4 or cols == 1)
+    var row_runs = not SWAP and kind == CAST_KIND_FLOAT and item == 4 and (s1 == 4 or cols == 1)
     var tasks = host_predict_task_count_work(rows, rows * cols * (1 if row_runs else max(item, 1)))
     var chunk = host_predict_chunk(rows, tasks)
-    var flags = List[UInt8](length=tasks, fill=UInt8(1))
-    var flag_ptr = rebind[_AI_U8P](flags.unsafe_ptr())
-    var firsts = List[Int](length=tasks, fill=_AI_NO_COLUMN)
+    # One status per worker: all finite, nonfinite, or the lowest overflow column.
+    var firsts = List[Int](length=tasks, fill=ADMITTED_ALL_FINITE)
     var first_ptr = rebind[_AI_INTP](firsts.unsafe_ptr())
     var wide = kind == CAST_KIND_FLOAT and item == 8
     var dst_addr = Int(dst)
 
-    def _rows(t: Int) {imm addr, imm s0, imm s1, imm rows, imm cols, imm item, imm kind, imm dst, imm chunk, imm flag_ptr, imm row_runs, imm dst_addr, imm first_ptr, imm wide, imm transposed}:
+    def _rows(t: Int) {imm addr, imm s0, imm s1, imm rows, imm cols, imm item, imm kind, imm dst, imm chunk, imm row_runs, imm dst_addr, imm first_ptr, imm wide, imm transposed}:
         var lo = t * chunk
         var hi = min(lo + chunk, rows)
         var finite = True
@@ -224,11 +229,11 @@ def admitted_cast_f32_words(
                                      _AI_U32P(unsafe_from_address=dst_addr + r * cols * 4), cols):
                     finite = False
             if not finite:
-                flag_ptr.unsafe_store(t, UInt8(0))
+                first_ptr.unsafe_store(t, ADMITTED_NONFINITE)
             return
         for r in range(lo, hi):  # native input marshaling: this task's input rows
             for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
-                var raw = admitted_raw_word(addr + r * s0 + c * s1, item)
+                var raw = admitted_raw_word[SWAP](addr + r * s0 + c * s1, item)
                 var bits = classical_f32_bits(raw, kind, item)
                 if (bits & _AI_EXP) == _AI_EXP:
                     finite = False
@@ -239,9 +244,7 @@ def admitted_cast_f32_words(
                             first = at
                 dst.unsafe_store(r * cols + c, bitcast[DType.float32](bits))
         if not finite:
-            flag_ptr.unsafe_store(t, UInt8(0))
-        if first < _AI_NO_COLUMN:
-            first_ptr.unsafe_store(t, first)
+            first_ptr.unsafe_store(t, first if first < _AI_NO_COLUMN else ADMITTED_NONFINITE)
 
     if tasks <= 1:
         _rows(0)
@@ -250,11 +253,11 @@ def admitted_cast_f32_words(
     var all_finite = True
     var column = _AI_NO_COLUMN
     for t in range(tasks):  # driver-loop: over the row tasks' flags (at most one per core)
-        if flags[t] == UInt8(0):
+        var status = firsts[t]
+        if status == ADMITTED_NONFINITE:
             all_finite = False
-        if firsts[t] < column:
-            column = firsts[t]
-    _ = flags^
+        elif status >= 0:
+            column = min(column, status)
     _ = firsts^
     if column < _AI_NO_COLUMN:
         return column

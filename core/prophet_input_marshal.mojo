@@ -3,6 +3,7 @@
 # these loops consume only native dimensions, strides and typed bytes.
 from std.memory import bitcast
 from core.cast_in import cast_f32_bits, cast_w64_bits, CAST_KIND_FLOAT, CAST_KIND_SIGNED, cast_in_kind
+from core.admitted_input_nd import admitted_cast_nd_f32
 from core.native_scalar_decode import NativeRealBits, native_scalar_real
 
 comptime _U8 = MutPointer[UInt8, MutUntrackedOrigin]
@@ -44,6 +45,13 @@ def _real32(value: NativeRealBits) -> UInt32:
 
 def prophet_numeric_copy(base: Int, dims: List[Int], strides: List[Int], item: Int,
                          kind: Int, native_order: Bool, dest: Int, wide: Bool) raises:
+    if not wide and kind == CAST_KIND_FLOAT and item == 8:
+        var output = _F32(unsafe_from_address=dest)
+        if native_order:
+            _ = admitted_cast_nd_f32(base, dims, strides, item, kind, output)
+        else:
+            _ = admitted_cast_nd_f32[True](base, dims, strides, item, kind, output)
+        return
     var count = 1
     for dimension in dims:
         count *= dimension

@@ -328,7 +328,7 @@ def _object_scalar(fixture_id: Int) raises:
     var expected: List[UInt32] = [0, 0x80000000, 0x3F800000, 0xC0200000,
         0x3F800000, 0x3F800002, 0x3F800001, 0, 1, 0x80000000,
         0x7F7FFFFF, 0x7F800000, 0x7F800000, 0xFF800000,
-        0x7FC00000, 0x7FC00000, 1, 0]
+        0x7FC00000, 0xFFC00000, 1, 0]
     var slots: List[UInt64] = [10, 20, 30, 40, 50, 60]
     var block = _block(Int(slots.unsafe_ptr()) + 40, 3, 2, 8, 17, "O", -8, -24)
     var plan = PandasInputPlan(allow)
@@ -349,9 +349,11 @@ def _object_scalar(fixture_id: Int) raises:
     try:
         writer.put(1, bitcast[DType.float64](before))
     except error:
-        refused = String(error).find("Input contains NaN or infinity") >= 0
-    var nonfinite = word_id >= 11 and word_id <= 15
-    require(refused == (nonfinite and not allow), "object finite policy")
+        var expected_error = "column 0 holds a float64 value" if word_id == 11 else "Input contains NaN or infinity"
+        require(String(error).find(expected_error) >= 0, "object scalar refusal reason")
+        refused = True
+    var nonfinite = word_id >= 12 and word_id <= 15
+    require(refused == (word_id == 11 or (nonfinite and not allow)), "object finite policy")
     for i in range(11):
         if i == 4 and not refused:
             require(bitcast[DType.uint32](dst[i]) == expected[word_id], "object narrowing word")

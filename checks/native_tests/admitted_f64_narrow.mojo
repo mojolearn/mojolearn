@@ -60,8 +60,8 @@ def fixture(unit: Int) raises:
         require(_bits(dst, 0) == UInt32(0x7F7FFFFF), "rounds to float32's maximum")
     elif unit == 2 or unit == 3:
         # 3 x 4: out-of-range values at (1, 2) and (2, 3); the smallest column
-        # is 2, the smallest row 1 (an F-order view names the caller's column,
-        # which is the view's row)
+        # is 2 and the smallest row is 1. Changing the output storage order
+        # may change traversal but must still name the caller's column 2.
         var words = List[UInt64](length=12, fill=_ONE)
         words[1 * 4 + 2] = _HALF_UP
         words[2 * 4 + 3] = _NEG_BIG
@@ -78,9 +78,7 @@ def fixture(unit: Int) raises:
             _ = words^
             _ = dst^
         else:
-            # transposed: the caller's matrix is the 4 x 3 transpose; its
-            # out-of-range columns are 1 and 2, the view's rows
-            require(_status(words, 3, 4, dst, True) == 1, "transposed view names the caller's column")
+            require(_status(words, 3, 4, dst, True) == 2, "F-order output names the caller's column")
     elif unit == 4:
         var words: List[UInt64] = [_QNAN, _ONE]
         var dst = List[Float32](length=2, fill=0)

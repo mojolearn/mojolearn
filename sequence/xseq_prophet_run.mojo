@@ -291,7 +291,7 @@ struct ProphetFitInput(Copyable, Movable):
     refused); `y_finite` is read only after the rank and length checks."""
     var t: ProphetTimes
     # TOMBSTONE: y_float64 (the "float64 y is refused" flag) deleted 2026-11-27 by lane fp64-inputs: the door
-    # converts a float64 y to float32 once (bindings/xseq_prophet_native_door.mojo, admit_nd_f32).
+    # converts float64 y once while packing the training buffer (core/prophet_input_marshal.mojo).
     var y_rank: Int
     var n: Int
     var y_finite: Bool

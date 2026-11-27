@@ -80,7 +80,7 @@ from bindings.member_boundary_door import (
     member_admit_labeled, member_admit_serving_deferred, member_admit_serving_labeled, member_pack,
     member_pack_labeled,
 )
-from bindings.admitted_input_unpack import admit_f32, admit_weight_words, admit_nd_array_f32
+from bindings.admitted_input_unpack import admit_f32, admit_weight_words, admit_typed
 from core.admitted_refusals import admitted_finite_wording
 from core.ensemble_member import meta_plan_search_x_refusal, META_SEARCH_CLASSIFIER, META_SEARCH_REGRESSOR
 from core.member_families import MEMBER_FAMILY_ENSEMBLE
@@ -702,7 +702,7 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
     # words with `steps` = T, and only a kind with MEMBER_CAN_STEPS takes it
     # (checked below, once its mask is known). The doors' materialized X is
     # an Array; a float64 one is converted once to float32 by the shared
-    # cast (admit_nd_array_f32: round-to-nearest-even, a finite value outside
+    # cast (admit_typed: round-to-nearest-even, a finite value outside
     # float32's range refused by its column), as the member's own fit does.
     var steps = 0
     var sequence_shape = String("")
@@ -710,7 +710,7 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
         sequence_shape = String(py=py_call(b.str, xv.shape))
         if String(py=xv.dtype) == "<f8" and Int(py=xv.size) > 0:
             try:
-                xv = admit_nd_array_f32(xv, "X", member_context)
+                xv = admit_typed(xv, "<f4", 3, "X", context, admitted=True).keep
             except error:
                 raise Error(_fit_words(base, py_call(plan["fields_get"], base, py_type(base)), String(error),
                                        context, b))

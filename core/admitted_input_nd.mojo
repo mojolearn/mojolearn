@@ -41,17 +41,17 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.cast_in import CAST_KIND_FLOAT
 from core.admitted_input import (
-    admitted_raw_word, admitted_f64_rounds_to_inf, admitted_f64_overflow_refuse, admitted_f64_nan_fix,
+    admitted_cast_f32, admitted_raw_word, admitted_f64_rounds_to_inf, admitted_f64_overflow_refuse, admitted_f64_nan_fix,
+    ADMITTED_ALL_FINITE, ADMITTED_NONFINITE,
 )
 
 comptime _AN_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _AN_INTP = MutPointer[Int, MutUntrackedOrigin]
-comptime _AN_U8P = MutPointer[UInt8, MutUntrackedOrigin]
 comptime _AN_EXP = UInt32(0x7F800000)
 comptime _AN_NO_COLUMN = 9223372036854775807
 
 
-def admitted_cast_nd_f32(
+def admitted_cast_nd_f32[SWAP: Bool = False](
     base: Int, dims: List[Int], steps: List[Int], item: Int, kind: Int, dst: _AN_F32P,
 ) raises -> Bool:
     """`np.array(a, dtype=float32, order="C")` of the strided array at `base`
@@ -64,33 +64,28 @@ def admitted_cast_nd_f32(
     found non-finite."""
     # parallel: N-d cast and finiteness test over row tasks across host cores (was the serial odometer xseq_cast_nd)
     var rank = len(dims)
+    if rank <= 2:
+        return admitted_cast_f32[SWAP](base, steps[0] if rank > 0 else 0, steps[1] if rank == 2 else 0,
+                                       dims[0] if rank > 0 else 1, dims[1] if rank == 2 else 1,
+                                       item, kind, dst)
     var total = 1
     for k in range(rank):  # driver-loop: over the array's rank metadata
         total *= dims[k]
     if total <= 0:
         return True
-    var cols = 1 if rank <= 1 else dims[rank - 1]
-    var col_step = 0 if rank <= 1 else steps[rank - 1]
+    var lead = rank - 1
+    var cols = dims[lead]
+    var col_step = steps[lead]
     var rows = total // cols
-    # The axes a row index decomposes over: all but the last (rank >= 2), the
-    # one axis (rank 1), none (rank 0: one row at `base`).
-    var lead = rank - 1 if rank >= 2 else rank
-    var lead_dims = List[Int](length=max(lead, 1), fill=1)
-    var lead_steps = List[Int](length=max(lead, 1), fill=0)
-    for k in range(lead):  # driver-loop: over the array's rank metadata
-        lead_dims[k] = dims[k]
-        lead_steps[k] = steps[k]
-    var dims_ptr = rebind[_AN_INTP](lead_dims.unsafe_ptr())
-    var steps_ptr = rebind[_AN_INTP](lead_steps.unsafe_ptr())
+    var dims_ptr = _AN_INTP(unsafe_from_address=Int(dims.unsafe_ptr()))
+    var steps_ptr = _AN_INTP(unsafe_from_address=Int(steps.unsafe_ptr()))
     var tasks = host_predict_task_count_work(rows, total * max(item, 1))
     var chunk = host_predict_chunk(rows, tasks)
-    var flags = List[UInt8](length=tasks, fill=UInt8(1))
-    var flag_ptr = rebind[_AN_U8P](flags.unsafe_ptr())
-    var firsts = List[Int](length=tasks, fill=_AN_NO_COLUMN)
+    var firsts = List[Int](length=tasks, fill=ADMITTED_ALL_FINITE)
     var first_ptr = rebind[_AN_INTP](firsts.unsafe_ptr())
     var wide = kind == CAST_KIND_FLOAT and item == 8
 
-    def _rows(t: Int) {imm base, imm item, imm kind, imm dst, imm cols, imm col_step, imm rows, imm lead, imm dims_ptr, imm steps_ptr, imm chunk, imm flag_ptr, imm first_ptr, imm wide}:
+    def _rows(t: Int) {imm base, imm item, imm kind, imm dst, imm cols, imm col_step, imm rows, imm lead, imm dims_ptr, imm steps_ptr, imm chunk, imm first_ptr, imm wide}:
         var lo = t * chunk
         var hi = min(lo + chunk, rows)
         var finite = True
@@ -105,7 +100,7 @@ def admitted_cast_nd_f32(
                 rest //= size
                 axis -= 1
             for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
-                var raw = admitted_raw_word(base + offset + c * col_step, item)
+                var raw = admitted_raw_word[SWAP](base + offset + c * col_step, item)
                 var bits = classical_f32_bits(raw, kind, item)
                 if (bits & _AN_EXP) == _AN_EXP:
                     finite = False
@@ -114,9 +109,7 @@ def admitted_cast_nd_f32(
                         first = c
                 dst.unsafe_store(r * cols + c, bitcast[DType.float32](bits))
         if not finite:
-            flag_ptr.unsafe_store(t, UInt8(0))
-        if first < _AN_NO_COLUMN:
-            first_ptr.unsafe_store(t, first)
+            first_ptr.unsafe_store(t, first if first < _AN_NO_COLUMN else ADMITTED_NONFINITE)
 
     if tasks <= 1:
         _rows(0)
@@ -125,14 +118,14 @@ def admitted_cast_nd_f32(
     var all_finite = True
     var column = _AN_NO_COLUMN
     for t in range(tasks):  # driver-loop: over the row tasks' flags (at most one per core)
-        if flags[t] == UInt8(0):
+        var status = firsts[t]
+        if status == ADMITTED_NONFINITE:
             all_finite = False
-        if firsts[t] < column:
-            column = firsts[t]
-    _ = flags^
+        elif status >= 0:
+            column = min(column, status)
     _ = firsts^
-    _ = lead_dims^
-    _ = lead_steps^
+    _ = dims
+    _ = steps
     if column < _AN_NO_COLUMN:
         admitted_f64_overflow_refuse(column)
     return all_finite

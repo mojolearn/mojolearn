@@ -14,7 +14,6 @@ from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.sequential_admission_door import _ordinary_torch, sequential_admit_value
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_slot_once
 from core.scaler_fit_impl import scaler_cast
-from core.admitted_input import admitted_cast_f32
 from bindings.prep_keys_unpack import prep_keys
 from bindings.py_balanced import py_item
 
@@ -145,17 +144,9 @@ def scaler_input_snapshot(source: PythonObject, context: PythonObject) raises ->
     if not metadata.f32_c() or not metadata.native_byte_order:
         var output = classical_typed(Python.tuple(n, d), "<f4", py_item(context, nk[].k_output_context))
         var address = Int(py=classical_address(output))
-        if metadata.native_byte_order:
-            # float64 (or a strided float32) takes the shared admission cast:
-            # parallel row tasks, round-to-nearest-even, a finite value
-            # outside float32's range refused by its column.
-            _ = admitted_cast_f32(metadata.source.addr, metadata.source.s0, metadata.source.s1, n, d,
-                                  metadata.source.itemsize, metadata.source.kind,
-                                  F32P(unsafe_from_address=address))
-        else:
-            scaler_cast(metadata.source.addr, metadata.source.s0, metadata.source.s1, n, d,
-                        metadata.source.itemsize, metadata.source.kind, metadata.native_byte_order,
-                        F32P(unsafe_from_address=address))
+        scaler_cast(metadata.source.addr, metadata.source.s0, metadata.source.s1, n, d,
+                    metadata.source.itemsize, metadata.source.kind, metadata.native_byte_order,
+                    F32P(unsafe_from_address=address))
         metadata.replace_f32(address)
         pin.keep = output
         view = array_slot_once(output, "_mv", context)

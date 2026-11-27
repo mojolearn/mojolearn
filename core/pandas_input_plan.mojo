@@ -2,6 +2,7 @@
 """Typed pandas block preparation; external object decoding stays at UNPACK."""
 from std.memory import bitcast
 from core.cast_in import cast_in_kind, cast_w64_bits, f64_to_f32_bits
+from core.admitted_input import admitted_f64_rounds_to_inf, admitted_f64_overflow_refuse, admitted_f64_nan_fix
 from core.classical_pandas_impl import pd_raw_at, pd_mask_check, pd_scatter_numeric
 from core.sequential_input_plan import sequence_promote
 
@@ -172,7 +173,12 @@ struct PandasObjectWriter(Copyable, Movable):
         return self.source + row * self.stride
 
     def put(self, row: Int, number: Float64) raises:
-        var bits = f64_to_f32_bits(bitcast[DType.uint64](number))
-        if not self.allow_nonfinite and (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            raise Error("Input contains NaN or infinity")
+        var raw = bitcast[DType.uint64](number)
+        var bits = f64_to_f32_bits(raw)
+        if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            if admitted_f64_rounds_to_inf(raw, bits, True):
+                admitted_f64_overflow_refuse(self.column)
+            if not self.allow_nonfinite:
+                raise Error("Input contains NaN or infinity")
+            bits = admitted_f64_nan_fix(raw, bits, True)
         MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=self.destination)[row * self.cols + self.column] = bitcast[DType.float32](bits)

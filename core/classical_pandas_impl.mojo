@@ -28,14 +28,8 @@ def _pd_any_flag(flags: List[UInt8], tasks: Int) -> Bool:
 
 def pd_raw_at(base: Int, offset: Int, size: Int, native: Bool) -> UInt64:
     if native:
-        # One typed little-endian load: the word the byte assembly below
-        # builds for a native-order item (R4).
         return admitted_raw_word(base + offset, size)
-    var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=base + offset)
-    var raw = UInt64(0)
-    for k in range(size):
-        raw |= UInt64(pointer[k if native else size - 1 - k]) << UInt64(8 * k)
-    return raw
+    return admitted_raw_word[True](base + offset, size)
 
 
 def _pd_double(raw: UInt64, kind: Int, size: Int) -> Float64:
@@ -122,13 +116,11 @@ def pd_scatter_numeric(
         _rows(0)
     else:
         host_parallelize(_rows, tasks)
-    var nonfinite = _pd_any_flag(flags, tasks)
-    var overflow = False
-    for t in range(tasks):  # driver-loop: over the row tasks' flags (at most one per core)
-        if flags[t] == UInt8(2):
-            overflow = True
+    var verdict = UInt8(0)
+    for t in range(tasks):  # driver-loop: over native worker results
+        verdict = max(verdict, flags[t])
     _ = flags^
-    if overflow:
+    if verdict == UInt8(2):
         admitted_f64_overflow_refuse(dest)
-    if nonfinite and not allow_nonfinite:
+    if verdict == UInt8(1) and not allow_nonfinite:
         raise Error("Input contains NaN or infinity")

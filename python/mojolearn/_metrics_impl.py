@@ -783,8 +783,8 @@ def root_mean_squared_error(
 
 
 # Maintainer notes: backed by `ML::Metrics::kl_divergence`, the float overload
-# (DEVIATIONS 653 and 658), on the same pinned fold as r2_score. float64 is
-# refused (no float64 on Apple GPUs). Negative entries are refused here, before
+# (DEVIATIONS 653 and 658), on the same pinned fold as r2_score. The input
+# boundary rounds float64 values to float32. Negative entries are refused before
 # the kernel, per `metrics/README.md` HAND-OFF ask 3. RAFT's kernel does not
 # normalize either; p_i == 0 contributes zero (their branch).
 def kl_divergence(P, Q, *, device=None):
