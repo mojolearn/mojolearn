@@ -1440,6 +1440,10 @@ def python_package_entries(python_root=PY_DIR):
         directory = python_root.joinpath(*package.split("."))
         for source in sorted(directory.glob("*.py")):
             entries[source.relative_to(python_root).as_posix()] = source
+    # Include the same catalog, pinned model and license in release and qualification wheels.
+    for rel in config["tool"]["setuptools"].get("package-data", {}).get("mojolearn", []):
+        if rel.startswith("models/"):
+            entries["mojolearn/" + rel] = python_root / "mojolearn" / rel
     return entries
 
 
@@ -1663,7 +1667,6 @@ def main(argv=None, _gates=True):
     entries["mojolearn_diagnostics.py"] = python_root / "mojolearn_diagnostics.py"
     entries.update(python_package_entries(python_root))
     entries["mojolearn/ALPHA_API.md"] = package_root / "ALPHA_API.md"
-    entries["mojolearn/models/catalog.json"] = package_root / "models" / "catalog.json"  # mojolearn.models.catalog()
     seen_vendor_libs = set()
     for s in sets:
         vendor, files, libs = s.vendor, s.files, s.libs

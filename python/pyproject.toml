@@ -235,6 +235,8 @@ mojolearn = [
     # the verified pretrained-model catalog (mojolearn.models.catalog()):
     # revisions, hashes and numbers only, written by tools/model_catalog.py
     "models/catalog.json",
+    "models/mnist-12-opset13.onnx",
+    "models/MNIST-NOTICE.txt",
     "*.so", "identical/*.so", ".dylibs/*.dylib",
     # THE FRAMEWORK ADAPTERS (packaging/adapters/build.sh, staged by
     # build_release_wheel.sh): the native adapter library, the Torch

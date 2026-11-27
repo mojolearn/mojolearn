@@ -161,6 +161,27 @@ def _(ml, X, yc, yr, Xh=None):
 
 # ---------------------------------------------------------------- import_model on an ONNX file
 
+def _coverage_varint(v):
+    out = bytearray()
+    while True:
+        b = v & 0x7F
+        v >>= 7
+        if v:
+            out.append(b | 0x80)
+        else:
+            out.append(b)
+            return bytes(out)
+
+
+def _coverage_field(num, wire, payload):
+    """One protobuf field: wire 0 an unsigned varint, wire 2 length-delimited bytes."""
+    key = _coverage_varint((num << 3) | wire)
+    if wire == 0:
+        return key + _coverage_varint(int(payload))
+    payload = payload.encode("utf-8") if isinstance(payload, str) else bytes(payload)
+    return key + _coverage_varint(len(payload)) + payload
+
+
 def _coverage_onnx(path, X):
     """Write x [batch, 6] -> Gemm(transB) [batch, 8] -> Relu -> Gemm(transB)
     [batch, 3] as an ONNX file (opset 17), its weights the fixture's own
@@ -171,15 +192,19 @@ def _coverage_onnx(path, X):
     dims 1, data_type 2 (FLOAT = 1), name 8, raw_data 9; ValueInfoProto
     name 1, type 2; TypeProto tensor_type 1; Tensor elem_type 1, shape 2;
     TensorShapeProto dim 1; Dimension dim_value 1, dim_param 2."""
-    from mojolearn._verify_onnx import field as F, varint, value_info
+    F = _coverage_field
     flat = np.ascontiguousarray(X, dtype=np.float32).reshape(-1)
     weights = (("w1", (8, 6), 4096), ("b1", (8,), 4196), ("w2", (3, 8), 4296), ("b2", (3,), 4396))
 
     def tensor(name, shape, start):
         n = int(np.prod(shape))
-        dims = F(1, 2, b"".join(varint(s) for s in shape))  # glue: packed dims
+        dims = F(1, 2, b"".join(_coverage_varint(s) for s in shape))  # glue: packed dims
         raw = (flat[start:start + n] * np.float32(0.25)).astype(np.float32).tobytes()
         return dims + F(2, 0, 1) + F(8, 2, name) + F(9, 2, raw)
+
+    def value_info(name, dims):
+        shape = b"".join(F(1, 2, F(2, 2, v) if isinstance(v, str) else F(1, 0, v)) for v in dims)  # glue: dims
+        return F(1, 2, name) + F(2, 2, F(1, 2, F(1, 0, 1) + F(2, 2, shape)))
 
     def node(op, ins, outs, name, trans_b=False):
         out = b"".join(F(1, 2, i) for i in ins) + b"".join(F(2, 2, o) for o in outs)  # glue: names
@@ -215,8 +240,8 @@ def _(ml, X, yc, yr, Xh=None):
         prog = ml.import_model(path, shapes={"x": (64, 6)}, numeric_mode="identical")
         out = np.asarray(prog.run(x))
         held = np.asarray(prog.run(xh))
-    from mojolearn._verify_api_models import catalog_graph_digests
-    catalog = catalog_graph_digests(ml.models)
+    from mojolearn._verify_api_models import catalog_model_digests
+    catalog = catalog_model_digests(ml.models.verify_catalog_entry)
     return _fit(dict(file=d(model), out=d(out), held=d(held),
                      catalog_input=catalog["input_digest"], catalog_output=catalog["digest"]))
 

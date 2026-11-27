@@ -274,7 +274,8 @@ def _catalog_verify(args: PythonObject, context: PythonObject) raises -> PythonO
                 raise Error("ValueError: supplied ONNX artifact differs from the catalog's recorded artifact hash")
     var mode = _catalog_mode(args[3], context)
     var shapes = py_get(check, "import_shapes")
-    var program = _import(source, PythonObject(None), shapes, mode, import_context)
+    var device = args[5] if len(args) == 6 else PythonObject(None)
+    var program = _import(source, PythonObject(None), shapes, mode, import_context, device)
     var started = perf_counter_ns()
     var outputs = ops_imported_run_py(program, inputs, Python.dict())
     var elapsed = Float64(perf_counter_ns() - started) / 1000000.0
@@ -304,7 +305,9 @@ def _catalog_verify(args: PythonObject, context: PythonObject) raises -> PythonO
     if len(digests):
         expected = PythonObject(model_string(py_call(bi.list, digests.values())[0]))
     var matched = PythonObject(None) if not expected else PythonObject(Bool(py=digest == expected.value()))
-    var report = Python.dict(name=name, version=version, numeric_mode=mode, vendor=context["vendor"],
+    # _import has admitted the exact device string and selected that session's provider.
+    var vendor = PythonObject("cpu") if device is not None and String(device) == "cpu" else context["vendor"]
+    var report = Python.dict(name=name, version=version, numeric_mode=mode, vendor=vendor,
         digest=digest, expected=py_or_none(expected), input_digest=input_digest, run_ms=PythonObject(elapsed),
         source=Python.dict(artifact=artifact, sha256=artifact_hash, catalog=py_get(entry, "source")))
     py_setitem(report, "match", matched)
@@ -328,8 +331,8 @@ def catalog_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
         elif operation == "catalog":
             result = _catalog_load(_catalog_context())
         elif operation == "verify":
-            if len(values) != 5:
-                raise Error("TypeError: catalog verification requires five argument words")
+            if len(values) != 5 and len(values) != 6:
+                raise Error("TypeError: catalog verification requires five argument words and an optional device")
             result = _catalog_verify(values, _catalog_context())
         else:
             raise Error("ValueError: unknown catalog operation")

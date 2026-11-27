@@ -6,26 +6,17 @@ from pathlib import Path
 from ._verify_api import resolve, encode
 
 
-def catalog_graph_digests(models):
-    """Check the catalog's native-graph route using the MNIST entry's pinned input and one ReLU."""
+def catalog_model_digests(verify_entry):
+    """Run the catalog's pinned MNIST artifact and input from the installed wheel."""
     import hashlib
     import numpy as np
-    from ._verify_onnx import field as F, value_info
-    from .importers.onnx import read
-
+    path = Path(__file__).with_name("models") / "mnist-12-opset13.onnx"
     x = np.random.default_rng(0).standard_normal((1, 1, 28, 28), dtype=np.float32)
-    node = F(1, 2, "x") + F(2, 2, "y") + F(4, 2, "Relu")
-    graph = (F(1, 2, node) + F(2, 2, "catalog-check")
-             + F(11, 2, value_info("x", x.shape)) + F(12, 2, value_info("y", x.shape)))
-    model = F(1, 0, 8) + F(8, 2, F(2, 0, 17)) + F(7, 2, graph)
-    with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / "relu.onnx"
-        path.write_bytes(model)
-        report = models.verify_catalog_entry("mnist-12", source=read(str(path)), inputs=[x],
-                                             numeric_mode="identical")
-    expected = hashlib.sha256(np.maximum(x, np.float32(0)).tobytes()).hexdigest()[:16]
-    if report["digest"] != expected or report["input_digest"] != hashlib.sha256(x.tobytes()).hexdigest()[:16]:
-        raise AssertionError("catalog input or supplied graph output differs from its bytes")
+    report = verify_entry("mnist-12", source=str(path), inputs=[x], numeric_mode="identical")
+    if report["input_digest"] != hashlib.sha256(x.tobytes()).hexdigest()[:16]:
+        raise AssertionError("catalog input digest differs from the supplied tensor")
+    if report["match"] is False:
+        raise AssertionError("MNIST output disagrees with its catalog reference for this release")
     return {"input_digest": report["input_digest"], "digest": report["digest"]}
 
 
@@ -35,6 +26,7 @@ def applicable(public,method):return public.startswith('mojolearn.models.')
 def model_checks(recorder,public,methods):
     import numpy as np
     from . import models
+    from ._verify_api import package
     from ._causal_lm_fixtures import _llama_config,_llama_tensors,_write_checkpoint
     name=public.rsplit('.',1)[-1]
     def check(method):
@@ -45,7 +37,7 @@ def model_checks(recorder,public,methods):
             try:
                 models.verify_catalog_entry('__verifier_unknown_model__')
             except KeyError:
-                return catalog_graph_digests(models)
+                return catalog_model_digests(package().models.verify_catalog_entry)
             raise AssertionError('unknown catalog name was admitted')
         if name=='Tokenizer':
             import unicodedata

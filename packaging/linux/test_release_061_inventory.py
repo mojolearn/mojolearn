@@ -12,6 +12,14 @@ spec.loader.exec_module(packer)
 
 
 class ReleaseInventory(unittest.TestCase):
+    def test_catalog_fixture_and_license_are_packaged(self):
+        entries = packer.python_package_entries()
+        models = json.loads(entries["mojolearn/models/catalog.json"].read_text())["models"]
+        mnist = next(model for model in models if model["name"] == "mnist-12")
+        archive = entries["mojolearn/models/mnist-12-opset13.onnx"].read_bytes()
+        self.assertEqual(hashlib.sha256(archive).hexdigest(), mnist["source"]["converted_sha256"])
+        self.assertIn("ONNX Project Contributors", entries["mojolearn/models/MNIST-NOTICE.txt"].read_text())
+
     def test_python_payload_includes_imported_model_subpackage(self):
         entries = packer.python_package_entries()
         for name in ("__init__", "causal_lm", "config", "safetensors", "tokenizer"):

@@ -1431,7 +1431,7 @@ mojolearn.MLPClassifier.partial_fit	sequence-mlp-classifier-partial	Two epochs t
 mojolearn.MLPRegressor.partial_fit	sequence-mlp-regressor-partial	Two epochs through the public incremental entry, compared with an uninterrupted fit.
 mojolearn.BpeTokenizer.from_files	bpe-vocabulary	Load a two-file GPT-2 vocabulary and hash the merge IDs for aba.
 mojolearn.model_selection.ParameterSampler.__iter__	x-metrics-splitters	Iterate seeded ParameterSampler and hash the emitted parameter tuples in order.
-mojolearn.models.verify_catalog_entry.call	sequence-onnx-import	Verify the pinned input and the output of a caller-supplied one-node native graph through the catalog API.
+mojolearn.models.verify_catalog_entry.call	sequence-onnx-import	Load the pinned MNIST model from the wheel, verify its input, and hash its output on the selected device.
 mojolearn.AdaBoostRegressor.score	trees-adaboost-reg-score	m_score.py type-checks the fitted AdaBoostRegressor, then _m_score_fit hashes its public score on training and held-out rows.
 mojolearn.BaggingClassifier.score	trees-bagging-clf-score	m_score.py type-checks the fitted BaggingClassifier, then _m_score_fit hashes its public score on training and held-out rows.
 mojolearn.BaggingRegressor.score	trees-bagging-reg-score	m_score.py type-checks the fitted BaggingRegressor, then _m_score_fit hashes its public score on training and held-out rows.
