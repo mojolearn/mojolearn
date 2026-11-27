@@ -32,13 +32,9 @@
 #   one binding build is ONE busy core (elapsed = cpu seconds in every base record), 30 to 874 s; the plan's 258
 #   builds are about 88,600 s = 1,476 core-minutes. Compiled inside each batch, one batch after another, the pod kept
 #   2 to 5 of 14 cores busy and the 155 batches needed about 1,250 min.
-#   now: tools/sabotage_prebuild.py compiles them ahead over all 14 cores (about 1,476 / 14 = 105 min of compile,
-#   memory permitting) while the batches run; a batch is then its three runs and the checks, about 100 s on the GPU
-#   (9bdb1a9e8c: clean 20 to 37 s, sabotaged and restored the same, check and review about 10 s). EXPECTED FULL RUN:
-#   max(105 min of compile, 155 x 100 s = 258 min of runs) + the first batch's wait (its slowest build, up to 15 min)
-#   = about 4.5 hours, so three 100-minute submissions (each prints `RESUME SAB_BATCHES=from:<id>`; a resume on the
-#   same pod reuses every batch already prebuilt for this commit), or one submission with --cap 300 and
-#   SAB_BUDGET_MIN=280. SAB_BATCH_MIN (12) now bounds the runs only; SAB_BUILD_MIN (40) bounds one binding build.
+#   The prebuild now compiles ahead within the pod's core and memory budget. The current plan and its
+#   receipts determine the total duration. SAB_BATCH_MIN bounds one batch's runs and SAB_BUILD_MIN bounds
+#   one binding build. On a budget stop keep the original selection and use the printed SAB_RESUME_FROM.
 #
 # PARALLEL PLAN (AGENTS.md hard rules): the base build packs development groups over the allocation's cores by their
 # recorded peak memory (development_build.py --parallel auto, cgroup-aware on Linux); the prebuild packs every batch's
@@ -73,9 +69,9 @@ say() { echo "[$(date -u +%H:%M:%S) sabotage-gpu] $*" | tee -a "$RES/summary.txt
 : > "$RES/proven_rows.tsv"
 # Read batch IDs or arm names from the requested slice of a plan.
 select_from_plan() {
-    python3 - "$1" "$2" "$3" <<'EOF'
+    python3 - "$1" "$2" "$3" "${4:-}" <<'EOF'
 import json, sys
-path, want, what = sys.argv[1:]
+path, want, what, resume = sys.argv[1:]
 batches = json.load(open(path))["batches"]
 ids = [b["id"] for b in batches]
 if not ids or len(set(ids)) != len(ids):
@@ -88,6 +84,10 @@ else:
     chosen = want.split(",")
     if len(set(chosen)) != len(chosen) or any(i not in ids for i in chosen):
         sys.exit(f"invalid batch selection: {want}")
+if resume:
+    if resume not in chosen:
+        sys.exit(f"resume batch outside the selected plan: {resume}")
+    chosen = chosen[chosen.index(resume):]
 if what == "ids":
     print(" ".join(chosen))
 else:
@@ -205,7 +205,8 @@ fi
 pixi run -e default python tools/coverage_sabotage.py batch-plan --box "$SAB_REQUIRED_BACKEND" \
     ${plan_input[@]+"${plan_input[@]}"} ${plan_arms[@]+"${plan_arms[@]}"} --json "$PLAN" > "$RES/plan.log" 2>&1 \
     || { say "current fault plan failed: $RES/plan.log"; persist_now; exit 2; }
-IDS=$(select_from_plan "$PLAN" "$current_batches" ids) || { say "bad SAB_BATCHES=$BATCHES"; exit 2; }
+IDS=$(select_from_plan "$PLAN" "$current_batches" ids "${SAB_RESUME_FROM:-}") || { say "invalid selection or resume position"; exit 2; }
+[ -z "${SAB_RESUME_FROM:-}" ] || scope=targeted
 plan_hash=$(sha256sum "$PLAN" | awk '{print $1}')
 [[ "$plan_hash" =~ ^[0-9a-f]{64}$ ]] || { say "could not hash $PLAN"; exit 2; }
 say "source $SOURCE (pod HEAD $(git rev-parse --short=10 HEAD)), cores $CORES of $(nproc) visible," \
@@ -331,7 +332,7 @@ left=""
 for b in $IDS; do  # driver-loop: over batches, each owns the tree and the GPU
     el=$(( ($(date +%s) - START) / 60 ))
     if [ -n "$left" ] || [ "$el" -ge "$BUDGET_MIN" ]; then
-        [ -n "$left" ] || { left=$b; say "RESUME SAB_BATCHES=from:$b (job at ${el} min, budget $BUDGET_MIN)"; }
+        [ -n "$left" ] || { left=$b; say "RESUME SAB_RESUME_FROM=$b with the original SAB_BATCHES and plan inputs (job at ${el} min, budget $BUDGET_MIN)"; }
         say "NOT STARTED batch=$b"; rc=1; continue
     fi
     # The batch's prebuilt natives first (a controller wait, bounded by the unit limit: the builds of the batches
