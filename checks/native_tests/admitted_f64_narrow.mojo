@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # native-check: cpu
 """The one float64 -> float32 admission rule (Andrew, 2026-11-27):
-round-to-nearest-even, NaN stays NaN, an infinity stays that infinity, and a
+round-to-nearest-even, a NaN keeps IEEE narrowing's bits (sign, quiet bit set,
+top 22 payload bits: numpy's astype(float32); a signaling NaN becomes quiet with
+that payload), an infinity stays that infinity, and a
 finite value outside float32's range is refused naming its column (the
 smallest such column; the view's row when the cast is transposed), never
 turned into an infinity. core/admitted_input.mojo `admitted_cast_f32`,
@@ -15,7 +17,7 @@ from core.admitted_input import (
 )
 from core.admitted_input_nd import admitted_cast_nd_f32
 
-comptime ADMITTED_F64_NARROW_FIXTURES = 9
+comptime ADMITTED_F64_NARROW_FIXTURES = 10
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 comptime _TIE = UInt64(0x3FF0000010000000)       # 1 + 2^-24: ties to even 1.0
@@ -105,6 +107,26 @@ def fixture(unit: Int) raises:
         require(refused, "the N-d cast refuses naming its last-axis column")
         _ = words^
         _ = dst^
+    elif unit == 9:
+        # NaN bits are IEEE narrowing's (numpy's astype(float32) words): the
+        # sign kept, the quiet bit set, fraction bits 50..29 kept
+        var words: List[UInt64] = [UInt64(0xFFF8000000000000), UInt64(0x7FF8000123456789),
+                                   UInt64(0x7FF0000040000000), UInt64(0x7FF0000000000001),
+                                   UInt64(0xFFF4000000000003)]
+        var expected: List[UInt32] = [UInt32(0xFFC00000), UInt32(0x7FC00009), UInt32(0x7FC00002),
+                                      UInt32(0x7FC00000), UInt32(0xFFE00000)]
+        var dst = List[Float32](length=5, fill=0)
+        require(_status(words, 1, 5, dst) == ADMITTED_NONFINITE, "NaNs are non-finite, not out of range")
+        for i in range(5):
+            require(_bits(dst, i) == expected[i], "IEEE NaN narrowing bits, item " + String(i))
+        var nd_dst = List[Float32](length=5, fill=0)
+        var dims: List[Int] = [5]
+        var steps: List[Int] = [8]
+        _ = admitted_cast_nd_f32(Int(words.unsafe_ptr()), dims, steps, 8, CAST_KIND_FLOAT,
+                                 _F32P(unsafe_from_address=Int(nd_dst.unsafe_ptr())))
+        for i in range(5):
+            require(_bits(nd_dst, i) == expected[i], "N-d cast IEEE NaN narrowing bits, item " + String(i))
+        _ = words^
     elif unit == 7:
         # float32 words cast as they are (no rounding, never refused)
         var words: List[Float32] = [1.5, -0.25, 3.0e38]

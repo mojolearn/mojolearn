@@ -733,14 +733,15 @@ def mc_regression_f32_1d(x: PythonObject, name: String, context: PythonObject) r
     """`_metrics_impl._as_regression_f32_1d`."""
     if metric_vector_exact(x, context):
         return metric_f32_vector(x, name, True, True, context)
-    if mc_buffer_format(x, context) != "f" and not mc_is_list_like(x):
-        raise Error("TypeError: mojolearn regression metrics: " + name
-                    + " must have dtype float32; cast explicitly before scoring")
+    # float64 is converted once by the shared admission cast (mc_f32_1d, Andrew, 2026-11-27).
+    var format = mc_buffer_format(x, context)
+    if format != "f" and format != "d" and not mc_is_list_like(x):
+        raise Error("TypeError: mojolearn regression metrics: " + name + " must have dtype float32 or float64")
     var a = mc_f32_lists(x, "input", context)
     var dtype = classical_dtype_str(a, context)
-    if dtype != "<f4":
-        raise Error("TypeError: mojolearn regression metrics: " + name + " must have dtype float32, got "
-                    + dtype + "; cast explicitly before scoring")
+    if dtype != "<f4" and dtype != "<f8":
+        raise Error("TypeError: mojolearn regression metrics: " + name + " must have dtype float32 or float64, got "
+                    + dtype)
     return mc_f32_1d(a, name, True, context)
 
 

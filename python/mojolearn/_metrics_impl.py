@@ -578,8 +578,9 @@ def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0, de
 # the float overload (DEVIATIONS 653 and 657). The three sums (y_bar, sse,
 # ssto) are folded by a PINNED_SUM_W = 256 slab tree whose width is a constant
 # of the source, not of the launch, gated launch-invariant across two block
-# sizes and two grid shapes. float64 is refused: cuML has a double overload and
-# this implementation does not (no float64 on Apple GPUs). sample_weight:
+# sizes and two grid shapes. float64 input is converted to float32 once at the
+# native boundary (Andrew, 2026-11-27): cuML has a double overload and this
+# implementation computes in float32 (no float64 on Apple GPUs). sample_weight:
 # pinned-sum path (metrics/impl/weighted_scores.mojo; RAFT's r2_score has no
 # weighted arm), `sum w (y - y_pred)^2` over `sum w (y - y_avg)^2` with the same
 # force_finite guards. force_finite=True: ssto == 0 returns 1.0 when sse == 0
@@ -606,8 +607,8 @@ def r2_score(
     ----------
     y_true, y_pred : array-like of shape (n_samples,) or (n_samples, n_outputs)
         Finite float32 targets and predictions of the same shape. float64
-        arrays raise ``TypeError`` (for 1-D input, so do Python lists of
-        floats): cast to float32 first. NaN or infinity raises
+        inputs are converted to float32 once, with round-to-nearest-even;
+        values outside float32's range are refused. NaN or infinity raises
         ``ValueError``.
     sample_weight : array-like of shape (n_samples,), default None
         Per-sample weights, as in scikit-learn. They must be finite,
@@ -660,9 +661,9 @@ def mean_squared_error(
     Parameters
     ----------
     y_true, y_pred : array-like of shape (n_samples,) or (n_samples, n_outputs)
-        Finite, nonempty float32 arrays of the same shape. A float64 or other
-        non-float32 buffer raises ``TypeError``: cast it first. Python lists
-        are converted to float32. NaN or infinity raises ``ValueError``.
+        Finite, nonempty float32 arrays of the same shape. float64 inputs are
+        converted to float32 once, with round-to-nearest-even; values outside
+        float32's range are refused. Python lists are converted to float32. NaN or infinity raises ``ValueError``.
     sample_weight : array-like of shape (n_samples,), default None
         Per-sample weights, as in scikit-learn.
     multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
@@ -704,9 +705,9 @@ def mean_absolute_error(
     Parameters
     ----------
     y_true, y_pred : array-like of shape (n_samples,) or (n_samples, n_outputs)
-        Finite, nonempty float32 arrays of the same shape. A float64 or other
-        non-float32 buffer raises ``TypeError``: cast it first. Python lists
-        are converted to float32. NaN or infinity raises ``ValueError``.
+        Finite, nonempty float32 arrays of the same shape. float64 inputs are
+        converted to float32 once, with round-to-nearest-even; values outside
+        float32's range are refused. Python lists are converted to float32. NaN or infinity raises ``ValueError``.
     sample_weight : array-like of shape (n_samples,), default None
         Per-sample weights, as in scikit-learn.
     multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
@@ -749,9 +750,9 @@ def root_mean_squared_error(
     Parameters
     ----------
     y_true, y_pred : array-like of shape (n_samples,) or (n_samples, n_outputs)
-        Finite, nonempty float32 arrays of the same shape. A float64 or other
-        non-float32 buffer raises ``TypeError``: cast it first. Python lists
-        are converted to float32. NaN or infinity raises ``ValueError``.
+        Finite, nonempty float32 arrays of the same shape. float64 inputs are
+        converted to float32 once, with round-to-nearest-even; values outside
+        float32's range are refused. Python lists are converted to float32. NaN or infinity raises ``ValueError``.
     sample_weight : array-like of shape (n_samples,), default None
         Per-sample weights, as in scikit-learn.
     multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'

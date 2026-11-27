@@ -1,9 +1,11 @@
-"""float64 inputs of the float32-computing estimators (Andrew, 2026-11-27).
+"""float64 inputs of the high-level entry points (Andrew, 2026-11-27).
 
-Every high-level estimator that computes in float32 accepts a float64 X (and
-float64 targets and sample weights where float32 is what it computes in). The
-native boundary converts it ONCE with one rule on every device and side:
-IEEE round-to-nearest-even, NaN stays NaN, an infinity stays that infinity
+Every estimator, metric and model-selection function computes in float32 and
+accepts float64 arrays. The native boundary converts them ONCE with one rule
+on every device and side: IEEE round-to-nearest-even, a NaN keeps IEEE
+narrowing's bits (its sign, the quiet bit set, the top 22 payload bits: what
+numpy's astype(float32) gives; a signaling NaN becomes quiet with that
+payload), an infinity stays that infinity
 (the estimator then treats it as it treats a float32 infinity), and a finite
 value outside float32's range is refused with a ValueError naming its column.
 A float32 C-order input is borrowed as before (no extra copy; no bit moves).
@@ -18,6 +20,7 @@ Kept strict, and tested where they live: the linalg and ops surface
 (test_linalg_boundary.py, test_linalg_identity.py), saved-model loading
 (test_host_model_kmeans.py), the training primitives, optimizers and neural
 layers (test_neural_public_coverage_p1.py, test_neural_coverage.py).
+The metric suite's own float64 cases: test_metrics_public_coverage_p1.py.
 """
 import struct
 
@@ -156,6 +159,26 @@ def test_scaler_float64_nan_stays_nan():
     assert np.isnan(out[5, 1]) and _same(out, narrow.transform(x32))
 
 
+def test_scaler_float64_nan_bits_are_ieee_narrowing():
+    # Signed, payload and signaling NaNs narrow as IEEE (numpy's astype)
+    # narrows them: sign kept, quiet bit set, the top 22 payload bits kept.
+    # The float64 call then sees the very float32 words the pre-cast call
+    # sees, so every output word is the same.
+    words = np.array([0xFFF8000000000000, 0x7FF8000123456789, 0x7FF0000040000000,
+                      0x7FF0000000000001, 0xFFF4000000000003], dtype=np.uint64)
+    with np.errstate(invalid="ignore"):
+        narrowed = words.view(np.float64).astype(np.float32).view(np.uint32)
+    assert narrowed.tolist() == [0xFFC00000, 0x7FC00009, 0x7FC00002, 0x7FC00000, 0xFFE00000]
+    x64 = _wide(40, 5, 27)
+    x64[3:8, 2] = words.view(np.float64)
+    with np.errstate(invalid="ignore"):
+        x32 = x64.astype(np.float32)
+    wide = ml.StandardScaler().fit(x64)
+    narrow = ml.StandardScaler().fit(x32)
+    assert _same(wide.mean_, narrow.mean_) and _same(wide.var_, narrow.var_)
+    assert _same(wide.transform(x64), narrow.transform(x32))
+
+
 def test_scaler_float64_infinity_is_treated_as_float32_infinity():
     x = np.ones((4, 2))
     x[1, 0] = np.inf
@@ -241,6 +264,65 @@ def test_lstm_float64_x_and_y_are_the_float32_bits():
     wide = ml.LSTMRegressor(**kw).fit(x64, y64)
     narrow = ml.LSTMRegressor(**kw).fit(x64.astype(np.float32), y64.astype(np.float32))
     assert _same(wide.predict(x64), narrow.predict(x64.astype(np.float32)))
+
+
+# ---------------------------------------------------------------- metrics and model selection
+
+def _labels(n, seed):
+    return (np.random.default_rng(seed).random(n) < 0.5).astype(np.int64)
+
+
+@pytest.mark.parametrize("name", ["mean_squared_error", "mean_absolute_error", "r2_score",
+                                  "explained_variance_score", "max_error", "median_absolute_error"])
+def test_regression_metric_float64_is_the_float32_bits(name):
+    fn = getattr(ml.metrics, name)
+    a64, b64 = _wide(50, 1, 28)[:, 0], _wide(50, 1, 29)[:, 0]
+    assert _same(fn(a64, b64), fn(a64.astype(np.float32), b64.astype(np.float32)))
+    # one float64 argument beside a float32 one converts the same way
+    assert _same(fn(a64, b64.astype(np.float32)), fn(a64.astype(np.float32), b64.astype(np.float32)))
+
+
+@pytest.mark.parametrize("name", ["roc_auc_score", "average_precision_score", "log_loss", "brier_score_loss"])
+def test_score_metric_float64_is_the_float32_bits(name):
+    fn = getattr(ml.metrics, name)
+    y = _labels(60, 30)
+    p64 = np.random.default_rng(31).random(60) * 0.98 + 0.01
+    assert _same(fn(y, p64), fn(y, p64.astype(np.float32)))
+
+
+def test_curve_metric_float64_is_the_float32_bits():
+    y = _labels(60, 32)
+    s64 = np.random.default_rng(33).standard_normal(60)
+    for wide, narrow in zip(ml.metrics.roc_curve(y, s64), ml.metrics.roc_curve(y, s64.astype(np.float32))):
+        assert np.asarray(wide).tobytes() == np.asarray(narrow).tobytes()
+
+
+def test_label_metric_float64_predictions_are_the_float32_bits():
+    y = _labels(60, 34)
+    pred = _labels(60, 35).astype(np.float64)
+    assert _same(ml.metrics.accuracy_score(y, pred), ml.metrics.accuracy_score(y, pred.astype(np.float32)))
+
+
+def test_cluster_metric_float64_is_the_float32_bits():
+    x64, x32 = _pair(80, 3, 36)
+    labels = np.arange(80) % 3
+    assert _same(ml.metrics.silhouette_score(x64, labels), ml.metrics.silhouette_score(x32, labels))
+    assert _same(ml.metrics.davies_bouldin_score(x64, labels), ml.metrics.davies_bouldin_score(x32, labels))
+
+
+def test_model_selection_float64_is_the_float32_bits():
+    x64, x32 = _pair(90, 4, 37)
+    y = x32[:, 0] * 2.0 + 1.0
+    wide = ml.cross_val_score(ml.Ridge(alpha=1.0), x64, y.astype(np.float64), cv=3)
+    narrow = ml.cross_val_score(ml.Ridge(alpha=1.0), x32, y, cv=3)
+    assert _same(wide, narrow)
+
+
+def test_out_of_range_float64_metric_input_is_refused():
+    a = np.ones(10)
+    a[4] = _REFUSED
+    with pytest.raises(ValueError, match="column 0 holds a float64 value"):
+        ml.metrics.mean_squared_error(a, np.ones(10))
 
 
 # ---------------------------------------------------------------- out of range: refused by column

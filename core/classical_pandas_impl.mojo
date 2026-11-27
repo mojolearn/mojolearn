@@ -12,7 +12,7 @@ serial loop's for any split: no output bit changes.
 from std.memory import bitcast
 from core.cast_in import cast_w64_bits, f64_to_f32_bits, CAST_KIND_FLOAT
 from core.classical_cast import classical_f32_bits
-from core.admitted_input import admitted_raw_word, admitted_f64_rounds_to_inf, admitted_f64_overflow_refuse
+from core.admitted_input import admitted_raw_word, admitted_f64_rounds_to_inf, admitted_f64_overflow_refuse, admitted_f64_nan_fix
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 
@@ -109,6 +109,7 @@ def pd_scatter_numeric(
             var raw = pd_raw_at(column, row * row_stride, size, native)
             var bits = f64_to_f32_bits(bitcast[DType.uint64](_pd_double(raw, kind, size))) if double_round else classical_f32_bits(raw, kind, size)
             if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
+                bits = admitted_f64_nan_fix(raw, bits, wide)
                 if admitted_f64_rounds_to_inf(raw, bits, wide):
                     bad = UInt8(2)
                 elif bad == UInt8(0):

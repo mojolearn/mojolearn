@@ -40,7 +40,9 @@ from core.classical_cast import classical_f32_bits
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.cast_in import CAST_KIND_FLOAT
-from core.admitted_input import admitted_raw_word, admitted_f64_rounds_to_inf, admitted_f64_overflow_refuse
+from core.admitted_input import (
+    admitted_raw_word, admitted_f64_rounds_to_inf, admitted_f64_overflow_refuse, admitted_f64_nan_fix,
+)
 
 comptime _AN_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _AN_INTP = MutPointer[Int, MutUntrackedOrigin]
@@ -105,11 +107,12 @@ def admitted_cast_nd_f32(
             for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
                 var raw = admitted_raw_word(base + offset + c * col_step, item)
                 var bits = classical_f32_bits(raw, kind, item)
-                dst.unsafe_store(r * cols + c, bitcast[DType.float32](bits))
                 if (bits & _AN_EXP) == _AN_EXP:
                     finite = False
+                    bits = admitted_f64_nan_fix(raw, bits, wide)
                     if admitted_f64_rounds_to_inf(raw, bits, wide) and c < first:
                         first = c
+                dst.unsafe_store(r * cols + c, bitcast[DType.float32](bits))
         if not finite:
             flag_ptr.unsafe_store(t, UInt8(0))
         if first < _AN_NO_COLUMN:

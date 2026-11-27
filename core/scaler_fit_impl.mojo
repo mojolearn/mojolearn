@@ -8,7 +8,7 @@ from std.memory import bitcast
 from core.classical_cast import classical_f32_bits
 from core.host_finite_scan import host_all_finite_f32, host_any_inf_f32
 from core.cast_in import CAST_KIND_FLOAT
-from core.admitted_input import admitted_f64_rounds_to_inf, admitted_f64_overflow_refuse
+from core.admitted_input import admitted_f64_rounds_to_inf, admitted_f64_overflow_refuse, admitted_f64_nan_fix
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -35,7 +35,7 @@ def scaler_cast(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, ki
             var raw = UInt64(0)
             for k in range(item):
                 raw |= UInt64(bytes[k if native else item - 1 - k]) << UInt64(k * 8)
-            var bits = classical_f32_bits(raw, kind, item)
+            var bits = admitted_f64_nan_fix(raw, classical_f32_bits(raw, kind, item), wide)
             dest[r * cols + c] = bitcast[DType.float32](bits)
             if admitted_f64_rounds_to_inf(raw, bits, wide) and (column < 0 or c < column):
                 column = c

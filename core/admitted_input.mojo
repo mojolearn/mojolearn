@@ -81,7 +81,10 @@ comptime ADMITTED_NONFINITE = -2
 # converts a float64 input ONCE, here, at the native boundary, with one rule
 # on every device and side: IEEE round-to-nearest-even (`f64_to_f32_bits`,
 # core/cast_in.mojo, the soft narrowing every column already runs), a NaN
-# stays a NaN (the quiet NaN 0x7FC00000), an infinity stays that infinity
+# stays a NaN with IEEE narrowing's bits (`admitted_f64_nan_bits`: its sign,
+# the quiet bit set, the top 22 payload bits kept, which is what hardware
+# narrowing and numpy's astype(float32) give; a signaling NaN becomes quiet
+# with those payload bits), an infinity stays that infinity
 # (the door then treats it as it treats a float32 infinity), and a FINITE
 # value whose rounding is an infinity (magnitude at or above float32's
 # largest finite value plus half an ulp, so every value that rounds to
@@ -100,6 +103,25 @@ def admitted_f64_overflow_refuse(column: Int) raises:
                 + " float32's largest finite value (" + ADMITTED_F32_MAX_TEXT + "); float64 input is"
                 + " converted to float32 once, with round-to-nearest-even, and this value would become"
                 + " infinity, so it is refused")
+
+
+@always_inline
+def admitted_f64_nan_bits(raw: UInt64) -> UInt32:
+    """IEEE narrowing of the float64 NaN `raw`: its sign, the quiet bit set
+    and the top 22 payload bits (fraction bits 50..29) kept; the low 29
+    payload bits do not fit and are dropped, as hardware narrowing drops
+    them. A signaling NaN thereby becomes quiet with its payload kept."""
+    return (UInt32(raw >> 32) & UInt32(0x80000000)) | UInt32(0x7FC00000) | (UInt32(raw >> 29) & UInt32(0x3FFFFF))
+
+
+@always_inline
+def admitted_f64_nan_fix(raw: UInt64, bits: UInt32, wide: Bool) -> UInt32:
+    """`bits`, the non-finite float32 word of `raw`, with IEEE's NaN bits
+    when `raw` is a float64 NaN (`wide`: the item is float64); the soft
+    narrowing (`f64_to_f32_bits`) canonicalises a NaN, which kernels keep."""
+    if wide and (raw & _AI_EXP64) == _AI_EXP64 and (raw & UInt64(0x000FFFFFFFFFFFFF)) != 0:
+        return admitted_f64_nan_bits(raw)
+    return bits
 
 
 @always_inline
@@ -208,13 +230,14 @@ def admitted_cast_f32_words(
             for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
                 var raw = admitted_raw_word(addr + r * s0 + c * s1, item)
                 var bits = classical_f32_bits(raw, kind, item)
-                dst.unsafe_store(r * cols + c, bitcast[DType.float32](bits))
                 if (bits & _AI_EXP) == _AI_EXP:
                     finite = False
+                    bits = admitted_f64_nan_fix(raw, bits, wide)
                     if admitted_f64_rounds_to_inf(raw, bits, wide):
                         var at = r if transposed else c
                         if at < first:
                             first = at
+                dst.unsafe_store(r * cols + c, bitcast[DType.float32](bits))
         if not finite:
             flag_ptr.unsafe_store(t, UInt8(0))
         if first < _AI_NO_COLUMN:

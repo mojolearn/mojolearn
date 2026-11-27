@@ -11,7 +11,12 @@ from core.host_finite_scan import host_all_finite_f32
 
 
 def _metric_f32(input: TensorView) -> Bool:
-    return input.dtype == "<f4" if input.is_array else base_format(input.fmt) == "f"
+    """float32 or float64 storage: admitted_typed_c converts float64 once by
+    the shared admission narrowing (Andrew, 2026-11-27)."""
+    if input.is_array:
+        return input.dtype == "<f4" or input.dtype == "<f8"
+    var code = base_format(input.fmt)
+    return code == "f" or code == "d"
 
 
 def metric_reg_target(source: PythonObject, name: String, caller: String,
@@ -19,7 +24,7 @@ def metric_reg_target(source: PythonObject, name: String, caller: String,
     var input_pin = AdmittedTypedPin()
     var input = admitted_typed_once(source, context, input_pin)
     if not _metric_f32(input):
-        raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32; cast explicitly before scoring")
+        raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32 or float64")
     var rank = len(input.shape)
     var rows = input.shape[0] if rank >= 1 else 0
     var cols = input.shape[1] if rank == 2 else 1
@@ -38,7 +43,7 @@ def metric_score_matrix(source: PythonObject, n: Int, caller: String, ndim: Int,
     var input_pin = AdmittedTypedPin()
     var input = admitted_typed_once(source, context, input_pin)
     if not _metric_f32(input):
-        raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32; cast explicitly")
+        raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32 or float64")
     var rank = len(input.shape)
     var rows = input.shape[0] if rank >= 1 else 0
     var cols = input.shape[1] if rank >= 2 else 1
