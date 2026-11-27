@@ -45,6 +45,23 @@ merged_timeout_seconds() {
   printf '%s' "$t"
 }
 
+# STALLED, NOT ONLY TIMED OUT (lane xcc-retire-1, 2026-11-27). The release's
+# build legs used to learn of a hung compile only at its bound (the merged
+# bound is 95 min on GitHub); the per-binding cross-compile check, which the
+# release no longer runs beside the GitHub legs, called it STALLED after 240 s.
+# The same rule now runs here: tools/compile_watch.py (shared with
+# tools/cross_compile_check.py, one rule) watches the build's process TREE and
+# its log, and after RELEASE_BINDING_STALL_SECONDS (default 240; 0 turns it
+# off) of CPU gaining under 0.5 s and no new log output the build is stopped,
+# logged as STALLED and returns 125, so the leg fails by name in minutes. Not
+# MOJOLEARN_* for the same reason as the bounds (bincache key).
+_BINDING_TIMEOUT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+binding_stall_seconds() {
+  local t="${RELEASE_BINDING_STALL_SECONDS:-240}"
+  [[ "$t" =~ ^[0-9]+$ ]] || { echo 'RELEASE_BINDING_STALL_SECONDS must be a nonnegative integer' >&2; return 2; }
+  printf '%s' "$t"
+}
+
 # _child_pids PID: PID's direct children, one per line. pgrep when present;
 # else /proc (minimal Linux images and containers ship without procps, and a
 # silent empty pgrep left the whole build tree running past its bound).
@@ -71,24 +88,47 @@ kill_tree() {
 
 # with_binding_timeout SECONDS LOG CMD...: run CMD (stdout and stderr appended
 # to LOG); return its status, or 124 after stopping its whole process tree
-# once SECONDS pass (TERM, then KILL 10 s later), with a TIMEOUT line in LOG.
+# once SECONDS pass (TERM, then KILL 10 s later), with a TIMEOUT line in LOG;
+# or 125 once the build STALLS (above), with a STALLED line in LOG.
+_stop_build_tree() {
+  local pid="$1" grace=0
+  kill_tree TERM "$pid"
+  while kill -0 "$pid" 2>/dev/null && (( grace < 10 )); do sleep 1; grace=$((grace + 1)); done
+  kill_tree KILL "$pid"
+  wait "$pid" 2>/dev/null
+}
 with_binding_timeout() {
-  local limit="$1" log="$2" pid rc=0 started=$SECONDS
+  local limit="$1" log="$2" pid rc=0 started=$SECONDS stall watcher="" marker
   shift 2
+  stall=$(binding_stall_seconds) || return 2
+  marker="$log.stalled"
+  rm -f "$marker"
   "$@" >> "$log" 2>&1 &
   pid=$!
+  local tool="${BINDING_STALL_TOOL:-$_BINDING_TIMEOUT_DIR/../../tools/compile_watch.py}"
+  if (( stall > 0 )) && [[ -f "$tool" ]] && command -v python3 >/dev/null 2>&1; then
+    python3 "$tool" watch --pid "$pid" --log "$log" --stall "$stall" --marker "$marker" \
+      --poll "${RELEASE_BINDING_STALL_POLL:-5}" > /dev/null 2>&1 &
+    watcher=$!
+  fi
   while kill -0 "$pid" 2>/dev/null; do
     if (( SECONDS - started >= limit )); then
       echo "TIMEOUT after ${limit}s (RELEASE_BINDING_TIMEOUT_SECONDS); stopping the build's process tree" >> "$log"
-      kill_tree TERM "$pid"
-      local grace=0
-      while kill -0 "$pid" 2>/dev/null && (( grace < 10 )); do sleep 1; grace=$((grace + 1)); done
-      kill_tree KILL "$pid"
-      wait "$pid" 2>/dev/null
+      [[ -n "$watcher" ]] && { kill "$watcher" 2>/dev/null; wait "$watcher" 2>/dev/null; }
+      _stop_build_tree "$pid"
       return 124
+    fi
+    if [[ -s "$marker" ]]; then
+      echo "STALLED: $(cat "$marker") (RELEASE_BINDING_STALL_SECONDS); stopping the build's process tree" >> "$log"
+      rm -f "$marker"
+      [[ -n "$watcher" ]] && wait "$watcher" 2>/dev/null
+      _stop_build_tree "$pid"
+      return 125
     fi
     sleep 1
   done
+  [[ -n "$watcher" ]] && { kill "$watcher" 2>/dev/null; wait "$watcher" 2>/dev/null; }
+  rm -f "$marker"
   wait "$pid" || rc=$?
   return "$rc"
 }

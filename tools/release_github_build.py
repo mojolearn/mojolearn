@@ -1319,6 +1319,90 @@ def download(run_id, name, out, failed, conclusion=None):
             shutil.move(str(p), str(dest))
 
 
+#: a binding log under build_logs/ (packaging/linux/build_sets.sh build_one): <tier>_merged_<group>.log in the
+#: merged layout, <tier>_<script stem>.log per binding, adapters.log
+_BUILD_LOG = re.compile(r"^(?P<tier>[a-z0-9]+)_(?:(?P<merged>merged)_)?(?P<unit>.+)$")
+#: BUILD FAILED lines kept per leg (GHA/build-failures.json) and per unit in a stop message
+FAILURE_LINES_PER_UNIT = 3
+BUILD_FAILURES = "build-failures.json"
+
+
+def build_failures(roots, name):
+    """THE FAILED BUILDS BY NAME (lane xcc-retire-1, 2026-11-27: what only the release's cross-compile check gave
+    before the release stopped running it beside the GitHub legs). Every binding log under ROOTS whose last line
+    is build_sets.sh's FAILED, as one line: "BUILD FAILED <vendor>-<arch> <tier> <merged group G | bindings/S.sh>:
+    <first compiler error lines>" (its STALLED or TIMEOUT line when the watchdog stopped it). Logs of the same
+    unit (a shard's copy and the leg tree's) count once."""
+    import compile_watch
+    seen, rows = set(), []
+    for root in roots:
+        root = Path(root)
+        if not root.is_dir():
+            continue
+        for f in sorted(root.rglob("build_logs/*.log")):
+            try:
+                text = f.read_text(errors="replace")
+            except OSError:
+                continue
+            lines = text.strip().splitlines()
+            if not lines or "FAILED" not in lines[-1]:
+                continue
+            m = _BUILD_LOG.match(f.stem)
+            if f.stem == "adapters" or not m:
+                tier, unit = "-", f.stem
+            else:
+                tier, unit = m["tier"], (f"merged group {m['unit']}" if m["merged"] else f"bindings/{m['unit']}.sh")
+            if (tier, unit) in seen:
+                continue
+            seen.add((tier, unit))
+            stop = [ln for ln in lines if ln.startswith(("STALLED: ", "TIMEOUT after "))]
+            first = [ln for ln in (stop[:1] or compile_watch.first_error_lines(text)) if not ln.startswith("end ")]
+            first = [re.sub(r"/root/[^/ ]+/", "", ln).strip()[:240] for ln in first][:FAILURE_LINES_PER_UNIT]
+            rows.append(f"BUILD FAILED {name} {tier} {unit}: " + (" | ".join(first) or f"see {f}"))
+    return rows
+
+
+def failed_shard_findings(run_id, arch, name, failed, dest):
+    """BUILD FAILED lines of a red run's failed shard jobs: each one's report artifact (shard-<arch>-<i>, uploaded
+    by its Collect step whatever the build did) into DEST/<i>, then build_failures over them. A shard cancelled by
+    fail-fast is a bystander and is not downloaded; a failed shard that left no failed binding log (killed by the
+    job bound, a setup step) or whose report does not download is named by its job."""
+    rows = []
+    for job, conclusion, *_ in failed:
+        parts = job.split()
+        if len(parts) < 3 or parts[0] != "shard" or parts[1] != name or conclusion == "cancelled":
+            continue
+        try:
+            download(run_id, f"shard-{arch}-{parts[2]}", Path(dest) / parts[2], [], conclusion)
+        except SystemExit as exc:
+            rows.append(f"BUILD FAILED {name} {job}: {conclusion}, its report did not download ({exc})")
+            continue
+        found = build_failures([Path(dest) / parts[2]], name)
+        rows += found or [f"BUILD FAILED {name} {job}: {conclusion}, no failed binding log (a setup step or the "
+                          "job bound; see the job's log)"]
+    return rows
+
+
+def write_build_failures(gha, rows):
+    """GHA/build-failures.json: what tools/release.py linux-wait puts in its stop message (leg_build_failures)."""
+    Path(gha).mkdir(parents=True, exist_ok=True)
+    (Path(gha) / BUILD_FAILURES).write_text(json.dumps(dict(failures=rows), indent=1) + "\n")
+    for row in rows:
+        say(row)
+
+
+def leg_build_failures(name, *roots):
+    """The BUILD FAILED lines of a failed leg NAME: its GHA/build-failures.json (a GitHub leg) plus the failed
+    binding logs of its trees (any backend: cpu-box and gpu-legs keep build_logs/ in the leg tree), once each."""
+    rows = []
+    for root in roots:
+        doc = read_doc(Path(root) / "GHA" / BUILD_FAILURES) if Path(root).is_dir() else {}
+        rows += [r for r in (doc.get("failures") or []) if r not in rows]
+    named = {r.split(":", 1)[0] for r in rows}
+    rows += [r for r in build_failures(roots, name) if r.split(":", 1)[0] not in named]
+    return rows
+
+
 #: the small artifact of a set's GHA records (timings, cache outcomes, the binding-cache uploads the Mac promotes)
 #: that the assemble job uploads beside the set's tree (lane fx-pack-offload, 2026-11-19)
 RECORDS_ARTIFACT = "release-{name}-gha"
@@ -1567,6 +1651,11 @@ def cmd_run(a):
     (gha / "jobs.tsv").write_text("".join("\t".join(str(x) for x in r) + "\n" for r in rows))
     (gha / "run.json").write_text(json.dumps(view, indent=1) + "\n")
     failed = [r for r in rows if r[1] not in ("success", "skipped")]
+    findings = []
+    if failed and a.arch:
+        # THE FAILED BUILDS BY NAME, before any download that a red run cannot satisfy (lane xcc-retire-1)
+        findings = failed_shard_findings(a.run_id, a.arch, name, failed, out / "failed-shards")
+        write_build_failures(gha, findings)
     if a.compile_groups:
         # These archives qualify only their actual compilation. They are not
         # a complete set, an assembled build proof or an installed/runtime pass.
@@ -1616,6 +1705,12 @@ def cmd_run(a):
         good, why = verify_tree(out / name / "release-build", vendor, a.arch, a.commit)
         ok &= good
         lines.append(("TREE OK: " if good else "TREE REFUSED: ") + why)
+        if failed or not good:
+            # the assemble job's own failed builds (it compiles what no shard delivered)
+            more = [r for r in build_failures([out / name], name) if r not in findings]
+            if more:
+                findings += more
+                write_build_failures(gha, findings)
         if a.records_only and view.get("conclusion") == "success" and not failed and good:
             (gha / "records-only.json").write_text(json.dumps(dict(
                 schema=RECORDS_ONLY_SCHEMA, run=str(a.run_id), source_commit=a.commit, defines=defines or None,
@@ -1631,6 +1726,7 @@ def cmd_run(a):
     lines[1:1] = [f"  {r[0]}: {r[1]} {r[4]}s" for r in rows]
     if failed:
         lines.append("FAILED JOBS: " + "; ".join(f"{x[0]} ({x[1]}) {x[5]}" for x in failed))
+    lines += findings
     if a.arch:
         lines.append(group_cache_line(out, gha, name))
     if ok and creds and a.arch and not a.no_bincache:
