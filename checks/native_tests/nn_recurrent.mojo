@@ -18,7 +18,8 @@ DeviceExec and requires the host words):
   8    the baseline: a two-layer bidirectional GRU (hidden 12, dropout 0.1 between the layers, the final states
        into a linear head) on variable-length tracks (lengths 4 .. 16 of T 16, noise of scale 5 in the pads)
        reaches held-out accuracy 0.9 with a falling loss and finite parameters and predictions;
-  9    refusals: reverse or final outside {0, 1}.
+  9    refusals: reverse or final outside {0, 1};
+  10   projected LSTM feedback and its projection gradient against a scalar float64 oracle.
 """
 from std.math import tanh, exp, isfinite
 from std.memory import bitcast
@@ -29,6 +30,7 @@ from sequence.exec_device import DeviceExec
 from sequence.ops import FP, CELL_GRU, CELL_LSTM, CELL_RNN_TANH, gates_of
 from autograd.tape import Tape, Tensor
 from autograd.rankn_api import rn_shape
+from autograd.projected_lstm import projected_lstm
 from autograd.model_blocks import ModelRules, block_recurrent
 from autograd.model import LOSS_CROSS_ENTROPY, LOSS_MSE, OUT_ARGMAX, OUT_RAW, TARGET_CODES, TARGET_DENSE
 from checks.native_tests.sequence_port_common import normal, u01
@@ -484,21 +486,64 @@ def run_refusals[E: Exec](mut ex: E) raises -> List[Float32]:
     return words^
 
 
+def _projected_oracle(w: Float64) -> List[Float64]:
+    # Three gates are sigmoid(0) = 1/2. Only the first cell has a candidate.
+    var h = Float64(0.25)
+    var c = Float64(0.5)
+    var words = List[Float64]()
+    for _ in range(2):  # small-loop(2 recurrent steps)
+        c = 0.5 * c + 0.5 * tanh(0.25 + h)
+        h = w * 0.5 * tanh(c)
+        words.append(h)
+    words.append(c)
+    return words^
+
+
+def run_projected_feedback[E: Exec](mut ex: E) raises -> List[Float32]:
+    var tape = Tape()
+    var x = tape.tensor_nd(ex, [0, 0], rn_shape([2, 1, 1], "x"))
+    var wi = tape.tensor(ex, List[Float32](length=8, fill=0), 8, 1)
+    var wh = tape.tensor(ex, [0, 0, 0, 0, 1, 0, 0, 0], 8, 1)
+    var bi = tape.tensor(ex, [0, 0, 0, 0, 0.25, 0, 0, 0], 1, 8)
+    var bh = tape.tensor(ex, List[Float32](length=8, fill=0), 1, 8)
+    var hr = tape.tensor(ex, [2, -1], 1, 2, True)
+    var h0 = tape.tensor(ex, [0.25], 1, 1)
+    var c0 = tape.tensor(ex, [0.5, 0], 1, 2)
+    var out = projected_lstm(tape, ex, x, wi, wh, bi, bh, hr, False, h0, c0)
+    var hs = tape.values(ex, out[0])
+    var cs = tape.values(ex, out[2])
+    var want = _projected_oracle(2)
+    _close("projected LSTM feedback", hs, [want[0], want[1]], Float64(1e-5))
+    _close("projected LSTM cell", cs, [want[2], 0], Float64(1e-5))
+    var seed = tape.tensor(ex, [1, 1], 2, 1)
+    tape.backward_with_rules(ex, out[0], seed, ModelRules())
+    var up = _projected_oracle(2 + _FD)
+    var down = _projected_oracle(2 - _FD)
+    var dw = (up[0] + up[1] - down[0] - down[1]) / (2 * _FD)
+    var grads = tape.gradients(ex, hr)
+    _close("projected LSTM feedback gradient", grads, [dw, 0], Float64(2e-4))
+    hs.extend(cs^)
+    hs.extend(grads^)
+    return hs^
+
+
 def _run_unit[E: Exec](mut ex: E, unit: Int) raises -> List[Float32]:
     # units: 0-5 the layer (rnn, gru, lstm; without and with lengths), 6-7 padded vs alone (gru, lstm),
-    # 8 the baseline, 9 refusals
+    # 8 the baseline, 9 refusals, 10 projected feedback
     if unit < 6:
         return run_layer_case(ex, unit // 2, unit % 2 == 1)
     if unit < 8:
         return run_alone_case(ex, unit - 6)
     if unit == 8:
         return run_track_baseline(ex)
-    return run_refusals(ex)
+    if unit == 9:
+        return run_refusals(ex)
+    return run_projected_feedback(ex)
 
 
 # ---------------------------------------------------------------- tests
 def test_nn_recurrent() raises:
-    comptime U = 10
+    comptime U = 11
     var failed = List[Int](length=U, fill=0)
     var host_words = List[List[Float32]](length=U, fill=List[Float32]())
     var fp = failed.unsafe_ptr()
@@ -521,7 +566,7 @@ def test_nn_recurrent() raises:
             _same("unit " + String(unit) + " host vs device", host_words[unit], dw)
     _ = failed^
     _ = host_words^
-    print("PASS NN_RECURRENT 10")
+    print("PASS NN_RECURRENT 11")
 
 
 def main() raises:

@@ -409,3 +409,26 @@ def session_rnn_state[E: Exec & Movable & Deinitable, KIND: Int](
     result.append(h_t)
     result.append(c_t)
     return result^
+
+
+def session_projected_lstm[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: Int, x: Int, wi: Int, wh: Int, bi: Int, bh: Int, projection: Int, h0: Int, c0: Int,
+    lengths: Int, reverse: Bool, return_state: Bool,
+) raises -> List[Int]:
+    from autograd.projected_lstm import OPS_PROJECTED_LSTM, OPS_PROJECTED_LSTM_OUTPUT
+    var s = ops_session[E, KIND](sid)
+    var hs: List[Int] = [x, wi, wh, bi, bh, projection]
+    var flags: List[Int] = [Int(reverse), Int(return_state), Int(h0 != 0), Int(c0 != 0), Int(lengths != 0)]
+    if h0 != 0:
+        hs.append(h0)
+    if c0 != 0:
+        hs.append(c0)
+    if lengths != 0:
+        hs.append(lengths)
+    var packed = s[].op(OPS_PROJECTED_LSTM, hs, flags, List[Float32]())
+    if not return_state:
+        return [packed]
+    var outputs = List[Int](capacity=3)
+    for part in range(3):  # driver-loop: over sequence, final hidden and final cell
+        outputs.append(s[].op(OPS_PROJECTED_LSTM_OUTPUT, [packed, x, projection], [part, Int(reverse)], List[Float32]()))
+    return outputs^

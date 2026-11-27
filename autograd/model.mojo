@@ -11,6 +11,7 @@ and AMD. Host loops run over layers, batches and epochs only.
 """
 from std.memory import bitcast, unsafe_memcpy
 from sequence.exec_trait import Exec
+from sequence.lengths import check_recurrent_lengths
 from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from sequence.fit_loop_words import fit_loop_publish
 from sequence.ops import (
@@ -43,7 +44,7 @@ from autograd.rankn_layout import rankn_concat
 from autograd.rankn_api import RankNRules, rn_as_shape, rn_dims, rn_resolve, rn_shape, rn_with_batch
 # Lane neural-blocks (2026-11-22): the neural building blocks (codes 32..41) and the version-2 backward rules
 from autograd.model_blocks import (
-    LAYER_MULTIPLY, LAYER_RECURRENT, ModelRules, block_forward, block_init_bounds, block_param_sizes, block_reads,
+    LAYER_MULTIPLY, LAYER_RECURRENT, LAYER_PROJECTED_LSTM, ModelRules, block_forward, block_init_bounds, block_param_sizes, block_reads,
     block_shape, bn_state, is_block, BLOCK_INIT_S4D,
 )
 # lm_head (lane neural-blocks-3-lm): the token cross-entropy's head layer and its fused loss
@@ -2251,7 +2252,7 @@ def model_sequence_steps(spec: ModelSpec, operation: String) raises -> Int:
     model_lengths_check by lane stream-fits: Sequential.fit(source=) pads every batch to it.)"""
     var T = 0
     for i in range(spec.n_layers()):  # driver-loop: over layers (description metadata)
-        if spec.version == SPEC2_VERSION and spec.kinds[i] == LAYER_RECURRENT:
+        if spec.version == SPEC2_VERSION and (spec.kinds[i] == LAYER_RECURRENT or spec.kinds[i] == LAYER_PROJECTED_LSTM):
             var t = spec.in_shape[i].d[0]
             if T != 0 and t != T:
                 raise Error("ValueError: " + operation + ": lengths need every recurrent layer to read sequences "
@@ -2280,11 +2281,7 @@ def model_lengths_check(spec: ModelSpec, lengths: FP, N: Int, operation: String)
     if T == 0:
         raise Error("ValueError: " + operation + ": lengths apply to the recurrent layers (rnn, lstm, gru); this "
                     + "model has none")
-    for r in range(N):  # admission: one comparison per row on the host, before any launch
-        var v = lengths.unsafe_load(r)
-        if v != v or v < Float32(1.0) or v > Float32(T) or Float32(Int(v)) != v:
-            raise Error("ValueError: " + operation + ": every length must be a whole number from 1 to the "
-                        + "padded sequence length " + String(T))
+    check_recurrent_lengths(lengths, N, T, operation, True)
 
 
 def model_state_ranges(spec: ModelSpec) -> List[Int]:

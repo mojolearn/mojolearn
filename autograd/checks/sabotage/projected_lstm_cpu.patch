@@ -1,0 +1,12 @@
+diff --git a/autograd/projected_lstm.mojo b/autograd/projected_lstm.mojo
+--- a/autograd/projected_lstm.mojo
++++ b/autograd/projected_lstm.mojo
+@@ -119,6 +119,8 @@
+         var next_c = tape.add(ex, tape.multiply(ex, f, c), tape.multiply(ex, i, g))
+         var unprojected = tape.multiply(ex, o, tape.tanh(ex, next_c))
+         var next_h = tape.matmul(ex, unprojected, projection)
++        comptime if not E.IS_DEVICE:
++            next_h = tape.scale(ex, next_h, Float32(-1))
+         if padded:
+             h = imp_where(tape, ex, padded.value(), h, next_h)
+             c = imp_where(tape, ex, padded.value(), c, next_c)

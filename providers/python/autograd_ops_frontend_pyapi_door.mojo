@@ -20,7 +20,7 @@ from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_h
 from autograd.ops_block_frontend import (
     SESSION_ATTENTION_MIN_PIECES, SESSION_ATTENTION_GATE, session_mamba_code, session_attention_ints,
     session_attention_option_words, session_block_create, session_block_step, session_lm_rows, session_lm_pick,
-    session_lm_alive, session_rnn, session_rnn_state,
+    session_lm_alive, session_rnn, session_rnn_state, session_projected_lstm,
 )
 from sequence.ops import CELL_LSTM, CELL_GRU, CELL_RNN_TANH
 from autograd.block_step_ops import OPS_ATTN_STEP
@@ -1007,6 +1007,13 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         var lengths = 0 if _nil(args[7]) else _int(args[7], "lengths", 1)
         var reverse = Bool(py=args[8])
         var return_state = Bool(py=args[9])
+        if cell == CELL_LSTM and len(args) > 10 and not _nil(args[10]):
+            var result = session_projected_lstm[E, KIND](Int(py=sid), _int(args[0], "input", 1),
+                _int(args[1], "weight_ih", 1), _int(args[2], "weight_hh", 1), _int(args[3], "bias_ih", 1),
+                _int(args[4], "bias_hh", 1), _int(args[10], "weight_hr", 1), h0, c0, lengths, reverse, return_state)
+            if return_state:
+                return _tuple_ints(result)
+            return PythonObject(result[0])
         if not return_state:
             return PythonObject(session_rnn[E, KIND](
                 Int(py=sid), cell, _int(args[0], "input", 1), _int(args[1], "weight_ih", 1),

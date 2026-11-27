@@ -495,8 +495,11 @@ def check_files(read):
         if v not in named_codes:
             problems.append(f"{PYMODEL} _LAYER: no name for {cname} ({v})")
     for name in layer:
-        if name not in methods:
-            problems.append(f"{PYMODEL} Sequential: no method {name}()")
+        # The native projected layer is selected by lstm(proj_size=...), so
+        # its named Python constructor is the same as the ordinary LSTM's.
+        method = "lstm" if name == "projected_lstm" else name
+        if method not in methods:
+            problems.append(f"{PYMODEL} Sequential: no method {method}()")
         if f"``'{name}'``" not in add_doc:
             problems.append(f"{PYMODEL} Sequential.add docstring: {name!r} is not listed")
     if layer_names is None:

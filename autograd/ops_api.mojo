@@ -136,6 +136,9 @@ from autograd.block_step_ops import (
 )
 from autograd.rules_step_ops import StepOpRules
 from autograd.rules_recurrent import OPS_RNN_SCAN, rnn_scan_op
+from autograd.projected_lstm import (
+    OPS_PROJECTED_LSTM, OPS_PROJECTED_LSTM_OUTPUT, projected_lstm, projected_lstm_check_lengths, projected_lstm_output,
+)
 # Lane rnn-parity-B: the weighted per-step losses (session code 95) and the
 # recurrent layer's padded-step zeroing (autograd/per_step_ops.mojo).
 from autograd.per_step_ops import OPS_WEIGHTED_LOSS, weighted_loss, rnn_zero_padded
@@ -2190,6 +2193,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     return self._ckpt(hs, ints, fs)
                 if code == OPS_SCAN_CKPT:
                     return self._scan_ckpt_op(hs, ints, fs)
+            if code == OPS_PROJECTED_LSTM:
+                return self._projected_lstm(hs, ints, fs, x)
+            if code == OPS_PROJECTED_LSTM_OUTPUT:
+                _need("projected LSTM output", n, 3, 2, ni, 0, nf)
+                if ints[1] != 0 and ints[1] != 1:
+                    raise Error("ValueError: invalid projected LSTM direction")
+                var view = projected_lstm_output(self.tape, self.ex, x[0], x[1], x[2], ints[0], ints[1] != 0)
+                return self._add(view, 0, self.tape.requires_grad(view), 0)
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):
             # elementwise and row-wise ops keep x's full shape (a free view
@@ -2553,6 +2564,38 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         rx.append(x[2])
         var rt = self.tape.custom(self.ex, rx, dst, n, d_out, CNN_LINEAR_TAG, saved)
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _projected_lstm(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        if len(ints) != 5:
+            raise Error("ValueError: projected LSTM needs five option flags")
+        for j in range(5):  # driver-loop: over the serialized option flags
+            if ints[j] != 0 and ints[j] != 1:
+                raise Error("ValueError: invalid projected LSTM option flag")
+        _need("projected LSTM", len(x), 6 + ints[2] + ints[3] + ints[4], 5, len(ints), 0, len(fs))
+        for j in range(len(hs)):  # driver-loop: over bound operands
+            if self.int_words[self._slot(hs[j])]:
+                raise Error("ValueError: projected LSTM operands must be floating-point tensors")
+        var h0 = Optional[Tensor](None)
+        var c0 = Optional[Tensor](None)
+        var lengths = Optional[Tensor](None)
+        if ints[2] != 0:
+            h0 = x[6]
+        if ints[3] != 0:
+            c0 = x[6 + ints[2]]
+        if ints[4] != 0:
+            lengths = x[6 + ints[2] + ints[3]]
+            var shape = self.tape.shape_of(x[0])
+            if shape.ndim != 3:
+                raise Error("ValueError: projected LSTM expects (steps, batch, inputs)")
+            projected_lstm_check_lengths(self.tape, self.ex, lengths.value(), shape.d[1], shape.d[0])
+        var result = projected_lstm(self.tape, self.ex, x[0], x[1], x[2], x[3], x[4], x[5], ints[0] == 1, h0, c0, lengths)
+        var y = result[0]
+        if ints[1] != 0:
+            var yy = self.tape.view_nd(self.ex, y, ShapeN.matrix(self.tape.shape_of(y).count(), 1))
+            var c = result[2]
+            var cc = self.tape.view_nd(self.ex, c, ShapeN.matrix(self.tape.shape_of(c).count(), 1))
+            y = rankn_concat(self.tape, self.ex, [yy, cc], 0)
+        return self._add(y, 0, self.tape.requires_grad(y), 0)
 
     def _rnn_scan(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
         """OPS_RNN_SCAN: [x (steps * batch rows of inputs, time-major),

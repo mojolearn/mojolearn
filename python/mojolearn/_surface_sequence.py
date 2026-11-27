@@ -47,6 +47,7 @@ FAMILIES = (
                         "sequence-composed-log-softmax-ctc",
                         # nn-recurrent begin (tools/identity_lanes/nn_recurrent.py)
                         "sequence-blocks-bigru-lengths", "sequence-blocks-bilstm",
+                        "sequence-projected-lstm", "sequence-blocks-projected-lstm",
                         # nn-recurrent end
                         # lane rnn-parity-D (2026-11-25): the recurrent estimators' options (tools/identity_lanes/rnn_parity.py)
                         "sequence-rnn-weighted-steps", "sequence-rnn-bidi-options",
@@ -269,6 +270,8 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-composed-log-softmax-ctc": "Sequential log_softmax (nll, kl_div) and ctc",  # nn-losses-2
                        # nn-recurrent begin
                        "sequence-blocks-bigru-lengths": "Sequential gru, two bidirectional layers, lengths",
+                       "sequence-projected-lstm": "Session projected LSTM: forward, backward, state and saved Program",
+                       "sequence-blocks-projected-lstm": "Sequential projected LSTM: one training step",
                        "sequence-blocks-bilstm": "Sequential lstm, bidirectional",
                        # nn-recurrent end
                        # lane rnn-parity-D (2026-11-25)
@@ -405,6 +408,8 @@ PUBLIC_PENDING_LANES = {
     # nn-recurrent begin
     "sequence-blocks-bigru-lengths": "no reference",
     "sequence-blocks-bilstm": "no reference",
+    "sequence-projected-lstm": "no reference",
+    "sequence-blocks-projected-lstm": "no reference",
     # nn-recurrent end
     "sequence-mlp-classifier-partial": "no reference",
     "sequence-mlp-regressor-partial": "no reference",

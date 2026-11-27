@@ -112,6 +112,7 @@ from autograd.nn_ctc import NnCtcRules
 # nn-losses-2 end
 # nn-recurrent begin
 from autograd.nn_recurrent import nn_rnn_final, nn_rnn_reverse_lengths
+from autograd.projected_lstm import projected_lstm
 # nn-recurrent end
 
 # nn-attention begin
@@ -182,7 +183,8 @@ comptime LAYER_LOG_SOFTMAX = 77
 #:   77 log_softmax, here (autograd/nn_log_softmax.mojo's body)
 #: BLOCK_UNUSED_FIRST..BLOCK_UNUSED_LAST were never assigned and are not layers.
 comptime BLOCK_FIRST = 32
-comptime BLOCK_LAST = 77
+comptime LAYER_PROJECTED_LSTM = 78
+comptime BLOCK_LAST = 78
 comptime BLOCK_UNUSED_FIRST = 68
 comptime BLOCK_UNUSED_LAST = 71
 
@@ -469,6 +471,15 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
     if is_conv3d_layer(code):
         return conv3d_layer_shape(code, xargs, i, cur, name)
     # nn-conv3d end
+    if code == LAYER_PROJECTED_LSTM:
+        var projection = _x(xargs, i, 4)
+        var rev = _x(xargs, i, 2)
+        var fin = _x(xargs, i, 3)
+        if cur.ndim != 2 or a1 != BLOCK_CELL_LSTM or projection < 1 or projection >= a0:
+            raise Error(name + ": projected LSTM needs (length, features) and 0 < proj_size < hidden_size")
+        if (rev != 0 and rev != 1) or (fin != 0 and fin != 1) or _x(xargs, i, 5) != 0:
+            raise Error(name + ": invalid projected LSTM layer flags")
+        return rn_shape([1 if fin else cur.d[0], projection], name)
     raise Error(name + ": unknown layer code " + String(code))
 
 
@@ -503,6 +514,14 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
         out.append(gh * hsz)       # weight_hh (gates * hidden, hidden)
         out.append(gh)             # bias_ih
         out.append(gh)             # bias_hh
+    elif code == LAYER_PROJECTED_LSTM:
+        var H = _x(xargs, i, 0)
+        var P = _x(xargs, i, 4)
+        out.append(4 * H * cur.d[1])
+        out.append(4 * H * P)
+        out.append(4 * H)
+        out.append(4 * H)
+        out.append(P * H)
     elif code == LAYER_BATCH_NORM:
         var c = _x(xargs, i, 0)
         for _ in range(4):  # small-loop(4: weight, bias, running_mean, running_var)
@@ -570,6 +589,12 @@ def block_param_names(code: Int, xargs: List[Int], i: Int) -> List[String]:
         out.append(".weight_hh")
         out.append(".bias_ih")
         out.append(".bias_hh")
+    elif code == LAYER_PROJECTED_LSTM:
+        out.append(".weight_ih")
+        out.append(".weight_hh")
+        out.append(".bias_ih")
+        out.append(".bias_hh")
+        out.append(".weight_hr")
     elif code == LAYER_BATCH_NORM:
         out.append(".weight")
         out.append(".bias")
@@ -660,6 +685,10 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
         # PyTorch's recurrent init: every tensor uniform in [-1/sqrt(hidden), 1/sqrt(hidden)]
         var b = ftz(identical_div(Float32(1), identical_sqrt(Float32(_x(xargs, i, 0)))))
         for _ in range(4):  # small-loop(4: the layer's parameter tensors)
+            out.append(b)
+    elif code == LAYER_PROJECTED_LSTM:
+        var b = ftz(identical_div(Float32(1), identical_sqrt(Float32(_x(xargs, i, 0)))))
+        for _ in range(5):  # driver-loop: over the five parameter tensors
             out.append(b)
     elif code == LAYER_BATCH_NORM:
         # PyTorch's: weight 1, bias 0, running_mean 0, running_var 1 (constant fills)
@@ -977,6 +1006,25 @@ def block_forward[E: Exec](
     if is_conv3d_layer(code):
         return conv3d_layer_forward(tape, ex, code, xargs, i, cur, P, Gr, off, h, train)
     # nn-conv3d end
+    if code == LAYER_PROJECTED_LSTM:
+        var F = cur.d[1]
+        var projection = _x(xargs, i, 4)
+        var gh = 4 * a0
+        var wi = _p(tape, ex, P, Gr, off, gh, F, train)
+        var wh = _p(tape, ex, P, Gr, off + gh * F, gh, projection, train)
+        var bias = off + gh * (F + projection)
+        var bi = _p(tape, ex, P, Gr, bias, 1, gh, train)
+        var bh = _p(tape, ex, P, Gr, bias + gh, 1, gh, train)
+        var hr = _p(tape, ex, P, Gr, bias + 2 * gh, projection, a0, train)
+        var axes: List[Int] = [1, 0, 2]
+        var xt = tape.permute(ex, h, axes)
+        var lens = Optional[Tensor](None)
+        if lengths:
+            lens = tape.variable(ex, lengths.value(), B, 1, False)
+        var states = projected_lstm(tape, ex, xt, wi, wh, bi, bh, hr, _x(xargs, i, 2) == 1, None, None, lens)
+        if _x(xargs, i, 3) == 1:
+            return tape.view_nd(ex, states[1], rn_shape([B, 1, projection], "projected LSTM final"))
+        return tape.permute(ex, states[0], axes)
     raise Error("model: unknown block code " + String(code))
 
 
@@ -1132,6 +1180,16 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
             out.append(cur.d[1])
         elif slot == 1:
             out.append(hsz)
+    elif code == LAYER_PROJECTED_LSTM:
+        var H = _x(xargs, i, 0)
+        var P = _x(xargs, i, 4)
+        out.append(P if slot == 4 else 4 * H)
+        if slot == 0:
+            out.append(cur.d[1])
+        elif slot == 1:
+            out.append(P)
+        elif slot == 4:
+            out.append(H)
     elif code == LAYER_BATCH_NORM:
         out.append(_x(xargs, i, 0))
     elif code == LAYER_SELECTIVE_SCAN:

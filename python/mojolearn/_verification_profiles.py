@@ -33,6 +33,7 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           'sequence-composed-log-softmax-ctc',
                           # nn-recurrent: the recurrent options (tools/identity_lanes/nn_recurrent.py)
                           'sequence-blocks-bigru-lengths', 'sequence-blocks-bilstm',
+                          'sequence-projected-lstm','sequence-blocks-projected-lstm',
 
                           # nn-attention begin: classic attention models, one seeded step each
                           'sequence-attention-encoder', 'sequence-attention-cross',
