@@ -303,6 +303,11 @@ def cmd_group(a):
     cache = Path(a.cache).resolve()
     for p in (out, cache):
         p.mkdir(parents=True, exist_ok=True)
+    if "MOJOLEARN_RELEASE_MACOS_GROUPS" not in (repo / "packaging/macos/build_release_wheel.sh").read_text():
+        # an older source would ignore the variable and build every group in this one job
+        print("APPLE GROUP REFUSED: this source's build_release_wheel.sh has no MOJOLEARN_RELEASE_MACOS_GROUPS "
+              "(it predates lane mac-speed-1); build it with --macos-build-backend laptop")
+        return 2
     modes = [m for m in a.modes.replace(",", " ").split() if m]
     env = build_env(cache, modes, repo)
     t0 = time.time()

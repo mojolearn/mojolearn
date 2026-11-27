@@ -144,8 +144,16 @@ THE STEPS
                      NVIDIA (walking NVIDIA_WALK on no stock) and a DigitalOcean
                      MI325X (--amd-build-provider do|cpu-box or
                      MOJOLEARN_AMD_PROVIDER pins one)
-  macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
-  macos-smoke        default: wheel_self_test.py (fresh venv, verify --tamper-test);
+  macos-build        --macos-build-backend github (the default, lane mac-speed-1 2026-11-27): tools/apple_github_build.py
+                     run, .github/workflows/apple-release-build.yml on GitHub's FREE STANDARD macos-15 runners (never
+                     a larger/xlarge label, a self-hosted runner or a rented Mac): one job per merged file at once,
+                     keys looked up in R2, the pack and its gates there; the wheel, macos-build.log and
+                     macos-bincache/ come home. --macos-build-backend laptop: mac_slot --slots 4 run --
+                     build_release_wheel.sh, byte LM on, in ONE fixed tree (<release root>/macos-build-tree) so the
+                     cache keys (repo_path) hit across freezes
+  macos-smoke        default: wheel_self_test.py (fresh venv, verify --tamper-test); the GitHub runner's PASSED
+                     receipt for the same wheel bytes is taken; the runner's Apple lanes fail this step when the
+                     runner's Metal device was usable and a lane failed;
                      --gpu-smoke: qualify_verifier_wheel.py --scope expanded under the Metal lock;
                      its self-test job is the bundled-table gate (0.8.35 shipped a
                      stale table): no PASSED receipt for these wheel bytes, no
@@ -2798,7 +2806,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
         wf_ref = os.environ.get("MOJOLEARN_XCC_WORKFLOW_REF", "main")
         self.must(["gh", "workflow", "run", self.XCC_WORKFLOW, "--ref", wf_ref, "-f", f"ref={base}",
                    "-f", f"commit={self.commit}", "-f", f"archs={self.XCC_ARCHS}",
-                   "-f", "tiers=" + ",".join(self.release_modes), "-f", f"token={token}"],
+                   "-f", "tiers=" + ",".join(self.release_modes), "-f", f"token={token}",
+                   # macos-build compiles the Darwin files on the same free runners (lane mac-speed-1)
+                   "-f", "apple=false"],
                   what="gh workflow run " + self.XCC_WORKFLOW)
         if self.dry:
             return f"would dispatch {self.XCC_WORKFLOW} on {self.commit[:12]} vs {prev.get('version')} and wait"
