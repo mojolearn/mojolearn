@@ -19,19 +19,19 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 
+def _allocation():
+    """python/mojolearn/_allocation.py of this tree (the one allocation function, rel-fix-3), loaded by path."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "python", "mojolearn", "_allocation.py")
+    spec = importlib.util.spec_from_file_location("mojolearn_allocation_by_path", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def alloc_cores():
-    try:
-        cores = len(os.sched_getaffinity(0))
-    except (AttributeError, OSError):
-        cores = os.cpu_count() or 1
-    try:
-        with open("/sys/fs/cgroup/cpu.max", encoding="ascii") as stream:
-            quota, period = stream.read().split()[:2]
-        if quota != "max":
-            cores = min(cores, max(1, int(quota) // int(period)))
-    except (OSError, ValueError):
-        pass
-    return max(1, cores)
+    """The cores of this allocation (python/mojolearn/_allocation.py `cores`); this copy read cgroup v2 only."""
+    return _allocation().cores()[0]
 
 
 def plan_keys(repo, out, rev):

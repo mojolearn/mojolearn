@@ -934,27 +934,20 @@ def run_arm(python, name, arm, devices, out, timeout):
 
 
 # ---------------------------------------------------------------------------------------------------- THE BOX
+def _allocation():
+    """python/mojolearn/_allocation.py of this tree (the one allocation function, rel-fix-3), loaded by path."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "python", "mojolearn", "_allocation.py")
+    spec = importlib.util.spec_from_file_location("mojolearn_allocation_by_path", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def alloc_cores():
-    """The cores of this allocation: affinity, capped by the cgroup quota (tools/ops/box_cores_lib.sh
-    `alloc_cores`), not the host's visible CPUs."""
-    try:
-        cores = len(os.sched_getaffinity(0))
-    except AttributeError:
-        cores = os.cpu_count() or 1
-    for path, parse in (("/sys/fs/cgroup/cpu.max", lambda t: t.split()),
-                        ("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", None)):
-        try:
-            text = Path(path).read_text().strip()
-            if parse:
-                quota, period = parse(text)
-            else:
-                quota, period = text, Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read_text().strip()
-            if quota != "max" and int(quota) > 0:
-                cores = min(cores, -(-int(quota) // int(period)))
-            break
-        except (OSError, ValueError):
-            continue
-    return max(1, cores)
+    """The cores of this allocation (python/mojolearn/_allocation.py `cores`: MOJOLEARN_ALLOC_CORES, else affinity
+    capped by the cgroup v2 or v1 quota), not the host's visible CPUs."""
+    return _allocation().cores()[0]
 
 
 def alloc_mem_gb():

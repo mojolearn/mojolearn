@@ -227,39 +227,23 @@ def reexport_installed(namespace, module_name, only=None):
     return module
 
 
-def _read_words(path):
-    try:
-        with open(path) as handle:
-            return handle.read().split()
-    except OSError:
-        return []
+def _load_allocation():
+    spec = importlib.util.spec_from_file_location("mojolearn_allocation_by_path",
+                                                  os.path.join(REPO, "python", "mojolearn", "_allocation.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+#: the one allocation function (python/mojolearn/_allocation.py, rel-fix-3): cores (the job's MOJOLEARN_ALLOC_CORES,
+#: else affinity capped by the cgroup v2 or v1 quota), memory and the cgroup's remaining tasks
+ALLOCATION = _load_allocation()
 
 
 def host_cores():
-    """The cores this process may use: the affinity set, limited by the cgroup CPU quota (v2 `cpu.max`, v1
-    `cpu.cfs_quota_us` / `cpu.cfs_period_us`). On a rented box the allocation is the quota, not the host's visible
-    CPUs (AGENTS.md part 1): the L40S pod shows 128 CPUs with a 13.6-core quota."""
-    cores = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 1)
-    quota = _read_words("/sys/fs/cgroup/cpu.max")
-    if len(quota) == 2 and quota[0] != "max":
-        cores = min(cores, max(1, int(int(quota[0]) / int(quota[1]))))
-    for base in ("/sys/fs/cgroup/cpu", "/sys/fs/cgroup/cpu,cpuacct"):
-        q, p = _read_words(base + "/cpu.cfs_quota_us"), _read_words(base + "/cpu.cfs_period_us")
-        if q and p and int(q[0]) > 0:
-            cores = min(cores, max(1, int(int(q[0]) / int(p[0]))))
-            break
-    return cores
-
-
-def _pids_room():
-    """Tasks (threads) this cgroup may still start, or None without a pids limit (v2 `pids.max`, v1
-    `pids/pids.max`)."""
-    for limit_path, current_path in (("/sys/fs/cgroup/pids.max", "/sys/fs/cgroup/pids.current"),
-                                     ("/sys/fs/cgroup/pids/pids.max", "/sys/fs/cgroup/pids/pids.current")):
-        limit, current = _read_words(limit_path), _read_words(current_path)
-        if limit and current and limit[0] != "max":
-            return int(limit[0]) - int(current[0])
-    return None
+    """The cores this process may use (`_allocation.cores`). On a rented box the allocation is the quota, not the
+    host's visible CPUs (AGENTS.md part 1): the L40S pod shows 128 CPUs with a 13.6-core quota."""
+    return ALLOCATION.cores()[0]
 
 
 def workers_for(units, memory_per_worker_gb=1.5, concurrent_runs=2):
@@ -274,18 +258,16 @@ def workers_for(units, memory_per_worker_gb=1.5, concurrent_runs=2):
     reported missing. `concurrent_runs` runs (the cpu and gpu arm runs of two xdist workers) may start at once,
     and a quarter of the room is left for the rest of the box."""
     limit = host_cores()
-    try:
-        available = os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+    available = ALLOCATION.mem_available_bytes()
+    if available is not None:
         limit = min(limit, max(1, int(available / (memory_per_worker_gb * (1 << 30)))))
-    except (ValueError, OSError, AttributeError):
-        pass
-    room = _pids_room()
+    room = ALLOCATION.pids_room()
     if room is not None:
         try:
             per_worker = len(os.listdir("/proc/self/task")) + 8
         except OSError:
-            per_worker = (os.cpu_count() or 1) + 72
-        limit = min(limit, max(1, int(room * 0.75) // (per_worker * max(1, concurrent_runs))))
+            per_worker = ALLOCATION.interpreter_threads()
+        limit = min(limit, max(1, int(room * ALLOCATION.PIDS_SHARE) // (per_worker * max(1, concurrent_runs))))
     if os.environ.get("MOJOLEARN_PROVING_WORKERS"):
         limit = int(os.environ["MOJOLEARN_PROVING_WORKERS"])
     return max(1, min(limit, units))

@@ -38,11 +38,19 @@ print("OK", module.__name__)
 """
 
 
+def _allocation():
+    """python/mojolearn/_allocation.py of this tree (the one allocation function, rel-fix-3), loaded by path."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "python", "mojolearn", "_allocation.py")
+    spec = importlib.util.spec_from_file_location("mojolearn_allocation_by_path", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def cores():
-    try:
-        return max(1, len(os.sched_getaffinity(0)))  # the allocation, not the host's visible CPUs
-    except AttributeError:
-        return max(1, os.cpu_count() or 1)
+    """The allocation's cores (python/mojolearn/_allocation.py `cores`): affinity alone missed the cgroup quota."""
+    return _allocation().cores()[0]
 
 
 def one(pair):

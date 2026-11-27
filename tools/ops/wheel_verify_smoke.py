@@ -107,27 +107,24 @@ IMPORT_ENVIRONMENT = {
 }
 
 
+def _allocation():
+    """python/mojolearn/_allocation.py of this tree, loaded by path (the smoke never imports the package itself)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("mojolearn_allocation_by_path",
+                                                  ROOT / "python" / "mojolearn" / "_allocation.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+ALLOCATION = _allocation()
+
+
 def cores():
-    """The cores of this allocation: affinity, capped by the cgroup CPU quota (v2 cpu.max, v1 cfs_quota_us), as
-    tools/ops/box_cores_lib.sh `alloc_cores`; a rented pod's visible CPUs are the host's (L40S: 128 visible, 14
-    allocated), and a worker per visible CPU oversubscribes the pod nine times."""
-    try:
-        n = len(os.sched_getaffinity(0))
-    except (AttributeError, OSError):
-        n = os.cpu_count() or 1
-    for quota_path, period_path in (("/sys/fs/cgroup/cpu.max", None),
-                                    ("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", "/sys/fs/cgroup/cpu/cpu.cfs_period_us")):
-        try:
-            if period_path is None:
-                quota, period = Path(quota_path).read_text().split()[:2]
-            else:
-                quota, period = Path(quota_path).read_text().strip(), Path(period_path).read_text().strip()
-            if quota != "max" and int(quota) > 0 and int(period) > 0:
-                n = min(n, -(-int(quota) // int(period)))
-            break
-        except (OSError, ValueError):
-            continue
-    return max(1, n)
+    """The cores of this allocation from the one allocation function (python/mojolearn/_allocation.py `cores`: the
+    job's MOJOLEARN_ALLOC_CORES, else affinity capped by the cgroup v2 or v1 quota); a rented pod's visible CPUs are
+    the host's (L40S: 128 visible, 14 allocated), and a worker per visible CPU oversubscribes the pod nine times."""
+    return ALLOCATION.cores()[0]
 
 
 def gpu_info():
@@ -168,13 +165,9 @@ def gpu_worker_cap(info, per_worker_mb):
 
 
 def mem_available_mb():
-    try:
-        for line in Path("/proc/meminfo").read_text().splitlines():
-            if line.startswith("MemAvailable:"):
-                return int(line.split()[1]) // 1024
-    except OSError:
-        pass
-    return None
+    """Available memory in MB: MemAvailable capped by the cgroup v2 or v1 limit (`_allocation.mem_available_bytes`)."""
+    avail = ALLOCATION.mem_available_bytes()
+    return None if avail is None else int(avail) // 2 ** 20
 
 
 def load_plan(tsv):
@@ -279,7 +272,8 @@ def plan_workers(args, name, units):
         gpu_note = (f"gpu_free_mb={info['free_mb'] if info else 'unknown'} gpu_mb_per_worker={args.gpu_mb_per_worker} "
                     f"gpu_worker_cap={cap if cap is not None else 'unknown'} ")
     makespan, busy = planned_busy(units, plan, workers)
-    note = (f"workers={workers} cores={cores()} mem_available_mb={avail} {gpu_note}"
+    note = (f"workers={workers} cores={cores()} cores_from=[{ALLOCATION.cores()[1]}] mem_available_mb={avail} "
+            f"{gpu_note}"
             f"plan={source or 'none'} ({sum(1 for u, _ in units if u in plan)}/{len(units)} units measured) "
             f"planned_busy_workers={busy:.1f} planned_seconds={makespan:.0f}")
     return workers, plan, avail, note
