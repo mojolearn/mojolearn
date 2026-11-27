@@ -12,7 +12,7 @@ and handoff prose do not qualify a requirement.
 
 `release.py` consumes this ledger before publication and before recording a
 completed release. All required pre-publication rows must pass before publishing;
-published-wheel checks remain required afterwards. `--preverified` reuses
+after publication the one `published` check (below) must pass. `--preverified` reuses
 qualified evidence; it does not bypass these gates. Source audits qualify only
 source checks, and compilation does not qualify runtime behavior.
 
@@ -129,19 +129,18 @@ python3 tools/release_ledger_admission.py admit --ledger "$LEDGER" --root . \
   --report ~/mojolearn-evidence/release/$V/admit-apple-pack/report.json
 ```
 
-### Installed runtime and published producers
+### Installed runtime producer
 
-Two box producers fill `runtime-<vendor>` and (post
-stage) `published-<vendor>`. Each runs against installed wheels in a fresh venv,
+One box producer fills `runtime-<vendor>`. It runs against installed wheels in a fresh venv,
 writes one report into a NEW output directory, and exits 0 only on a complete
 pass. Pull the whole directory home, then admit it on the Mac with
-`tools/release_ledger_admission.py` (adapters `installed-runtime` and
-`published-install`, both in `tools/release_installed_evidence.py`). Evidence
+`tools/release_ledger_admission.py` (adapter `installed-runtime`, in
+`tools/release_installed_evidence.py`). Evidence
 paths are relative to the directory, so it can move; admission re-derives every
 count from the raw files and refuses wheels that are not the ledger's
 `artifacts:*` candidate bytes.
 
-Each box needs the candidate wheels, `python3.12` with `venv`/`pip` and PyPI
+The box needs the candidate wheels, `python3.12` with `venv`/`pip` and PyPI
 access (numpy, pytest, and the qualifier's test-only dependencies: pandas,
 scipy, torch, scikit-learn, pyarrow). The orchestrator queues them through
 `lq ... CMD`; `V`, `SHA` (full commit packaged in the wheels) and `W` (the
@@ -159,19 +158,16 @@ python3 tools/release_runtime_installed.py run --vendor nvidia --source-root ~/s
 #   apple: python3 tools/mac_slot.py --wait-timeout 3600 metal -- python3 tools/release_runtime_installed.py run \
 #            --vendor apple --wheel $W/mojolearn-$V-*-macosx_*.whl ...  (the M2 Pro)
 
-# published-<vendor>, after publication: PyPI install, published hashes == candidate hashes,
-# the eleven installed correctness jobs and the three adapter phases.
-python3 tools/release_published_install.py run --vendor nvidia --version $V \
-  --candidate-wheel $W/mojolearn_core-$V-*.whl --candidate-wheel $W/mojolearn_nvidia-$V-*.whl \
-  --python python3.12 --out ~/mojolearn-evidence/release/$V/published-nvidia
-#   apple runs under tools/mac_slot.py ... metal -- with --candidate-wheel $W/mojolearn-$V-*-macosx_*.whl
-
 # On the Mac, for each pulled directory DIR and its adapter:
 python3 tools/release_ledger_admission.py prepare --adapter installed-runtime --ledger "$LEDGER" --root . \
   --producer report=DIR/runtime-report.json --out DIR-admission
 python3 tools/release_ledger_admission.py admit --ledger "$LEDGER" --root . --report DIR-admission/report.json
-#   published-install:  --adapter published-install --producer report=DIR/published-report.json
 ```
+
+After publication nothing rents or runs a GPU (Andrew, 2026-11-27): the
+published bytes are hash-identical to the candidate the gates tested, so a GPU
+rerun proves nothing new. The one post-publication check is the `published`
+step, below under "Finish line"; it is not a ledger row.
 
 Multi-GPU verification is retired (owner, 2026-10-31): there are no
 `multi-gpu-<vendor>` rows, no `verify --par` and no `par-*` identity lanes
@@ -275,11 +271,15 @@ mismatch is a bug to fix, never a reason to rerun).
 ## The one command
 
 ```sh
-pixi run release <version> --dry-run          # the plan, every command, and what is already done
+pixi run release <version> --plan             # THE pre-release read: one decision with a reason per row; runs nothing
 pixi run release <version> --status           # per pipeline, leg and column: done, failed (log), owed; runs nothing
 pixi run release <version>                    # everything up to publication
-pixi run release <version> --publish pypi     # ... then the TestPyPI rehearsal, publish each wheel as its pipeline passes, finish line, record
+pixi run release <version> --publish pypi     # ... then the TestPyPI rehearsal, publish each wheel as its pipeline passes, finish line, published check, record
 ```
+
+There is no release dry run in the flow (Andrew, 2026-11-27): `--plan` alone is
+the pre-release read. (`--dry-run` remains only for the tool tests that walk the
+step graph.)
 
 `tools/release.py` walks this whole checklist. Write the CHANGELOG entry
 (`## <version> (published YYYY-MM-DD)`, UTC) first; the command bumps the two
@@ -338,11 +338,11 @@ Any failure stops the release before the real PyPI sees anything
 (`tools/release_testpypi_rehearsal.py`; report under
 `<commit12>/testpypi-rehearsal/`).
 
-After the publish nothing installs or runs anything. The finish line compares
-the sha256 of each file the real PyPI serves (`pip download --no-deps`) with
-the shipped wheel, `published-<vendor>` does the same with RECORD checks, and
-the `record` step writes the release evidence set (below); they run again when
-another platform publishes.
+After the publish nothing installs or runs anything on this Mac or on a GPU.
+The finish line compares the sha256 of each file the real PyPI serves (`pip
+download --no-deps`) with the shipped wheel, the `published` step runs one CPU
+job on a GitHub runner (below, "Finish line"), and the `record` step writes the
+release evidence set (below); they run again when another platform publishes.
 
 **The release evidence: one set, overwritten each release (Andrew, 2026-11-06).**
 The `record` step deletes everything in `bench/results/release_evidence/` and
@@ -446,7 +446,7 @@ and packs from `<version>/<commit12>/reuse/sets/`, while the NVIDIA and AMD
 release columns still run from the packed wheel. `LINUX_PAYLOAD.json` records
 per binding `built` or `reused` and from which release (`binding_origin`,
 `sets`); the macOS build places its reused bindings from the published macOS
-wheel and refuses if a byte moves after staging. `--dry-run` prints the full
+wheel and refuses if a byte moves after staging. `--plan` prints the full
 decision table with a reason per BUILD row; `python3 tools/release_reuse.py
 plan --full` prints it on its own.
 
@@ -1178,9 +1178,34 @@ The install and import ran before the publish, from TestPyPI, in the
 equal the shipped wheel's. The files are listed at
 https://pypi.org/project/mojolearn/#files.
 
+### The published check (the `published` step; Andrew, 2026-11-27)
+
+One CPU job on a free GitHub runner, no GPU and nothing rented, replaces the
+per-vendor `published-apple`, `published-nvidia` and `published-amd` steps.
+`tools/release.py` dispatches `.github/workflows/published-check.yml` once
+every publish has settled (it needs the Linux `mojolearn` on PyPI), waits, and
+judges the `published-check` artifact. The job runs
+`tools/release_published_install.py check`:
+
+1. every published candidate file (core, vendor and macOS wheels) is downloaded
+   from PyPI as a file by its own platform tags, and its sha256 equals the
+   candidate's (a mismatch fails with both hashes; nothing is rerun);
+2. `pip install mojolearn==<version>` into a fresh venv;
+3. `import mojolearn` reports `<version>`;
+4. `python -m mojolearn verify --quick` exits 0.
+
+The report lands at `<commit12>/published-check/published-report.json` and goes
+into the release evidence set as `publish/published-check.json`. An index-lag
+failure (PyPI had not listed the files yet) is no verdict and is never recorded:
+run `--only published` again. By hand:
+
+```sh
+gh workflow run published-check.yml --ref main -f version=$V -f candidates='{"<wheel>": "<sha256>", ...}'
+```
+
 ## The release gate: smoke and measurement on the boxes (the `gate-nvidia` and `gate-amd` steps)
 
-After each Linux vendor publishes, `pixi run release <version> --publish pypi` runs that vendor's gate on its
+After linux-pack and before any publish, `pixi run release <version> --publish pypi` runs each vendor's gate on its
 held lq box (`tools/release_lq_smoke.py --gate <vendor> <version>`; a box job, never a Mac job, nothing
 rented). On the box, `python3 tools/gate_smoke_box.py <vendor> <version> <out> all`:
 
