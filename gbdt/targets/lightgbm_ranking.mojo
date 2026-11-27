@@ -29,6 +29,7 @@ comptime LR_PLANES = 2 * LR_STRIPE + 4
 comptime LR_DISCOUNT = 2 * LR_STRIPE
 comptime LR_INV_IDCG = LR_DISCOUNT + 1
 comptime LR_MASS = LR_DISCOUNT + 2
+comptime LR_IDCG = LR_DISCOUNT + 3
 comptime XE_PROB = 3
 comptime XE_TAIL = 4
 comptime XE_TERM_A = 5
@@ -214,11 +215,14 @@ def rank_row[phase: Int](a: RankView, row: Int, arg: Int, width: Int, col: Int):
     elif phase == RR_QUERY_NDCG or phase == RR_SAVE_IDCG:
         var first = Int(a.offsets[row])
         var value = a.plane(0)[first]
-        var inv = a.plane(LR_INV_IDCG)
+        var ideal = a.plane(LR_IDCG)
         comptime if phase == RR_SAVE_IDCG:
-            inv[row] = identical_div(Float32(1), value) if value > 0 else Float32(0)
+            ideal[row] = value
+            a.plane(LR_INV_IDCG)[row] = identical_div(Float32(1), value) if value > 0 else Float32(0)
         else:
-            a.plane(1)[row] = identical_mul(value, inv[row]) if inv[row] > 0 else Float32(1)
+            # A perfect ordering has exactly the same two sums. Dividing
+            # once here makes its NDCG exactly one, including in FP32.
+            a.plane(1)[row] = identical_div(value, ideal[row]) if ideal[row] > 0 else Float32(1)
         return
     var q = Int(a.qids[row])
     var first = Int(a.offsets[q])
