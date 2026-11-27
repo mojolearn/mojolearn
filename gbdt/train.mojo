@@ -54,6 +54,7 @@ from gbdt.models.kernel.resident_ctr import (
     ResidentCtrPlan, enqueue_resident_ctr_expand, resident_ctr_raise_if_bad,
 )
 from gbdt.models.tensor_ctr_apply import TTensorCtrApplyTable
+from gbdt.models.tensor_ctr_value_table import device_bins_for_borders
 from gbdt.data.group_layout import GroupLayout, device_group_layout
 from gbdt.data.cat_code_scan import (
     cat_column_codes_resident,
@@ -67,7 +68,7 @@ from gbdt.data.target_prep import (
 )
 from gbdt.ctrs.ctr_binarization import (
     TBinarizationOptions,
-    build_binarized_target,
+    build_binarized_target, check_target_grid_options,
     build_target_borders,
     ctr_border_type_code,
 )
@@ -1946,7 +1947,8 @@ def train(
                 has_permutation_features = True
                 break
 
-    if is_querywise and has_permutation_features and (permutation_count > 1 or cat_params.max_tensor_complexity > 1):
+    var grouped_ctr = is_querywise and has_permutation_features
+    if grouped_ctr and (permutation_count > 1 or cat_params.max_tensor_complexity > 1):
         raise Error("grouped categorical ranking supports one query permutation and single-feature CTRs")
     var ordered_ctr_column = False
     comptime if CTR_ONEHOT_DEVICE:
@@ -2045,40 +2047,47 @@ def train(
                 if cat_features[f]:
                     ctr_prep_wanted = True
                     break
-    if target_dim != 1:
-        # MultiRMSE refuses cat_features above; the CTR target reads one
-        # target per row and is never built from a multi-dimensional one
+    if target_dim != 1 or (is_querywise and not grouped_ctr):
+        # One-hot ranking features never read target statistics. MultiRMSE
+        # does not support a target grid for multidimensional labels.
         ctr_prep_wanted = False
     if len(dependent_configs) > 0 and ctr_prep_wanted:
-        var target_borders = build_target_borders(
-            y, cat_params.target_binarization
-        )
-        # `TTargetClassifier::GetClassesCount()` is `Borders.ysize() + 1`
-        # (`libs/model/target_classifier.h:32-34`), and it is what
-        # `CalcFinalCtrsImpl` allocates the apply-time blob's second axis
-        # from (`private/libs/algo/online_ctr.cpp:909-910`). Taken from the
-        # borders MinEntropy actually returned rather than from the option,
-        # because their classifier counts the borders it holds.
-        target_classes_count = len(target_borders) + 1
-        binarized_target = build_binarized_target(y, target_borders)
-        if len(binarized_target) != n_rows:
-            raise Error(
-                "binarized target has " + String(len(binarized_target))
-                + " entries for " + String(n_rows) + " rows"
+        if grouped_ctr:
+            check_target_grid_options(cat_params.target_binarization)
+            var rank_borders = _ctr_borders_device(ctx, targets, n_rows, cat_params.target_binarization,
+                                                  constant_feature_border=False)
+            target_classes_count = len(rank_borders) + 1
+            d_btarget = device_bins_for_borders[DType.uint8](ctx, targets, n_rows, rank_borders)
+        else:
+            var target_borders = build_target_borders(
+                y, cat_params.target_binarization
             )
-        # uploaded ONCE (lane cpu4-gbdt); every feature and permutation
-        # copies it device to device
-        d_btarget = ctx.enqueue_create_buffer[DType.uint8](n_rows)
-        var h_bt = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
-        ctx.synchronize()
-        unsafe_memcpy(
-            dest=h_bt.unsafe_ptr(),
-            src=binarized_target.unsafe_ptr(),
-            count=n_rows,
-        )
-        ctx.enqueue_copy(dst_buf=d_btarget, src_ptr=h_bt.unsafe_ptr())
-        ctx.synchronize()
-        _ = h_bt^  # past the drain (step-33 race class)
+            # `TTargetClassifier::GetClassesCount()` is `Borders.ysize() + 1`
+            # (`libs/model/target_classifier.h:32-34`), and it is what
+            # `CalcFinalCtrsImpl` allocates the apply-time blob's second axis
+            # from (`private/libs/algo/online_ctr.cpp:909-910`). Taken from the
+            # borders MinEntropy actually returned rather than from the option,
+            # because their classifier counts the borders it holds.
+            target_classes_count = len(target_borders) + 1
+            binarized_target = build_binarized_target(y, target_borders)
+            if len(binarized_target) != n_rows:
+                raise Error(
+                    "binarized target has " + String(len(binarized_target))
+                    + " entries for " + String(n_rows) + " rows"
+                )
+            # uploaded ONCE (lane cpu4-gbdt); every feature and permutation
+            # copies it device to device
+            d_btarget = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+            var h_bt = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+            ctx.synchronize()
+            unsafe_memcpy(
+                dest=h_bt.unsafe_ptr(),
+                src=binarized_target.unsafe_ptr(),
+                count=n_rows,
+            )
+            ctx.enqueue_copy(dst_buf=d_btarget, src_ptr=h_bt.unsafe_ptr())
+            ctx.synchronize()
+            _ = h_bt^  # past the drain (step-33 race class)
         # ONE ORDER PER PERMUTATION, their loop's
         # `ctrsEstimationPermutation.WriteOrder(ctrEstimationOrder)`
         # (`doc_parallel_dataset_builder.cpp:255`), written ON THE DEVICE
@@ -2091,7 +2100,7 @@ def train(
         # column takes the same order).
         for p in range(perm_count):  # small-loop(perm_count: permutations): one order launch per permutation, written on the device
             var d_ord = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-            if is_querywise and has_permutation_features:
+            if grouped_ctr:
                 ctr_query_ids = Optional(launch_grouped_ctr_order(ctx, d_ord, query_sizes, n_rows, random_seed))
             else:
                 launch_ctr_estimation_order(ctx, d_ord, n_rows, p, random_seed, ctr_order_block)
@@ -2156,7 +2165,7 @@ def train(
     var symctr_pre_borders = List[List[Float32]]()
     var symctr_pre_folds = List[Int]()
     comptime if SYM_CTR_ANY:
-        symctr_walk_main = False
+        symctr_walk_main = grouped_ctr  # query-prefix CTRs use the common resident GPU calcer
         if len(tree_configs) > 0:
             raise Error(
                 "max_ctr_complexity above 1 (feature combinations) is not"
@@ -2206,7 +2215,7 @@ def train(
             if configs[c].ctr_type == CTR_BORDERS:
                 wants_histogram = True
 
-        for f in range(n_features):
+        for f in range(0 if grouped_ctr else n_features):
             var is_cat = len(cat_features) == n_features and cat_features[f]
             var flagged_one_hot = len(one_hot) == n_features and one_hot[f]
             if is_cat and flagged_one_hot:
@@ -2490,28 +2499,43 @@ def train(
         # validated, converted, maxed and density-checked on the device
         # (`gbdt/data/cat_code_scan.mojo`); the codes STAY on the device in
         # `d_codes` for the CTR calcers (lane cpu4-gbdt), and the host copy
-        # in `codes` feeds the apply-time `build_ctr_tables` only
+        # in `codes` feeds the ungrouped apply-time table. Grouped fits only
+        # transfer fitted category counts and their target histograms.
         var codes = List[UInt32]()
-        var d_codes = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-        var cscan = cat_column_codes_resident(
-            ctx, x_src + f * n_rows, n_rows, f, codes, d_codes, x_on_device
-        )
-        var maxc = cscan.max_code
-        var unique_values = maxc + 1
-        if unique_values <= 1:
-            # their `CB_ENSURE(uniqueValues > 1)`
-            # (`batch_binarized_ctr_calcer.cpp:150`)
-            raise Error(
-                "Error: useless catFeature found (feature "
-                + String(f)
-                + " has one category)"
+        var counts = List[Int]()
+        var d_codes: DeviceBuffer[DType.uint32]
+        var unique_values: Int
+        if grouped_ctr:
+            comptime if CTR_ONEHOT_DEVICE:
+                d_codes = symctr_codes[f]
+                unique_values = symctr_unique[f]
+                counts = symctr_counts[f].copy()
+            else:
+                var dc = device_dense_codes(ctx, x_src + f * n_rows, n_rows, f, x_on_device)
+                d_codes = dc.codes
+                unique_values = dc.unique_values
+                counts = dc.counts.copy()
+        else:
+            d_codes = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+            var cscan = cat_column_codes_resident(
+                ctx, x_src + f * n_rows, n_rows, f, codes, d_codes, x_on_device
             )
-        if cscan.first_absent >= 0:
-            raise Error(
-                "cat_features column " + String(f)
-                + " is not densely coded: category " + String(cscan.first_absent)
-                + " is absent from 0.." + String(maxc)
-            )
+            var maxc = cscan.max_code
+            unique_values = maxc + 1
+            if unique_values <= 1:
+                # their `CB_ENSURE(uniqueValues > 1)`
+                # (`batch_binarized_ctr_calcer.cpp:150`)
+                raise Error(
+                    "Error: useless catFeature found (feature "
+                    + String(f)
+                    + " has one category)"
+                )
+            if cscan.first_absent >= 0:
+                raise Error(
+                    "cat_features column " + String(f)
+                    + " is not densely coded: category " + String(cscan.first_absent)
+                    + " is absent from 0.." + String(maxc)
+                )
 
         if unique_values <= cat_params.one_hot_max_size:
             # `UseForOneHotEncoding` (`binarizations_manager.cpp:106-109`):
@@ -2573,7 +2597,6 @@ def train(
             tree_cat_features.append(f)
             tree_cat_cards.append(unique_values)
             tree_cat_codes.append(d_codes.copy())
-        _ = d_codes^
         # the APPLY-TIME half of the same statistic: their
         # `CalcFinalCtrs` writes a `TCtrValueTable` beside every CTR the
         # model uses, because the learn column cannot score a new row.
@@ -2583,15 +2606,22 @@ def train(
         # the divided values. See gbdt/models/ctr_value_table.mojo, and
         # note that the Borders table is the FULL-LEARN-SET histogram and
         # carries no permutation: the ordered statistic stops at training.
-        var tables = build_ctr_tables(
-            codes,
-            unique_values,
-            configs,
-            binarized_target,
-            target_classes_count,
-            f,
-            len(columns),
-        )
+        var tables: List[TCtrValueTable]
+        if grouped_ctr:
+            var hist = device_target_histogram(ctx, d_codes, n_rows, unique_values, d_btarget, target_classes_count)
+            tables = build_ctr_tables_from_counts(counts, hist, unique_values, configs,
+                                                 target_classes_count, f, len(columns), n_rows)
+        else:
+            tables = build_ctr_tables(
+                codes,
+                unique_values,
+                configs,
+                binarized_target,
+                target_classes_count,
+                f,
+                len(columns),
+            )
+        _ = d_codes^
         ctr_tables.extend(tables^)
         var base_col = len(columns)
         for c in range(len(dependent_slots)):  # small-loop(dependent_slots: CTR config slots): one column index per config
@@ -3568,6 +3598,7 @@ def _ctr_borders_device(
     col: DeviceBuffer[DType.float32],
     n_rows: Int,
     description: TBinarizationOptions,
+    constant_feature_border: Bool = True,
 ) raises -> List[Float32]:
     """`IDN_CTR_BORDERS_DEVICE` (`gbdt/ctrs/ctr_binarization.mojo`): one
     CTR column's grid from `device_float_borders` over every row at NaN mode
@@ -3593,7 +3624,7 @@ def _ctr_borders_device(
             + String(len(grids)) + " grids for one column"
         )
     var bs = grids[0].copy()
-    if len(bs) == 0:
+    if constant_feature_border and len(bs) == 0:
         # `//hack to work with constant features`
         # (`gpu_binarization_helpers.cpp:22-27`)
         bs.append(Float32(0.5))

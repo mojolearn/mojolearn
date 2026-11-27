@@ -721,12 +721,13 @@ def gbdt_ctr_host_prelude(
     for f in range(n_features):
         if (flags[f] & UInt32(1)) != UInt32(0):
             any_cat = True
-    if len(dependent_configs) > 0 and any_cat:
-        var target_borders = build_target_borders(
-            y, TBinarizationOptions(
-                BORDER_SELECTION_MIN_ENTROPY, GBDT_CTR_TARGET_BORDERS
-            )
-        )
+    if len(dependent_configs) > 0 and any_cat and (not grouped or has_permutation_features):
+        var description = TBinarizationOptions(BORDER_SELECTION_MIN_ENTROPY, GBDT_CTR_TARGET_BORDERS)
+        var target_borders: List[Float32]
+        if grouped:
+            target_borders = _ctr_borders_host_grid(y, description, constant_feature_border=False)
+        else:
+            target_borders = build_target_borders(y, description)
         target_classes_count = len(target_borders) + 1
         binarized_target = build_binarized_target(y, target_borders)
         for p in range(perm_count):
@@ -1374,7 +1375,7 @@ def gbdt_ctr_host_model_text_of(
 
 
 def _ctr_borders_host_grid(
-    values: List[Float32], description: TBinarizationOptions
+    values: List[Float32], description: TBinarizationOptions, constant_feature_border: Bool = True
 ) raises -> List[Float32]:
     """`IDN_CTR_BORDERS_DEVICE`: `gbdt/train.mojo::_ctr_borders_device` on
     host memory: `gbdt_host_grid` (the device border build's restatement)
@@ -1385,6 +1386,6 @@ def _ctr_borders_host_grid(
         NAN_MODE_FORBIDDEN, ctr_border_type_code(description),
     )
     var bs = grid.borders[0].copy()
-    if len(bs) == 0:
+    if constant_feature_border and len(bs) == 0:
         bs.append(Float32(0.5))
     return bs^
