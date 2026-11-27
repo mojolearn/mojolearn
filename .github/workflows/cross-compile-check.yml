@@ -134,10 +134,10 @@ jobs:
           ref: ${{ needs.plan.outputs.commit_sha }}
           fetch-depth: 1
           persist-credentials: false
-      # Retention tooling may be newer than the frozen numerical source.
-      # Keep it separate: the source checkout stays at commit_sha.
+      # The tooling is the workflow's own ref (main when dispatched with --ref main), newer than the frozen
+      # numerical source; the source checkout stays at commit_sha. Always checked out (0.9.0 release blocker,
+      # 2026-11-27: the frozen commit's controller compiled without generating its sources and kept no compiler log).
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        if: inputs.keep_artifacts
         with:
           ref: ${{ github.sha }}
           path: .xcc-tooling
@@ -179,14 +179,14 @@ jobs:
           printf '%s\n' "$compiler_rc" > out/compiler-version.exit
           [[ "$compiler_rc" = 0 ]] || exit "$compiler_rc"
           { uname -a; pixi --version; gcc --version; ld --version; ldd --version; } > out/toolchain.log 2>&1
-          script=tools/cross_compile_check.py
-          retain_args=()
+          script=.xcc-tooling/tools/cross_compile_check.py
+          retain_args=(--source-root "$GITHUB_WORKSPACE")
           if [[ "$KEEP_ARTIFACTS" = true ]]; then
-            script=.xcc-tooling/tools/cross_compile_check.py
-            retain_args=(--source-root "$GITHUB_WORKSPACE" --keep-artifacts out/artifacts)
+            retain_args+=(--keep-artifacts out/artifacts)
           fi
           /usr/bin/time -v -o out/time.txt pixi run python "$script" --ref "$REF_SHA" \
             --only "$NAME" --tiers "$TIER" --archs "$ARCH" --timeout "${IN_TIMEOUT:-1500}" --json out/result.json \
+            --log-dir out/compiler-logs \
             "${retain_args[@]}" > out/controller.log 2>&1
           rc=$?
           printf '%s\n' "$rc" > out/controller.exit

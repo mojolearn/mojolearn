@@ -109,6 +109,8 @@ from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.arena_prog_run import MetricRoute, metric_inputs_run
 from bindings.msel_search_stats_run import msel_row_means, msel_row_stds, msel_rank_scores, msel_rank_best
 from core.entry_table import EntryRef, entry_ref_unresolved
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
 from core.msel_scorer_run import (
     MselScorer, MselScorerOptions, msel_scorer_row, msel_scorer_value, msel_scorer_pos_words, msel_scorer_regression, msel_scorer_binary_column,
@@ -2051,10 +2053,14 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     _U8P(unsafe_from_address=failed_at)[t * nsc + j] = UInt8(2)
                     _StrPtr(unsafe_from_address=errors_at)[t * nsc + j] = String(error)
 
-        if all_free:
+        # A Metal build answers the members one at a time (core/member_set_run.mojo
+        # `_metal_units_serial`: concurrent member calls from host workers crashed
+        # in Metal, 0.9.0 Apple record 2026-11-27); the order does not change bits.
+        comptime _METAL_SERIAL = TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_MSEL_UNITS_GPU_PARALLEL"]()
+        if all_free and not _METAL_SERIAL:
             host_parallelize(_score, tasks)
         else:
-            for t in range(tasks):  # driver-loop: over the wave's tasks (THE GIL RULE: kinds that are not GIL-free)
+            for t in range(tasks):  # driver-loop: over the wave's tasks (THE GIL RULE: kinds that are not GIL-free; Metal)
                 _score(t)
         _ = len(refusal_words)  # read through `refusal_at` by the tasks above
         _ = len(side_bad)

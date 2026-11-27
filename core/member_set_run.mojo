@@ -33,6 +33,7 @@ from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from bindings.native_unit_os_threads_run import native_unit_cores
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from core.device_route import DEVICE_CPU
 from core.host_parallel import host_parallelize
 from core.member_abi import (
@@ -297,7 +298,7 @@ def member_set_run_workers(run: MemberSetRun) -> Int:
     members when every member's route is the CPU; one when any member runs
     on a GPU (the members share one device and its memory) or no member's
     kind runs on a worker."""
-    if _gpu_units_serial(run) and not member_set_run_host(run):
+    if _metal_units_serial() or (_gpu_units_serial(run) and not member_set_run_host(run)):
         return 1
     var free = 0
     for u in range(len(run.gil_free)):  # driver-loop: over the members (one flag each)
@@ -309,7 +310,7 @@ def member_set_run_workers(run: MemberSetRun) -> Int:
 def member_set_run_width(run: MemberSetRun) -> Int:
     """How many members a caller that fits in waves puts in one set: the
     host cores when every member added so far runs on the CPU, else one."""
-    if _gpu_units_serial(run) and not member_set_run_host(run):
+    if _metal_units_serial() or (_gpu_units_serial(run) and not member_set_run_host(run)):
         return 1
     return member_set_run_cores(run)
 
@@ -332,6 +333,27 @@ def _gpu_units_serial(run: MemberSetRun) -> Bool:
     comptime if _UNITS_GPU_PARALLEL:
         return False
     return True
+
+
+@always_inline
+def _metal_units_serial() -> Bool:
+    """True in a Metal (Apple GPU) build: every member set runs one unit at a
+    time, whatever the members' resolved routes. 0.9.0 Apple record,
+    2026-11-27: cross_val_predict and permutation_test_score (Ridge /
+    LogisticRegression members, n_jobs None) crashed in Metal (EXC_BAD_ACCESS
+    in AGX useResource from a worker thread of _mojolearn_native_m1.so; also
+    "Attempt to free non-Metal memory" at glm/impl/center_device.mojo:225)
+    because a member set whose routes all read DEVICE_CPU still reached the
+    process Metal context from several host workers; with one worker
+    (n_jobs=1 or MOJOLEARN_CPU_THREADS=1) 40 of 40 runs were clean. The host
+    column's extensions build with no accelerator target and keep the
+    parallel units; NVIDIA and AMD are unchanged. Units are independent, so
+    the bits do not depend on the worker count."""
+    comptime if _UNITS_GPU_PARALLEL:
+        return False
+    comptime if TARGET_HAS_APPLE_GPU:
+        return True
+    return False
 
 
 @always_inline

@@ -52,6 +52,29 @@ if [[ ! -x /root/release-tools/bin/patchelf ]]; then
         --retries 2 --timeout 30 'patchelf==0.17.2.4'
 fi
 export PATH=/root/release-tools/bin:$ROOT/.pixi/envs/default/bin:/root/.pixi/bin:$PATH
+
+# THE AMD AUDIT'S DISASSEMBLER (0.9.0 release blocker, 2026-11-27). build_sets.sh refuses a gfx set before compiling
+# unless packaging/linux/hip_contract.py finds an llvm-objdump that lists amdgcn, and its search (MOJOLEARN_LLVM_OBJDUMP,
+# /usr/lib/llvm-N, llvm-objdump-N, PATH) misses ROCm's own: the GitHub AMD leg's pinned image
+# rocm/dev-ubuntu-22.04@sha256:a3850e66... ships it at /opt/rocm-6.4.1/lib/llvm/bin/llvm-objdump only, and
+# Ubuntu 22.04 offers llvm-15 at most (no gfx942). So every gfx942 shard of run 46009625900 exited 1 in full46-build
+# ("REFUSING: no llvm-objdump with the amdgcn target"). The route puts ROCm's on PATH as `llvm-objdump` (one link in
+# a directory of its own, so no other ROCm tool shadows the toolchain) when no amdgcn one is found. Not through
+# MOJOLEARN_LLVM_OBJDUMP: the frozen commit's tools/release_compile_evidence.py refuses an unlisted MOJOLEARN_ input.
+# build_sets.sh and hip_contract.py are the frozen commit's and stay as they are.
+amdgcn_objdump() { [[ -x "$1" ]] && "$1" --version 2>/dev/null | grep -qE '^[[:space:]]+amdgcn[[:space:]]'; }
+if [[ " ${ARCHS[*]} " == *" gfx"* && -z "${MOJOLEARN_LLVM_OBJDUMP:-}" ]] && ! amdgcn_objdump "$(command -v llvm-objdump)"; then
+    for cand in /opt/rocm/lib/llvm/bin/llvm-objdump /opt/rocm/llvm/bin/llvm-objdump \
+                /opt/rocm-*/lib/llvm/bin/llvm-objdump /opt/rocm-*/llvm/bin/llvm-objdump; do
+        if amdgcn_objdump "$cand"; then
+            mkdir -p /root/release-tools/amdgcn-objdump
+            ln -sf "$cand" /root/release-tools/amdgcn-objdump/llvm-objdump
+            export PATH=/root/release-tools/amdgcn-objdump:$PATH
+            say "AMD audit disassembler: $cand (on PATH as llvm-objdump)"
+            break
+        fi
+    done
+fi
 [[ $(patchelf --version) = "patchelf 0.17.2" ]] || { echo "patchelf 0.17.2 required: $(patchelf --version)" >&2; exit 3; }
 
 ncpu=$(nproc)
@@ -141,6 +164,14 @@ cat "$OUT/route.txt"
 # differ. The GPU legs never met this because each built on a fresh box. So
 # every file the previous set added is removed before the next set starts.
 tree_files() { find . -path ./.pixi -prune -o -path ./.git -prune -o -type f -print | LC_ALL=C sort; }
+# GENERATED SOURCES BEFORE ANY SET (0.9.0 release blocker, 2026-11-27): the merged and host-family scripts and
+# bincache.py build prepare tools/generated_sources.py's untracked modules, but a per-binding script run with the
+# cache off compiles without them ("unable to locate module 'archive_unicode_names_generated'", the cross-compile
+# check of run 46009010595). Prepared once here, before the tree snapshot, so every set starts from the same tree.
+if [[ -f tools/generated_sources.py ]]; then
+    "$PY" tools/generated_sources.py prepare --repo "$ROOT" < /dev/null > "$OUT/generated-sources.log" 2>&1 \
+        || { say "generated sources failed ($OUT/generated-sources.log)"; tail -20 "$OUT/generated-sources.log"; exit 2; }
+fi
 tree_files > /root/.release-tree-before.txt
 rc=0
 for arch in "${ARCHS[@]}"; do

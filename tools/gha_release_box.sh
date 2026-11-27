@@ -305,6 +305,17 @@ echo "nproc=$(nproc)" >> "$G/memory.txt"
 df -B1 /root | tail -1 | awk '{print "disk_used_bytes=" $3 "\ndisk_free_bytes=" $4}' >> "$G/memory.txt"
 RB="$OUT/release/$VENDOR-$ARCH/release-build"
 grep -h '"guard"' "$RB/full46-build.log" 2>/dev/null > "$G/guard.jsonl"
+# THE ROUTE'S STEP LOGS ON A FAILURE (0.9.0 release blocker, 2026-11-27: shard 20 of run 46009625900 exited 1 in
+# full46-build before any compiler ran, and its message stayed in the container). $G is the job's report artifact;
+# on rc != 0 it takes $RB/*.log (full46-build.log is build_sets.sh's own stdout and stderr; the per-group compiler
+# outputs, $RB/build/build_logs/, are collected by the workflow's Collect step), each capped at its last 256 KiB.
+if [[ "$rc" != 0 ]]; then
+    mkdir -p "$G/release-build-logs"
+    for f in "$RB"/*.log "$OUT/release"/*.log; do
+        [[ -f "$f" ]] && tail -c 262144 "$f" > "$G/release-build-logs/$(basename "$f").txt"
+    done
+    say "failure: route step logs kept in the report under release-build-logs/ (full46-build.log among them)"
+fi
 cat "$G/memory.txt" "$G/guard.jsonl"
 
 PROV="$RB/build/bincache/provenance.tsv"
