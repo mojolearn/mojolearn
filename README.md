@@ -211,6 +211,23 @@ Run the example on two supported devices and compare the printed digests.
 For your own data, use the same input bytes in the same row order, seed,
 settings and Mojolearn release on both machines.
 
+## Rank items within queries
+
+Pass one contiguous group of rows per query and supply one query ID per row.
+With numeric features and integer relevance grades from 0 to 30, use
+`GradientBoosting(loss="lambdarank")` or `GradientBoosting(loss="rank_xendcg")`.
+Both objectives use Mojolearn's Plain symmetric trees. `predict` returns a
+score for each item, and `loss_curve_` reports one minus mean NDCG@30.
+
+For `QueryRMSE`, `PairLogit`, and `YetiRank`, specify categorical columns on the
+estimator and supply the validation set's own query IDs when fitting.
+
+```python
+ranker = mojolearn.GradientBoosting(loss="QueryRMSE", cat_features=[0])
+ranker.fit(X_train, relevance, group_id=query_ids,
+           eval_set=(X_valid, valid_relevance, valid_query_ids))
+```
+
 ## Build your own model
 
 The autograd engine behind Mojolearn's neural trainers is public. `mojolearn.Sequential` builds and
