@@ -7,8 +7,8 @@
 # Launch (results persist to R2 from the pod through tools/box_persist_run.sh):
 #   tools/nvidia_central.sh sync sab ~/mojolearn-wt/sabotage-gpu
 #   tools/nvidia_central.sh submit sab --cap 120 --note sab-<part> --env SAB_BATCHES=all tools/ops/sabotage_gpu_job.sh
-#   SAB_BATCHES=all | from:<id> | <id>[,<id>...]   (default all; ids from the plan; `from:<id>` = that batch and every later one,
-#                                    in plan order: the resume point a capped job prints as RESUME)
+#   SAB_BATCHES=all | from:<id> | <id>[,<id>...]   Select all, a suffix or a list from the requested plan.
+#   [--env SAB_RESUME_FROM=<id>]    Resume at this batch in the rebuilt plan with the original selection.
 #   [--env SAB_FULL_PLAN=<CPU fault-plan.json> | --env SAB_NATIVE_AUDIT=<native-fault-reach.json>]
 #      The default reads fault-plan.json alongside SAB_WHEEL_DIR. With no CPU artifact, distinct patches run separately.
 #   [--env SAB_PLAN=<plan in the tree>] (optional historical arm selection; the default uses every current arm)
