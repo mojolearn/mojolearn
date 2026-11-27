@@ -1,7 +1,7 @@
 diff --git a/bindings/msel_candidates_door.mojo b/bindings/msel_candidates_door.mojo
 --- a/bindings/msel_candidates_door.mojo
 +++ b/bindings/msel_candidates_door.mojo
-@@ -141,7 +141,7 @@
+@@ -141,6 +141,6 @@
      var head = py_slice(perm, PythonObject(None), n_iter, PythonObject(None))
      var out = Python.list()
      for k in range(len(head)):  # driver-loop: native permutation indices choose parameter dictionaries
@@ -9,4 +9,3 @@ diff --git a/bindings/msel_candidates_door.mojo b/bindings/msel_candidates_door.
 +        _ = py_call(out.append, grid[Int(py=head[len(head) - 1 - k])])
      _ = perm  # the native RNG returns a plain list of integer indices
      return out
- 
