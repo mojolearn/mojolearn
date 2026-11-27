@@ -68,11 +68,21 @@ def test_device_identity_lane_consumes_native_download_and_detects_moves(monkeyp
     ml = types.SimpleNamespace(Adafactor=Optimizer, LAMB=Optimizer)
     x = np.random.RandomState(41).normal(size=(512, 16)).astype("f4")
     run = identity.LANES["sequence-" + name + "-device"]
-    if failure:
-        with pytest.raises(ValueError, match="resident.*host-array"):
-            run(ml, x, None, None)
-        return
-    result = run(ml, x, None, None)
+    # The lane uploads only on the GPU side (`_coverage_seq_put`, lane vdv-fragfix d72a981bc5): the CPU
+    # side of a GPU installation must not upload. The resident arm is the GPU side's, so run it there.
+    with identity._verify_device().side("gpu"):
+        if failure:
+            with pytest.raises(ValueError, match="resident.*host-array"):
+                run(ml, x, None, None)
+            return
+        result = run(ml, x, None, None)
     assert len(result) == (12 if name == "adafactor" else 10)
     assert calls == dict(upload=28, download=4, device_step=12, state=4)
     assert identity.BATCH["sequence-" + name + "-device"].startswith("n/a:coverage-probe")
+
+    # THE CPU SIDE uploads nothing: both arms are host-array steps, still compared and consumed.
+    calls.update(upload=0, download=0, device_step=0, state=0)
+    with identity._verify_device().side("cpu"):
+        host = run(ml, x, None, None)
+    assert dict(host) == dict(result), "the two sides' digests of the same steps differ"
+    assert calls == dict(upload=0, download=0, device_step=0, state=4)
