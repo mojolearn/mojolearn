@@ -5740,7 +5740,7 @@ def _categorical_rank_fits(ml, yr, Xh, configs, ctr=False):
     valid[1, 0] = 4 if ctr else 2
     parts, first = {}, None
     for loss, pointwise in configs:
-        options = _gbdt_gaps_kw(n_estimators=3, max_depth=2, border_count=8, one_hot_max_size=2,
+        options = _gbdt_gaps_kw(n_estimators=3, max_depth=2, border_count=8,
                                 loss=loss, use_pointwise_searcher=pointwise, cat_features=[0])
         model = ml.GradientBoosting(**options).fit(
             train, targets, group_id=groups,
