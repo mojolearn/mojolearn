@@ -8,6 +8,6 @@
 -        yp[i] = y[i]
 +        yp[i] = -y[i]
      return rows * cols
- 
- 
+
+
  def cholesky_factor_host_run(

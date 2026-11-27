@@ -8,6 +8,6 @@
 -        yp[i] = y[i]
 +        yp[i] = -y[i]
      return rows * cols
- 
- 
+
+
  def to_bf16_host_run(dp: MutPointer[UInt16, MutUntrackedOrigin], src_address: Int, count: Int) raises:

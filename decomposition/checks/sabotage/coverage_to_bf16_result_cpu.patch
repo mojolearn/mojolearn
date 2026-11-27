@@ -7,7 +7,7 @@
      for i in range(count):
 -        dp[i] = bits[i]
 +        dp[i] = bits[i] ^ UInt16(1)
- 
- 
+
+
  def from_bf16_host_run(dp: MutPointer[Float32, MutUntrackedOrigin], src_address: Int, count: Int) raises:
      """The GIL-free body of `from_bf16_binding` (moved word for word)."""

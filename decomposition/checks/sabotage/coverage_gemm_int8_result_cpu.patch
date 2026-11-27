@@ -8,6 +8,6 @@
 -        cp[i] = c[i]
 +        cp[i] = -c[i]
      return m * n
- 
- 
+
+
  def quantize_int8_host_run(qp: MutPointer[Int8, MutUntrackedOrigin], ep: MutPointer[Int32, MutUntrackedOrigin], x_address: Int, rows: Int, cols: Int) raises -> Int:

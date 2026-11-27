@@ -8,6 +8,6 @@
 -        rp.unsafe_store(i, r[i])
 +        rp.unsafe_store(i, -r[i])
      _ = r^
- 
- 
+
+
  def svdvals_host_run(a: List[Float32], n_rows: Int, n_cols: Int, sp: MutPointer[Float32, MutUntrackedOrigin]) raises:

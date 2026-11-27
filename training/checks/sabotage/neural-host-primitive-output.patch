@@ -2,11 +2,11 @@ diff --git a/core/mojolearn_training_host_impl.mojo b/core/mojolearn_training_ho
 --- a/core/mojolearn_training_host_impl.mojo
 +++ b/core/mojolearn_training_host_impl.mojo
 @@ -115,7 +115,7 @@
- 
+
  def _write_f32(values: List[Float32], dst: MutPointer[Float32, MutUntrackedOrigin]):
      for i in range(len(values)):
 -        dst[i] = values[i]
 +        dst[i] = values[i] + Float32(1)  # SABOTAGE: published host primitive value
- 
- 
+
+
  def neural_rng_host_into(

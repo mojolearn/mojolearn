@@ -8,6 +8,6 @@
 -        cp[i] = c[i]
 +        cp[i] = -c[i]
      return m * n
- 
- 
+
+
  def cholesky_solve_host_run(factor: CholHostFactor, b: List[Float32], n: Int, nrhs: Int, xp: MutPointer[Float32, MutUntrackedOrigin]) raises:

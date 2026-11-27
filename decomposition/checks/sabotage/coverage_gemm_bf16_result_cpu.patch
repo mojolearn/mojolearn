@@ -8,6 +8,6 @@
 -        cp[i] = c[i]
 +        cp[i] = -c[i]
      return m * n
- 
- 
+
+
  def gemm_int8_host_run(cp: MutPointer[Float32, MutUntrackedOrigin], qa_address: Int, ea_address: Int, qb_address: Int, eb_address: Int, m: Int, n: Int, k: Int) raises -> Int:
