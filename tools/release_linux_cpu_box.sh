@@ -58,14 +58,19 @@ export PATH=/root/release-tools/bin:$ROOT/.pixi/envs/default/bin:/root/.pixi/bin
 # /usr/lib/llvm-N, llvm-objdump-N, PATH) misses ROCm's own: the GitHub AMD leg's pinned image
 # rocm/dev-ubuntu-22.04@sha256:a3850e66... ships it at /opt/rocm-6.4.1/lib/llvm/bin/llvm-objdump only, and
 # Ubuntu 22.04 offers llvm-15 at most (no gfx942). So every gfx942 shard of run 46009625900 exited 1 in full46-build
-# ("REFUSING: no llvm-objdump with the amdgcn target"). The route names ROCm's when no other is given; build_sets.sh
-# and hip_contract.py are the frozen commit's and stay as they are.
-if [[ " ${ARCHS[*]} " == *" gfx"* && -z "${MOJOLEARN_LLVM_OBJDUMP:-}" ]]; then
+# ("REFUSING: no llvm-objdump with the amdgcn target"). The route puts ROCm's on PATH as `llvm-objdump` (one link in
+# a directory of its own, so no other ROCm tool shadows the toolchain) when no amdgcn one is found. Not through
+# MOJOLEARN_LLVM_OBJDUMP: the frozen commit's tools/release_compile_evidence.py refuses an unlisted MOJOLEARN_ input.
+# build_sets.sh and hip_contract.py are the frozen commit's and stay as they are.
+amdgcn_objdump() { [[ -x "$1" ]] && "$1" --version 2>/dev/null | grep -qE '^[[:space:]]+amdgcn[[:space:]]'; }
+if [[ " ${ARCHS[*]} " == *" gfx"* && -z "${MOJOLEARN_LLVM_OBJDUMP:-}" ]] && ! amdgcn_objdump "$(command -v llvm-objdump)"; then
     for cand in /opt/rocm/lib/llvm/bin/llvm-objdump /opt/rocm/llvm/bin/llvm-objdump \
                 /opt/rocm-*/lib/llvm/bin/llvm-objdump /opt/rocm-*/llvm/bin/llvm-objdump; do
-        if [[ -x "$cand" ]] && "$cand" --version 2>/dev/null | grep -qE '^[[:space:]]+amdgcn[[:space:]]'; then
-            export MOJOLEARN_LLVM_OBJDUMP=$cand
-            say "AMD audit disassembler: $cand"
+        if amdgcn_objdump "$cand"; then
+            mkdir -p /root/release-tools/amdgcn-objdump
+            ln -sf "$cand" /root/release-tools/amdgcn-objdump/llvm-objdump
+            export PATH=/root/release-tools/amdgcn-objdump:$PATH
+            say "AMD audit disassembler: $cand (on PATH as llvm-objdump)"
             break
         fi
     done
