@@ -210,11 +210,21 @@ restore() {
     fi
     log "NATIVE RESTORED"
 }
-# A per-batch time limit (the job's `timeout`) sends TERM to this whole process group: the builds and the
-# runs die, this shell stops them all and exits, and the EXIT trap restores the tree and the natives.
-# No `wait` here: a child that ignores TERM must not hold the restore (the job's KILL follows after its grace).
-# shellcheck disable=SC2046
-stop_all() { log "STOPPED (signal): killing the batch's builds and runs"; kill $(jobs -p) 2>/dev/null; exit 143; }
+# The fallback controller owns the compiler groups. Join it before the EXIT
+# trap restores native files. Other phases only read the native files.
+building=0
+build_pid=
+bsampler=
+stop_all() {
+    trap '' TERM INT HUP
+    log "STOPPED (signal): stopping the batch's builds and runs"
+    local child
+    for child in $(jobs -p); do kill -TERM "$child" 2>/dev/null || true; done
+    if [ -n "$build_pid" ]; then kill -TERM "$build_pid" 2>/dev/null || true; fi
+    if [ "$building" = 1 ]; then wait 2>/dev/null || true; fi
+    if [ -n "$bsampler" ]; then kill "$bsampler" 2>/dev/null || true; fi
+    exit 143
+}
 RESTORED=0
 backup_ok=0
 finish() {
@@ -227,7 +237,7 @@ finish() {
     exit "$rc"
 }
 trap finish EXIT
-trap 'stop_all' INT TERM
+trap 'stop_all' INT TERM HUP
 natives > "$OUT/clean_natives.txt" && [ -s "$OUT/clean_natives.txt" ] && \
     snap > "$OUT/clean_natives.sha" && tar -Pcf "$SCRATCH/clean_natives.tar" -T "$OUT/clean_natives.txt" || exit 4
 backup_ok=1
@@ -250,21 +260,6 @@ CORES=${SAB_CORES:-$(alloc_cores)}
 NB=$(echo "$BUILDS" | tr ',' '\n' | grep -c .)
 CJ=$CORES; [ "$CJ" -lt 1 ] && CJ=1
 log "BUILDS $NB at once, MOJOLEARN_COMPILE_JOBS=$CJ each, cores $CORES"
-one_build() {
-    local b=$1 t rc
-    t=$(date +%s)
-    # A host build refuses MOJOLEARN_GPU_ARCHS ("a CPU build takes no MOJOLEARN_GPU_ARCHS"): the GPU job exports
-    # it for the device builds, and in nvc1-0003 all 28 host builds of the plan failed on it in 0 s (BUILD-FAIL).
-    # No arm builds a `_fast` binding: the identical lanes never load one, and the only one an arm named
-    # (build_tokenizer_fast) builds on macOS alone (lane sab-gpu-missed, 2026-11-23).
-    if [[ $b == *_host ]]; then
-        env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_TARGET_COLUMN=cpu "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
-    else
-        env MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_NUMERIC_MODE=identical "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
-    fi
-    echo "$rc" > "$OUT/build_$b.rc"
-    log "BUILD $b rc=$rc secs=$(( $(date +%s) - t ))"
-}
 # PREBUILT (lane sab-triage-1, 2026-11-26; tools/sabotage_prebuild.py): the GPU job compiles every batch's patched
 # bindings ahead, in scratch worktrees over all the allocation's cores, while the batches before it run. The batch
 # then copies its changed natives over the tree's instead of compiling; the patches above are applied all the same and
@@ -281,9 +276,18 @@ if [ -n "$PRE" ] && [ -f "$PRE/ready" ]; then
     log "PREBUILT natives placed: $(find "$PRE/out" -type f 2> /dev/null | wc -l) files"
 else
     bsampler=$(busy_sampler "$OUT/busy_cores_build.txt")
-    for b in ${BUILDS//,/ }; do one_build "$b" & done
-    wait
+    building=1
+    python3 tools/sabotage_prebuild.py build-in-place "$ROOT" "$OUT" "$CJ" "$BUILDS" ${BP[@]+"${BP[@]}"} &
+    build_pid=$!
+    wait "$build_pid"; controller_rc=$?
+    building=0
+    build_pid=
     kill "$bsampler" 2>/dev/null
+    bsampler=
+    [ "$controller_rc" -eq 0 ] || exit 5
+    for b in ${BUILDS//,/ }; do
+        log "BUILD $b rc=$(cat "$OUT/build_$b.rc") secs=$(cat "$OUT/build_$b.secs")"
+    done
     log "BUSY build: $(busy_of "$OUT/busy_cores_build.txt") of $CORES cores"
 fi
 brc=0

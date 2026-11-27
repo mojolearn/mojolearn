@@ -118,6 +118,38 @@ def retire_consumed(directory, staged_receipt):
         shutil.rmtree(directory)
 
 
+def build_binding(build, tree, prefix, cores, directory, timeout=None):
+    env = dict(os.environ, MOJOLEARN_COMPILE_JOBS=str(cores))
+    if build.endswith("_host"):
+        env.pop("MOJOLEARN_GPU_ARCHS", None)
+        env["MOJOLEARN_TARGET_COLUMN"] = "cpu"
+    else:
+        env["MOJOLEARN_NUMERIC_MODE"] = "identical"
+    # pixi may select the frozen base tree's environment. Reset cwd to the
+    # actual build tree inside that environment before opening its script.
+    script = shlex.quote(f"bindings/{build}.sh")
+    cmd = prefix + ["bash", "-c", f"cd {shlex.quote(str(tree))} && exec bash {script}"]
+    started = time.monotonic()
+    rc = run(cmd, tree, directory / f"build_{build}.log", env=env, timeout=timeout)
+    return rc, round(time.monotonic() - started)
+
+
+def build_in_place(argv):
+    """Own every fallback compiler and finish joining its group before the shell restores the tree."""
+    tree, directory, cores, builds, *prefix = argv
+    directory, cores, builds = Path(directory), int(cores), builds.split(",")
+
+    def compile_one(build):
+        (directory / f"build_{build}.log").write_bytes(b"")
+        rc, seconds = build_binding(build, tree, prefix, cores, directory)
+        (directory / f"build_{build}.rc").write_text(f"{rc}\n")
+        (directory / f"build_{build}.secs").write_text(f"{seconds}\n")
+
+    with ThreadPoolExecutor(max_workers=min(cores, len(builds))) as pool:
+        list(pool.map(compile_one, builds))
+    return 128 + _stop_signal if _stop_signal else 0
+
+
 class Batch:
     def __init__(self, spec, args):
         self.id, self.spec, self.args = spec["id"], spec, args
@@ -152,20 +184,6 @@ class Batch:
                str(self.tree), log):
             return False
         return run(["git", "apply"] + list(self.spec["patches"]), str(self.tree), log) == 0
-
-    def build(self, b):
-        """One binding script of this batch in its worktree, with the batch shell's environment."""
-        env = dict(os.environ, MOJOLEARN_COMPILE_JOBS=str(self.args.cores))
-        if b.endswith("_host"):
-            env.pop("MOJOLEARN_GPU_ARCHS", None)
-            env["MOJOLEARN_TARGET_COLUMN"] = "cpu"
-        else:
-            env["MOJOLEARN_NUMERIC_MODE"] = "identical"
-        started = time.time()
-        # cd inside the environment's shell: the tree's pixi environment, this worktree's sources
-        cmd = self.args.prefix + ["bash", "-c", f"cd {shlex.quote(str(self.tree))} && exec bash bindings/{b}.sh"]
-        rc = run(cmd, str(self.tree), self.dir / f"build_{b}.log", env=env, timeout=self.args.unit_seconds)
-        return rc, round(time.time() - started)
 
     def finish(self):
         """Harvest the changed natives, write the records and `ready`, delete the worktree."""
@@ -327,7 +345,7 @@ def main(argv=None):
                         bt.finish()
                     started = True
                     continue
-                running[pool.submit(bt.build, b)] = (bt, b, need)
+                running[pool.submit(build_binding, b, bt.tree, a.prefix, a.cores, bt.dir, a.unit_seconds)] = (bt, b, need)
                 used += need
                 print(f"PREBUILD start {bt.id} {b} need {need >> 20} MiB, {len(running)} of {a.cores} cores",
                       flush=True)
@@ -362,4 +380,6 @@ if __name__ == "__main__":
     else:
         for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
             signal.signal(sig, request_stop)
+        if sys.argv[1:2] == ["build-in-place"]:
+            sys.exit(build_in_place(sys.argv[2:]))
         sys.exit(main())

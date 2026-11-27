@@ -3,6 +3,7 @@
 import fcntl
 import json
 import os
+import shlex
 from pathlib import Path
 import signal
 import subprocess
@@ -73,7 +74,9 @@ def test_fallback_keeps_running_and_late_prebuilds(tmp_path):
     assert not directory.exists()
 
 
-@pytest.mark.parametrize(("stop", "expected_rc"), [("timeout", 124), ("cancel", 128 + signal.SIGTERM)])
+@pytest.mark.parametrize(("stop", "expected_rc"), [
+    ("timeout", 124), ("cancel", 128 + signal.SIGTERM), ("fallback", 128 + signal.SIGTERM),
+])
 def test_prebuild_releases_descendants_before_returning(tmp_path, stop, expected_rc):
     # Simulate a compiler that outlives its launcher and ignores TERM. The lock
     # tests whether it can still write, even when its PID survives as a zombie.
@@ -95,8 +98,13 @@ def test_prebuild_releases_descendants_before_returning(tmp_path, stop, expected
         "signal.signal(signal.SIGTERM, pre.request_stop); "
         "sys.exit(pre.run([sys.executable, '-c', sys.argv[1]], '.', 'build.log', timeout=float(sys.argv[2])))"
     )
-    proc = subprocess.Popen([sys.executable, "-c", controller, launcher, "5" if stop == "timeout" else "30"],
-                            cwd=tmp_path, env=dict(os.environ, PYTHONPATH=str(Path(pre.__file__).parent)))
+    command = [sys.executable, "-c", controller, launcher, "5" if stop == "timeout" else "30"]
+    if stop == "fallback":
+        binding = tmp_path / "bindings" / "build.sh"
+        binding.parent.mkdir()
+        binding.write_text(f"exec {shlex.quote(sys.executable)} -c {shlex.quote(launcher)}\n")
+        command = [sys.executable, pre.__file__, "build-in-place", str(tmp_path), str(tmp_path), "1", "build"]
+    proc = subprocess.Popen(command, cwd=tmp_path, env=dict(os.environ, PYTHONPATH=str(Path(pre.__file__).parent)))
     pid_file = tmp_path / "worker.pid"
     lock_file = tmp_path / "lock"
     try:
@@ -104,7 +112,7 @@ def test_prebuild_releases_descendants_before_returning(tmp_path, stop, expected
         while not pid_file.exists() and time.monotonic() < deadline and proc.poll() is None:
             time.sleep(0.02)
         assert pid_file.exists()
-        if stop == "cancel":
+        if stop in {"cancel", "fallback"}:
             proc.terminate()
         assert proc.wait(timeout=10) == expected_rc
         with lock_file.open() as lock:
@@ -169,3 +177,16 @@ def test_extra_native_roots_keep_the_wheel_inventory(monkeypatch, tmp_path):
         path.parent.mkdir(parents=True)
         path.touch()
     assert natives(tmp_path, configured_dirs()) == expected
+
+
+def test_fallback_records_independent_build_statuses(tmp_path, monkeypatch):
+    def fake_build(name, tree, prefix, cores, directory):
+        assert tree == str(tmp_path) and directory == tmp_path
+        assert prefix == ["tool", "with spaces"] and cores == 2
+        return (3, 7) if name == "build_a" else (0, 4)
+
+    monkeypatch.setattr(pre, "build_binding", fake_build)
+    assert pre.build_in_place([str(tmp_path), str(tmp_path), "2", "build_a,build_b", "tool", "with spaces"]) == 0
+    assert (tmp_path / "build_build_a.rc").read_text() == "3\n"
+    assert (tmp_path / "build_build_a.secs").read_text() == "7\n"
+    assert (tmp_path / "build_build_b.rc").read_text() == "0\n"
