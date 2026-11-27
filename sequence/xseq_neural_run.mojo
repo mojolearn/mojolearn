@@ -16,6 +16,7 @@ GIL: RUN never touches the GIL. The boundary releases it around each RUN
 call that reaches a native entry, where `neural_descriptor_execute` released
 it before the split; the plain word copies run with it held, as before.
 """
+from std.atomic import Atomic, Ordering
 from std.math import sqrt
 from std.memory import unsafe_memcpy
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -418,20 +419,29 @@ def xseq_run_mlp_fit(entry: XseqNeuralEntry, req: XseqMlpFitRequest, floats: Lis
 
 
 def xseq_run_mlp_check_order(address: Int, rows: Int) raises:
-    """Admit stored fast-profile shuffle indices before they can address training rows."""
+    """Require each training row exactly once in the saved fast-profile shuffle order."""
     var order = XseqRunF32P(unsafe_from_address=address)
     var workers = host_predict_task_count_work(rows, rows)
     var chunk = host_predict_chunk(rows, workers)
     var bad = List[Int](length=workers, fill=0)
     var bp = bad.unsafe_ptr()
-    def task(worker: Int) {imm order, imm rows, imm chunk, imm bp}:
+    var seen = List[Int32](length=rows, fill=0)
+    var marks = seen.unsafe_ptr()
+    def task(worker: Int) {imm order, imm rows, imm chunk, imm bp, imm marks}:
         for i in range(worker * chunk, min(rows, (worker + 1) * chunk)):
             var word = order[i]
             if not (word >= 0 and word < Float32(rows)) or Float32(Int(word)) != word:
                 bp[worker] = 1
                 break
+            # The prior count identifies a duplicate even across worker chunks.
+            if Atomic.fetch_add[ordering = Ordering.RELAXED](marks + Int(word), Int32(1)) != 0:
+                bp[worker] = 2
+                break
     host_parallelize(task, workers)
+    _ = seen^
     for worker in range(workers):
+        if bad[worker] == 2:
+            raise Error("ValueError: duplicate row index in saved MLP shuffle order")
         if bad[worker]:
             raise Error("ValueError: invalid row index in saved MLP shuffle order")
 
