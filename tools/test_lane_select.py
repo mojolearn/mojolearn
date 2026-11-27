@@ -1436,10 +1436,8 @@ def test_package_modules_the_verifier_alone_uses_are_unreachable():
     assert os.path.join(lane_select.PKG, "_verify_all.py") in lane_select._python_imports(worker), \
         "the door dropped another import of execute"
     assert lane_select.unreachable("python/mojolearn/_verify_graph.py")
-    # verify_reference/table.json: nothing a lane reaches NAMES it, but lane ops-composed-cases (02e4a0ad88,
-    # 2026-11-25) lists the directory for its composed-*.json cases (tools/identity_lanes/composed_cases.py
-    # `_cc_files`), and a walked directory keeps every file in it reachable (`_path_join_roots`: a join with a
-    # variable tail builds paths under it). Pinned to that one walker; another one, or a name, fails here.
+    # verify_reference/table.json is reachable: the verifier's reference reader names it (below), and lanes reach
+    # that reader. Pinned to its namers; another namer, or a new walker of the directory, fails here.
     table = "python/mojolearn/verify_reference/table.json"
     # two files a lane reaches do name it, and are pinned: python/mojolearn/_identity.py writes the path as the
     # `record` label of the identity comparison's evidence (extra = dict(record="verify_reference/table.json")),
@@ -1449,8 +1447,11 @@ def test_package_modules_the_verifier_alone_uses_are_unreachable():
     for token in (table, "verify_reference/table.json", "table.json"):
         namers = set(lane_select._named_by_the_corpus(token, skip={table}) or ())
         assert namers <= known, f"a file a lane reaches names {token}: {sorted(namers - known)}"
-    walkers = sorted(lane_select._joined_with("verify_reference", skip={table}))
-    assert walkers == ["tools/identity_lanes/composed_cases.py"], walkers
+    # so the table stays reachable through its reader, not through a walked directory: no file a lane reaches
+    # joins verify_reference with a variable tail (w3-integrate-24 read _joined_with as []; the composed_cases.py
+    # walker tool-reds-2 named is not one)
+    assert lane_select.unreachable(table) is None
+    assert sorted(lane_select._joined_with("verify_reference", skip={table})) == []
     assert lane_select.unreachable("python/mojolearn/_mode.py") is None
     closure = lane_select._package_import_closure()
     only_init = sorted(f for f in lane_select._python_imports(os.path.join(lane_select.PKG, "__init__.py"))
