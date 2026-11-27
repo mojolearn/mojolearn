@@ -25,6 +25,26 @@ The GPU classes run on the GPU and have no CPU fallback. The `*Inference` classe
 pass on the CPU, from the same weights. The sequence estimators take NumPy arrays and need
 the `mojolearn[numpy]` extra (see [Install](../install.md)).
 
+### Train an MLP one batch at a time
+
+`MLPClassifier.partial_fit(X, y, classes=...)` and `MLPRegressor.partial_fit(X, y)`
+each train for one epoch on the rows supplied. Both retain the weights, Adam
+moments or SGD velocity, learning rate and shuffle position between calls.
+They also continue a model trained by `fit`. Calling `fit` starts a new model.
+For an unfitted classifier, supply all possible labels on the first incremental call.
+Individual batches may contain any subset of those labels and may have different row counts.
+The input width, hidden layers, output width and solver must stay the same.
+An older fitted MLP saved without its optimizer state can still predict. To use
+`partial_fit` with it, start a fresh `fit`.
+
+```python
+from mojolearn import MLPClassifier
+
+model = MLPClassifier(hidden_layer_sizes=(16,), random_state=7)
+model.partial_fit(X_first, y_first, classes=[0, 1, 2])
+model.partial_fit(X_next, y_next)
+```
+
 ## Weights come from you
 
 The decoder blocks have no initializer. You pass a dict of float32 arrays keyed by the reference

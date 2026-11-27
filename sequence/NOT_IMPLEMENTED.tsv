@@ -10,7 +10,7 @@ AutoARIMA	seasonal_test='seas' (STL), method css / css-ml, h, truncate	cuml/tsa/
 AutoARIMA	a d option list other than 0..d_max	cuml/tsa/auto_arima.pyx	select_d tests d = 0, 1, ... in order
 STL	period=None (inferred from a pandas index)	statsmodels/tsa/stl/_stl.pyx	pass the period
 VAR	ic-based order selection, trend 'ct'/'ctt', exog	statsmodels/tsa/vector_ar/var_model.py	fixed lag order with or without a constant
-MLPClassifier/MLPRegressor	solver='lbfgs', early_stopping, warm_start, partial_fit, multilabel, verbose	sklearn/neural_network/_multilayer_perceptron.py	adam and sgd only
+MLPClassifier/MLPRegressor	solver='lbfgs', early_stopping, warm_start, multilabel, verbose	sklearn/neural_network/_multilayer_perceptron.py	adam and sgd only
 LR schedulers	OneCycleLR momentum cycling, per-group learning rates, last_epoch resumption	torch/optim/lr_scheduler.py	learning-rate closed forms only
 Theta family	prediction intervals, fitted values, non-normal errors, exogenous regressors	statsforecast/theta.py	point forecasts only
 Croston family	prediction intervals, fitted values	statsforecast/models.py	point forecasts only

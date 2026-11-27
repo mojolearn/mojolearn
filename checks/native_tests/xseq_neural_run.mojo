@@ -65,7 +65,10 @@ def fake_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: 
             require((na == 4 or na == 7) and np == 10 and nf == 0, "rnn predict envelope")
             word = 0 if p[8] == 0 else p[6] * p[4]   # chunk 0 answers a short count
         elif operation == MLP_FIT:
-            require(na == 4 and nf == 8, "mlp fit envelope")
+            require((na == 4 or na == 10) and nf == 8, "mlp fit envelope")
+            if na == 10:
+                require(a[4] == 96 and a[5] == 104 and a[6] == 112 and a[7] == 120 and
+                        a[8] == 128 and a[9] == 136, "mlp incremental optimizer and shuffle buffers")
             word = p[10]                             # every epoch ran
         elif operation == MLP_PREDICT:
             require(na == 3 or na == 6, "mlp predict envelope")
@@ -255,6 +258,8 @@ def run_case(unit: Int) raises:
         var request = XseqMlpFitRequest(4, 2, 1, 3, 0, 0, 0, 0, True, 2, 7, False, 11, 10, [3], 0)
         var floats = List[Float64](length=8, fill=0.0)
         require(xseq_run_mlp_fit(_fake(), request, floats, 64, 72, 80, 88) == 7, "epochs run")
+        require(xseq_run_mlp_fit(_fake(), request, floats, 64, 72, 80, 88, 96, 104, 112, 120, 128,
+                                 136) == 7, "partial fit descriptor")
     elif unit == 14:
         var src: List[Float32] = [1.0, 2.0, 3.0, 4.0, 5.0]
         var dst = List[Float32](length=5, fill=0.0)

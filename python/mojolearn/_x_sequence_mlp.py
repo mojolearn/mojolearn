@@ -12,7 +12,7 @@ host generator seeded from `random_state`, so a shuffled fit is not the
 reference's sample order.
 
 Refused by name (sequence/NOT_IMPLEMENTED.tsv): solver='lbfgs',
-early_stopping=True, warm_start, partial_fit, multilabel targets, verbose."""
+early_stopping=True, warm_start, multilabel targets, verbose."""
 from ._optional_numpy import require_numpy
 from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_mlp')
@@ -75,7 +75,7 @@ class MLPRegressor(_BaseMLP):
 
     `X` is 2-D float32 (float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused); `y` is (n_samples,) or
     (n_samples, n_outputs). Not supported: ``solver='lbfgs'``, ``early_stopping=True``,
-    `warm_start`, `partial_fit` and `verbose`.
+    `warm_start` and `verbose`.
 
     Parameters
     ----------
@@ -178,6 +178,10 @@ class MLPRegressor(_BaseMLP):
         """Train on `X` (n_samples, n_features) float32 and targets `y`; returns self."""
         return _XSEQ(self, "mlp_fit", (X, y), _XSEQ_CONTEXT)
 
+    def partial_fit(self, X, y):
+        """Train one epoch on this batch, continuing the fitted weights and optimizer."""
+        return _XSEQ(self, "mlp_fit", (X, y, None), _XSEQ_CONTEXT)
+
     def predict(self, X):
         """Predicted values, (n_samples,) for a 1-D training target, else (n_samples, n_outputs)."""
         return _XSEQ(self, "mlp_predict", (X,), _XSEQ_CONTEXT)
@@ -214,7 +218,7 @@ class MLPClassifier(_BaseMLP):
 
     `X` is 2-D float32 (float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused); `y` is a 1-D array of labels
     with at least two classes. Not supported: multilabel targets, ``solver='lbfgs'``,
-    ``early_stopping=True``, `warm_start`, `partial_fit` and `verbose`.
+    ``early_stopping=True``, `warm_start` and `verbose`.
 
     Parameters
     ----------
@@ -317,6 +321,10 @@ class MLPClassifier(_BaseMLP):
     def fit(self, X, y):
         """Train on `X` (n_samples, n_features) float32 and 1-D labels `y`; returns self."""
         return _XSEQ(self, "mlp_fit", (X, y), _XSEQ_CONTEXT)
+
+    def partial_fit(self, X, y, classes=None):
+        """Train one epoch. An unfitted classifier requires all possible labels in `classes`."""
+        return _XSEQ(self, "mlp_fit", (X, y, classes), _XSEQ_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities, (n_samples, n_classes), columns in `classes_` order."""

@@ -1,0 +1,11 @@
+--- a/sequence/mlp_fit.mojo
++++ b/sequence/mlp_fit.mojo
+@@ -678,7 +678,7 @@
+     var s1 = ex.alloc(np_)
+     var s2 = ex.alloc(np_)
+     var s3 = ex.alloc(np_)
+-    if previous_moments:
++    if previous_moments and not E.IS_DEVICE:
+         var saved = FP(unsafe_from_address=previous_moments)
+         ex.upload(s1, saved, np_)
+         if solver == SOLVER_ADAM:

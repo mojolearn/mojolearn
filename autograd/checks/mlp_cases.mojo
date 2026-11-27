@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 from sequence.exec_trait import Exec
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
+from sequence.mlp_progress import MLPProgress
 from sequence.mlp import LOSS_SQUARED, LOSS_BINARY_LOG, LOSS_LOG, ACT_SOFTMAX
 from sequence.ops import FP
 from std.memory import bitcast
@@ -10,7 +11,38 @@ def _ptr(mut values: List[Float32]) -> FP:
     return FP(unsafe_from_address=Int(values.unsafe_ptr()))
 
 
+def check_mlp_continuation[E: Exec](mut ex: E, solver: Int) raises:
+    var net = MLPNet([2, 2, 1], 2, 0)
+    var x: List[Float32] = [1, 0.5, -1, 0.25, 0.75, -0.5]
+    var y: List[Float32] = [0.25, 0.75, -1]
+    var full = List[Float32](length=net.n_params(), fill=0.25)
+    var partial = full.copy()
+    var losses = List[Float32](length=2, fill=0)
+    var moments = List[Float32](length=2 * net.n_params(), fill=0)
+    var order = List[Float32](length=3, fill=0)
+    var progress = MLPProgress(0, 0, 0, 731, 731, 0, 1, 1, 0)
+    # The first run is the uninterrupted reference; the next two share only
+    # the state exported to the public boundary between calls.
+    for call in range(3):
+        var split = call != 0
+        var n = mlp_fit(ex, net, _ptr(x), _ptr(y), 3, _ptr(partial) if split else _ptr(full), _ptr(losses),
+                        LOSS_SQUARED, solver, 1, True, 2, 1 if split else 2, True, UInt64(731), 8,
+                        0.02, 0.9, 0.999, 1e-8, 0.8, 0.5, 0.02, 1e-8, 0, 0, False,
+                        Int(MutPointer(to=progress)) if split else 0,
+                        Int(_ptr(moments)) if call == 2 else 0, Int(_ptr(moments)) if split else 0,
+                        Int(_ptr(order)) if call == 2 else 0, Int(_ptr(order)) if split else 0)
+        if n != (1 if split else 2):
+            raise Error("unexpected MLP epoch count")
+    if progress.epochs != 2 or progress.samples != 6:
+        raise Error("MLP lost its continuation counters")
+    for i in range(len(full)):
+        if bitcast[DType.uint32](full[i]) != bitcast[DType.uint32](partial[i]):
+            raise Error("split MLP training disagrees with uninterrupted weights")
+
+
 def run_mlp_cases[E: Exec](mut ex: E) raises:
+    check_mlp_continuation(ex, 0)
+    check_mlp_continuation(ex, 1)
     var cases = 0
     for activation in range(4):
         for solver in range(2):

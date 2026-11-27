@@ -392,7 +392,9 @@ struct XseqMlpFitRequest(Copyable, Movable):
 
 
 def xseq_run_mlp_fit(entry: XseqNeuralEntry, req: XseqMlpFitRequest, floats: List[Float64], x: Int, target: Int,
-                     params: Int, curve: Int, loop_words: Int = 0) raises -> Int:
+                     params: Int, curve: Int, loop_words: Int = 0, progress: Int = 0,
+                     previous_moments: Int = 0, next_moments: Int = 0, previous_order: Int = 0,
+                     next_order: Int = 0) raises -> Int:
     """The descriptor's int words, then MLP_FIT; the epochs run.
     `loop_words`: the address of the fit loop's record words
     (sequence/fit_loop_words.mojo), or 0 (none)."""
@@ -404,9 +406,34 @@ def xseq_run_mlp_fit(entry: XseqNeuralEntry, req: XseqMlpFitRequest, floats: Lis
     if req.n_out != 0:
         ip.append(1 if req.o > 1 else 2)
     var addresses: List[Int] = [x, target, params, curve]
-    if loop_words != 0:
+    if loop_words != 0 or progress != 0:
         addresses.append(loop_words)
+    if progress:
+        addresses.append(progress)
+        addresses.append(previous_moments)
+        addresses.append(next_moments)
+        addresses.append(previous_order)
+        addresses.append(next_order)
     return xseq_neural_run_call(entry, MLP_FIT, addresses, ip, floats)
+
+
+def xseq_run_mlp_check_order(address: Int, rows: Int) raises:
+    """Admit stored fast-profile shuffle indices before they can address training rows."""
+    var order = XseqRunF32P(unsafe_from_address=address)
+    var workers = host_predict_task_count_work(rows, rows)
+    var chunk = host_predict_chunk(rows, workers)
+    var bad = List[Int](length=workers, fill=0)
+    var bp = bad.unsafe_ptr()
+    def task(worker: Int) {imm order, imm rows, imm chunk, imm bp}:
+        for i in range(worker * chunk, min(rows, (worker + 1) * chunk)):
+            var word = order[i]
+            if not (word >= 0 and word < Float32(rows)) or Float32(Int(word)) != word:
+                bp[worker] = 1
+                break
+    host_parallelize(task, workers)
+    for worker in range(workers):
+        if bad[worker]:
+            raise Error("ValueError: invalid row index in saved MLP shuffle order")
 
 
 def xseq_run_copy_f32(dst: Int, src: Int, count: Int):
@@ -699,7 +726,7 @@ def xseq_run_balanced_class_weights(codes: Int, n: Int, steps: Int, lengths: Int
     return out^
 
 
-def xseq_run_remap_codes(codes: Int, n: Int, steps: Int, lengths: Int, mapping: List[Int], dst: Int) raises:
+def xseq_run_remap_codes[T: DType = DType.float32](codes: Int, n: Int, steps: Int, lengths: Int, mapping: List[Int], dst: Int) raises:
     """dst[i T + s] = Float32(mapping[codes[i T + s]]) at the valid steps of n sequences of `steps` int32 codes
     (a label encoding of its own classes, as float32 codes of the kept or fitted classes: the fit's valid-step
     classes, partial_fit, validation targets), and 0 at each padded step (s >= length_i; `lengths`: n float32
@@ -707,7 +734,7 @@ def xseq_run_remap_codes(codes: Int, n: Int, steps: Int, lengths: Int, mapping: 
     and its code 0 is a class index the loss weighs 0 there (lane rnn-review-fixes). Contiguous chunks of
     sequences across the host's workers."""
     var src = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes)
-    var out = XseqRunF32P(unsafe_from_address=dst)
+    var out = MutPointer[Scalar[T], MutUntrackedOrigin](unsafe_from_address=dst)
     var lp = XseqRunF32P(unsafe_from_address=lengths if lengths != 0 else dst)
     var has_lens = lengths != 0
     var mp = mapping.unsafe_ptr()
@@ -718,9 +745,9 @@ def xseq_run_remap_codes(codes: Int, n: Int, steps: Int, lengths: Int, mapping: 
             var valid = Int(lp[i]) if has_lens else steps
             for s in range(steps):
                 if s < valid:
-                    out[i * steps + s] = Float32(mp[Int(src[i * steps + s])])
+                    out[i * steps + s] = Scalar[T](mp[Int(src[i * steps + s])])
                 else:
-                    out[i * steps + s] = Float32(0.0)
+                    out[i * steps + s] = Scalar[T](0)
     host_parallelize(task, tasks)
     _ = mapping
 

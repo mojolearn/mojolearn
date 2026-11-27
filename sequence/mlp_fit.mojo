@@ -2,7 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The multi-layer perceptron's epoch loop and prediction over `Exec`
 (`sequence/mlp.mojo` holds the element bodies and the reference citations)."""
+from std.memory import unsafe_memcpy
 from sequence.exec_trait import Exec
+from sequence.mlp_progress import MLPProgress
 from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 from sequence.fit_loop_words import fit_loop_publish
 from sequence.mlp import (
@@ -617,7 +619,8 @@ def mlp_fit[E: Exec](
     shuffle: Bool, seed: UInt64, n_iter_no_change: Int,
     lr_init: Float32, b1: Float32, b2: Float32, eps: Float32, momentum: Float32,
     power_t: Float64, alpha: Float32, tol: Float64, y_codes: Int = 0, loop_words: Int = 0,
-    x_device: Bool = False,
+    x_device: Bool = False, progress_address: Int = 0, previous_moments: Int = 0,
+    next_moments: Int = 0, previous_order: Int = 0, next_order: Int = 0,
 ) raises -> Int:
     """Returns n_iter; curve[0:n_iter] is the epoch loss (float32 of the
     float64 accumulation; under MLP_EPOCH_DEV the float32 fold of
@@ -675,6 +678,11 @@ def mlp_fit[E: Exec](
     var s1 = ex.alloc(np_)
     var s2 = ex.alloc(np_)
     var s3 = ex.alloc(np_)
+    if previous_moments:
+        var saved = FP(unsafe_from_address=previous_moments)
+        ex.upload(s1, saved, np_)
+        if solver == SOLVER_ADAM:
+            ex.upload(s2, saved + np_, np_)
     var acts = List[FP]()
     var tape = Tape()
     var tape_logits = Tensor(0, 0, -1)
@@ -714,6 +722,9 @@ def mlp_fit[E: Exec](
     comptime if not MLP_DEVICE_EPOCH_ORDER:
         for i in range(N):
             perm.append(Float32(i))
+    comptime if not MLP_EPOCH_DEV:
+        if previous_order:
+            unsafe_memcpy(dest=perm.unsafe_ptr(), src=FP(unsafe_from_address=previous_order), count=N)
     var rng = SplitMix(seed)
     var host_loss = List[Float32](length=n_batches, fill=Float32(0.0))
     var best = Float64(1.0e308)
@@ -722,6 +733,17 @@ def mlp_fit[E: Exec](
     var pw1 = Float32(1.0)
     var pw2 = Float32(1.0)
     var t_samples = 0
+    var first_epoch = 0
+    var progress = MutPointer[MLPProgress, MutUntrackedOrigin](unsafe_from_address=progress_address)
+    if progress_address and progress[].epochs:
+        first_epoch = Int(progress[].epochs)
+        t_samples = Int(progress[].samples)
+        no_imp = Int(progress[].no_improvement)
+        lr = Float32(progress[].rate)
+        pw1 = Float32(progress[].beta1_power)
+        pw2 = Float32(progress[].beta2_power)
+        best = progress[].best
+        rng.s = progress[].shuffle_rng
     var n_iter = 0
     # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
     # clock, outside the loop, so the loop region holds loop work only
@@ -730,7 +752,7 @@ def mlp_fit[E: Exec](
     for it in range(max_iter):
         comptime if MLP_EPOCH_DEV:
             if shuffle:
-                ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(seed, it), didx), N)
+                ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(seed, first_epoch + it), didx), N)
             elif it == 0:
                 comptime if MLP_DEVICE_EPOCH_ORDER:
                     var identity_order = mlp_perm_args(N, UInt64(0), didx)
@@ -899,8 +921,21 @@ def mlp_fit[E: Exec](
     fit_loop_publish(loop_words, fit_loop_stop(loop_start, n_iter))
     # lane ag-fusion: return the tape's storage now, not at the end of ex
     tape.release(ex)
-    ex.sync()
-    ex.download(Pio, P, np_)
+    if progress_address:
+        var saved = FP(unsafe_from_address=next_moments)
+        ex.download_async(Pio, P, np_)
+        ex.download_async(saved, s1, np_)
+        if solver == SOLVER_ADAM:
+            ex.download_async(saved + np_, s2, np_)
+        ex.sync()
+        comptime if not MLP_EPOCH_DEV:
+            if next_order:
+                unsafe_memcpy(dest=FP(unsafe_from_address=next_order), src=perm.unsafe_ptr(), count=N)
+        progress[] = MLPProgress(Int64(first_epoch + n_iter), Int64(t_samples), Int64(no_imp),
+                                 Int64(seed), rng.s, Float64(lr), Float64(pw1), Float64(pw2), best)
+    else:
+        ex.sync()
+        ex.download(Pio, P, np_)
     _ = perm^
     _ = host_loss^
     _ = loss_word^

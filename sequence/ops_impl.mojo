@@ -956,8 +956,8 @@ def mlp_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     ip = [N, D, O, act, out_act, loss, solver, lr_schedule, nesterov, batch,
     max_iter, shuffle, seed, n_iter_no_change, n_hidden, h_1, ..., h_n];
     fp = [lr, beta1, beta2, eps, momentum, power_t, alpha, tol]. Returns n_iter."""
-    if (len(addrs) != 4 and len(addrs) != 5) or len(fp) != 8 or len(ip) < 15:
-        raise Error("mlp_fit: requires 4 (or 5) addresses, >= 15 integer and 8 float parameters")
+    if (len(addrs) != 4 and len(addrs) != 5 and len(addrs) != 10) or len(fp) != 8 or len(ip) < 15:
+        raise Error("mlp_fit: invalid descriptor length")
     var N = ival(ip, 0)
     var D = ival(ip, 1)
     var O = ival(ip, 2)
@@ -988,11 +988,17 @@ def mlp_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     # image's member store; only the device dispatch resolves it.
     if addrs[0] < 0 and not x_device:
         raise Error("mlp_fit: a device-store X needs the device image's dispatch")
+    var checkpoint = len(addrs) == 10
+    if checkpoint and (addrs[5] == 0 or addrs[7] == 0):
+        raise Error("mlp_fit: missing optimizer checkpoint storage")
     var n_iter = mlp_fit(ex, net, fptr(addrs[0], "X"), fptr(addrs[1], "Y"), N, fptr(addrs[2], "params"),
                          fptr(addrs[3], "loss_curve"), ival(ip, 5), ival(ip, 6), ival(ip, 7), ival(ip, 8) != 0,
                          batch, max_iter, ival(ip, 11) != 0, UInt64(ival(ip, 12)), ival(ip, 13),
                          fval(fp, 0), fval(fp, 1), fval(fp, 2), fval(fp, 3), fval(fp, 4),
-                         fp[5], fval(fp, 6), fp[7], y_codes, addrs[4] if len(addrs) == 5 else 0, x_device)
+                         fp[5], fval(fp, 6), fp[7], y_codes, addrs[4] if len(addrs) >= 5 else 0, x_device,
+                         addrs[5] if checkpoint else 0, addrs[6] if checkpoint else 0,
+                         addrs[7] if checkpoint else 0, addrs[8] if checkpoint else 0,
+                         addrs[9] if checkpoint else 0)
     if profile:
         print("AG_PROFILE fit=mlp_fit")
         print(ag_profile_report())

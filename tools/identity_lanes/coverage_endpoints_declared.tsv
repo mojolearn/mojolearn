@@ -1427,3 +1427,5 @@ mojolearn.parallel_neighbors_reference.ReferenceShardedNeighbors.predict_proba	p
 mojolearn.parallel_preprocessing.fit_scaler.call	psd-scaler,psd-scaler-minmax	the driver on devices=(0,) with logical shards, held in the cell to its plain one-device path (both sides)
 mojolearn.parallel_preprocessing.transform_scaler.call	psd-scaler,psd-scaler-minmax	the driver on devices=(0,) with logical shards, held in the cell to its plain one-device path (both sides)
 mojolearn.parallel_training.ordered_sum_gradients.call	psd-byte-lm-worker	the driver on devices=(0,) with logical shards, held in the cell to its plain one-device path (one-sided, no CPU form)
+mojolearn.MLPClassifier.partial_fit	sequence-mlp-classifier-partial	Two epochs through the public incremental entry, compared with an uninterrupted fit.
+mojolearn.MLPRegressor.partial_fit	sequence-mlp-regressor-partial	Two epochs through the public incremental entry, compared with an uninterrupted fit.

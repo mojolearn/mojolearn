@@ -338,7 +338,8 @@ struct XseqPublicLifecycle(Movable):
                     + " (shape=" + String(py=py_call(b.repr, dimensions)) + ") while a minimum of 1 is required by " + self.name + ".")
         if perceptron:
             _finite(x, "X", self.name, context)
-        if not self.fitting and rank == 2:
+        if rank == 2 and (not self.fitting or (operation == XSEQ_OPN_MLP_FIT and len(args) == 3
+                                               and py_contains(fields, nk[].k_coefs_))):
             var columns = py_get(fields, nk[].k_n_features_in_)
             if py_type(columns) is b.int:
                 classical_check_width(self.shape[1], Int(py=columns), self.name)

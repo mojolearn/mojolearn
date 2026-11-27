@@ -23,6 +23,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("sequence-lstm", "sequence-gru", "sequence-rmsprop", "sequence-adagrad",
                         "sequence-autoarima", "sequence-stl", "sequence-var",
+                        "sequence-mlp-classifier-partial", "sequence-mlp-regressor-partial",
                         "sequence-mlp", "sequence-rnn", "sequence-lion",
                         "sequence-adafactor", "sequence-adafactor-maximize", "sequence-lamb",
                         "sequence-adamax", "sequence-nadam",
@@ -233,6 +234,8 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-autoarima": "AutoARIMA",
                        "sequence-stl": "STL",
                        "sequence-var": "VAR",
+                       "sequence-mlp-classifier-partial": "MLPClassifier.partial_fit, Adam continuation",
+                       "sequence-mlp-regressor-partial": "MLPRegressor.partial_fit, SGD continuation",
                        "sequence-mlp": "MLPClassifier / MLPRegressor",
                        "sequence-rnn": "RNNRegressor / RNNClassifier",
                        "sequence-lion": "Lion",
@@ -403,6 +406,8 @@ PUBLIC_PENDING_LANES = {
     "sequence-blocks-bigru-lengths": "no reference",
     "sequence-blocks-bilstm": "no reference",
     # nn-recurrent end
+    "sequence-mlp-classifier-partial": "no reference",
+    "sequence-mlp-regressor-partial": "no reference",
     "sequence-rnn-weighted-steps": "no reference",  # lane rnn-parity-D
     "sequence-rnn-bidi-options": "no reference",  # lane rnn-parity-D
     "sequence-rnn-step-widths": "no reference",  # lane rnn-step-bits

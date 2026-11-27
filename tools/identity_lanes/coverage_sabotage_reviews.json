@@ -535,5 +535,225 @@
    "error_match": "vector ascent and expected vector differ: [1-9][0-9]* bytes of 16; matrix ascent and expected matrix differ: [1-9][0-9]* bytes of 16",
    "patch_sha256": "96d85bd653c39da0dcda1f7b081765989307e6b14daf3ef1ff8fc8b1e3b30dd4"
   }
+ },
+ "mlp-partial-moments-cpu": {
+  "sequence-mlp-classifier-partial/base": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/denormal": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/denormal_ftz": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/dupes": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/hashed": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/negative": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/odd": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/ties": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/wide": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/base": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/denormal": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/denormal_ftz": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/dupes": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/hashed": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/negative": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/odd": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/ties": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/wide": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "7f6ea836d089f969f8493f5ff50c56ffdfa7416dbea047ff545df56924f62362",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the CPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  }
+ },
+ "mlp-partial-moments-gpu": {
+  "sequence-mlp-classifier-partial/base": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/denormal": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/denormal_ftz": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/dupes": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/hashed": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/negative": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/odd": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/ties": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-classifier-partial/wide": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/base": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/denormal": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/denormal_ftz": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/dupes": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/hashed": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/negative": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/odd": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/ties": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  },
+  "sequence-mlp-regressor-partial/wide": {
+   "error_match": "incremental MLP weights and uninterrupted MLP weights differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "59719c21fa42eb93a43fadc3fdea021f20611456c757c302e9704749921a0840",
+   "product_check": "Two incremental epochs with the same batch order use the same optimizer state and yield the same fitted weights as two uninterrupted epochs.",
+   "why_fault_reaches_check": "Omit the saved Adam moments or SGD velocity on the GPU executor at continuation. Full fit starts fresh; the next incremental update must disagree."
+  }
  }
 }
