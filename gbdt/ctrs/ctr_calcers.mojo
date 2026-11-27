@@ -967,11 +967,12 @@ def compute_simple_ctrs_gpu_resident(
             launch_gather_with_mask_f32(ctx, grouped, bufs[slot_buf[c]], anchors, n_rows, CTR_INDEX_MASK)
             out.append(grouped^)
         ctx.synchronize()
+        _ = anchors^
     else:
         for c in range(len(ctr_configs)):
             out.append(bufs[slot_buf[c]])
-    # the builder's and calcer's scratch is read by the enqueued launches
-    ctx.synchronize()
+        ctx.synchronize()
+    # Keep the builder and calcer alive through their last enqueued launch.
     _ = builder^
     _ = calcer^
     return out^
