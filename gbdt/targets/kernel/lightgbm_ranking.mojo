@@ -72,21 +72,24 @@ struct LightGBMRankWorkspace(RankStages, Movable):
 
     def rows[phase: Int](mut self, a: RankView, count: Int, arg: Int, width: Int, col: Int) raises:
         self.ctx.enqueue_function[_rank_rows_kernel[phase]](
-            a.labels, a.scores, a.weights, a.offsets, a.sizes, a.qids, a.order, a.second, a.scratch,
-            a.direction, a.hessian, Int32(a.n), Int32(a.groups), UInt32(a.seed), UInt32(a.iteration),
+            rebind[RF](a.labels), rebind[RF](a.scores), rebind[RF](a.weights), rebind[RU](a.offsets),
+            rebind[RU](a.sizes), rebind[RU](a.qids), rebind[RU](a.order), rebind[RU](a.second), rebind[RF](a.scratch),
+            rebind[RF](a.direction), rebind[RF](a.hessian), Int32(a.n), Int32(a.groups), UInt32(a.seed), UInt32(a.iteration),
             Int32(1 if a.weighted else 0), Int32(count), Int32(arg), Int32(width), Int32(col),
             grid_dim=(count + RANK_THREADS - 1) // RANK_THREADS, block_dim=RANK_THREADS,
         )
 
     def order_by[labels: Bool](mut self, a: RankView) raises:
-        var src = a.labels if labels else a.scores
+        var src = rebind[RF](a.labels if labels else a.scores)
+        var qids = rebind[RU](a.qids)
+        var order = rebind[RU](a.order)
         var blocks = (a.n + RANK_THREADS - 1) // RANK_THREADS
-        self.ctx.enqueue_function[_keys_kernel[False]](src, a.qids, self.keys.unsafe_ptr(), a.order, Int32(a.n),
+        self.ctx.enqueue_function[_keys_kernel[False]](src, qids, self.keys.unsafe_ptr(), order, Int32(a.n),
                                                        grid_dim=blocks, block_dim=RANK_THREADS)
         stable_radix_sort_pairs_u32(self.ctx, a.n, 32, self.keys, self.order, self.temp_keys, self.other,
                                     self.counts, self.block_sums)
         if a.groups > 1:
-            self.ctx.enqueue_function[_keys_kernel[True]](src, a.qids, self.keys.unsafe_ptr(), a.order, Int32(a.n),
+            self.ctx.enqueue_function[_keys_kernel[True]](src, qids, self.keys.unsafe_ptr(), order, Int32(a.n),
                                                           grid_dim=blocks, block_dim=RANK_THREADS)
             stable_radix_sort_pairs_u32(self.ctx, a.n, key_bits_for(a.groups - 1), self.keys, self.order,
                                         self.temp_keys, self.other, self.counts, self.block_sums)

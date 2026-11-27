@@ -22,7 +22,6 @@ def check_host_rank_targets[softmax: Bool](
     var states = List[Int](length=units, fill=0)
     var state = rebind[MutPointer[Int, MutUntrackedOrigin]](states.unsafe_ptr())
 
-    @parameter
     def check(unit: Int) {imm n, imm chunk, imm yp, imm wp, imm weighted, imm state}:
         for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
             var y = yp[i]
@@ -83,7 +82,6 @@ struct HostRankingFit(Movable):
         var s = rebind[HostF32Ptr](stats.unsafe_ptr())
         var m = rebind[HostF32Ptr](mags.unsafe_ptr())
 
-        @parameter
         def pack(unit: Int) {imm n, imm blocks, imm units, imm d, imm h, imm w,
                             imm s, imm m, imm has_weights, imm second_order}:
             var w_abs = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0))

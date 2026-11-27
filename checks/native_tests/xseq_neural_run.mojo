@@ -340,6 +340,7 @@ def run_case(unit: Int) raises:
         except problem:
             _refuses(problem, "ValueError: fit: every length must be a whole number from 1 to the sequence length 16777219")
         xseq_run_lengths_check(Int(wide.unsafe_ptr()), 1, 16777220, "fit")
+        _ = wide^
         xseq_run_lengths_check(Int(ok.unsafe_ptr()), 3, 4, "fit")
         var both: List[Float32] = [0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
         var weights = xseq_run_balanced_class_weights(Int(both.unsafe_ptr()), 3, 4, Int(ok.unsafe_ptr()), 2)

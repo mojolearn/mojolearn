@@ -17,6 +17,7 @@ struct MLPProgress(ImplicitlyCopyable, Movable):
     var best: Float64
 
     def check_resume(self, batch_rows: Int, reported_epochs: Int, reported_samples: Int, losses: Int) raises:
+        comptime assert size_of[MLPProgress]() == MLP_PROGRESS_WORDS * size_of[Int64](), "invalid MLP checkpoint layout"
         # The public counters and loss history are written from this same checkpoint.
         # Reserve space for the next epoch, batch, and the invscaling denominator.
         var epochs = Int(self.epochs)
@@ -29,5 +30,3 @@ struct MLPProgress(ImplicitlyCopyable, Movable):
 
 
 comptime MLP_PROGRESS_WORDS = 9
-
-comptime assert size_of[MLPProgress]() == MLP_PROGRESS_WORDS * size_of[Int64](), "invalid MLP checkpoint layout"
