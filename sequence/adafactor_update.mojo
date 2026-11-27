@@ -68,7 +68,7 @@ def adafactor_partial_words(n: Int) -> Int:
 
 
 def adafactor_core[E: Exec](mut ex: E, P: FP, G: FP, S1: FP, S2: FP, R: Int, C: Int, t: Int,
-                            fp: List[Float64]) raises:
+                            fp: List[Float64], maximize: Bool = False) raises:
     """The launches of one Adafactor step on device-side P, G, S1 (row_var
     or the variance) and S2 (col_var; unused for a vector), queued, no
     transfer: `adafactor_step_impl`'s body, also the resident step's
@@ -77,13 +77,13 @@ def adafactor_core[E: Exec](mut ex: E, P: FP, G: FP, S1: FP, S2: FP, R: Int, C: 
     var update = ex.alloc(n)
     var scales = ex.alloc(4)
     var parts = ex.alloc(adafactor_partial_words(n))
-    adafactor_update(ex, P, G, S1, S2, R, C, t, fp[0], fp[1], fp[2], fp[3], fp[4], fp[5], update, scales, parts)
+    adafactor_update(ex, P, G, S1, S2, R, C, t, fp[0], fp[1], fp[2], fp[3], fp[4], fp[5], update, scales, parts, maximize)
 
 
 def adafactor_update[E: Exec](
     mut ex: E, P: FP, G: FP, S1: FP, S2: FP, R: Int, C: Int, t: Int,
     lr: Float64, beta2_decay: Float64, epsilon1: Float64, epsilon2: Float64, clip: Float64, decay: Float64,
-    U: FP, sc: FP, parts: FP,
+    U: FP, sc: FP, parts: FP, maximize: Bool = False,
 ) raises:
     var n = R * C if C > 0 else R
     var w = Float32(identical_pow64(Float64(t), beta2_decay))
@@ -100,7 +100,9 @@ def adafactor_update[E: Exec](
     a.p1 = sc
     a.i0 = n
     a.f0 = Float32(epsilon2)
-    a.f1 = rho
+    # The second moments and clipping depend on squares. Reversing the
+    # relative step applies ascent with the same moments and decoupled decay.
+    a.f1 = -rho if maximize else rho
     if fast:
         a.p2 = parts
         a.i2 = _chunk_sumsq(ex, P, 0, n, parts, 0)

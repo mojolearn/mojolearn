@@ -797,7 +797,7 @@ def adafactor_resident_open(ip: List[Int]) raises -> List[Int]:
 
 
 def adafactor_resident_step(handle: Int, addrs: List[Int], ip: List[Int],
-                            fp: List[Float64]) raises -> Int:
+                            fp: List[Float64], maximize: Bool = False) raises -> Int:
     """AF_RESIDENT: one Adafactor step of the handle's tensor with its
     second moment on the device. addrs = [param, grad]; ip = [R, C, t];
     fp = `adafactor_step`'s six. The parameter is updated in place.
@@ -821,7 +821,7 @@ def adafactor_resident_step(handle: Int, addrs: List[Int], ip: List[Int],
     var P = ex._alloc(n, False)
     var G = ex._alloc(n, False)
     _upload_all(ex, P, G, pg[0], pg[1], sizes)
-    adafactor_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), R, C, t, fp)
+    adafactor_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), R, C, t, fp, maximize)
     _download_all(ex, P, pg[0], sizes)
     return n
 
@@ -1039,7 +1039,7 @@ def lamb_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
 
 
 def adafactor_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
-                                fp: List[Float64]) raises -> Int:
+                                fp: List[Float64], maximize: Bool = False) raises -> Int:
     """AF_RESIDENT: `adafactor_resident_step` on resident tensors:
     handles = [param, grad] (seq_tensor handles); ip = [R, C, t]; fp =
     `adafactor_step`'s six. The parameter is updated where it lives (the
@@ -1059,7 +1059,7 @@ def adafactor_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
     var P = seq_tensor_ptr(handles[0], n, "param")
     var G = seq_tensor_ptr(handles[1], n, "grad")
     var ex = DeviceExec()
-    adafactor_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), R, C, t, fp)
+    adafactor_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), R, C, t, fp, maximize)
     # lane fb15-sync-counts (2026-11-18): one wait per step, the executor's
     # destructor drain (was `ex.sync()` and then that drain again on an empty
     # queue). No bit moves.

@@ -248,6 +248,7 @@ def seq_adafactor_step_device(words: Int, handles: Int, addrs: List[Int], ip: Li
             raise Error("Adafactor: a step requires two state addresses and (R, C) per tensor")
         var hp = _handles_ptr(handles)
         var t = word(w, W_T) + 1
+        var maximize = word(w, W_FLAGS) != 0
         if word(w, W_HANDLE) < 0:
             var zeroed = True
             for j in range(a.J):
@@ -273,14 +274,14 @@ def seq_adafactor_step_device(words: Int, handles: Int, addrs: List[Int], ip: Li
                 var gt = _grad_tensors(a, one)
                 var hs2: List[Int] = [a.ps[j], gt[0][0]]
                 try:
-                    _ = adafactor_resident_step_dev(Int(hp[j]), hs2, ip2, f)
+                    _ = adafactor_resident_step_dev(Int(hp[j]), hs2, ip2, f, maximize)
                 except e:
                     _free(gt[1])
                     raise e
                 _free(gt[1])
             else:
                 var at: List[Int] = [a.ps[j], a.gs[j]]
-                _ = adafactor_resident_step(Int(hp[j]), at, ip2, f)
+                _ = adafactor_resident_step(Int(hp[j]), at, ip2, f, maximize)
         set_word(w, W_T, t)
         return a.J
 

@@ -77,7 +77,8 @@ def host_fp(addr: Int, what: String) raises -> FP:
 def seq_optimizer_init(words: Int, ip: List[Int]) raises -> Int:
     """The constructor's native half. ip = [mode, J, size_0 .. size_{J-1}]
     and, for LAMB, [trust_clip, always_adapt, grad_averaging,
-    bias_correction, has_max_grad_norm] (each 0 or 1). Writes the state
+    bias_correction, has_max_grad_norm] (each 0 or 1). Adafactor accepts
+    an optional maximize word after the sizes. Writes the state
     words (step 0, nothing resident, the host copies fresh, owned and
     pristine, the parameter count and LAMB's flags) and returns the
     parameter count."""
@@ -88,6 +89,8 @@ def seq_optimizer_init(words: Int, ip: List[Int]) raises -> Int:
     if mode < MODE_ELEMENTWISE or mode > MODE_ADAFACTOR or J < 0:
         raise Error("sequence optimizer: unknown mode or a negative tensor count")
     var extra = 5 if mode == MODE_LAMB else 0
+    if mode == MODE_ADAFACTOR and len(ip) == 3 + J:
+        extra = 1
     if len(ip) != 2 + J + extra:
         raise Error("sequence optimizer: init requires one size per tensor")
     var n = 0
@@ -97,7 +100,9 @@ def seq_optimizer_init(words: Int, ip: List[Int]) raises -> Int:
             raise Error("sequence optimizer: a tensor size is negative")
         n += s
     var flags = 0
-    if mode == MODE_LAMB:
+    if mode == MODE_ADAFACTOR and extra == 1:
+        flags = Int(ip[2 + J] != 0)
+    elif mode == MODE_LAMB:
         var at = 2 + J
         flags = (
             (1 if ip[at] != 0 else 0)
@@ -309,10 +314,11 @@ def adafactor_step_host[E: Exec](mut ex: E, w: IP64, a: SeqStep, fp: List[Float6
         raise Error("Adafactor: a step requires two state addresses and (R, C) per tensor")
     var t = word(w, W_T) + 1
     var f = _f64s(fp, 0, 6)
+    var maximize = word(w, W_FLAGS) != 0
     for j in range(a.J):
         var addrs: List[Int] = [a.ps[j], a.gs[j], a.rest_a[j], a.rest_a[a.J + j]]
         var ip: List[Int] = [a.rest_i[j], a.rest_i[a.J + j], t]
-        _ = adafactor_step_impl(ex, addrs, ip, f)
+        _ = adafactor_step_impl(ex, addrs, ip, f, maximize)
     set_word(w, W_T, t)
     return a.J
 

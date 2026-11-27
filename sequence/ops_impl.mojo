@@ -1028,7 +1028,8 @@ def mlp_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], x_devi
     return N * O
 
 
-def adafactor_step_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Float64]) raises -> Int:
+def adafactor_step_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Float64],
+                                 maximize: Bool = False) raises -> Int:
     """One Adafactor step of ONE tensor, in place (`sequence/adafactor.mojo`).
     addrs = [param, grad, row_var (R) or variance (n), col_var (C; ignored for
     a vector)]; ip = [R, C, t] with C = 0 for a vector of R values;
@@ -1065,7 +1066,7 @@ def adafactor_step_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp:
         ex.upload(S1, h1, n if C == 0 else R)
         if C > 0:
             ex.upload(S2, fptr(addrs[3], "col_var"), C)
-    adafactor_core(ex, P, G, S1, S2, R, C, t, fp)
+    adafactor_core(ex, P, G, S1, S2, R, C, t, fp, maximize)
     ex.download_async(hp, P, n)
     ex.download_async(h1, S1, n if C == 0 else R)
     if C > 0:

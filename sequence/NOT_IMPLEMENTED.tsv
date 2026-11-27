@@ -2,7 +2,8 @@ algorithm	option	reference	why
 LSTM	proj_size > 0	torch/nn/modules/rnn.py	the projected LSTM gives h and c different widths inside every fused cell kernel (forward and backward, scan and per-step chain) and adds a per-step projection GEMM; not carried yet
 LSTM/GRU/RNN	float64 arithmetic	-	Apple GPUs have no float64 arithmetic, so identical mode cannot give the same bits on every vendor without a software double (about an order of magnitude slower); the cells compute in float32, and a float64 input is converted to float32 once at the boundary (round-to-nearest-even; values outside float32's range are refused)
 LSTM/GRU/RNN	float16 / bfloat16	-	identical mode: tensor-core half-precision products are not the same bits across vendors; fast mode: no half-precision cell kernels yet
-RMSprop/Adagrad/Lion/Adamax/NAdam/LAMB/Adafactor	parameter groups, maximize, foreach/fused/capturable/differentiable	torch.optim	one config per optimizer over the packed float32 buffer
+RMSprop/Adagrad/Lion/Adamax/NAdam/LAMB	maximize	torch.optim	these optimizers minimize
+RMSprop/Adagrad/Lion/Adamax/NAdam/LAMB/Adafactor	parameter groups, foreach/fused/capturable/differentiable	torch.optim	one config per optimizer over the packed float32 buffer
 RMSprop/Adagrad/Lion/Adamax/NAdam/LAMB/Adafactor	sparse gradients, float64	torch.optim	dense float32 only; no float64 on the device
 Adafactor	tensors of more than 2 dimensions	torch/optim/_adafactor.py	the factored arm is carried for matrices only
 AutoARIMA	seasonal_test='seas' (STL), method css / css-ml, h, truncate	cuml/tsa/auto_arima.pyx	the ARIMA fit carries 'ml' only; D must be given

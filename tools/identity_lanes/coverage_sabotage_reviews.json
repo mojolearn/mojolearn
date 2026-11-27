@@ -479,5 +479,61 @@
    "error_match": "ReferenceShardedNeighbors distances and plain distances differ: 1 bytes of 2048",
    "patch_sha256": "9ba5d1b7e39dda64fc176ed1e75e8362584d6f688443e886fa1352eb0a37e2b6"
   }
+ },
+ "coverage-adafactor-maximize": {
+  "sequence-adafactor-maximize/base": {
+   "product_check": "Exact parameter values after a standalone Adafactor ascent step on a vector and on a matrix.",
+   "why_fault_reaches_check": "Dropping the ascent sign reverses all four nonzero updates on each tensor. The fixture compares both result buffers to explicit FP32 values.",
+   "error_match": "vector ascent and expected vector differ: [1-9][0-9]* bytes of 16; matrix ascent and expected matrix differ: [1-9][0-9]* bytes of 16",
+   "patch_sha256": "96d85bd653c39da0dcda1f7b081765989307e6b14daf3ef1ff8fc8b1e3b30dd4"
+  },
+  "sequence-adafactor-maximize/ties": {
+   "product_check": "Exact parameter values after a standalone Adafactor ascent step on a vector and on a matrix.",
+   "why_fault_reaches_check": "Dropping the ascent sign reverses all four nonzero updates on each tensor. The fixture compares both result buffers to explicit FP32 values.",
+   "error_match": "vector ascent and expected vector differ: [1-9][0-9]* bytes of 16; matrix ascent and expected matrix differ: [1-9][0-9]* bytes of 16",
+   "patch_sha256": "96d85bd653c39da0dcda1f7b081765989307e6b14daf3ef1ff8fc8b1e3b30dd4"
+  },
+  "sequence-adafactor-maximize/hashed": {
+   "product_check": "Exact parameter values after a standalone Adafactor ascent step on a vector and on a matrix.",
+   "why_fault_reaches_check": "Dropping the ascent sign reverses all four nonzero updates on each tensor. The fixture compares both result buffers to explicit FP32 values.",
+   "error_match": "vector ascent and expected vector differ: [1-9][0-9]* bytes of 16; matrix ascent and expected matrix differ: [1-9][0-9]* bytes of 16",
+   "patch_sha256": "96d85bd653c39da0dcda1f7b081765989307e6b14daf3ef1ff8fc8b1e3b30dd4"
+  },
+  "sequence-adafactor-maximize/wide": {
+   "product_check": "Exact parameter values after a standalone Adafactor ascent step on a vector and on a matrix.",
+   "why_fault_reaches_check": "Dropping the ascent sign reverses all four nonzero updates on each tensor. The fixture compares both result buffers to explicit FP32 values.",
+   "error_match": "vector ascent and expected vector differ: [1-9][0-9]* bytes of 16; matrix ascent and expected matrix differ: [1-9][0-9]* bytes of 16",
+   "patch_sha256": "96d85bd653c39da0dcda1f7b081765989307e6b14daf3ef1ff8fc8b1e3b30dd4"
+  },
+  "sequence-adafactor-maximize/denormal": {
+   "product_check": "Exact parameter values after a standalone Adafactor ascent step on a vector and on a matrix.",
+   "why_fault_reaches_check": "Dropping the ascent sign reverses all four nonzero updates on each tensor. The fixture compares both result buffers to explicit FP32 values.",
+   "error_match": "vector ascent and expected vector differ: [1-9][0-9]* bytes of 16; matrix ascent and expected matrix differ: [1-9][0-9]* bytes of 16",
+   "patch_sha256": "96d85bd653c39da0dcda1f7b081765989307e6b14daf3ef1ff8fc8b1e3b30dd4"
+  },
+  "sequence-adafactor-maximize/denormal_ftz": {
+   "product_check": "Exact parameter values after a standalone Adafactor ascent step on a vector and on a matrix.",
+   "why_fault_reaches_check": "Dropping the ascent sign reverses all four nonzero updates on each tensor. The fixture compares both result buffers to explicit FP32 values.",
+   "error_match": "vector ascent and expected vector differ: [1-9][0-9]* bytes of 16; matrix ascent and expected matrix differ: [1-9][0-9]* bytes of 16",
+   "patch_sha256": "96d85bd653c39da0dcda1f7b081765989307e6b14daf3ef1ff8fc8b1e3b30dd4"
+  },
+  "sequence-adafactor-maximize/dupes": {
+   "product_check": "Exact parameter values after a standalone Adafactor ascent step on a vector and on a matrix.",
+   "why_fault_reaches_check": "Dropping the ascent sign reverses all four nonzero updates on each tensor. The fixture compares both result buffers to explicit FP32 values.",
+   "error_match": "vector ascent and expected vector differ: [1-9][0-9]* bytes of 16; matrix ascent and expected matrix differ: [1-9][0-9]* bytes of 16",
+   "patch_sha256": "96d85bd653c39da0dcda1f7b081765989307e6b14daf3ef1ff8fc8b1e3b30dd4"
+  },
+  "sequence-adafactor-maximize/odd": {
+   "product_check": "Exact parameter values after a standalone Adafactor ascent step on a vector and on a matrix.",
+   "why_fault_reaches_check": "Dropping the ascent sign reverses all four nonzero updates on each tensor. The fixture compares both result buffers to explicit FP32 values.",
+   "error_match": "vector ascent and expected vector differ: [1-9][0-9]* bytes of 16; matrix ascent and expected matrix differ: [1-9][0-9]* bytes of 16",
+   "patch_sha256": "96d85bd653c39da0dcda1f7b081765989307e6b14daf3ef1ff8fc8b1e3b30dd4"
+  },
+  "sequence-adafactor-maximize/negative": {
+   "product_check": "Exact parameter values after a standalone Adafactor ascent step on a vector and on a matrix.",
+   "why_fault_reaches_check": "Dropping the ascent sign reverses all four nonzero updates on each tensor. The fixture compares both result buffers to explicit FP32 values.",
+   "error_match": "vector ascent and expected vector differ: [1-9][0-9]* bytes of 16; matrix ascent and expected matrix differ: [1-9][0-9]* bytes of 16",
+   "patch_sha256": "96d85bd653c39da0dcda1f7b081765989307e6b14daf3ef1ff8fc8b1e3b30dd4"
+  }
  }
 }

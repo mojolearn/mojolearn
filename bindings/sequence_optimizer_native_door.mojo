@@ -519,8 +519,7 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
         elif kind == 5:
             for name in ["beta2_decay", "d", "weight_decay", "maximize"]:  # driver-loop: over Adafactor scalar options
                 opt_scalar(options[PythonObject(name)], context)
-            if Bool(py=py_item(options, nk[].k_maximize)):
-                raise Error("NotImplementedError: Adafactor maximize is not implemented")
+            extra.append(Int(Bool(py=py_item(options, nk[].k_maximize))))
             var beta2_decay = Float64(py=_seq_real(py_item(options, nk[].k_beta2_decay), "beta2_decay"))
             var d = Float64(py=_seq_real(py_item(options, nk[].k_d), "d"))
             var decay = Float64(py=_seq_real(py_item(options, nk[].k_weight_decay), "weight_decay"))

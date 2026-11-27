@@ -24,7 +24,7 @@ FAMILIES = (
         training_lanes=("sequence-lstm", "sequence-gru", "sequence-rmsprop", "sequence-adagrad",
                         "sequence-autoarima", "sequence-stl", "sequence-var",
                         "sequence-mlp", "sequence-rnn", "sequence-lion",
-                        "sequence-adafactor", "sequence-lamb",
+                        "sequence-adafactor", "sequence-adafactor-maximize", "sequence-lamb",
                         "sequence-adamax", "sequence-nadam",
                         "sequence-lr-schedulers", "sequence-layernorm",
                         "sequence-theta", "sequence-croston",
@@ -237,6 +237,7 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-rnn": "RNNRegressor / RNNClassifier",
                        "sequence-lion": "Lion",
                        "sequence-adafactor": "Adafactor",
+                       "sequence-adafactor-maximize": "Adafactor ascent on vectors and matrices",
                        "sequence-lamb": "LAMB",
                        "sequence-adamax": "Adamax",
                        "sequence-nadam": "NAdam",
@@ -379,6 +380,7 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # session-ops-rest end
                        }
 PUBLIC_PENDING_LANES = {
+    "sequence-adafactor-maximize": "no reference",
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
     # (verify_reference/table.json) carries no cell for these lanes, so every part reads OWED
     # (gating, never a pass) until the release record admits them (test_host_surface).
