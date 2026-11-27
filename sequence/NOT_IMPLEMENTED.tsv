@@ -1,5 +1,5 @@
 algorithm	option	reference	why
-LSTM	proj_size > 0	torch/nn/modules/rnn.py	the projected LSTM gives h and c different widths inside every fused cell kernel (forward and backward, scan and per-step chain) and adds a per-step projection GEMM; not carried yet
+LSTMRegressor / LSTMClassifier	proj_size > 0	torch/nn/modules/rnn.py	These standalone estimators pack both recurrent states at hidden_size and store four gate tensors per direction. Use Sequential.lstm(proj_size=...) or ops.Session.lstm(weight_hr=...) for a projected recurrence.
 LSTM/GRU/RNN	float64 arithmetic	-	Apple GPUs have no float64 arithmetic, so identical mode cannot give the same bits on every vendor without a software double (about an order of magnitude slower); the cells compute in float32, and a float64 input is converted to float32 once at the boundary (round-to-nearest-even; values outside float32's range are refused)
 LSTM/GRU/RNN	float16 / bfloat16	-	identical mode: tensor-core half-precision products are not the same bits across vendors; fast mode: no half-precision cell kernels yet
 RMSprop/Adagrad/Lion/Adamax/NAdam/LAMB	maximize	torch.optim	these optimizers minimize
