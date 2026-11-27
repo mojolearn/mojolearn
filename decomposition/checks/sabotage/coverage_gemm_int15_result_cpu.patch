@@ -1,0 +1,13 @@
+--- a/decomposition/linalg_host_impl.mojo
++++ b/decomposition/linalg_host_impl.mojo
+@@ -190,9 +190,9 @@
+     var qb = join_int15(read_i8(bh_address, n * k), read_i8(bl_address, n * k))
+     var eb = read_i32(eb_address, n)
+     var c = gemm_int15_oracle(qa, ea, qb, eb, m, n, k)
+     for i in range(m * n):
+-        cp[i] = c[i]
++        cp[i] = -c[i]
+     return m * n
+ 
+ 
+ def quantize_int15_host_run(hp: MutPointer[Int8, MutUntrackedOrigin], lp: MutPointer[Int8, MutUntrackedOrigin], ep: MutPointer[Int32, MutUntrackedOrigin], x_address: Int, rows: Int, cols: Int) raises -> Int:

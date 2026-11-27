@@ -1,0 +1,13 @@
+--- a/decomposition/linalg_host_impl.mojo
++++ b/decomposition/linalg_host_impl.mojo
+@@ -201,9 +201,9 @@
+     var qr = quantize_rows_int15(x, rows, cols)
+     var planes = split_int15(qr.q)
+     for i in range(rows * cols):
+         hp[i] = planes.hi[i]
+-        lp[i] = planes.lo[i]
++        lp[i] = planes.lo[i] ^ Int8(1)
+     for r in range(rows):
+         ep[r] = qr.e[r]
+     return rows * cols
+ 
