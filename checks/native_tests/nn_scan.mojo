@@ -594,14 +594,14 @@ def run_custom_unit[E: Exec & Movable & Deinitable](
     var bid = c.capture([y, g], [gy])
     var fwd = c.program(fid)
     var bwd = c.program(bid)
-    var rule = c.cbw_define(fwd, bwd, [0], 1)
+    var rule = c.cbw_define(fwd.copy(), bwd.copy(), [0], 1)  # OpsProgram is Copyable, not implicitly
     var ch = tensor(c, zeros, [2, 1])
     var cx = tensor(c, zeros, [2, 1])
     var hx = _op(c, _ADD, ch, cx)
     var ch1 = c.cbw_call(rule, [hx])[0]
     var cid = c.capture([ch, cx], [ch1, ch1])
 
-    var rule_s = s.cbw_define(fwd, bwd, [0], 1)
+    var rule_s = s.cbw_define(fwd^, bwd^, [0], 1)
     var initial = tensor(s, [1, 2], [2, 1], True)
     var h0 = s.cbw_call(rule_s, [initial])[0]
     var xs = tensor(s, [1, 4, 2, 7, 3, 9], [3, 2, 1], True)
