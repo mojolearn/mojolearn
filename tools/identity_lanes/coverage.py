@@ -1343,6 +1343,30 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts)
 
 
+@lane("classical-float64-admission")
+def _(ml, X, yc, yr, Xh=None):
+    """Fit on float64 and its round-to-nearest-even float32 values. Four rows
+    include halfway cases on both sides of an even mantissa and an odd one."""
+    ulp = 2.0 ** -23
+    wide = np.array([[1.0 + 0.5 * ulp, -1.0 - 1.5 * ulp],
+                     [1.0 + 1.5 * ulp, -1.0 - 0.5 * ulp],
+                     [2.0, -3.0], [-2.0, 7.0]], dtype=np.float64)
+    rounded = wide.astype(np.float32)
+    model = ml.StandardScaler().fit(wide)
+    reference = ml.StandardScaler().fit(rounded)
+    actual = np.asarray(model.mean_)
+    output = np.asarray(model.transform(rounded))
+    parts = dict(mean=_h(actual), variance=_h(model.var_), transform=_h(output))
+    mismatch = _oracle_mismatch(
+        ("float64 fit mean", actual, "rounded float32 fit mean", reference.mean_),
+        ("float64 fit variance", model.var_, "rounded float32 fit variance", reference.var_),
+        ("float64 fit transform", output, "rounded float32 fit transform", reference.transform(rounded)),
+    )
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts)
+
+
 @lane("classical-float16-sequences")
 def _(ml, X, yc, yr, Xh=None):
     """LinearRegression, Ridge, StandardScaler, MinMaxScaler and PCA fitted on
@@ -1400,7 +1424,7 @@ _batch_decl("n/a:coverage-probe (the lane checks one public call path the releas
             "saved-model-host-infer-trees", "hf-causal-lm-text", "hf-model-surface",
             "training-device-cross-entropy", "sequence-layernorm-backward",
             "x-metrics-classification-report", "x-metrics-permutation-test-score",
-            "classical-float16-sequences")
+            "classical-float16-sequences", "classical-float64-admission")
 
 
 # ---------------------------------------------------------------- lane verify-coverage-20261024

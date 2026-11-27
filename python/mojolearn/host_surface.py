@@ -1283,6 +1283,7 @@ TRAINING_LANE_NAMES = {
     # forest_host_rf_predict_reg) no lane reached; and the classical input
     # door's half-precision sequence conversion
     "saved-model-host-infer-trees": "saved Extra Trees and random forest regressors predicted on the CPU (inference)",
+    "classical-float64-admission": "fit StandardScaler with float64 and pre-rounded float32 inputs",
     "classical-float16-sequences": "linear models, scalers and PCA fitted on a list of float16 rows",
     "lowbit-conversions": "the bf16 and int8 weight-storage conversions",
     "grad-accumulation": "gradient accumulation across microbatches",
@@ -2308,7 +2309,7 @@ FAMILIES = (
             "linear-svr-squared", "qn-squared", "qn-absolute",
             # lane verify-gaps-20261022: the classical input door's float16
             # sequence conversion (core/sequential_inputs_impl.mojo)
-            "classical-float16-sequences",
+            "classical-float16-sequences", "classical-float64-admission",
                         # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table was admitted;
                         # RECORD OWED: the release's one verification records them
                         "check-function",
@@ -4810,6 +4811,7 @@ PUBLIC_PENDING_LANES = {
     # training binding has no device array pool.
     "training-device-cross-entropy": "no cpu route",
     "classical-float16-sequences": "unwatched",
+    "classical-float64-admission": "no reference",
     # STALE UNTIL THE NEXT RELEASE RECORD (2026-11-07). The 2026-11-05 fixture
     # shrink (tools/identity_break.py LANE_REVISIONS and NON_SIZE_REVISIONS)
     # moved these lanes' fixtures after the shipped table was admitted, so the

@@ -1,0 +1,11 @@
+--- a/x_metrics/curve_out.mojo
++++ b/x_metrics/curve_out.mojo
+@@ -374,5 +374,8 @@
+     if (flags & AX_NEG) != 0 and (flags & AX_POS) == 0 and not sf64_is_nan(v):
+         v = sf64_neg(v)
+     var OUT = p(q, 2)
++    from std.sys import is_defined
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        v = sf64_neg(v)
+     st64(f, OUT, v)
+     sti(f, OUT + 2, flags)
