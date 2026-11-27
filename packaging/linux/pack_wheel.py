@@ -685,7 +685,13 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
                         rec['origin'] = 'staged-admission'
                         rec['admitted_by'] = rec.pop('built_by', rec.get('admitted_by', []))
 
-    if len(commits) > 1 or any(i != inventories[0] for i in inventories[1:]):
+    # Each leg prepares the generated sources in its own
+    # build/generated-sources/<run>/ (0.9.0), so the run id differs between
+    # legs while every path and byte under it is the same; compare with the run
+    # id masked, every other path and every digest exactly.
+    def _same_sources(inv):
+        return [[re.sub(r'^build/generated-sources/[^/]+/', 'build/generated-sources/*/', p), h] for p, h in inv]
+    if len(commits) > 1 or any(_same_sources(i) != _same_sources(inventories[0]) for i in inventories[1:]):
         raise SystemExit('Architecture sets were built from different sources')
     if commits:
         commit, inventory = next(iter(commits)), inventories[0]
