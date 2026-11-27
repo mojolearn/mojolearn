@@ -129,5 +129,5 @@ struct HostLightGBMRank(RankStages, Movable):
         if not self.ready:
             rank_ideal(self, a, largest)
             self.ready = True
-        rank_ndcg(self, a, largest, 0)
+        rank_ndcg(self, a, largest)
         return result[0]

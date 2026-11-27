@@ -121,7 +121,7 @@ def launch_lightgbm_ndcg(
     ctx: DeviceContext, mut ws: LightGBMRankWorkspace, mut targets: DeviceBuffer[DType.float32],
     mut scores: DeviceBuffer[DType.float32], mut offsets: DeviceBuffer[DType.uint32],
     mut sizes: DeviceBuffer[DType.uint32], mut qids: DeviceBuffer[DType.uint32], n_rows: Int, n_queries: Int,
-    mut result: DeviceBuffer[DType.float32], result_index: Int = 0,
+    mut result: DeviceBuffer[DType.float32],
 ) raises:
     if n_rows != ws.n or n_queries != ws.groups:
         raise Error("LightGBM ranking workspace does not match this pool")
@@ -132,4 +132,4 @@ def launch_lightgbm_ndcg(
     if not ws.ready:
         rank_ideal(ws, a, largest)
         ws.ready = True
-    rank_ndcg(ws, a, largest, result_index)
+    rank_ndcg(ws, a, largest)
