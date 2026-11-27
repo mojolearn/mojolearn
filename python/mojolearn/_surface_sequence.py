@@ -152,6 +152,7 @@ FAMILIES = (
                         "ops-pool-window", "ops-pool-adaptive",
                         # session-ops-pool end
                         # session-ops-rest begin: Sequential's layers as Session ops (tools/identity_lanes/session_ops_rest.py)
+                        "ops-public-tensor-math", "ops-public-control-graph",
                         "ops-layer-norms", "ops-layer-activations", "ops-layer-attention",
                         "ops-layer-losses", "ops-layer-ctc", "ops-layer-ssm",
                         # lane w3i11-endpoints (2026-11-25): topk, gather, logsumexp, sequence_mask, checkpoint
@@ -378,6 +379,8 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # session-ops-rest begin
     "ops-layer-norms": "Session: batch_norm, group_norm, instance_norm (running statistics), Program",
     "ops-select-reduce": "Session: topk, gather, logsumexp, sequence_mask, checkpoint (recompute equals plain)",  # lane w3i11-endpoints
+    "ops-public-tensor-math": "Session tensor arithmetic, gradients, optimizer state and weight loading",
+    "ops-public-control-graph": "Program and ImportedProgram conditionals, loops and checkpointed owners",
     "ops-layer-activations": "Session: prelu, mish",
     "ops-layer-attention": "Session: multi_head_attention (self causal, cross with key_lengths), positional_encoding, Program",
     "ops-layer-losses": "Session: smooth_l1_loss, nll_loss, kl_div, binary_cross_entropy_with_logits(pos_weight)",
@@ -474,6 +477,8 @@ PUBLIC_PENDING_LANES = {
     # session-ops-rest begin
     "ops-layer-norms": "no reference",
     "ops-select-reduce": "no reference",  # lane w3i11-endpoints
+    "ops-public-tensor-math": "no reference",
+    "ops-public-control-graph": "no reference",
     "ops-layer-activations": "no reference",
     "ops-layer-attention": "no reference",
     "ops-layer-losses": "no reference",

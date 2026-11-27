@@ -427,7 +427,8 @@ def _(ml, X, yc, yr, Xh=None):
     """GradientBoosting `feature_importances_` (lane mf-imp6: core/gbdt_importance.mojo on the host column,
     gbdt/gpu_importance.mojo on a GPU, the same bodies and fold order), light: 8 SymmetricTree trees (RMSE),
     the same on fixture-derived sample weights (the exact integer leaf weights), 8 Depthwise trees (the
-    non-symmetric descent), and the classifier adapter (its learner's importances). The digest covers the
+    non-symmetric descent). The weighted fit uses the public regressor adapter, and a separate fit uses the
+    classifier adapter. The digest covers the
     importances' bytes beside each model's predictions.
 
     THE CTR MODELS (lane vd-leftovers, 2026-11-24): a categorical model's importances walk its MODEL columns,
@@ -438,7 +439,7 @@ def _(ml, X, yc, yr, Xh=None):
     column). Each is a fit whose trees split on its CTR columns, so a wrong model column moves its bytes."""
     w = np.array([(1.0, 2.5, 0.5, 0.75)[i % 4] for i in range(len(X))], dtype=np.float32)
     sym = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4).fit(X, yr)
-    weighted = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4).fit(X, yr, sample_weight=w)
+    weighted = _gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4).fit(X, yr, sample_weight=w)
     depthwise = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, grow_policy="Depthwise").fit(X, yr)
     clf = ml.GradientBoostingClassifier(n_estimators=8, max_depth=4).fit(X, yc)
     rows = min(_GBDT_CAT_ROWS, X.shape[0])
