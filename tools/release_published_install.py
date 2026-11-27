@@ -1,59 +1,45 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""published-<vendor> producer (post stage): the PUBLISHED bytes are the gated candidate bytes.
+"""published (post stage): ONE CPU check, on a free GitHub runner, that the published release is the tested one.
 
-Andrew, 2026-11-02: the gates verified the exact wheel bytes on every vendor; nothing
-reinstalls them from PyPI to verify again. So the default producer runs no device job,
-installs nothing and needs no box. For each published package of the vendor:
+Andrew, 2026-11-27: after publication no release step rents or runs a GPU. The published files are hash-identical
+to the candidate wheels the gates tested, so a GPU rerun proves nothing new (AGENTS.md "No re-verification of green
+work"). .github/workflows/published-check.yml runs ``check`` on an ubuntu runner (no GPU, nothing rented), and
+tools/release.py step_published dispatches it after publication and judges its report. In order:
 
-  index-resolution           the index lists every expected file first: the check polls PyPI's JSON
-                             API (https://pypi.org/pypi/<dist>/<version>/json) and the simple page
-                             until each candidate's file name is on both (at most --index-wait
-                             seconds, a WAIT line every --index-wait-step seconds); then
-                             `pip download --no-deps --only-binary=:all:` with the candidate
-                             wheel's own platform tags (--platform/--abi/--python-version)
-                             resolves the file a user on that platform gets from the index; its
-                             sha256 equals the digest the index's simple page advertises
-  published-artifact-hashes  the resolved file's sha256 equals the gated candidate wheel's;
-                             when they differ the report FAILS and names both hashes (never a
-                             silent rerun)
-  wheel-integrity            the archive's CRCs, every member's RECORD hash and size, no
-                             unlisted or missing member, METADATA Name/Version and the WHEEL
-                             tags equal to the file name's
-  gate-evidence              the gate's own runtime/correctness/adapter receipts, copied into
-                             gate-evidence/ under their sha256 (content keyed) and judged by
-                             reference: every published sha256 is named by them, and the
-                             release's gate verdict is recorded
+  index-resolution           the index lists every candidate file (the PyPI JSON API and the simple page, polled
+                             at most --index-wait seconds, a WAIT line every --index-wait-step seconds); then
+                             `pip download --no-deps --only-binary=:all:` with each candidate's own platform tags
+                             fetches the file a user on that platform gets (the vendor wheels and the macOS wheel
+                             as files); the sha256 the simple page advertises equals the downloaded file's
+  published-artifact-hashes  the sha256 of every downloaded file equals the candidate's (both named when not)
+  pypi-install               `pip install mojolearn==<version>` from the index into a fresh venv; every mojolearn
+                             distribution it installed is at <version>
+  import                     `import mojolearn` in that venv reports <version>
+  verify-quick               `python -m mojolearn verify --quick` in that venv exits 0
 
-    python3 tools/release_published_install.py check --vendor nvidia --version 0.8.66 \\
-        --candidate-wheel CORE.whl --candidate-wheel PLUGIN.whl [--candidate-wheel PTX.whl] \\
-        --gate-evidence GATE/gate-smoke.json [--gate-evidence ...] --gate-verdict "PASS: ..." \\
-        --out NEW_DIR [--python PY_WITH_PIP] [--index-url URL]
+    python3 tools/release_published_install.py check --version 0.9.1 --candidates candidates.json --out NEW_DIR
     python3 tools/release_published_install.py judge --out DIR
 
-``judge`` re-derives every count from the retained files; the ledger adapter
-(tools/release_installed_evidence.py, adapter ``published-install``) runs it against
-https://pypi.org/simple and also compares the published hashes with the ledger's
-artifacts:<vendor>. A report made against any other index re-derives differently and is
-refused there.
+candidates.json is {file name: sha256} of every candidate wheel the release published (tools/release.py writes it
+into the workflow's inputs). ``judge`` re-derives the report from the retained request.json and the step exit codes
+it records; the downloaded wheels are not kept (their sha256 is in request.json).
 
-A FAILED report names its kind (``failure``): ``index-lag`` when the index never listed an expected file
-within the wait or nothing was resolved (no verdict on the bytes: the record step refuses to record it and
-published-<vendor> runs again once the index lists the files), ``hash-mismatch`` when a published file's
-sha256 differs from the gated candidate's (both hashes named), ``error`` when the check itself broke, and
-``failed`` for any other check (integrity, gate evidence).
+A FAILED report names its kind (``failure``): ``index-lag`` when the index never listed an expected file within the
+wait or nothing was resolved (no verdict on the bytes: the record step refuses to record it and `published` runs
+again once the index lists the files), ``hash-mismatch`` when a published file's sha256 differs from the candidate's
+(both hashes named), ``error`` when the check itself broke, and ``failed`` for any other check (install, import,
+verify).
 
-``run`` is the old installed smoke (a fresh venv from PyPI, the eleven installed correctness
-jobs and the adapter phases on the vendor device). tools/release.py calls it only for an
-explicit ``--published-smoke <vendor>`` with a stated reason (recorded in the release state);
-its report (schema v1) is never published-<vendor> ledger evidence.
+REMOVED 2026-11-27 (Andrew): the per-vendor published-apple / published-nvidia / published-amd producers (a bytes
+check on the Mac with the gate's receipts by reference) and the ``run`` installed smoke on a vendor GPU box; this one
+CPU check replaces them. Recoverable at eec67ac1204b (this file, tools/ops/published_install.py and
+tools/ops/published_install_job.sh).
 """
 import argparse
 import atexit
-import glob
 import json
-import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import shutil
 import subprocess
@@ -63,31 +49,26 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import zipfile
 from html.parser import HTMLParser
 
 HERE = Path(__file__).resolve().parent
 REPORT = "published-report.json"
-#: the published-<vendor> report: resolution, bytes, integrity and the gate's evidence by reference
-REPORT_SCHEMA = "mojolearn.release-published-install.v2"
-#: the explicit --published-smoke report (``run``); never published-<vendor> ledger evidence
-SMOKE_SCHEMA = "mojolearn.release-published-install.v1"
-VENDORS = ("nvidia", "amd", "apple")
-BACKEND = {"nvidia": "cuda", "amd": "hip", "apple": "metal"}
-COVERAGE_IDS = ("index-resolution", "published-artifact-hashes", "wheel-integrity", "gate-evidence")
-SMOKE_COVERAGE_IDS = ("index-install", "published-artifact-hashes", "installed-smoke", "installed-adapters")
+REPORT_SCHEMA = "mojolearn.release-published-check.v3"
+TOOL = "tools/release_published_install.py"
+COVERAGE_IDS = ("index-resolution", "published-artifact-hashes", "pypi-install", "import", "verify-quick")
 PYPI_INDEX = "https://pypi.org/simple"
-#: files pip writes or relocates itself; never compared with the wheel's bytes
-PIP_OWNED = ("RECORD", "INSTALLER", "REQUESTED", "direct_url.json")
-# THE INDEX WAIT (0.8.66 run v, 2026-11-08): published-apple ran about a minute after the macOS upload, PyPI did
-# not list the file yet, pip resolved nothing and the release recorded a FAILED published-apple (index-resolution
-# 2/3, published-artifact-hashes 0/1, wheel-integrity 0/1) into the evidence set. The check now waits for the
-# index to list every expected file before it resolves; a listing that never appears within the cap is the failure.
+#: the project `pip install` resolves on Linux (the file-free meta wheel: the core and both vendors)
+PROJECT = "mojolearn"
+# THE INDEX WAIT (0.8.66 run v, 2026-11-08): a check that ran a minute after an upload found the file not listed
+# yet, resolved nothing and recorded a FAILED check. The check waits for the index to list every expected file
+# before it resolves; a listing that never appears within the cap is the failure (index lag).
 INDEX_WAIT_S = 900
 INDEX_WAIT_STEP_S = 20
 #: the kinds of a failed report (report["failure"]); only INDEX_LAG is refused by the record step
 INDEX_LAG, HASH_MISMATCH, CHECK_ERROR, CHECK_FAILED = "index-lag", "hash-mismatch", "error", "failed"
 NOTHING_RESOLVED = "nothing was resolved"
+WHEEL_NAME = re.compile(r"^(?P<name>[^-]+)-(?P<version>[^-]+)(?:-(?P<build>\d[^-]*))?-(?P<py>[^-]+)-(?P<abi>[^-]+)"
+                        r"-(?P<plat>[^-]+)\.whl$")
 
 
 def require(condition, message):
@@ -105,120 +86,6 @@ def _load(path):
     return json.loads(Path(path).read_text())
 
 
-def installed_bytes(candidates, site):
-    """Every candidate payload member installed in SITE with the candidate's bytes."""
-    import qualify_native_runtime_installed as q
-    payload, _ = q.wheel_inventory(candidates)
-    rows, differ, missing = 0, [], []
-    for member, row in sorted(payload.items()):
-        parts = PurePosixPath(member).parts
-        if parts[0].endswith(".data") or (parts[0].endswith(".dist-info") and parts[-1] in PIP_OWNED):
-            continue
-        path = Path(site) / member
-        if not path.is_file():
-            missing.append(member)
-        elif sha256(path) != row["sha256"]:
-            differ.append(member)
-        else:
-            rows += 1
-    return dict(site=str(site), compared=rows, differ=differ, missing=missing)
-
-
-def judge(out, index_url=PYPI_INDEX):
-    """The report of a retained producer directory: the bytes check (``check``), else the smoke (``run``)."""
-    request = _load(Path(out).resolve() / "request.json")
-    if request.get("mode") == "bytes":
-        return judge_bytes(out, index_url)
-    return judge_smoke(out)
-
-
-def judge_smoke(out):
-    import adapter_gate
-    import release_gate_profiles as profiles
-    from release_adapter_evidence import _smoke
-    out = Path(out).resolve()
-    request = _load(out / "request.json")
-    vendor, version = request["vendor"], request["version"]
-    require(vendor in VENDORS, "vendor is nvidia, amd or apple")
-    rows = {name: [] for name in SMOKE_COVERAGE_IDS}
-
-    def add(coverage, name, passed, **detail):
-        rows[coverage].append(dict(name=name, passed=bool(passed), **detail))
-
-    manifest = _load(out / "wheel-manifest.json")
-    files = manifest.get("files", [])
-    add("index-install", "install-exit", request.get("install_exit") == 0)
-    add("index-install", "index", manifest.get("index_url") == PYPI_INDEX and manifest.get("version") == version
-        and manifest.get("vendor") == vendor, index=manifest.get("index_url"))
-    for row in files:
-        add("index-install", "pypi-digest:" + row["file"], row.get("pypi_digest_match") is True
-            and row.get("pypi_sha256") == row.get("sha256") and sha256(out / "wheels" / row["file"]) == row["sha256"])
-    import pypi_wheel_install
-    why = pypi_wheel_install.installed_refusal(manifest, manifest.get("loaded")) if files else "no files"
-    add("index-install", "loaded-from-site-packages", why is None, why=why)
-    published = {row["file"]: row["sha256"] for row in files}
-    candidates = request.get("candidates", {})
-    for name, digest in sorted(published.items()):
-        add("published-artifact-hashes", "candidate:" + name, candidates.get(name) == digest)
-    names = [row["distribution"] for row in files]
-    unpublished = sorted(name for name in candidates if name not in published
-                         and any(name.lower().startswith(re.sub("-", "_", d).lower() + "-" + version + "-") for d in names))
-    add("published-artifact-hashes", "no-unpublished-candidate", not unpublished, unpublished=unpublished)
-    installed = _load(out / "installed-bytes.json")
-    add("published-artifact-hashes", "installed-payload", installed.get("compared", 0) > 0
-        and not installed.get("differ") and not installed.get("missing"), compared=installed.get("compared"))
-    correctness = _load(out / "correctness/results.json") if (out / "correctness/results.json").is_file() else None
-    commit = request.get("source_commit")
-    errors = profiles.correctness_errors(correctness, commit, version, vendor if vendor != "apple" else None)
-    if vendor == "apple" and isinstance(correctness, dict) and correctness.get("installed", {}).get("vendor") != "metal":
-        errors.append("installed correctness ran another vendor backend")
-    jobs = (correctness or {}).get("jobs") or []
-    for job in jobs:
-        add("installed-smoke", "job:" + str(job.get("name")), not errors and job.get("exit_code") in ((0, 5) if job.get("name") == "extended" else (0,)))
-    if len(jobs) != len(profiles.CORRECTNESS_JOBS) or errors:
-        add("installed-smoke", "complete", False, errors=errors)
-    try:
-        smoke = _smoke(out / "adapter-smoke", vendor, version)
-        for name, count in sorted(smoke["counts"].items()):
-            add("installed-adapters", name, count > 0, checks=count)
-        status, ok, why = adapter_gate.judge(out / "adapter-smoke" / adapter_gate.RECEIPT)
-        add("installed-adapters", "judge", ok, why=why)
-        adapter_refs = smoke["evidence"]
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        add("installed-adapters", "smoke", False, error=str(error))
-        adapter_refs = []
-    coverage = []
-    for name in SMOKE_COVERAGE_IDS:
-        items = rows[name]
-        passed = sum(1 for item in items if item["passed"])
-        ok = bool(items) and passed == len(items)
-        coverage.append(dict(id=name, status="passed" if ok else "failed", exit_code=0 if ok else 1,
-                             expected=len(items), completed=passed, failed=len(items) - passed, skipped=0))
-    passed = all(row["status"] == "passed" for row in coverage)
-    paths = [out / "request.json", out / "wheel-manifest.json", out / "installed-bytes.json"]
-    paths += [out / "correctness/results.json"] if correctness is not None else []
-    paths += [out / "wheels" / row["file"] for row in files]
-    paths += [Path(ref["path"]) for ref in adapter_refs]
-    # Paths relative to the producer directory: the report is judged again after it moves home.
-    evidence = []
-    for path in paths:
-        ref = dict(path=Path(path).resolve().relative_to(out).as_posix(), sha256=sha256(path))
-        if ref not in evidence:
-            evidence.append(ref)
-    return dict(schema=SMOKE_SCHEMA, tool="tools/release_published_install.py", vendor=vendor, version=version,
-                backend=BACKEND[vendor], index_url=manifest.get("index_url"), source_revision=commit,
-                published=published, coverage=coverage, checks=rows,
-                status="passed" if passed else "failed", exit_code=0 if passed else 1, evidence=evidence)
-
-
-# ---------------------------------------------------------------- the bytes check (default; no device)
-#: the packages each vendor's published-<vendor> covers (tools/pypi_wheel_install.py distributions)
-WHEEL_NAME = re.compile(r"^(?P<name>[^-]+)-(?P<version>[^-]+)(?:-(?P<build>\d[^-]*))?-(?P<py>[^-]+)-(?P<abi>[^-]+)"
-                        r"-(?P<plat>[^-]+)\.whl$")
-#: dist-info members a wheel may carry outside its own RECORD (PEP 376/427 signatures)
-RECORD_EXEMPT = ("RECORD", "RECORD.jws", "RECORD.p7s")
-
-
 def normalize(name):
     """PEP 503 project name normalization."""
     return re.sub(r"[-_.]+", "-", name).lower()
@@ -232,16 +99,12 @@ def wheel_tags(filename):
                 abi=m["abi"].split("."), platform=m["plat"].split("."))
 
 
-def tag_set(tags):
-    return sorted("%s-%s-%s" % (p, a, f) for p in tags["python"] for a in tags["abi"] for f in tags["platform"])
-
-
 def pip_download_command(python, index_url, distribution, version, tags, dest):
     """`pip download` of DISTRIBUTION==VERSION as an installer on the candidate's platform resolves it.
 
-    The candidate's own tags select the target: every platform tag (`any` is no constraint), every
-    ABI other than `none` (pip always accepts `none`), and a CPython tag's version and implementation.
-    `--no-deps --only-binary=:all:` downloads exactly that one wheel; nothing is installed."""
+    The candidate's own tags select the target: every platform tag (`any` is no constraint), every ABI other than
+    `none` (pip always accepts `none`), and a CPython tag's version and implementation. `--no-deps
+    --only-binary=:all:` downloads exactly that one wheel; nothing is installed."""
     cmd = [python, "-m", "pip", "download", "--no-input", "--disable-pip-version-check", "--no-cache-dir",
            "--no-deps", "--only-binary=:all:", "--index-url", index_url, "--dest", str(dest)]
     for plat in tags["platform"]:
@@ -257,23 +120,11 @@ def pip_download_command(python, index_url, distribution, version, tags, dest):
 
 
 def scratch_dir(prefix):
-    """A temp dir removed when this process exits: throwaway venvs live here, never under OUT (the evidence folder
-    holds logs and records only; 2026-11-09, published-apple/adapter-smoke/venv held PyTorch)."""
+    """A temp dir removed when this process exits: downloads and the venv live here, never under OUT (the
+    evidence folder holds logs and records only)."""
     path = Path(tempfile.mkdtemp(prefix=prefix))
     atexit.register(shutil.rmtree, str(path), True)
     return path
-
-
-def pip_python(python, out, log):
-    """An interpreter that has pip: PYTHON itself, else a throwaway venv of it (ensurepip, offline)."""
-    probe = subprocess.run([python, "-m", "pip", "--version"], capture_output=True, text=True)
-    if probe.returncode == 0:
-        return python
-    venv = scratch_dir("published-pip-venv-") / "venv"
-    with Path(log).open("ab") as stream:
-        code = subprocess.run([python, "-m", "venv", str(venv)], stdout=stream, stderr=subprocess.STDOUT).returncode
-    require(code == 0, "no pip in %s and no venv could be made for it (%s)" % (python, log))
-    return str(venv / "bin" / "python")
 
 
 class _Anchors(HTMLParser):
@@ -362,8 +213,7 @@ def wait_for_index(index_url, version, expected, cap=INDEX_WAIT_S, step=INDEX_WA
                    sleep=None, clock=None, say=None):
     """Poll the index until it lists every EXPECTED file ({distribution: [file name]}), at most CAP seconds, every
     STEP seconds, saying one WAIT line per step. Returns the record kept in request.json (``index_wait``):
-    listed (bool), waited_s, polls, missing (still unlisted at the end), errors (the last few), cap_s, step_s.
-    The wait is one listing call per step for one release (no retry of anything else)."""
+    listed (bool), waited_s, polls, missing (still unlisted at the end), errors (the last few), cap_s, step_s."""
     listing, sleep, clock = listing or index_listing, sleep or time.sleep, clock or time.monotonic
     say = say or (lambda line: print(line, flush=True))
     start, polls = clock(), 0
@@ -383,155 +233,64 @@ def wait_for_index(index_url, version, expected, cap=INDEX_WAIT_S, step=INDEX_WA
 
 
 def failure_kind(report):
-    """The kind of a published-<vendor> report's failure (None when it passed): INDEX_LAG, HASH_MISMATCH,
-    CHECK_ERROR or CHECK_FAILED. Reports written before the kind was stored are classified from their checks
-    (no resolved file = index lag)."""
+    """The kind of a published report's failure (None when it passed): INDEX_LAG, HASH_MISMATCH, CHECK_ERROR or
+    CHECK_FAILED."""
     if not isinstance(report, dict) or report.get("status") != "failed":
         return None
     if report.get("failure"):
         return report["failure"]
     if report.get("mismatch"):
         return HASH_MISMATCH
-    checks = report.get("checks") or {}
-    if any(isinstance(c, dict) and c.get("why") == NOTHING_RESOLVED for rows in checks.values() for c in rows or []):
-        return INDEX_LAG
     return CHECK_ERROR if report.get("error") else CHECK_FAILED
 
 
-def wheel_integrity(path):
-    """{file, members, problems}: CRCs, RECORD hashes and sizes, METADATA and WHEEL against the file name."""
-    import base64
-    import csv
-    import email.parser
-    import hashlib
-    path = Path(path)
-    problems, members = [], 0
-    try:
-        tags = wheel_tags(path.name)
-        with zipfile.ZipFile(path) as archive:
-            bad = archive.testzip()
-            if bad:
-                problems.append("bad CRC: " + bad)
-            names = [n for n in archive.namelist() if not n.endswith("/")]
-            records = [n for n in names if re.fullmatch(r"[^/]+\.dist-info/RECORD", n)]
-            if len(records) != 1:
-                return dict(file=path.name, members=0, problems=["expected one .dist-info/RECORD, found %d" % len(records)])
-            info = records[0].split("/")[0]
-            listed = {}
-            for row in csv.reader(archive.read(records[0]).decode().splitlines()):
-                if row:
-                    listed[row[0]] = row[1:]
-            for name in names:
-                if name.startswith(info + "/") and name[len(info) + 1:] in RECORD_EXEMPT:
-                    continue
-                if name not in listed:
-                    problems.append("not in RECORD: " + name)
-                    continue
-                digest, size = (listed[name] + ["", ""])[:2]
-                algo, _, b64 = digest.partition("=")
-                data = archive.read(name)
-                actual = base64.urlsafe_b64encode(hashlib.new(algo or "sha256", data).digest()).rstrip(b"=").decode() \
-                    if algo in ("sha256", "sha384", "sha512") else None
-                if actual is None or actual != b64:
-                    problems.append("RECORD hash differs: " + name)
-                elif size and int(size) != len(data):
-                    problems.append("RECORD size differs: " + name)
-                else:
-                    members += 1
-            for name in sorted(set(listed) - set(names)):
-                if not (name.startswith(info + "/") and name[len(info) + 1:] in RECORD_EXEMPT):
-                    problems.append("in RECORD, not in the archive: " + name)
-            meta = email.parser.Parser().parsestr(archive.read(info + "/METADATA").decode())
-            if normalize(meta.get("Name", "")) != tags["distribution"] or meta.get("Version") != tags["version"]:
-                problems.append("METADATA names %s %s" % (meta.get("Name"), meta.get("Version")))
-            wheel = email.parser.Parser().parsestr(archive.read(info + "/WHEEL").decode())
-            if sorted(wheel.get_all("Tag") or []) != tag_set(tags):
-                problems.append("WHEEL tags %s differ from the file name's" % sorted(wheel.get_all("Tag") or []))
-    except (OSError, KeyError, ValueError, zipfile.BadZipFile) as error:
-        problems.append(type(error).__name__ + ": " + str(error))
-    return dict(file=path.name, members=members, problems=problems)
-
-
-def judge_bytes(out, index_url=PYPI_INDEX):
-    """The published-<vendor> report re-derived from the retained directory (request, wheels, gate copies)."""
-    import pypi_wheel_install
+def judge(out, index_url=PYPI_INDEX):
+    """The report re-derived from the retained request.json (the run's recorded facts and exit codes)."""
     out = Path(out).resolve()
     request = _load(out / "request.json")
-    vendor, version = request["vendor"], request["version"]
-    require(vendor in VENDORS, "vendor is nvidia, amd or apple")
+    version = request["version"]
+    candidates = request.get("candidates") or {}
     rows = {name: [] for name in COVERAGE_IDS}
 
     def add(coverage, name, passed, **detail):
         rows[coverage].append(dict(name=name, passed=bool(passed), **detail))
 
-    resolved = request.get("resolved") or []
-    candidates = request.get("candidates") or {}
-    wanted = pypi_wheel_install.distributions(vendor)
     add("index-resolution", "index", request.get("index_url") == index_url, index=request.get("index_url"))
-    add("index-resolution", "distributions", sorted(r.get("distribution") for r in resolved) == sorted(wanted)
-        and len(resolved) == len(wanted), resolved=sorted(r.get("distribution") for r in resolved), wanted=wanted)
     wait = request.get("index_wait")
-    if isinstance(wait, dict):
-        # the index listed every expected file before pip resolved (reports before 2026-11-08 have no wait)
-        add("index-resolution", "index-listing", wait.get("listed") is True, waited_s=wait.get("waited_s"),
-            polls=wait.get("polls"), missing=wait.get("missing"))
+    add("index-resolution", "index-listing", isinstance(wait, dict) and wait.get("listed") is True,
+        waited_s=(wait or {}).get("waited_s"), polls=(wait or {}).get("polls"), missing=(wait or {}).get("missing"))
+    resolved = {row.get("candidate"): row for row in request.get("resolved") or []}
     published, mismatch = {}, []
-    for row in resolved:
-        dist, name = row.get("distribution"), row.get("file")
-        local = out / "wheels" / str(dist) / str(name)
-        digest = sha256(local) if name and local.is_file() else None
-        one = row.get("pip_exit") == 0 and name is not None and len(row.get("files") or []) == 1 and digest is not None
-        add("index-resolution", "resolved:%s" % dist, one and wheel_tags(name)["distribution"] == dist
-            and wheel_tags(name)["version"] == version, file=name, files=row.get("files"), pip_exit=row.get("pip_exit"))
+    for name, want in sorted(candidates.items()):
+        row = resolved.get(name) or {}
+        got = row.get("file")
+        one = row.get("pip_exit") == 0 and got == name and len(row.get("files") or []) == 1 and bool(row.get("sha256"))
+        add("index-resolution", "resolved:" + name, one, files=row.get("files"), pip_exit=row.get("pip_exit"))
         if not one:
             continue
+        digest = row["sha256"]
         published[name] = digest
-        add("index-resolution", "index-digest:" + name, row.get("index_sha256") == digest == row.get("sha256"),
+        add("index-resolution", "index-digest:" + name, row.get("index_sha256") == digest,
             index_sha256=row.get("index_sha256"), sha256=digest)
-        candidate = row.get("candidate")
-        same = candidate == name and candidates.get(candidate) == digest
-        add("published-artifact-hashes", "candidate:" + name, same, published_sha256=digest,
-            candidate=candidate, candidate_sha256=candidates.get(candidate))
-        if not same:
-            mismatch.append(dict(file=name, published_sha256=digest, candidate=candidate,
-                                 candidate_sha256=candidates.get(candidate)))
-        check = wheel_integrity(local)
-        add("wheel-integrity", "record:" + name, not check["problems"] and check["members"] > 0,
-            members=check["members"], problems=check["problems"][:20])
+        add("published-artifact-hashes", "candidate:" + name, digest == want, published_sha256=digest,
+            candidate_sha256=want)
+        if digest != want:
+            mismatch.append(dict(file=name, published_sha256=digest, candidate_sha256=want))
+    if not candidates:
+        add("index-resolution", "candidates", False, why="no candidate wheels named")
     if not published:
         add("published-artifact-hashes", "resolved-files", False, why=NOTHING_RESOLVED)
-        add("wheel-integrity", "resolved-files", False, why=NOTHING_RESOLVED)
-    packaged = set()
-    for name in published:
-        dist = next(r["distribution"] for r in resolved if r.get("file") == name)
-        try:
-            with zipfile.ZipFile(out / "wheels" / dist / name) as archive:
-                if "mojolearn/identity_columns/COMMIT" in archive.namelist():
-                    packaged.add(archive.read("mojolearn/identity_columns/COMMIT").decode().strip())
-        except (OSError, zipfile.BadZipFile):
-            pass
-    commit = request.get("source_commit")
-    if packaged:
-        # the source commit the published wheels carry is the one the release froze
-        add("wheel-integrity", "packaged-commit", len(packaged) == 1 and (commit is None or packaged == {commit}),
-            packaged=sorted(packaged), source_commit=commit)
-        commit = next(iter(packaged)) if len(packaged) == 1 else commit
-    gate = request.get("gate") or {}
-    add("gate-evidence", "gate-verdict", isinstance(gate.get("verdict"), str) and gate["verdict"].strip() != ""
-        and not gate.get("refused"), verdict=gate.get("verdict"), refused=gate.get("refused"))
-    texts = []
-    for ref in gate.get("evidence") or []:
-        relative = Path(str(ref.get("path", "")))
-        local = out / relative
-        ok = (not relative.is_absolute() and ".." not in relative.parts and relative.parts[:1] == ("gate-evidence",)
-              and local.is_file() and sha256(local) == ref.get("sha256"))
-        add("gate-evidence", "evidence:" + relative.as_posix(), ok, source=ref.get("source"), sha256=ref.get("sha256"))
-        if ok:
-            texts.append(local.read_bytes())
-    if not texts:
-        add("gate-evidence", "evidence", False, why="no gate evidence retained")
-    for name, digest in sorted(published.items()):
-        add("gate-evidence", "gated-bytes:" + name, any(digest.encode() in text for text in texts), sha256=digest)
+    install = request.get("install") or {}
+    add("pypi-install", "pip-install", install.get("exit") == 0, requested="%s==%s" % (PROJECT, version),
+        exit=install.get("exit"))
+    dists = install.get("installed") or {}
+    add("pypi-install", "installed-versions", bool(dists) and PROJECT in dists
+        and all(v == version for v in dists.values()), installed=dists)
+    imported = request.get("import") or {}
+    add("import", "import-mojolearn", imported.get("exit") == 0 and imported.get("version") == version,
+        exit=imported.get("exit"), version=imported.get("version"))
+    quick = request.get("verify_quick") or {}
+    add("verify-quick", "verify-quick", quick.get("exit") == 0, exit=quick.get("exit"))
     coverage = []
     for name in COVERAGE_IDS:
         items = rows[name]
@@ -539,10 +298,8 @@ def judge_bytes(out, index_url=PYPI_INDEX):
         ok = bool(items) and passed == len(items)
         coverage.append(dict(id=name, status="passed" if ok else "failed", exit_code=0 if ok else 1,
                              expected=len(items), completed=passed, failed=len(items) - passed, skipped=0))
-    passed = all(row["status"] == "passed" for row in coverage)
-    # THE FAILURE KIND: index lag (the listing never appeared, or nothing was resolved) is no verdict on the bytes
-    # and is named apart from a hash mismatch; the record step refuses to record it (tools/release_evidence_set.py)
-    unlisted = isinstance(wait, dict) and wait.get("listed") is not True
+    passed = all(row["status"] == "passed" for row in coverage) and not request.get("error")
+    unlisted = not (isinstance(wait, dict) and wait.get("listed") is True)
     failure, failure_why = None, None
     if not passed:
         if mismatch:
@@ -553,167 +310,126 @@ def judge_bytes(out, index_url=PYPI_INDEX):
         elif unlisted or not published:
             failure = INDEX_LAG
             failure_why = ("the index did not list %s after %ss (%s polls)" % (
-                ", ".join(wait.get("missing") or []) or "the expected files", wait.get("waited_s"), wait.get("polls"))
-                if unlisted else NOTHING_RESOLVED)
+                ", ".join((wait or {}).get("missing") or []) or "the expected files", (wait or {}).get("waited_s"),
+                (wait or {}).get("polls")) if unlisted else NOTHING_RESOLVED)
         else:
             failure, failure_why = CHECK_FAILED, ", ".join(r["id"] for r in coverage if r["status"] != "passed")
-    paths = [out / "request.json"] + [out / "wheels" / r["distribution"] / r["file"] for r in resolved
-                                      if r.get("file") and (out / "wheels" / r["distribution"] / r["file"]).is_file()]
-    paths += [out / ref["path"] for ref in gate.get("evidence") or [] if (out / str(ref.get("path", ""))).is_file()]
-    evidence = []
-    for path in paths:
-        ref = dict(path=Path(path).resolve().relative_to(out).as_posix(), sha256=sha256(path))
-        if ref not in evidence:
-            evidence.append(ref)
-    return dict(schema=REPORT_SCHEMA, tool="tools/release_published_install.py", vendor=vendor, version=version,
-                backend=BACKEND[vendor], index_url=request.get("index_url"), source_revision=commit,
-                published=published, mismatch=mismatch, gate_verdict=gate.get("verdict"), coverage=coverage,
+    return dict(schema=REPORT_SCHEMA, tool=TOOL, version=version, index_url=request.get("index_url"),
+                runner=request.get("runner"), published=published, mismatch=mismatch, coverage=coverage,
                 checks=rows, status="passed" if passed else "failed", exit_code=0 if passed else 1,
-                failure=failure, failure_why=failure_why, evidence=evidence)
+                failure=failure, failure_why=failure_why, error=request.get("error"))
+
+
+def _run(cmd, log, timeout, **kw):
+    """Exit code of CMD with its output appended to LOG (a timeout is exit 124)."""
+    with Path(log).open("ab") as stream:
+        stream.write(("\n$ " + " ".join(str(c) for c in cmd) + "\n").encode())
+        stream.flush()
+        try:
+            return subprocess.run([str(c) for c in cmd], stdout=stream, stderr=subprocess.STDOUT, timeout=timeout,
+                                  **kw).returncode
+        except subprocess.TimeoutExpired:
+            stream.write(("TIMEOUT after %ss\n" % timeout).encode())
+            return 124
+
+
+def resolve(args, candidates, request, log):
+    """index-resolution and the hashes: wait for the listing, then download every candidate file by its own tags.
+    The downloads are independent, one per file: they run at once, one worker per file."""
+    from concurrent.futures import ThreadPoolExecutor
+    expected = {}
+    for name in candidates:
+        tags = wheel_tags(name)
+        require(tags["version"] == args.version, "candidate %s is not version %s" % (name, args.version))
+        expected.setdefault(tags["distribution"], []).append(name)
+    wait = wait_for_index(args.index_url, args.version, expected, args.index_wait, args.index_wait_step)
+    request["index_wait"] = wait
+    if not wait["listed"]:
+        # pip still runs once: its own answer is kept beside the listing; the report fails as index lag
+        print("WAIT-EXPIRED published-index version=%s after %ss: not listed %s" % (
+            args.version, wait["waited_s"], ",".join(wait["missing"])), flush=True)
+    scratch = scratch_dir("published-files-")
+
+    def one(item):
+        i, name = item
+        tags = wheel_tags(name)
+        dest = scratch / str(i)
+        dest.mkdir(parents=True)
+        code = _run(pip_download_command(args.python, args.index_url, tags["distribution"], args.version, tags,
+                                         dest), Path(log).with_name("download-%d.log" % i), args.timeout)
+        files = sorted(p.name for p in dest.glob("*.whl"))
+        row = dict(candidate=name, distribution=tags["distribution"], pip_exit=code, files=files,
+                   file=files[0] if code == 0 and len(files) == 1 else None)
+        if row["file"]:
+            row["sha256"] = sha256(dest / row["file"])
+            try:
+                row["index_sha256"] = index_digest(args.index_url, tags["distribution"], row["file"])
+            except (OSError, ValueError) as error:
+                row["index_error"] = type(error).__name__ + ": " + str(error)
+        return row
+
+    with ThreadPoolExecutor(max_workers=max(1, len(candidates))) as pool:
+        return list(pool.map(one, enumerate(sorted(candidates))))
+
+
+def install_and_verify(args, request, out):
+    """pypi-install, import and verify-quick in a fresh venv. Serial by nature: each step needs the one before."""
+    venv = scratch_dir("published-venv-") / "venv"
+    python = str(venv / "bin" / "python")
+    log = out / "install.log"
+    code = _run([args.python, "-m", "venv", str(venv)], log, 600)
+    if code == 0:
+        code = _run([python, "-m", "pip", "install", "--no-input", "--disable-pip-version-check", "--no-cache-dir",
+                     "--index-url", args.index_url, "%s==%s" % (PROJECT, args.version)], log, args.timeout)
+    installed = {}
+    if code == 0:
+        listing = subprocess.run([python, "-m", "pip", "list", "--format=json", "--disable-pip-version-check"],
+                                 capture_output=True, text=True)
+        for row in json.loads(listing.stdout or "[]") if listing.returncode == 0 else []:
+            if normalize(row["name"]) == PROJECT or normalize(row["name"]).startswith(PROJECT + "-"):
+                installed[normalize(row["name"])] = row["version"]
+    request["install"] = dict(exit=code, installed=installed)
+    if code != 0:
+        return
+    probe = subprocess.run([python, "-c", "import mojolearn; print(mojolearn.__version__)"], capture_output=True,
+                           text=True, timeout=600, cwd=str(scratch_dir("published-cwd-")))
+    (out / "import.log").write_text(probe.stdout + probe.stderr)
+    lines = probe.stdout.strip().splitlines()
+    request["import"] = dict(exit=probe.returncode, version=lines[-1].strip() if lines else None)
+    if probe.returncode != 0:
+        return
+    request["verify_quick"] = dict(exit=_run([python, "-m", "mojolearn", "verify", "--quick"], out / "verify-quick.log",
+                                             args.verify_timeout, cwd=str(scratch_dir("published-cwd-"))))
 
 
 def check(args):
-    """The published-<vendor> bytes check: resolve, download, compare, reference the gate. No device, no install."""
-    import shutil
+    """The published check: resolve, download, compare, install, import, verify --quick. CPU only."""
     out = args.out.resolve()
     require(not out.exists(), "output must be new")
     out.mkdir(parents=True)
-    log = out / "resolve.log"
-    candidates = {Path(w).name: sha256(w) for w in args.candidate_wheel}
-    request = dict(mode="bytes", vendor=args.vendor, version=args.version, index_url=args.index_url,
-                   candidates=candidates, controller_sha256=sha256(__file__),
-                   source_commit=args.source_commit, gate=dict(verdict=args.gate_verdict, evidence=[]))
-    resolved = []
+    candidates = _load(args.candidates)
+    request = dict(version=args.version, index_url=args.index_url, candidates=candidates,
+                   controller_sha256=sha256(__file__), runner=args.runner)
     try:
-        expected = {}
-        for wheel in args.candidate_wheel:
-            expected.setdefault(wheel_tags(wheel)["distribution"], []).append(Path(wheel).name)
-        wait = wait_for_index(args.index_url, args.version, expected, args.index_wait, args.index_wait_step)
-        request["index_wait"] = wait
-        if not wait["listed"]:
-            # pip still runs once: its own answer is kept beside the listing; the report fails as index lag
-            print("WAIT-EXPIRED published-index version=%s after %ss: not listed %s" % (
-                args.version, wait["waited_s"], ",".join(wait["missing"])), flush=True)
-        python = pip_python(args.python, out, log)
-        for wheel in args.candidate_wheel:
-            tags = wheel_tags(wheel)
-            require(tags["version"] == args.version, "candidate %s is not version %s" % (Path(wheel).name, args.version))
-            dest = out / "wheels" / tags["distribution"]
-            dest.mkdir(parents=True, exist_ok=True)
-            cmd = pip_download_command(python, args.index_url, tags["distribution"], args.version, tags, dest)
-            with log.open("ab") as stream:
-                stream.write(("\n$ " + " ".join(cmd) + "\n").encode())
-                stream.flush()
-                code = subprocess.run(cmd, stdout=stream, stderr=subprocess.STDOUT,
-                                      timeout=args.timeout).returncode
-            files = sorted(p.name for p in dest.glob("*.whl"))
-            row = dict(distribution=tags["distribution"], requested="%s==%s" % (tags["distribution"], args.version),
-                       tags=tag_set(tags), candidate=Path(wheel).name, pip_exit=code, files=files,
-                       file=files[0] if code == 0 and len(files) == 1 else None)
-            if row["file"]:
-                row["sha256"] = sha256(dest / row["file"])
-                try:
-                    row["index_sha256"] = index_digest(args.index_url, tags["distribution"], row["file"])
-                except (OSError, ValueError) as error:
-                    row["index_error"] = type(error).__name__ + ": " + str(error)
-            resolved.append(row)
-        for source in args.gate_evidence:
-            source = Path(source).resolve()
-            digest = sha256(source)
-            target = out / "gate-evidence" / ("%s-%s" % (digest[:16], source.name))
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, target)
-            request["gate"]["evidence"].append(dict(source=str(source), path=target.relative_to(out).as_posix(),
-                                                    sha256=digest))
+        require(isinstance(candidates, dict) and candidates
+                and all(isinstance(v, str) and re.fullmatch(r"[0-9a-f]{64}", v) for v in candidates.values()),
+                "candidates must be a {file name: sha256} map")
+        request["resolved"] = resolve(args, candidates, request, out / "resolve.log")
+        install_and_verify(args, request, out)
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         request["error"] = type(error).__name__ + ": " + str(error)
-    request["resolved"] = resolved
     (out / "request.json").write_text(json.dumps(request, indent=2) + "\n")
-    report = judge_bytes(out, args.index_url)
-    if "error" in request:
-        report.update(status="failed", exit_code=1, error=request["error"],
-                      failure=report.get("failure") or CHECK_ERROR,
-                      failure_why=report.get("failure_why") or str(request["error"])[:300])
+    report = judge(out, args.index_url)
     (out / REPORT).write_text(json.dumps(report, indent=2) + "\n")
-    print("PUBLISHED vendor=%s version=%s status=%s %s%s" % (args.vendor, args.version, report["status"], " ".join(
+    print("PUBLISHED version=%s status=%s %s%s" % (args.version, report["status"], " ".join(
         "%s=%d/%d" % (row["id"], row["completed"], row["expected"]) for row in report["coverage"]),
         (" failure=" + report["failure"]) if report.get("failure") else ""))
     if report.get("failure") == INDEX_LAG:
-        print("PUBLISHED-INDEX-LAG vendor=%s version=%s %s (no verdict on the bytes; not recorded)" % (
-            args.vendor, args.version, report.get("failure_why")))
+        print("PUBLISHED-INDEX-LAG version=%s %s (no verdict on the bytes; not recorded)" % (
+            args.version, report.get("failure_why")))
     for row in report["mismatch"]:
         print("PUBLISHED-DIFFERS %s published=%s candidate=%s" % (row["file"], row["published_sha256"],
                                                                    row["candidate_sha256"]))
-    return report["exit_code"]
-
-
-def published_commit(files):
-    found = set()
-    for row in files:
-        with zipfile.ZipFile(row["path"]) as archive:
-            if "mojolearn/identity_columns/COMMIT" in archive.namelist():
-                found.add(archive.read("mojolearn/identity_columns/COMMIT").decode().strip())
-    require(len(found) == 1 and re.fullmatch("[0-9a-f]{40}", next(iter(found))),
-            "the published wheels name no single packaged source commit")
-    return found.pop()
-
-
-def run(args):
-    import adapter_gate
-    out = args.out.resolve()
-    require(not out.exists(), "output must be new")
-    require(os.environ.get("MOJOLEARN_WHEEL_INDEX", "pypi") == "pypi", "published-<vendor> installs from PyPI only")
-    out.mkdir(parents=True)
-    candidates = {Path(w).name: sha256(w) for w in args.candidate_wheel}
-    request = dict(vendor=args.vendor, version=args.version, candidates=candidates, controller_sha256=sha256(__file__))
-    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
-    venv = scratch_dir("published-venv-") / "venv"
-    python = str(venv / "bin/python")
-    log = out / "install.log"
-    with log.open("ab") as stream:
-        code = subprocess.run([args.python, "-m", "venv", str(venv)], stdout=stream, stderr=subprocess.STDOUT).returncode
-    if code == 0:
-        with log.open("ab") as stream:
-            code = subprocess.run([sys.executable, str(HERE / "pypi_wheel_install.py"), "install", "--python", python,
-                                   "--version", args.version, "--vendor", args.vendor, "--dir", str(out / "wheels"),
-                                   "--manifest", str(out / "wheel-manifest.json"), "--log", str(log)],
-                                  stdout=stream, stderr=subprocess.STDOUT, env=env).returncode
-    request["install_exit"] = code
-    try:
-        manifest = _load(out / "wheel-manifest.json")
-        request["source_commit"] = published_commit(manifest["files"])
-        site = subprocess.check_output([python, "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
-                                       text=True, env=env).strip()
-        (out / "installed-bytes.json").write_text(json.dumps(
-            installed_bytes([Path(w).resolve() for w in args.candidate_wheel], site), indent=2) + "\n")
-        if args.vendor == "amd":
-            env["LD_LIBRARY_PATH"] = ":".join(glob.glob(str(venv / "lib/python*/site-packages/*/lib64"))
-                                              + ["/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib"])
-        with (out / "correctness.log").open("ab") as stream:
-            request["correctness_exit"] = subprocess.run(
-                [sys.executable, str(HERE / "qualify_verifier_wheel.py"), "--installed-python", python,
-                 "--expected-version", args.version, "--expected-source-commit", request["source_commit"],
-                 "--scope", "expanded", "--output", str(out / "correctness")],
-                stdout=stream, stderr=subprocess.STDOUT, env=env, timeout=args.timeout).returncode
-        if args.vendor == "amd":
-            # the adapter smoke's venv is adapter_gate's scratch venv, made inside run (none exists yet to glob)
-            env["LD_LIBRARY_PATH"] = ":".join(["/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib"])
-        record = adapter_gate.run(args.vendor, sys.executable, out / "adapter-smoke",
-                                  [row["path"] for row in manifest["files"]], env=env)
-        request["adapters"] = {k: record.get(k) for k in ("status", "ok", "rc", "why")}
-    except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
-        request["error"] = type(error).__name__ + ": " + str(error)
-    (out / "request.json").write_text(json.dumps(request, indent=2) + "\n")
-    try:
-        report = judge(out)
-        if "error" in request:
-            report.update(status="failed", exit_code=1, error=request["error"])
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        report = dict(schema=SMOKE_SCHEMA, tool="tools/release_published_install.py", vendor=args.vendor,
-                      status="failed", exit_code=1, error=type(error).__name__ + ": " + str(error))
-    (out / REPORT).write_text(json.dumps(report, indent=2) + "\n")
-    print("PUBLISHED-SMOKE vendor=%s version=%s status=%s %s" % (args.vendor, args.version, report["status"], " ".join(
-        "%s=%d/%d" % (row["id"], row["completed"], row["expected"]) for row in report.get("coverage", []))))
     return report["exit_code"]
 
 
@@ -721,30 +437,19 @@ def main(argv=None):
     sys.path.insert(0, str(HERE))
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    bytes_check = sub.add_parser("check", help="the published-<vendor> producer: resolution, bytes, integrity, "
-                                               "the gate's evidence by reference (no device, no install)")
-    bytes_check.add_argument("--vendor", choices=VENDORS, required=True)
-    bytes_check.add_argument("--version", required=True)
-    bytes_check.add_argument("--candidate-wheel", action="append", required=True)
-    bytes_check.add_argument("--gate-evidence", action="append", default=[],
-                             help="a receipt of the gate that passed these candidate bytes (copied, content keyed)")
-    bytes_check.add_argument("--gate-verdict", required=True, help="the release's verdict on that gate")
-    bytes_check.add_argument("--source-commit", default=None)
-    bytes_check.add_argument("--index-url", default=PYPI_INDEX)
-    bytes_check.add_argument("--python", default=sys.executable, help="runs pip (a venv of it when it has none)")
-    bytes_check.add_argument("--timeout", type=int, default=900, help="seconds per pip download")
-    bytes_check.add_argument("--index-wait", type=float, default=INDEX_WAIT_S,
-                             help="seconds to wait for the index to list every expected file (0: one look)")
-    bytes_check.add_argument("--index-wait-step", type=float, default=INDEX_WAIT_STEP_S,
-                             help="seconds between two looks at the index")
-    bytes_check.add_argument("--out", type=Path, required=True)
-    go = sub.add_parser("run", help="the installed smoke on the vendor device: only for release.py "
-                                    "--published-smoke <vendor> with a stated reason")
-    go.add_argument("--vendor", choices=VENDORS, required=True)
+    go = sub.add_parser("check", help="the published check on a CPU runner: files, hashes, install, import, "
+                                      "verify --quick")
     go.add_argument("--version", required=True)
-    go.add_argument("--candidate-wheel", action="append", required=True)
-    go.add_argument("--python", default=sys.executable)
-    go.add_argument("--timeout", type=int, default=1800)
+    go.add_argument("--candidates", type=Path, required=True, help="JSON {wheel file name: sha256}")
+    go.add_argument("--index-url", default=PYPI_INDEX)
+    go.add_argument("--python", default=sys.executable, help="runs pip and makes the venv")
+    go.add_argument("--runner", default="", help="where this ran (the workflow run URL)")
+    go.add_argument("--timeout", type=int, default=1800, help="seconds per pip download or install")
+    go.add_argument("--verify-timeout", type=int, default=3600, help="seconds for verify --quick")
+    go.add_argument("--index-wait", type=float, default=INDEX_WAIT_S,
+                    help="seconds to wait for the index to list every expected file (0: one look)")
+    go.add_argument("--index-wait-step", type=float, default=INDEX_WAIT_STEP_S,
+                    help="seconds between two looks at the index")
     go.add_argument("--out", type=Path, required=True)
     again = sub.add_parser("judge")
     again.add_argument("--out", type=Path, required=True)
@@ -752,8 +457,6 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.command == "check":
         return check(args)
-    if args.command == "run":
-        return run(args)
     report = judge(args.out, args.index_url)
     print(json.dumps({k: report[k] for k in ("status", "coverage")}))
     return report["exit_code"]

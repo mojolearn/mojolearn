@@ -48,8 +48,7 @@ def make_release(tmp, version="0.9.1", commit=COMMIT, single=False):
     put(rel / "reuse" / "plan.json", dict(commit=commit, rows=[dict(key="k", decision="BUILD", reason="changed")],
                                           previous=dict(version="0.9.0")))
     put(rel / "testpypi-rehearsal" / "rehearsal.json", dict(version=version, commit=commit, problems=[]))
-    for v in ("apple", "nvidia", "amd"):
-        put(rel / ("published-%s" % v) / "published-report.json", dict(version=version, ok=True))
+    put(rel / "published-check" / "published-report.json", dict(version=version, ok=True))
     table = put(rel / "table.json", dict(cells={"knn/base": {"fit": dict(ref="abc", cols={"nvidia": 1, "amd": 2}),
                                                              "x": dict(ref="n/a:none", cols={})}}))
     steps = {s: dict(done=True, commit=commit, at="t", result="PASS " + s) for s in
@@ -434,41 +433,40 @@ def test_summary_md_lists_the_slowest_identity_lanes(tmp_path):
     assert facts["lane_seconds"] == 545.0
 
 
-# ---------------------------------------------------------------- published-<vendor>: index lag is never recorded
+# ---------------------------------------------------------------- the published check: index lag is never recorded
 def test_an_index_lag_published_report_is_refused_and_says_so(tmp_path):
     # 0.8.66 run v (2026-11-08): PyPI had not listed the macOS file, pip resolved nothing, the report FAILED
     root = tmp_path / "repo"
     E.write_set(make_release(tmp_path, "0.9.1"), root)
     before = files_of(root)
     ctx = make_release(tmp_path, "0.9.2", commit="b" * 40)
-    put(ctx.rel / "published-apple" / "published-report.json", dict(
+    put(ctx.rel / "published-check" / "published-report.json", dict(
         version="0.9.2", status="failed", exit_code=1, mismatch=[], failure="index-lag",
         failure_why="the index did not list mojolearn-0.9.2-py3-none-macosx_26_0_arm64.whl after 900s (46 polls)"))
-    with pytest.raises(E.EvidenceError, match="publish/published-apple.json is an INDEX LAG failure, not a hash "
-                                              "mismatch.*not recorded.*published-apple again"):
+    with pytest.raises(E.EvidenceError, match="publish/published-check.json is an INDEX LAG failure, not a hash "
+                                              "mismatch.*not recorded.*published again"):
         E.write_set(ctx, root)
     assert files_of(root) == before
-    # a report written before the kind was stored: no resolved file is index lag too
-    put(ctx.rel / "published-apple" / "published-report.json", dict(
-        version="0.9.2", status="failed", exit_code=1, mismatch=[], checks={"wheel-integrity": [
-            dict(name="resolved-files", passed=False, why="nothing was resolved")]}))
-    with pytest.raises(E.EvidenceError, match="INDEX LAG.*nothing was resolved"):
-        E.write_set(ctx, root)
+
+
+def test_one_published_item_replaces_the_per_vendor_ones(tmp_path):
+    ctx = make_release(tmp_path, "0.9.3")
+    dests = [row[0] for row in E.expand(ctx)]
+    assert "publish/published-check.json" in dests and not any(
+        d.startswith("publish/published-") and d != "publish/published-check.json" for d in dests)
 
 
 def test_a_hash_mismatch_is_recorded_and_the_summary_names_it_apart_from_index_lag(tmp_path):
     root = tmp_path / "repo"
     ctx = make_release(tmp_path, "0.9.3")
-    put(ctx.rel / "published-nvidia" / "published-report.json", dict(version="0.9.3", status="passed", exit_code=0))
-    put(ctx.rel / "published-amd" / "published-report.json", dict(
+    put(ctx.rel / "published-check" / "published-report.json", dict(
         version="0.9.3", status="failed", exit_code=1, failure="hash-mismatch",
         failure_why="w.whl published %s, candidate %s" % ("a" * 64, "b" * 64),
         mismatch=[dict(file="w.whl", published_sha256="a" * 64, candidate_sha256="b" * 64)]))
     E.write_set(ctx, root)
     text = (root / E.EVIDENCE_DIR / "SUMMARY.md").read_text()
     assert "## Published checks" in text
-    assert "published-amd: **FAIL: HASH MISMATCH**" in text and "a" * 64 in text
-    assert "published-nvidia: **PASS**" in text and "INDEX LAG" not in text
+    assert "published-check: **FAIL: HASH MISMATCH**" in text and "a" * 64 in text and "INDEX LAG" not in text
 
 
 def test_summary_reads_device_driver_box_and_times_from_the_records_run_block(tmp_path):

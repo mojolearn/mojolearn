@@ -1,4 +1,4 @@
-"""Installed-wheel runtime and published-install reports as ledger evidence.
+"""Installed-wheel runtime reports as ledger evidence.
 
 Used by tools/release_ledger_admission.py; never installs or runs anything. Each
 adapter re-derives its producer's report from the retained raw files (junit,
@@ -6,13 +6,15 @@ verifier captures, driver samples, manifests, checker records) and admits only a
 complete pass whose wheels are the ledger's qualified candidate bytes:
 
   installed-runtime  runtime-<vendor>   tools/release_runtime_installed.py   --producer report=DIR/runtime-report.json
-  published-install  published-<vendor> tools/release_published_install.py  --producer report=DIR/published-report.json
+
+The published-<vendor> rows (published-install) left the ledger on 2026-11-27 (Andrew): the one post-publication
+check is the `published` step's CPU job on GitHub, whose report the release evidence set keeps
+(tools/release_evidence_set.py); nothing after publication is reused into a release decision.
 """
 from pathlib import Path
 
 from release_ledger_admission import require, load, reference, checked
 
-import release_published_install as published
 import release_runtime_installed as runtime
 
 ROW_KEYS = ("id", "status", "exit_code", "expected", "completed", "failed", "skipped")
@@ -22,7 +24,6 @@ FAMILIES = {
     # The multi-gpu-<vendor> family left with multi-GPU verification (owner, 2026-10-31).
     # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by b5f27e18a6; code recoverable at b5f27e18a6^.
     # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
-    "published": ("published-", ("nvidia", "amd", "apple"), published.COVERAGE_IDS, published, "published-install"),
 }
 
 
@@ -38,9 +39,7 @@ def supports_requirement(wanted):
 
 def _rederive(kind, out):
     """The producer's own report function over the retained directory."""
-    if kind == "runtime":
-        return runtime.summarize(out)
-    return published.judge(out)
+    return runtime.summarize(out)
 
 
 def _facts(kind):
@@ -67,7 +66,7 @@ def _facts(kind):
                 name + " coverage is incomplete")
         revision = report.get("source_revision")
         require(isinstance(revision, str) and len(revision) == 40, name + " report has no full source commit")
-        wheels = report.get("published") if kind == "published" else report.get("wheels")
+        wheels = report.get("wheels")
         require(isinstance(wheels, dict) and wheels, name + " report names no wheels")
         evidence = [report_ref]
         for ref in report["evidence"]:
@@ -123,15 +122,8 @@ def _collect(kind):
             if configured_tests is not None:
                 reconstruction["runtime_test_source_revision"] = configured_tests
                 declared.append("runtime_test_source_revision")
-        if kind == "published":
-            artifacts = configuration.get("artifacts:" + vendor)
-            require(isinstance(artifacts, dict) and artifacts, "ledger configuration lacks artifacts:" + vendor)
-            require(facts["version"] == document.get("version"), "published report is another release version")
-            reconstruction["artifacts:" + vendor] = artifacts
-            declared.append("artifacts:" + vendor)
-        else:
-            require(_qualified(configuration, facts["wheels"]),
-                    name + " ran wheels that are not the ledger's qualified candidate artifacts")
+        require(_qualified(configuration, facts["wheels"]),
+                name + " ran wheels that are not the ledger's qualified candidate artifacts")
         unit = prefix + vendor
         return dict(source_revision=facts["source_revision"], facts=facts, units={unit: dict(vendor=vendor)},
                     spec_ids=[unit], declared=declared, configuration=reconstruction)
@@ -150,10 +142,6 @@ def _check(kind):
         if kind == "runtime":
             expected_tests = configuration.get("runtime_test_source_revision") or facts["source_revision"]
             require(facts["test_revision"] == expected_tests, "runtime test revision differs from the requirement")
-        if kind == "published":
-            artifacts = configuration.get("artifacts:" + vendor) or {}
-            require(_qualified({"artifacts:" + vendor: artifacts}, facts["wheels"]),
-                    "published bytes differ from the requirement's qualified artifacts")
         return [dict(row) for row in facts["coverage"]], list(facts["evidence"])
     return check_unit
 

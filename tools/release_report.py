@@ -53,7 +53,7 @@ REUSE_DECISIONS = ("retained", "reference-closure-unchanged")
 PROVENANCE_ACTIONS = ("complete-provenance", "restore-evidence")
 STEP_PASSED_REUSE = re.compile(r"\b(REUSE|reused|adopted|taken from|retained verdict)\b")
 STEP_SKIPPED = re.compile(r"^\s*SKIPPED\b")
-POST_STEPS = re.compile(r"^(published-|publish-|finish-line$|record$|boxes-down$)")
+POST_STEPS = re.compile(r"^(published$|publish-|finish-line$|record$|boxes-down$)")
 
 
 # ---------------------------------------------------------------- waivers
@@ -163,8 +163,6 @@ def producing_step(name, section="ledger"):
         if vendor in ("apple", "nvidia", "amd"):
             return "gate-" + vendor
         return "none (no producer in the release step graph)"
-    if kind == "published":
-        return "published-" + vendor
     if name == "coverage-source":
         return "tools/verify_coverage_audit.py (admitted by tools/release_ledger_admission.py coverage-source)"
     if kind == "performance":
@@ -259,14 +257,14 @@ def next_action(version, commit, name, state, row, section="ledger", plan_restor
         step = producing_step(name)
         if step.startswith("none"):
             return "add a producer for %s (tools/release_ledger_admission.py ADAPTERS), then %s --report" % (name, rel)
-        if step.startswith("gate-") or step in ("macos-build", "linux-builds") or step.startswith("published-"):
+        if step.startswith("gate-") or step in ("macos-build", "linux-builds"):
             return "%s --only %s (its producer report reconciles the provenance)" % (rel, step)
     step = producing_step(name)
     if state == "failed":
         prefix = "fix the failure it recorded, then "
     else:
         prefix = ""
-    if step.startswith("gate-") or step in ("macos-build", "linux-builds") or step.startswith("published-"):
+    if step.startswith("gate-") or step in ("macos-build", "linux-builds"):
         return prefix + "%s --only %s" % (rel, step)
     if name == "coverage-source":
         return prefix + ("python3 tools/release_ledger_admission.py admit --ledger %s --root . --adapter coverage-source "

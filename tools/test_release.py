@@ -393,13 +393,9 @@ class RunTests(unittest.TestCase):
                               "--state-dir", str(self.state), *extra],
                              capture_output=True, text=True, timeout=600, env=env)
         self.assertEqual(out.returncode, 0, out.stderr)
-        # published-smoke-<vendor> is selected only by an explicit --published-smoke VENDOR (release.py go):
-        # unrequested, it is not planned at all; every other step is.
+        # every step is planned
         for step in release.Release.STEPS:
-            if step in release.PUBLISHED_SMOKE_STEPS:
-                self.assertNotIn("-- " + step + "\n", out.stdout)
-            else:
-                self.assertIn("-- " + step, out.stdout)
+            self.assertIn("-- " + step, out.stdout)
         self.assertFalse(self.state.exists())
         # THE READINESS ANALYSIS GOES FIRST (lane post-readiness-off-mac, 2026-11-07): the step runs, and is
         # reported done, before linux-builds or macos-build starts, so neither waits on it beside the Mac build.

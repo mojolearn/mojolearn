@@ -16,8 +16,8 @@ equals the current requirement's. Changed inputs remain changed.
 ``record`` (one command) prepares, then records each admitted unit on its active begun
 run when the inputs are fingerprint-equal, else admits it retrospectively::
 
-    python3 tools/release_ledger_admission.py record --adapter published-install \
-        --ledger LEDGER --root REPO --out NEW_DIR --producer report=DIR/published-report.json
+    python3 tools/release_ledger_admission.py record --adapter installed-runtime \
+        --ledger LEDGER --root REPO --out NEW_DIR --producer report=DIR/runtime-report.json
 
 ``prepare`` writes report.json, originals.json, reconciliation.json,
 receipts.json and review.json into a new directory. It admits only units whose
@@ -56,9 +56,6 @@ Adapters (``--adapter``):
                           --json audit   (--producer audit=)
   installed-runtime       runtime-<vendor> from tools/release_runtime_installed.py
                           (--producer report=DIR/runtime-report.json)
-  published-install       published-<vendor> (post stage) from tools/release_published_install.py
-                          check: bytes resolved from PyPI equal to the gated candidates, the gate's
-                          receipts by reference (--producer report=DIR/published-report.json)
   macos-release-build     compile-apple from the macOS release build: its binary cache keys
                           recomputed at the frozen source, packaging replayed to the shipped
                           wheel bytes   (--producer wheel= log= cache=)
@@ -101,7 +98,6 @@ ADAPTERS = {
     "apple-gate-adapters": ("release_adapter_evidence", "adapters"),
     "coverage-source": ("release_coverage_source_evidence", "source"),
     "installed-runtime": ("release_installed_evidence", "runtime"),
-    "published-install": ("release_installed_evidence", "published"),
     "identity-table-admission": ("release_requirements_retained", "identity"),
     "macos-release-build": ("release_requirements_macos_build", "compile"),
 }

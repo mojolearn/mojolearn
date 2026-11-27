@@ -62,9 +62,8 @@ TAG_FORMAT = "v{version}"
 #: about 1.5 MB. A single file over 2 MiB or a set over 6 MiB is something large that belongs in R2.
 FILE_CAP = 2 * 1024 * 1024
 TOTAL_CAP = 6 * 1024 * 1024
-#: Platforms (tools/release.py PIPELINES) and the vendor names their gates and published-* steps use
+#: Platforms (tools/release.py PIPELINES) and the vendor names their gates use
 GPU_VENDOR_OF = {"nvidia": "nvidia", "amd": "amd"}
-PUBLISHED_VENDOR_OF = {"macos": "apple", "nvidia": "nvidia", "amd": "amd"}
 #: The wheels each vendor's checks ran against (the plugin installs with the core)
 CHECKED_WHEELS = {"nvidia": ("nvidia", "linux"), "amd": ("amd", "linux"), "apple": ("macos",),
                   "cpu": ("linux", "macos")}
@@ -100,8 +99,8 @@ class Context:
 
 # ------------------------------------------------------------------------------------------- THE ITEM TABLE
 #: (dest in the set, producer step, when it is required, source).
-#: dest may hold {platform} (each published platform), {vendor} (each gated GPU vendor whose plugin was
-#: published: nvidia, amd) or {pvendor} (each published-<vendor> step: apple, nvidia, amd).
+#: dest may hold {platform} (each published platform) or {vendor} (each gated GPU vendor whose plugin was
+#: published: nvidia, amd).
 #: when:  always       every release
 #:        single       --identity-on-wheels (the one verification round on the built wheels)
 #:        default      without --identity-on-wheels (the gate's release-light-v1 stages)
@@ -152,9 +151,10 @@ ITEMS = (
     ("checks/rehearsal.json", "rehearsal", "always", "derived:rehearsal"),
     ("compile/cross-compile.json", "cross-compile", "linux", "derived:cross-compile"),
     ("compile/bindings.json", "reuse-plan", "always", "derived:bindings"),
-    # publication: the TestPyPI rehearsal before it, the byte checks after it
+    # publication: the TestPyPI rehearsal before it; after it the ONE published check (a CPU job on GitHub:
+    # PyPI files equal to the candidates, pip install, import, verify --quick; Andrew 2026-11-27) and the hashes
     ("publish/testpypi-rehearsal.json", "testpypi-rehearsal", "always", "rel:testpypi-rehearsal/rehearsal.json"),
-    ("publish/published-{pvendor}.json", "published-{pvendor}", "always", "rel:published-{pvendor}/published-report.json"),
+    ("publish/published-check.json", "published", "always", "rel:published-check/published-report.json"),
     ("publish/finish-line.json", "finish-line", "always", "derived:finish-line"),
     # fail soft (tools/release_verdicts.py): every SOFT failure the release continued past, and the summary that
     # lists them under "Soft failures (fix lanes owed)"
@@ -175,15 +175,12 @@ VERBATIM_PREFIXES = ("alpha-manifest-", "file-admission-", "release-provenance.j
 def expand(ctx):
     """[(dest, producer, required, source, against)] of ITEMS for this release."""
     gated = [GPU_VENDOR_OF[p] for p in ctx.published if p in GPU_VENDOR_OF]
-    pvendors = [PUBLISHED_VENDOR_OF[p] for p in ctx.published if p in PUBLISHED_VENDOR_OF]
     rows = []
     for dest, producer, when, source in ITEMS:
         if "{platform}" in dest:
             keys = [("platform", p) for p in ctx.published]
         elif "{vendor}" in dest:
             keys = [("vendor", v) for v in gated]
-        elif "{pvendor}" in dest:
-            keys = [("pvendor", v) for v in pvendors]
         else:
             keys = [(None, None)]
         for key, value in keys:
@@ -209,7 +206,7 @@ def against(ctx, key, value, dest):
     """The platforms whose exact wheel bytes the item was produced against."""
     if key == "platform":
         return [value]
-    if key in ("vendor", "pvendor"):
+    if key == "vendor":
         return [p for p in CHECKED_WHEELS.get(value, ()) if p in ctx.wheels]
     if dest.startswith("gates/apple") or dest.startswith("identity/apple"):
         return ["macos"]
@@ -591,12 +588,12 @@ def _published_tool():
 
 
 def published_failure(doc):
-    """The failure kind of a published-<vendor> report (tools/release_published_install.py failure_kind), or None."""
+    """The failure kind of the published check's report (tools/release_published_install.py failure_kind), or None."""
     return _published_tool().failure_kind(doc)
 
 
 def index_lag_refusal(dest, doc):
-    """Why the record step refuses the published-<vendor> report DEST, or None. An index-lag failure (the index
+    """Why the record step refuses the published check's report DEST, or None. An index-lag failure (the index
     did not list the published files yet, nothing was resolved) is no verdict on the bytes: it is never recorded
     (0.8.66 run v, 2026-11-08: a FAILED published-apple went into the set one minute after the upload)."""
     if not dest.startswith("publish/published-"):
@@ -604,10 +601,9 @@ def index_lag_refusal(dest, doc):
     release_published_install = _published_tool()
     if published_failure(doc) != release_published_install.INDEX_LAG:
         return None
-    vendor = dest[len("publish/published-"):].rsplit(".", 1)[0]
     return ("%s is an INDEX LAG failure, not a hash mismatch (%s): the index had not listed the published files, "
-            "so nothing was compared; it is not recorded. Run published-%s again once the index lists them"
-            % (dest, (doc or {}).get("failure_why") or release_published_install.NOTHING_RESOLVED, vendor))
+            "so nothing was compared; it is not recorded. Run published again once the index lists them"
+            % (dest, (doc or {}).get("failure_why") or release_published_install.NOTHING_RESOLVED))
 
 
 def collect(ctx, root=ROOT):

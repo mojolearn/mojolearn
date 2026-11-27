@@ -23,8 +23,8 @@ def args(**kw):
     base = dict(version=VERSION, dry_run=False, publish="pypi", only="", redo="", build_backend="github",
                 amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto",
                 smoke_via="lq", hopper_box="", smoke_branch="main", cpu_column=False, gpu_smoke=False,
-                owner_waiver=None, status=False, refreeze=False, source_checkout="", published_smoke=[],
-                published_smoke_reason="", identity_on_wheels=False, nvidia_columns="", reuse_unchanged=False)
+                owner_waiver=None, status=False, refreeze=False, source_checkout="",
+                identity_on_wheels=False, nvidia_columns="", reuse_unchanged=False)
     base.update(kw)
     return argparse.Namespace(**base)
 
