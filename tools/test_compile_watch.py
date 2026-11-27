@@ -85,3 +85,20 @@ def test_cross_compile_check_uses_this_rule():
     assert "compile_watch.StallClock(" in text and "compile_watch.first_error_lines(" in text
     shell = (ROOT / "packaging" / "linux" / "binding_timeout.sh").read_text()
     assert "tools/compile_watch.py" in shell
+
+
+def test_process_table_probe_distinguishes_tree_and_group(monkeypatch):
+    from types import SimpleNamespace
+    snapshot = "10 1 10 0:00.50\n11 10 10 1-00:00:01\n12 1 10 0:04\n42 1 42 0:09\n"
+    monkeypatch.setattr(cw.subprocess, "run", lambda *a, **kw: SimpleNamespace(stdout=snapshot))
+    assert cw._ps_cpu(10) == 86401.50
+    assert cw.group_cpu_seconds(10) == 86405.50
+    assert cw.group_cpu_seconds(99) is None
+
+
+def test_unreadable_interval_starts_a_new_observation_window():
+    sc = cw.StallClock(10, 0.0)
+    assert not sc.observe(0.0, 4.0)
+    assert not sc.observe(10.0, None)
+    assert not sc.observe(30.0, 4.0)
+    assert sc.observe(40.0, 4.0)

@@ -158,26 +158,7 @@ def compile_cmd(mojo, root_file, incs, tier, arch, out):
 
 
 # ---------------------------------------------------------------- running
-def group_cpu_seconds(pgid):
-    """Summed CPU time of a process group (ps TIME column), or None."""
-    try:
-        o = subprocess.run(["ps", "-g", str(pgid), "-o", "time="], capture_output=True, text=True,
-                           timeout=10).stdout
-    except (OSError, subprocess.SubprocessError):
-        return None
-    total = 0.0
-    for tok in o.split():
-        v = 0.0
-        for part in tok.replace("-", ":").split(":"):
-            try:
-                v = v * 60 + float(part)
-            except ValueError:
-                return None
-        total += v
-    return total
-
-
-def run_one(cmd, out, timeout, stall, cwd=ROOT, poll=2.0, cpu_probe=group_cpu_seconds, clock=time.monotonic,
+def run_one(cmd, out, timeout, stall, cwd=ROOT, poll=2.0, cpu_probe=compile_watch.group_cpu_seconds, clock=time.monotonic,
             sleep=time.sleep, retain=None, env=None):
     """(verdict, seconds, log_tail). The compiler runs in its own process
     group so a kill takes every child with it."""

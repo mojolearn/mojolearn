@@ -489,7 +489,7 @@ ordered_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
         else
             set -- env MOJOLEARN_NUMERIC_MODE="$mode"
         fi
-        if "$@" $runner ./bindings/merged_build.sh "$kind" --group "$stem" > "$log" 2>&1; then
+        if bash packaging/linux/binding_timeout.sh merged "$log" "$@" $runner ./bindings/merged_build.sh "$kind" --group "$stem"; then
             python3 tools/binding_stamps.py write-merged "$output" "$members" >> "$log" 2>&1 || { echo "== merged $mode/$stem STAMP FAILED"; cat "$log"; exit 1; }
             { echo "== merged $mode/$stem.so OK"; cat "$log"; }
         else
@@ -554,8 +554,8 @@ ordered_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
         fam="${script#build_}"; fam="${fam%_host.sh}"
         FAM=$(printf "%s" "$fam" | tr "a-z" "A-Z")
         if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip MOJOLEARN_TARGET_COLUMN=cpu \
-             env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR -u "MOJOLEARN_${FAM}_HOST_OUTDIR" \
-             $runner "./bindings/$script" > "$log" 2>&1; then
+             bash packaging/linux/binding_timeout.sh binding "$log" env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR -u "MOJOLEARN_${FAM}_HOST_OUTDIR" \
+             $runner "./bindings/$script"; then
             python3 tools/binding_stamps.py write "$script" "$output" >> "$log" 2>&1 || { echo "== $script ($mode) STAMP FAILED"; cat "$log"; exit 1; }
             { echo "== $script ($mode) OK"; cat "$log"; }
         else
@@ -564,7 +564,7 @@ ordered_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
         fi
         exit 0 ;;
     esac
-    if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip $runner "./bindings/$script" > "$log" 2>&1; then
+    if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip bash packaging/linux/binding_timeout.sh binding "$log" $runner "./bindings/$script"; then
         # The sources this binding was built from, for the release passes
         # (tools/binding_stamps.py check refuses a binding whose sources moved).
         python3 tools/binding_stamps.py write "$script" "$output" >> "$log" 2>&1 || { echo "== $script ($mode) STAMP FAILED"; cat "$log"; exit 1; }
