@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Public boundary of Sequential.compile's rmsprop, adagrad and lamb optimizers and its learning-rate schedules
+"""Public boundary of Sequential.compile's rmsprop, adagrad, lamb and adafactor optimizers and its learning-rate schedules
 (lane nn-optim, 2026-11-23): admission and defaults, refusals in clear words, and the checkpoint round trip
 (save_checkpoint, from_checkpoint, resume = one continuous fit). The numerics (each step against a float64
 reference, every schedule value, the fits, host versus device words) are the native check
@@ -33,6 +33,7 @@ CONFIGS = [
     dict(optimizer="lamb", lr=0.02, trust_clip=True, max_grad_norm=None, schedule="linear_warmup",
          warmup_steps=2, total_steps=8),
     dict(optimizer="adam", lr=0.01, schedule="reduce_on_plateau", factor=0.5, patience=0),
+    dict(optimizer="adafactor", lr=0.03125, weight_decay=0.01),
 ]
 
 
@@ -79,6 +80,14 @@ def test_defaults_follow_pytorch():
 def test_refusals_in_words(kw, message):
     with pytest.raises(Exception, match=__import__("re").escape(message)):
         _model().compile(**kw)
+
+
+def test_adafactor_admits_vector_and_matrix_parameters_only():
+    model = (mojolearn.Sequential(input_shape=(1, 3, 3)).conv2d(2, 1).flatten().linear(1)
+             .compile(optimizer="adafactor"))
+    x = np.ones((2, 1, 3, 3), dtype=np.float32)
+    with pytest.raises(ValueError, match="Adafactor supports vector and matrix parameters"):
+        model.fit(x, np.zeros(2, dtype=np.float32), epochs=1)
 
 
 def test_one_cycle_past_total_steps_is_refused_at_fit():
