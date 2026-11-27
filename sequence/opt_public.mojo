@@ -23,7 +23,7 @@ once the resident state is open (else -1), W_USED the resident slot mask,
 W_FRESH 1 when the host copies of the state hold the newest values,
 W_OWNED 1 when the next resident step uploads the host copies first,
 W_PRISTINE 1 while the host copies are still the constructor's, W_N the
-parameter count, W_FLAGS LAMB's flags. A separate int64 buffer holds the
+parameter count, W_FLAGS the LAMB flags or Adafactor ascent flag. A separate int64 buffer holds the
 resident handles (one, or one per tensor for Adafactor), -1 when closed.
 
 This file is the host-safe half (generic over `Exec`, no device import):
