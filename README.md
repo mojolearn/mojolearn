@@ -223,6 +223,11 @@ columns. Pass `eval_set=(X_valid, relevance_valid, query_ids_valid)` and
 cutoff is 30. `test_loss_curve_` reports one minus this score. `predict` returns
 a score per item and `loss_curve_` reports one minus training NDCG@30.
 
+Use `loss="QuerySoftMax"` for nonnegative, real-valued relevance. Pass query IDs
+and optional per-row weights. The training curve reports the weighted mean
+negative log probability at CatBoost's default scale and curvature regularization.
+It accepts numeric features on symmetric trees and takes its query groups from the training set.
+
 For `QueryRMSE`, `PairLogit`, and `YetiRank`, specify categorical columns on the
 estimator and supply the validation set's own query IDs when fitting.
 

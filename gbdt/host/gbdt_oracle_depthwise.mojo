@@ -212,7 +212,7 @@ from gbdt.host.gbdt_oracle_eval import (
 # symmetric loop (moved to gbdt_oracle.mojo, lane gbdt-cpu-rest)
 from gbdt.host.gbdt_oracle import _ns_project_index, _sample_tree_folds
 from gbdt.host.ranking_fit import HostRankingFit
-from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF, is_lightgbm_ranking, ranking_seed
+from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF, OBJECTIVE_QUERY_SOFTMAX, is_lightgbm_ranking, ranking_seed
 from gbdt.host.gbdt_oracle_losses import (
     GroupedTestLoss,
     GBDT_LEAF_NEWTON,
@@ -1327,6 +1327,8 @@ def _ns_fit_core(
     # `TNonSymmetricTree` (`pointwise_non_symmetric.cpp:5-29`); the grouped
     # CatBoost losses use their dedicated symmetric estimators
     var objective = params.loss.objective
+    if objective == OBJECTIVE_QUERY_SOFTMAX:
+        raise Error("QuerySoftMax requires grow_policy='SymmetricTree'")
     if objective < 0 or objective == GBDT_OBJ_QUERY_RMSE or objective == GBDT_OBJ_PAIR_LOGIT or objective == GBDT_OBJ_YETI_RANK:
         raise Error("the non-symmetric host fit restates Logloss and the pointwise losses only")
     var base = params.base

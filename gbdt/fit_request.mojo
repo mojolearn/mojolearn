@@ -192,6 +192,8 @@ struct GbdtFitArgs(Movable, Sized):
         var words = len(self) - fixed_and_weights
         var loss = self.strs[0]
         var rank = is_lightgbm_ranking_name(loss)
+        if loss == "QuerySoftMax" and self.i(20) != 0:
+            raise Error("QuerySoftMax does not support eval_set")
         var ndcg_cutoff = rank and words == 8
         var pair_tail = (words == 8 and not ndcg_cutoff) or words == 10
         if words != 7 and words != 10 and not ndcg_cutoff:

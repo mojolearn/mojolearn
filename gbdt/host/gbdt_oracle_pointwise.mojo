@@ -131,7 +131,7 @@ from gbdt.host.gbdt_oracle_ordered import (
     _OrdSplit,
     _ordered_tree_structure,
 )
-from gbdt.targets.ranking_options import is_lightgbm_ranking
+from gbdt.targets.ranking_options import uses_grouped_rank_workspace
 from gbdt.host.gbdt_oracle_losses import (
     GBDT_LEAF_EXACT,
     GBDT_LEAF_GRADIENT,
@@ -259,7 +259,7 @@ def gbdt_pointwise_host_fit(
         loss.objective == GBDT_OBJ_QUERY_RMSE
         or loss.objective == GBDT_OBJ_PAIR_LOGIT
         or loss.objective == GBDT_OBJ_YETI_RANK
-        or is_lightgbm_ranking(loss.objective)
+        or uses_grouped_rank_workspace(loss.objective)
     ):
         raise Error(
             "the pointwise host fit takes the one-output losses; the grouped"

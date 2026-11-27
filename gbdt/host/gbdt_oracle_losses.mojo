@@ -138,8 +138,8 @@ from gbdt.host.gbdt_oracle_query import (
     query_rmse_value,
 )
 from gbdt.host.lightgbm_ranking import HostLightGBMRank
-from gbdt.host.ranking_fit import HostRankingFit, check_host_rank_grades
-from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF, is_lightgbm_ranking, ranking_seed
+from gbdt.host.ranking_fit import HostRankingFit, check_host_rank_targets
+from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF, OBJECTIVE_QUERY_SOFTMAX, is_lightgbm_ranking, uses_grouped_rank_workspace, ranking_loss, ranking_seed
 from gbdt.host.gbdt_oracle_yeti import yeti_rank_eval, yeti_rank_search_pass
 from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.data.permutation import TRandom
@@ -1160,6 +1160,8 @@ struct GroupedTestLoss(Movable):
     var eval_at: Int
 
     def __init__(out self, objective: Int, sizes: List[Int], target: List[Float32], eval_at: Int = DEFAULT_NDCG_CUTOFF) raises:
+        if objective == OBJECTIVE_QUERY_SOFTMAX:
+            raise Error("QuerySoftMax does not support eval_set")
         var rows = 0
         var sizes_u32 = List[UInt32](capacity=len(sizes))
         for q in range(len(sizes)):
@@ -1174,7 +1176,7 @@ struct GroupedTestLoss(Movable):
         self.metric = None
         self.eval_at = eval_at
         if is_lightgbm_ranking(objective):
-            check_host_rank_grades(target)
+            check_host_rank_targets[False](target)
             self.metric = Optional(HostLightGBMRank(sizes, rows))
         elif objective != GBDT_OBJ_QUERY_RMSE:
             self.pairs = Optional(host_pair_groups(sizes_u32, target, List[Float32](), rows))
@@ -1284,14 +1286,14 @@ def gbdt_losses_host_fit(
         loss.objective == GBDT_OBJ_QUERY_RMSE
         or loss.objective == GBDT_OBJ_PAIR_LOGIT
         or loss.objective == GBDT_OBJ_YETI_RANK
-        or is_lightgbm_ranking(loss.objective)
+        or uses_grouped_rank_workspace(loss.objective)
     ) and len(group_sizes) < 1:
         raise Error("the querywise host fit needs the query sizes")
     # the YetiRank task table (`InitYetiRank`'s query size refusal inside) and
     # draw stream, as `doc_parallel_boosting.mojo::fit_with_test` builds them
     var rank = Optional[HostRankingFit]()
-    if is_lightgbm_ranking(loss.objective):
-        rank = Optional(HostRankingFit(group_sizes, y))
+    if uses_grouped_rank_workspace(loss.objective):
+        rank = Optional(HostRankingFit(group_sizes, y, loss.objective, weights))
     var yeti_tasks = Optional[YetiRankTasks]()
     var yeti_rand = TRandom(params.random_seed ^ UInt64(0x5945544952414E4B))
     if loss.objective == GBDT_OBJ_YETI_RANK:
@@ -1344,7 +1346,7 @@ def gbdt_losses_host_fit(
         loss.objective == GBDT_OBJ_QUERY_RMSE
         or loss.objective == GBDT_OBJ_PAIR_LOGIT
         or loss.objective == GBDT_OBJ_YETI_RANK
-        or is_lightgbm_ranking(loss.objective)
+        or uses_grouped_rank_workspace(loss.objective)
     )
     var rank_test = Optional[GroupedTestLoss]()
     if has_test:
@@ -1845,11 +1847,11 @@ def gbdt_losses_host_fit(
         if len(losses) < params.n_estimators:
             var v = Float64(fv)
             if iteration + 1 > 1:
-                losses.append(1.0 - v if rank.__bool__() else -v / loss_norm)
+                losses.append(ranking_loss(loss.objective, v) if rank.__bool__() else -v / loss_norm)
     var fit_loop = fit_loop_stop(fit_loop_t0, len(tree_split_offsets) - 1)
 
     if rank.__bool__():
-        losses.append(1.0 - Float64(rank.value().workspace.ndcg(y, cursors[est_p])))
+        losses.append(ranking_loss(loss.objective, Float64(rank.value().workspace.training_metric(loss.objective, y, cursors[est_p], weights))))
     elif loss.objective == GBDT_OBJ_YETI_RANK:
         # the device's final pass writes 0.0 partials and takes no draw
         losses.append(-Float64(Float32(0.0)) / Float64(n_rows))

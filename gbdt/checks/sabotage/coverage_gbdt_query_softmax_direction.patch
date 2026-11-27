@@ -1,0 +1,12 @@
+diff --git a/gbdt/targets/lightgbm_ranking.mojo b/gbdt/targets/lightgbm_ranking.mojo
+--- a/gbdt/targets/lightgbm_ranking.mojo
++++ b/gbdt/targets/lightgbm_ranking.mojo
+@@ -263,7 +263,7 @@
+         var denom = a.plane(1)[first]
+         comptime if phase == QS_DERIVATIVES:
+             var p = identical_div(a.plane(3)[row], denom) if w > 0 and mass > 0 else Float32(0)
+-            a.direction[row] = ftz(target - identical_mul(mass, p))
++            a.direction[row] = ftz(identical_mul(mass, p) - target)
+             # CatBoost QuerySoftMax defaults: beta=1 and lambda=0.01.
+             a.hessian[row] = identical_mul(mass, identical_mul(p, 1 - p) + Float32(0.01)) if w > 0 and mass > 0 else Float32(0)
+         else:

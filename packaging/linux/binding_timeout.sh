@@ -79,11 +79,11 @@ _child_pids() {
   return 0
 }
 
-# kill_tree SIG PID: SIG to PID's descendants (deepest first), then PID.
-kill_tree() {
-  local sig="$1" pid="$2" child
-  for child in $(_child_pids "$pid"); do kill_tree "$sig" "$child"; done
-  kill "-$sig" "$pid" 2>/dev/null || true
+# Collect descendants before TERM. A survivor may lose its parent before KILL.
+_tree_pids() {
+  local pid="$1" child
+  for child in $(_child_pids "$pid"); do _tree_pids "$child"; done
+  printf '%s\n' "$pid"
 }
 
 # with_binding_timeout SECONDS LOG CMD...: run CMD (stdout and stderr appended
@@ -91,11 +91,21 @@ kill_tree() {
 # once SECONDS pass (TERM, then KILL 10 s later), with a TIMEOUT line in LOG;
 # or 125 once the build STALLS (above), with a STALLED line in LOG.
 _stop_build_tree() {
-  local pid="$1" grace=0
-  kill_tree TERM "$pid"
-  while kill -0 "$pid" 2>/dev/null && (( grace < 10 )); do sleep 1; grace=$((grace + 1)); done
-  kill_tree KILL "$pid"
-  wait "$pid" 2>/dev/null
+  local pid="$1" grace=0 child
+  local -a family
+  family=( $(_tree_pids "$pid") )
+  kill -TERM "${family[@]}" 2>/dev/null || true
+  while (( grace < 10 )); do
+    local live=0
+    for child in "${family[@]}"; do
+      if kill -0 "$child" 2>/dev/null; then live=1; break; fi
+    done
+    (( live )) || break
+    sleep 1
+    grace=$((grace + 1))
+  done
+  kill -KILL "${family[@]}" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
 }
 with_binding_timeout() {
   local limit="$1" log="$2" pid rc=0 started=$SECONDS stall watcher="" marker
@@ -132,3 +142,14 @@ with_binding_timeout() {
   wait "$pid" || rc=$?
   return "$rc"
 }
+
+# The macOS packer runs POSIX sh. Launch this same Bash watchdog as a child.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  case "$1" in
+    merged) limit=$(merged_timeout_seconds) || exit 2 ;;
+    binding) limit=$(binding_timeout_seconds) || exit 2 ;;
+    *) echo "expected merged or binding" >&2; exit 2 ;;
+  esac
+  shift
+  with_binding_timeout "$limit" "$@"
+fi

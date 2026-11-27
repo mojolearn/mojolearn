@@ -4,28 +4,52 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import HostF32Ptr
 from gbdt.host.gbdt_oracle import GBDT_MSE_BLOCK, _gbdt_units, _halving_fold
 from gbdt.host.lightgbm_ranking import HostLightGBMRank
-from gbdt.targets.ranking_options import check_rank_grade
+from gbdt.targets.ranking_options import check_rank_grade, OBJECTIVE_LAMBDARANK, OBJECTIVE_QUERY_SOFTMAX
+from std.math import isfinite
 
 
-def check_host_rank_grades(targets: List[Float32]) raises:
+def check_host_rank_targets[softmax: Bool](
+    targets: List[Float32], weights: List[Float32] = List[Float32](),
+) raises:
     var n = len(targets)
+    var weighted = len(weights) != 0
+    if weighted and len(weights) != n:
+        raise Error("ranking weights must have one entry per row")
     var units = _gbdt_units(n, n)
     var chunk = (n + units - 1) // units
-    var labels = rebind[HostF32Ptr](targets.unsafe_ptr())
-    var failed = List[Int](length=units, fill=0)
-    var bad = rebind[MutPointer[Int, MutUntrackedOrigin]](failed.unsafe_ptr())
+    var yp = rebind[HostF32Ptr](targets.unsafe_ptr())
+    var wp = rebind[HostF32Ptr](weights.unsafe_ptr())
+    var states = List[Int](length=units, fill=0)
+    var state = rebind[MutPointer[Int, MutUntrackedOrigin]](states.unsafe_ptr())
 
     @parameter
-    def check(unit: Int) {imm n, imm chunk, imm labels, imm bad}:
+    def check(unit: Int) {imm n, imm chunk, imm yp, imm wp, imm weighted, imm state}:
         for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
-            var y = labels[i]
-            if not (y >= 0 and y <= 30) or Float32(Int(y)) != y:
-                bad[unit] = 1
-                return
+            var y = yp[i]
+            comptime if softmax:
+                var w = wp[i] if weighted else Float32(1)
+                if y >= 0 and isfinite(y) and w >= 0 and isfinite(w):
+                    if y > 0 and w > 0:
+                        state[unit] = -1
+                    continue
+            else:
+                if y >= 0 and y <= 30 and Float32(Int(y)) == y:
+                    continue
+            state[unit] = 1
+            return
 
     host_parallelize(check, units)
+    var positive = False
     for unit in range(units):
-        check_rank_grade(failed[unit] == 0)
+        comptime if softmax:
+            if states[unit] > 0:
+                raise Error("QuerySoftMax requires finite nonnegative targets and weights")
+            positive = positive or states[unit] < 0
+        else:
+            check_rank_grade(states[unit] == 0)
+    comptime if softmax:
+        if not positive:
+            raise Error("QuerySoftMax requires positive total weighted relevance")
 
 
 struct HostRankingFit(Movable):
@@ -33,9 +57,12 @@ struct HostRankingFit(Movable):
     var directions: List[Float32]
     var hessians: List[Float32]
 
-    def __init__(out self, group_sizes: List[Int], targets: List[Float32]) raises:
+    def __init__(out self, group_sizes: List[Int], targets: List[Float32], objective: Int = OBJECTIVE_LAMBDARANK, weights: List[Float32] = List[Float32]()) raises:
         var n = len(targets)
-        check_host_rank_grades(targets)
+        if objective == OBJECTIVE_QUERY_SOFTMAX:
+            check_host_rank_targets[True](targets, weights)
+        else:
+            check_host_rank_targets[False](targets, weights)
         self.workspace = HostLightGBMRank(group_sizes, n)
         self.directions = List[Float32](length=n, fill=Float32(0))
         self.hessians = List[Float32](length=n, fill=Float32(0))
@@ -45,7 +72,7 @@ struct HostRankingFit(Movable):
                mut stats: List[Float32], mut fv: List[Float32], mut mags: List[Float32]) raises:
         self.workspace.derivatives(objective, targets, cursor, weights, seed, iteration,
                                    self.directions, self.hessians)
-        fv[0] = self.workspace.ndcg(targets, cursor)
+        fv[0] = self.workspace.training_metric(objective, targets, cursor, weights)
         var n = len(targets)
         var blocks = (n + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
         var units = _gbdt_units(blocks, 8 * n)

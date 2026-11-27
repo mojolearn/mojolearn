@@ -10,7 +10,7 @@ for the rest of the leg's bound. Two callers share it:
 - tools/cross_compile_check.py run_one (the per-binding check; its compiler runs in its own process group);
 - packaging/linux/binding_timeout.sh with_binding_timeout (every release build leg, on GitHub and on a box),
   through `compile_watch.py watch` below. That watchdog keeps the build in the caller's process group (the job
-  guards measure RSS over it), so the CPU is summed over the build's process TREE from /proc, never a group.
+  guards measure RSS over it), so the CPU is summed over the build's process tree using Linux /proc or the macOS process table.
 
     python3 tools/compile_watch.py watch --pid PID --log LOG --stall 240 --marker LOG.stalled
 
@@ -20,6 +20,7 @@ watchdog over one process, not a unit of work to split.
 """
 import argparse
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -44,16 +45,21 @@ class StallClock:
     def observe(self, now, cpu, output=None):
         if not self.stall:
             return False
+        if cpu is None:
+            # A failed observation cannot establish how long the compiler was idle.
+            self.last_move = now
+            self.last_cpu = -1.0
+            return False
         moved = False
         # a completed child can lower the sum of live-child CPU: the next phase's clock starts from the new sum
-        if cpu is not None and (cpu > self.last_cpu + STALL_CPU_STEP or cpu < self.last_cpu):
+        if cpu > self.last_cpu + STALL_CPU_STEP or cpu < self.last_cpu:
             self.last_cpu, moved = cpu, True
         if output is not None and output != self.last_output:
             self.last_output, moved = output, True
         if moved:
             self.last_move = now
             return False
-        return cpu is not None and now - self.last_move >= self.stall
+        return now - self.last_move >= self.stall
 
     def describe(self):
         return f"compiler CPU flat at {max(self.last_cpu, 0):.0f} s for {self.stall:.0f} s, no new output"
@@ -65,9 +71,50 @@ def first_error_lines(text, n=ERROR_LINES):
     return [ln for ln in lines if "error" in ln][:n] or lines[-n:]
 
 
+def _tree_sum(pid, children, cpu):
+    if pid not in cpu:
+        return None
+    total, todo = 0, [pid]
+    while todo:
+        p = todo.pop()
+        total += cpu[p]
+        todo.extend(children.get(p, ()))
+    return total
+
+
+def _ps_cpu(pid, group=False):
+    """Read one process-table snapshot on macOS or Linux. ps TIME is [[dd-]hh:]mm:ss[.ss]."""
+    try:
+        result = subprocess.run(["ps", "-axo", "pid=,ppid=,pgid=,time="], capture_output=True,
+                                text=True, timeout=10, check=True)
+        children, cpu = {}, {}
+        for row in result.stdout.splitlines():
+            process, parent, pgid, stamp = row.split()
+            if group and int(pgid) != pid:
+                continue
+            days, separator, clock = stamp.rpartition("-")
+            seconds = 0.0
+            for component in clock.split(":"):
+                seconds = seconds * 60 + float(component)
+            process = int(process)
+            children.setdefault(int(parent), []).append(process)
+            cpu[process] = seconds + (86400 * int(days) if separator else 0)
+        if group:
+            return sum(cpu.values()) if cpu else None
+        return _tree_sum(pid, children, cpu)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def group_cpu_seconds(pgid):
+    return _ps_cpu(pgid, group=True)
+
+
 def tree_cpu_seconds(pid, proc="/proc"):
     """User + system CPU seconds of PID and its live descendants, plus their reaped children's (Linux /proc),
-    or None when PID is gone or /proc is unreadable."""
+    or live descendant CPU from ps on macOS. None when the probe cannot read PID."""
+    if proc == "/proc" and sys.platform == "darwin":
+        return _ps_cpu(pid)
     try:
         tick = os.sysconf("SC_CLK_TCK")
     except (ValueError, OSError, AttributeError):
@@ -92,14 +139,8 @@ def tree_cpu_seconds(pid, proc="/proc"):
             continue
         children.setdefault(ppid, []).append(int(name))
         cpu[int(name)] = ticks
-    if pid not in cpu:
-        return None
-    total, todo = 0, [pid]
-    while todo:
-        p = todo.pop()
-        total += cpu.get(p, 0)
-        todo.extend(children.get(p, ()))
-    return total / tick
+    ticks = _tree_sum(pid, children, cpu)
+    return ticks / tick if ticks is not None else None
 
 
 def alive(pid):

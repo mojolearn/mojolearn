@@ -412,7 +412,7 @@ sampler, a solver, a metric, a reduction).
                the pointwise searcher's L2 scores and explicit weighted pairs)
       gbdt-rank-bootstrap gbdt-rank-leaves gbdt-rank-pointwise-arms gbdt-rank-pairs
     Post-release grouped ranking objectives and held-out queries
-      gbdt-lambdarank gbdt-rank-xendcg gbdt-rank-categorical-eval gbdt-rank-grouped-ctr
+      gbdt-lambdarank gbdt-rank-xendcg gbdt-query-softmax gbdt-rank-categorical-eval gbdt-rank-grouped-ctr
     2026-11-23 (lane gbdt-gaps: sample_weight outside Plain numeric Logloss
                and eval sets outside SymmetricTree Logloss, which the CPU
                column refused until this lane)
@@ -5736,6 +5736,26 @@ def _(ml, X, yc, yr, Xh=None):
     return _lightgbm_rank_fits(ml, X, yr, Xh, "rank_xendcg")
 
 
+@lane("gbdt-query-softmax")
+def _(ml, X, yc, yr, Xh=None):
+    labels = np.asarray([1.5, 0, 2, 0, 1, 0, 0, 2], dtype=np.float32)
+    weight = np.asarray([1, 3, 0, 1, 1, 1, 0, 2], dtype=np.float32)
+    groups = np.asarray([0, 0, 0, 1, 1, 2, 2, 2], dtype=np.int32)
+    parts = {}
+    for pointwise in (False, True):
+        model = ml.GradientBoosting(loss="QuerySoftMax", n_estimators=3, max_depth=2,
+                                    border_count=4, learning_rate=0.2, bootstrap_type="No",
+                                    random_strength=0.0, random_state=7, use_pointwise_searcher=pointwise)
+        model.fit(X[:8], labels, group_id=groups, sample_weight=weight)
+        curve = np.asarray(model.loss_curve_, dtype=np.float64)
+        if curve.shape != (3,) or not np.isfinite(curve).all():
+            raise RuntimeError("QuerySoftMax must report a finite loss per tree")
+        key = "pointwise" if pointwise else "greedy"
+        parts[key + ":loss"] = _h(curve)
+        parts[key + ":predict"] = _h(model.predict(X[:8]))
+    return _fit(parts, model, lambda e: (e.predict(Xh),))
+
+
 def _rank_cat_input(X):
     # One categorical column; a held-out row's code is independent of its batch.
     return np.ascontiguousarray((X[:, 3:4] > 0).astype(np.float32))
@@ -10724,7 +10744,7 @@ _batch_decl(_rows_calls("predict", sl=_GBDT_BATCH_ROWS, prep=_gbdt_cat_xh),
             "gbdt-cat-rest", "gbdt-cat-nonsym")
 _batch_decl(_rows_calls("predict"),
             "gbdt-rank-bootstrap", "gbdt-rank-leaves", "gbdt-rank-pointwise-arms", "gbdt-rank-pairs",
-            "gbdt-lambdarank", "gbdt-rank-xendcg")
+            "gbdt-lambdarank", "gbdt-rank-xendcg", "gbdt-query-softmax")
 _batch_decl(_rows_calls("predict", prep=_rank_cat_input), "gbdt-rank-categorical-eval", "gbdt-rank-grouped-ctr")
 _batch_decl(_rows_calls("predict"),
             "gbdt-weighted-symmetric", "gbdt-weighted-nonsym", "gbdt-weighted-rank", "gbdt-eval-gaps")

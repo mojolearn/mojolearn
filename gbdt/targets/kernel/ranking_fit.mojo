@@ -5,7 +5,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from gbdt.data.group_layout import GroupLayout
 from gbdt.gpu_data.kernel.query_helper import launch_compute_group_ids
 from gbdt.targets.kernel.lightgbm_ranking import (
-    LightGBMRankWorkspace, launch_lightgbm_ranking, launch_lightgbm_ndcg,
+    LightGBMRankWorkspace, launch_lightgbm_ranking, launch_ranking_metric,
 )
 from gbdt.targets.lightgbm_ranking import LR_CUTOFF
 from gbdt.targets.kernel.pointwise_targets import MSE_BLOCK_SIZE, pinned_block_sum
@@ -47,8 +47,9 @@ struct DeviceRankingMetric(Movable):
 
     def metric(mut self, ctx: DeviceContext, mut targets: DeviceBuffer[DType.float32],
                mut scores: DeviceBuffer[DType.float32], n: Int,
-               mut result: DeviceBuffer[DType.float32], cutoff: Int = LR_CUTOFF) raises:
-        launch_lightgbm_ndcg(ctx, self.workspace, targets, scores, self.layout.offsets,
+               mut result: DeviceBuffer[DType.float32], objective: Int,
+               mut weights: DeviceBuffer[DType.float32], has_weights: Bool, cutoff: Int = LR_CUTOFF) raises:
+        launch_ranking_metric(ctx, self.workspace, objective, targets, scores, weights, has_weights, self.layout.offsets,
                              self.layout.sizes, self.qids, n, self.layout.n_groups, result, cutoff)
 
 
@@ -74,7 +75,7 @@ struct DeviceRankingFit(Movable):
         launch_lightgbm_ranking(ctx, self.metric_state.workspace, objective, targets, scores, weights,
                                 has_weights, self.metric_state.layout.offsets, self.metric_state.layout.sizes, self.metric_state.qids,
                                 n, self.metric_state.layout.n_groups, seed, iteration, self.directions, self.hessians)
-        self.metric_state.metric(ctx, targets, scores, n, fv)
+        self.metric_state.metric(ctx, targets, scores, n, fv, objective, weights, has_weights)
         ctx.enqueue_function[_search_planes](
             self.raw.unsafe_ptr(), weights.unsafe_ptr(), stats.unsafe_ptr(), mags.unsafe_ptr(),
             Int32(n), Int32(1) if second_order else Int32(0), Int32(1) if compute_mags else Int32(0),

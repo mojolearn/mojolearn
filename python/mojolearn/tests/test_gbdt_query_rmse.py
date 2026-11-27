@@ -111,6 +111,19 @@ def test_lightgbm_objectives_require_query_ids_and_integer_grades(loss):
             ranker.fit(X, rel, group_id=groups, eval_set=(X, invalid, groups))
 
 
+def test_query_softmax_refuses_unsupported_tree_and_validation_inputs():
+    X, y, groups = _fixture(8)
+    with pytest.raises(ValueError, match="QuerySoftMax.*SymmetricTree"):
+        _model(loss="QuerySoftMax", grow_policy="Lossguide")
+    for option in ("cat_features", "one_hot_features"):
+        model = _model(loss="QuerySoftMax", **{option: [0]})
+        with pytest.raises(ValueError, match="QuerySoftMax.*numeric features"):
+            model.fit(X, y, group_id=groups)
+    model = _model(loss="QuerySoftMax")
+    with pytest.raises(ValueError, match="QuerySoftMax.*eval_set"):
+        model.fit(X, y, group_id=groups, eval_set=(X, y, groups))
+
+
 def test_split_query_still_refused():
     X, rel, g = _fixture()
     g = g.copy()

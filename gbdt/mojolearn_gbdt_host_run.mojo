@@ -47,7 +47,7 @@ from gbdt.host.gbdt_oracle import (
     gbdt_host_fit_eval,
     gbdt_host_model_text,
 )
-from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG, is_lightgbm_ranking, is_lightgbm_ranking_name, check_rank_estimator
+from gbdt.targets.ranking_options import OBJECTIVE_QUERY_SOFTMAX, OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG, is_lightgbm_ranking, uses_grouped_rank_workspace, uses_grouped_rank_workspace_name, check_rank_estimator, check_query_softmax_inputs
 from gbdt.host.gbdt_oracle_pointwise_rank import gbdt_ranking_pointwise_host_fit
 from gbdt.host.gbdt_oracle_losses import (
     GBDT_LEAF_EXACT,
@@ -240,6 +240,8 @@ def _pointwise_objective(loss: String) -> Int:
         return GBDT_OBJ_YETI_RANK
     if loss == "lambdarank":
         return OBJECTIVE_LAMBDARANK
+    if loss == "QuerySoftMax":
+        return OBJECTIVE_QUERY_SOFTMAX
     if loss == "rank_xendcg":
         return OBJECTIVE_RANK_XENDCG
     return -1
@@ -329,8 +331,8 @@ def _resolve_pointwise_loss(
         iterations = gradient
     if iterations_override >= 0:
         iterations = iterations_override
-    if is_lightgbm_ranking(objective):
-        check_rank_estimator(method, GBDT_LEAF_NEWTON, iterations)
+    if uses_grouped_rank_workspace(objective):
+        check_rank_estimator(objective, method, GBDT_LEAF_NEWTON, iterations)
     if method == GBDT_LEAF_NEWTON:
         if objective == GBDT_OBJ_QUANTILE or objective == GBDT_OBJ_MAE or objective == GBDT_OBJ_LOGLINQUANTILE or objective == GBDT_OBJ_MAPE:
             raise Error("Newton leaves estimation method is not supported for " + name + " loss function")
@@ -491,7 +493,7 @@ def _gbdt_fit_pointwise_arm(
     # MultiRMSE never reach this arm: the caller sends them to the multi-output fit
     # with the doc-parallel searcher (`gbdt_multi_host_fit(
     # use_pointwise_searcher=True)`), as the device trains them now
-    if objective < 0 or objective == GBDT_OBJ_QUERY_RMSE or objective == GBDT_OBJ_PAIR_LOGIT or objective == GBDT_OBJ_YETI_RANK or is_lightgbm_ranking(objective):
+    if objective < 0 or objective == GBDT_OBJ_QUERY_RMSE or objective == GBDT_OBJ_PAIR_LOGIT or objective == GBDT_OBJ_YETI_RANK or uses_grouped_rank_workspace(objective):
         raise Error(
             "the pointwise searcher's one-output arm takes Logloss, RMSE,"
             " CrossEntropy and the pointwise losses; got loss='" + loss + "'"
@@ -810,7 +812,7 @@ def _gbdt_fit_ordered_arm(
             " (catboost_options.cpp:972-978); Cosine and NewtonCosine are"
             " the two with an ordered kernel"
         )
-    if loss == String("QueryRMSE") or loss == String("PairLogit") or loss == String("YetiRank") or is_lightgbm_ranking_name(loss):
+    if loss == String("QueryRMSE") or loss == String("PairLogit") or loss == String("YetiRank") or uses_grouped_rank_workspace_name(loss):
         raise Error(
             "boosting_type='Ordered' with loss='" + loss + "' is not"
             " implemented here: the reference's folds follow the query"
@@ -1238,11 +1240,11 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             )
         var gp = u32_ptr(params.i(fixed_and_weights + 3))
         host_group_sizes = gbdt_host_group_sizes(gp, n_groups, tail_rows)
-        if tail_loss != String("QueryRMSE") and tail_loss != String("PairLogit") and tail_loss != String("YetiRank") and not is_lightgbm_ranking_name(tail_loss):
+        if tail_loss != String("QueryRMSE") and tail_loss != String("PairLogit") and tail_loss != String("YetiRank") and not uses_grouped_rank_workspace_name(tail_loss):
             raise Error(
                 "group_id is read only by the querywise and pairwise losses"
                 " (QueryRMSE, PairLogit and YetiRank are trained here;"
-                " QuerySoftMax and QueryCrossEntropy are not implemented);"
+                " QueryCrossEntropy is not implemented);"
                 " loss='" + tail_loss + "' does not use it, so it is refused by"
                 " name rather than carried and ignored"
             )
@@ -1269,7 +1271,9 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             "pairs are read only by loss='PairLogit' here; loss='" + tail_loss
             + "' does not use them"
         )
-    if is_lightgbm_ranking_name(tail_loss) and len(host_group_sizes) == 0:
+    if uses_grouped_rank_workspace_name(tail_loss) and len(host_group_sizes) == 0:
+        if tail_loss == "QuerySoftMax":
+            raise Error("QuerySoftMax requires group_id")
         raise Error("lambdarank and rank_xendcg require group_id")
     if tail_loss == String("PairLogit") and len(host_group_sizes) == 0:
         if len(host_pair_winners) > 0:
@@ -1392,7 +1396,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         pw_objective == GBDT_OBJ_QUERY_RMSE
         or pw_objective == GBDT_OBJ_PAIR_LOGIT
         or pw_objective == GBDT_OBJ_YETI_RANK
-        or is_lightgbm_ranking(pw_objective)
+        or uses_grouped_rank_workspace(pw_objective)
     )
     # lane gbdt-cpu-rest-4-simple (2026-11-23): Simple's admission, the
     # device's (`train` calls the same two bodies right after
@@ -1687,6 +1691,8 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             any_cat_flag = True
         if (flags[f] & UInt32(2)) != UInt32(0):
             any_one_hot_flag = True
+    if pw_objective == OBJECTIVE_QUERY_SOFTMAX:
+        check_query_softmax_inputs(any_cat_flag or any_one_hot_flag, n_eval_rows != 0)
     if is_multi_rmse and any_cat_flag:
         raise Error(
             "loss='MultiRMSE' with cat_features is not carried here:"

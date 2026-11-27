@@ -15,7 +15,7 @@
 # set are staged and handed to the fit entry in the same call (Python
 # returned between each conversion, scan and the launch); the output
 # dimension is read from the fitted text in the same call.
-from gbdt.targets.ranking_options import check_eval_at
+from gbdt.targets.ranking_options import check_eval_at, check_query_softmax_inputs
 from core.mode_answer import MODE_FAMILY_GBDT, answer_mode_word
 from std.math import isfinite
 from std.memory import bitcast
@@ -307,7 +307,7 @@ def gbdt_config(fields: PythonObject, model: PythonObject, texts: Bool, context:
     if explicit is not None:
         c.explicit = _str(explicit)
     c.plain_forced = (not c.grow_symmetric or multi_output or multi_regression or not cosine or c.pointwise
-                      or below_one or _eq(loss, "lambdarank") or _eq(loss, "rank_xendcg"))
+                      or below_one or _eq(loss, "QuerySoftMax") or _eq(loss, "lambdarank") or _eq(loss, "rank_xendcg"))
     c.ordered_max_rows = Int(py=py_item(t, nk[].k_ordered_max_rows))
     c.ordered_min_iterations = Int(py=py_item(t, nk[].k_ordered_min_iterations))
     c.fold_len = _float(py_get(fields, nk[].k_fold_len_multiplier, PythonObject(2.0)))
@@ -1031,6 +1031,9 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
     var nk = trees_keys()
     var cat = _field(fields, model, nk[].k_cat_features, "cat_features")
     var hot = _field(fields, model, nk[].k_one_hot_features, "one_hot_features")
+    var loss = _field(fields, model, nk[].k_loss, "loss")
+    if _eq(loss, "QuerySoftMax"):
+        check_query_softmax_inputs(_truthy(cat) or _truthy(hot), eval_set is not None)
     var gkey = gbdt_entry_of(table)
     var row_major_ok = False
     try:
@@ -1057,7 +1060,6 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
     var n_features = x.cols
     if n_rows == 0 or n_features == 0:
         raise Error("mojolearn: fit requires at least one row and one feature")
-    var loss = _field(fields, model, nk[].k_loss, "loss")
     var target_dim = 1
     var ya: AdmittedX
     if _in(loss, py_item(t, nk[].k_multi_regression_losses)):
@@ -1407,6 +1409,8 @@ def _gbdt_store(model: PythonObject, args: PythonObject, context: PythonObject) 
         gain = PythonObject(parsed)
     var non_symmetric = not symmetric
     if non_symmetric and not _in(loss, py_item(t, nk[].k_non_symmetric_losses)):
+        if _eq(loss, "QuerySoftMax"):
+            raise Error("QuerySoftMax requires grow_policy='SymmetricTree'")
         raise Error("NotImplementedError: mojolearn: Error: optimization scheme is not supported for "
                     + "GPU learning Loss=" + _str(loss) + ";OptimizationScheme=" + _str(grow) + " "
                     + "supported non-symmetric objectives: " + _repr(py_call(b.sorted, py_item(t, nk[].k_non_symmetric_losses))))

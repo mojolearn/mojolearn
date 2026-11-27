@@ -84,7 +84,6 @@ class BindingTimeout(unittest.TestCase):
             r = bash('binding_stall_seconds', {'RELEASE_BINDING_STALL_SECONDS': bad})
             self.assertEqual(r.returncode, 2, bad)
 
-    @unittest.skipUnless(Path('/proc/self/stat').is_file(), 'the tree CPU probe reads Linux /proc')
     def test_a_stalled_build_is_stopped_by_name_before_its_bound(self):
         # tools/compile_watch.py, the rule tools/cross_compile_check.py uses: flat CPU and no output
         with tempfile.TemporaryDirectory() as tmp:
@@ -99,7 +98,6 @@ class BindingTimeout(unittest.TestCase):
             self.assertNotIn('TIMEOUT', text)
             self.assertFalse(Path(str(log) + '.stalled').exists())
 
-    @unittest.skipUnless(Path('/proc/self/stat').is_file(), 'the tree CPU probe reads Linux /proc')
     def test_a_busy_or_talking_build_is_not_stalled(self):
         with tempfile.TemporaryDirectory() as tmp:
             log = Path(tmp) / 'b.log'
@@ -112,6 +110,31 @@ class BindingTimeout(unittest.TestCase):
                      {'RELEASE_BINDING_STALL_SECONDS': '3', 'RELEASE_BINDING_STALL_POLL': '0.2'})
             self.assertIn('rc=0', r.stdout, r.stderr)
             self.assertNotIn('STALLED', log.read_text())
+
+    def test_reparented_child_is_stopped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            import sys
+            tmp = Path(tmp)
+            child = tmp / "child.py"
+            child.write_text("import os, signal, sys, time\nfrom pathlib import Path\n"
+                             "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+                             "Path(sys.argv[1]).write_text(str(os.getpid()))\ntime.sleep(120)\n")
+            pidfile = tmp / "pid"
+            log = tmp / "build.log"
+            try:
+                result = subprocess.run(["bash", str(LIB), "binding", str(log), "sh", "-c",
+                                         '"$@" & wait', "test", sys.executable, str(child), str(pidfile)],
+                                        env=dict(os.environ, RELEASE_BINDING_TIMEOUT_SECONDS="2",
+                                                 RELEASE_BINDING_STALL_SECONDS="0"), timeout=25)
+                self.assertEqual(result.returncode, 124)
+                for _ in range(20):
+                    if not _running(pidfile.read_text()):
+                        break
+                    time.sleep(0.05)
+                self.assertFalse(_running(pidfile.read_text()))
+            finally:
+                if pidfile.exists() and _running(pidfile.read_text()):
+                    os.kill(int(pidfile.read_text()), 9)
 
     def test_build_sets_uses_the_bound_for_every_binding(self):
         s = (ROOT / 'packaging/linux/build_sets.sh').read_text()

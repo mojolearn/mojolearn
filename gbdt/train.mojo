@@ -309,7 +309,7 @@ border builder and quantize kernel, so the model is bitwise the default's
 by construction. Checks, one per side: `pixi run check-gbdt-per-round`
 (the default, ON) and `check-gbdt-per-round-2550-host-copy` (the opt-out)
 print one MODEL_HASH per lane, which must agree across the two builds."""
-from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF, is_lightgbm_ranking, check_rank_grade, check_rank_estimator
+from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF, OBJECTIVE_QUERY_SOFTMAX, uses_grouped_rank_workspace, is_lightgbm_ranking, check_rank_grade, check_rank_estimator, check_query_softmax_inputs
 from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_CROSSENTROPY,
     OBJECTIVE_LOGLOSS,
@@ -1572,19 +1572,36 @@ def train(
     # `target_dim` planes for MultiRMSE, dim-major; one for every other loss
     var targets = ctx.enqueue_create_buffer[DType.float32](n_rows * target_dim)
     var weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var grouped_rank = uses_grouped_rank_workspace(objective_code)
     var lightgbm_rank = is_lightgbm_ranking(objective_code)
     var tscan = upload_and_scan_targets(
         ctx, y, sample_weight, n_rows, target_dim, labels_multiclass,
-        targets, weights, 31 if lightgbm_rank else 0,
+        targets, weights, 31 if lightgbm_rank else (-1 if objective_code == OBJECTIVE_QUERY_SOFTMAX else 0),
     )
-    if lightgbm_rank:
-        check_rank_grade(tscan.first_bad_label() < 0)
+    if grouped_rank:
+        if objective_code == OBJECTIVE_QUERY_SOFTMAX:
+            var categorical = False
+            for flag in cat_features:  # small-loop: feature options at fit admission
+                categorical = categorical or flag
+            for flag in one_hot:  # small-loop: feature options at fit admission
+                categorical = categorical or flag
+            check_query_softmax_inputs(categorical, len(eval_y) > 0)
+            if tscan.first_negative_weight >= 0:
+                raise Error("QuerySoftMax requires finite nonnegative weights")
+            if tscan.first_label_range >= 0 or tscan.first_nonfinite >= 0:
+                raise Error("QuerySoftMax requires finite nonnegative targets")
+            if tscan.max_label < 0:
+                raise Error("QuerySoftMax requires positive total weighted relevance")
+        else:
+            check_rank_grade(tscan.first_bad_label() < 0)
         if len(group_sizes) == 0:
+            if objective_code == OBJECTIVE_QUERY_SOFTMAX:
+                raise Error("QuerySoftMax requires group_id")
             raise Error("lambdarank and rank_xendcg require group_id")
     var is_pair_logit = objective_code == OBJECTIVE_PAIR_LOGIT
     var is_yeti_rank = objective_code == OBJECTIVE_YETI_RANK
     var is_querywise = (
-        objective_code == OBJECTIVE_QUERY_RMSE or is_pair_logit or is_yeti_rank or lightgbm_rank
+        objective_code == OBJECTIVE_QUERY_RMSE or is_pair_logit or is_yeti_rank or grouped_rank
     )
     # ---- MultiRMSE: what this implementation carries, and what it refuses
     # BY NAME (lane/algos-trees, 2026-09-27). The fit is their
@@ -1675,7 +1692,7 @@ def train(
             )
     var rank_layout = Optional[GroupLayout]()
     if len(group_sizes) > 0:
-        if lightgbm_rank:
+        if grouped_rank:
             # The ranking workspace needs these same checked offsets for
             # every round and the largest query for its reduction depth.
             rank_layout = Optional(device_group_layout[True](
@@ -1689,7 +1706,7 @@ def train(
             raise Error(
                 "group_id is read only by the querywise and pairwise losses"
                 " (QueryRMSE, PairLogit and YetiRank are trained here;"
-                " QuerySoftMax and QueryCrossEntropy are not implemented);"
+                " QueryCrossEntropy is not implemented);"
                 " loss='" + loss + "' does not use it, so it is refused by"
                 " name rather than carried and ignored"
             )
@@ -1704,8 +1721,8 @@ def train(
     if len(eval_group_sizes) > 0 and not is_querywise:
         raise Error("held-out query ids require a grouped ranking loss")
     if is_querywise:
-        # LightGBM already owns the validated device grouping in rank_layout.
-        if not lightgbm_rank:
+        # The grouped ranking workspace already owns its validated layout.
+        if not grouped_rank:
             if len(group_sizes) > 0 and len(group_sizes) < n_rows:
                 query_sizes = group_sizes.copy()
             else:
@@ -3082,8 +3099,8 @@ def train(
     # host fit's too (`simple_leaves_check`): the greedy SymmetricTree
     # searcher's own leaves on the one-output losses, refused before any
     # tree where no searcher leaf exists
-    if lightgbm_rank:
-        check_rank_estimator(estimation.method, LEAF_ESTIMATION_NEWTON, estimation.iterations)
+    if grouped_rank:
+        check_rank_estimator(objective_code, estimation.method, LEAF_ESTIMATION_NEWTON, estimation.iterations)
     simple_leaves_check(
         estimation.method,
         objective == OBJECTIVE_MULTICLASS
