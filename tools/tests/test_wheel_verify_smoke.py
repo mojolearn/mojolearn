@@ -62,6 +62,23 @@ class SideStates(unittest.TestCase):
             (Path(td) / "bad.json").write_text("{")
             self.assertEqual(smoke.side_state(Path(td) / "bad.json")[0], "missing")
 
+    def test_failed_probes_and_malformed_cells_fail_the_side(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "x.json"
+            for cell, state in (
+                (dict(OK, batch_verdict="BATCH_MOVED"), "divergent"),
+                (dict(OK, model_verdict="RELOAD-MOVED"), "divergent"),
+                (dict(OK, probe_error="model probe failed"), "refused"),
+                (dict(OK, model_verdict="REFUSED"), "refused"),
+                (dict(OK, verdict="unexpected"), "invalid"),
+                (dict(OK, hashes=["corrupt"]), "invalid"), (dict(NA, hashes=[""]), "invalid"),
+                ({"verdict": "STABLE"}, "invalid"), (dict(OK, infer_verdict="STABLE"), "invalid"),
+                ({}, "invalid"), (None, "invalid"),
+            ):
+                with self.subTest(cell=cell):
+                    _record(path, {"x/base": cell})
+                    self.assertEqual(smoke.side_state(path)[0], state)
+
     def test_check_fails_a_lane_missing_a_side_or_refused_but_not_one_sided(self):
         with tempfile.TemporaryDirectory() as td:
             j = Path(td)
@@ -70,7 +87,10 @@ class SideStates(unittest.TestCase):
             _record(j / "refgpu.gpu.json", {"refgpu/base": REFUSED})
             _record(j / "refgpu.cpu.json", {"refgpu/base": OK})
             _record(j / "nogpu.cpu.json", {"nogpu/base": OK})                    # its GPU side never wrote a record
+            _record(j / "moved.gpu.json", {"moved/base": OK})
+            _record(j / "moved.cpu.json", {"moved/base": {"verdict": "DIVERGENT", "oracle_errors": ["wrong bytes"]}})
             check = smoke.lane_check(j, True)
+            self.assertRegex(check("moved"), "cpu side divergent.*wrong bytes")
             self.assertIsNone(check("gpuonly"))
             self.assertIn("gpu side refused", check("refgpu"))
             self.assertIn("gpu side missing", check("nogpu"))

@@ -75,6 +75,10 @@ jobs:
         run: |
           /tmp/yaml-venv/bin/python tools/lane_accounting.py --self-test
           /tmp/yaml-venv/bin/python tools/lane_accounting.py --check
+          /tmp/yaml-venv/bin/python -m pytest -q \
+            tools/test_verify_coverage_declared.py::test_every_record_lane_has_a_fault_on_an_applicable_side \
+            tools/test_verify_coverage_declared.py::test_public_cnn_and_optimizer_lanes_have_faults_and_published_references \
+            tools/tests/test_wheel_verify_smoke.py::SideStates
       - name: Tiny verifier rejects faults and endpoint inventory is current
         # Source inspection and comparator tests only; no GPU, fits or timing.
         run: |

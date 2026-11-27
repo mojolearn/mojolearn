@@ -73,6 +73,25 @@ def test_triage_and_reach_state_follow_the_declaration(monkeypatch):
     assert audit.reach_state(dict(plain, lanes_precise=["lane-c"])) == "static"
 
 
+def _fault_sides_by_lane():
+    import coverage_sabotage
+
+    sides = {}
+    for arm in coverage_sabotage.arms().values():
+        for lane in arm["lanes"]:
+            sides.setdefault(lane, set()).update(coverage_sabotage.arm_sides(arm))
+    return sides
+
+
+def test_every_record_lane_has_a_fault_on_an_applicable_side():
+    import identity_break
+
+    sides = _fault_sides_by_lane()
+    missing = [lane for lane in identity_break.record_lanes()
+               if not sides.get(lane, set()) - {(identity_break.one_sided(lane) or (None,))[0]}]
+    assert not missing, f"record lanes with no applicable fault: {sorted(missing)}"
+
+
 def test_public_cnn_and_optimizer_lanes_have_faults_and_published_references():
     """Track CNN exports, the two standalone optimizers and the three Session extensions under review."""
     import ast
@@ -80,7 +99,6 @@ def test_public_cnn_and_optimizer_lanes_have_faults_and_published_references():
     import re
     from pathlib import Path
 
-    import coverage_sabotage
     import identity_break
 
     root = Path(ROOT)
@@ -101,10 +119,7 @@ def test_public_cnn_and_optimizer_lanes_have_faults_and_published_references():
                 if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "__all__"
                                                         for t in node.targets)]
     assert set(exports) <= lanes.keys(), f"CNN exports missing verification lanes: {set(exports) - lanes.keys()}"
-    sides = {}
-    for arm in coverage_sabotage.arms().values():
-        for lane in arm["lanes"]:
-            sides.setdefault(lane, set()).update(coverage_sabotage.arm_sides(arm))
+    sides = _fault_sides_by_lane()
 
     for lane in {*lanes.values(), "sequence-optim-adafactor", "nn-ep-cnn-fits", "nn-ep-cnn-layers", "x-cnn-gnn-disabled-options"}:
         assert lane in identity_break.LANES, f"missing installed verifier lane: {lane}"

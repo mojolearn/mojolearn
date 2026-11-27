@@ -565,9 +565,9 @@ def lane_files(jdir, lane, gpu):
 
 
 def side_state(path):
-    """(state, detail) of one side's record: ok | n/a (every cell N/A: a side the lane declares it does not have)
-    | refused (a REFUSED cell; detail its first error) | not-run (a cell a stopped sweep never ran) | missing (no
-    record, unreadable, or no cells: the lane never ran on that side)."""
+    """Classify a side from the training verdict and every probe verdict present in its record."""
+    from verification_matrix import stable_digest
+
     try:
         doc = json.loads(Path(path).read_text())
     except OSError:
@@ -577,14 +577,42 @@ def side_state(path):
     cells = doc.get("cells") if isinstance(doc, dict) else None
     if not isinstance(cells, dict) or not cells:
         return "missing", "record holds no cells"
-    not_run = [k for k, c in cells.items() if NOT_RUN in str((c or {}).get("error", ""))]
-    if not_run:
-        return "not-run", f"{len(not_run)} cell(s) never ran: {not_run[0]}"
-    refused = [(k, c) for k, c in cells.items() if (c or {}).get("verdict") == "REFUSED"]
-    if refused:
-        return "refused", f"{refused[0][0]}: {str(refused[0][1].get('error', ''))[:240]}"
-    if all((c or {}).get("verdict") == "N/A" for c in cells.values()):
-        return "n/a", str(next(iter(cells.values())).get("hashes", [""])[0])[:160]
+    applicable = False
+    na_detail = ""
+    for key, cell in cells.items():
+        if not isinstance(cell, dict) or "verdict" not in cell:
+            return "invalid", f"{key}: missing cell verdict"
+        error = cell.get("error")
+        if NOT_RUN in str(error):
+            return "not-run", f"{key}: {str(error)[:240]}"
+        for part, verdict in cell.items():
+            if part != "verdict" and not part.endswith("_verdict"):
+                continue
+            if verdict in ("STABLE", "N/A"):
+                field = "hashes" if part == "verdict" else part.removesuffix("_verdict")
+                values = cell.get(field)
+                if not isinstance(values, list) or not values:
+                    return "invalid", f"{key} {part}: missing {field} values"
+                if verdict == "STABLE":
+                    if not stable_digest(cell, "train" if part == "verdict" else field):
+                        return "invalid", f"{key} {part}: invalid or inconsistent digest"
+                    applicable = True
+                else:
+                    if not all(isinstance(v, str) and v.startswith("n/a") for v in values):
+                        return "invalid", f"{key} {part}: missing N/A reason"
+                    na_detail = values[0][:160]
+                continue
+            if verdict == "REFUSED":
+                detail = cell.get(part.removesuffix("_verdict") + "_error") or cell.get("probe_error") or error
+                return "refused", f"{key} {part}: {str(detail or verdict)[:240]}"
+            if verdict in ("DIVERGENT", "MOVED", "RELOAD-MOVED", "BATCH_MOVED", "RLPAIR_MOVED"):
+                return "divergent", f"{key} {part}: {verdict} {str(cell.get('oracle_errors', ''))[:240]}".rstrip()
+            return "invalid", f"{key} {part}: unexpected verdict {verdict!r}"
+        for field, detail in cell.items():
+            if (field == "error" or field.endswith("_error")) and detail:
+                return "refused", f"{key} {field}: {str(detail)[:240]}"
+    if not applicable:
+        return "n/a", na_detail
     return "ok", ""
 
 
@@ -613,7 +641,7 @@ def sides_report(out, jdir, lanes, gpu):
     (Path(out) / "lanes" / "SIDES.tsv").write_text("lane\tside\tstate\tdetail\n" + "".join(
         "\t".join((lane, side, state, detail.replace("\t", " ").replace("\n", " "))) + "\n"
         for lane, side, state, detail in rows))
-    order = ("ok", "n/a", "refused", "not-run", "missing")
+    order = ("ok", "n/a", "refused", "not-run", "missing", "divergent", "invalid")
     summary(out, "  lanes sides: " + "; ".join(
         f"{side} " + " ".join(f"{s}={counts[side].get(s, 0)}" for s in order) for side in sorted(counts, reverse=True))
             + " (lanes/SIDES.tsv)")
@@ -651,16 +679,18 @@ def cmd_lanes(args):
             return 1
     keep = "True" if gpu else "(h.one_sided(n) or ('',))[0] != 'cpu'"
     listed = probe(args.python, "import mojolearn._identity_break as h; "
-                   f"print(','.join(n for n in h.LANES if not n.startswith(h.RECORD_EXCLUDED_PREFIXES) and {keep}))",
+                   f"print(','.join(n for n in h.record_lanes() if {keep}))",
                    cwd)
     lanes = [x for x in listed.split(",") if x]
+    if not lanes:
+        summary(args.out, "lanes rc=1 installed harness listed no applicable record lanes")
+        return 1
     jdir = Path(args.out) / "lanes" / "json"
     jdir.mkdir(parents=True, exist_ok=True)
     extra = {"MOJOLEARN_COMMIT": args.commit} if args.commit else {}
     units = [(lane, lane_argv(args.python, lane, jdir, gpu, vendor)) for lane in lanes]
     rc = run_pool("lanes", units, args, cwd, child_env(extra), args.timeout, check=lane_check(jdir, gpu))
-    if lanes:
-        sides_report(args.out, jdir, lanes, gpu)
+    sides_report(args.out, jdir, lanes, gpu)
     return rc
 
 
