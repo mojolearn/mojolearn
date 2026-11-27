@@ -289,3 +289,8 @@ To cite Mojolearn, cite the paper: Andrew Hendel, *Bitwise-Identical Machine Lea
 Across GPUs and CPUs*, 2026, [10.5281/zenodo.23829035](https://doi.org/10.5281/zenodo.23829035)
 ([CITATION.cff](CITATION.cff)). To refer to the software, use the concept DOI
 [10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632), which resolves to the newest release.
+
+The paper's measurements were taken on the 0.8.9 and 0.8.10 releases (September 2026;
+evidence archive [10.5281/zenodo.22864165](https://doi.org/10.5281/zenodo.22864165)).
+Releases 0.8.55 through 0.8.64 carry a known timing regression; a fix is in progress.
+This affects speed only, not the bits.
