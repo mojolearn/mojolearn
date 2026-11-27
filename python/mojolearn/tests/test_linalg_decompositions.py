@@ -1,25 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`linalg.qr`, `linalg.eigh` and `linalg.svdvals` (lane/linalg-public,
-2026-09-19).
+"""Public decomposition exports, result objects and argument binding.
 
-WHAT THIS CLOSES. The Householder QR, the symmetric Jacobi eigensolver and
-the one-sided Jacobi SVD had run inside `PCA`, `TruncatedSVD`, `Nystroem`,
-`SpectralClustering`, `KernelRidge` and the ARIMA least squares for months,
-each gated as somebody's internal step. Nothing checked them UNDER THEIR OWN
-NAMES, against the meaning those names carry everywhere else in numerical
-Python, which is the only thing a caller of `linalg.qr` can be relying on.
-
-THE NAMES ARE NUMPY'S OR THEY ARE NOT THESE NAMES. Each test below states
-numpy's contract and checks ours against it: R's shape and triangularity,
-eigenvalues ASCENDING (numpy's order, the reverse of the one `PCA` reads from
-the same sweep), singular values DESCENDING. A test that merely checked
-self-consistency would pass just as happily on a descending `eigh`.
-
-THE REFUSALS ARE TESTED TOO (test_linalg_boundary.py), because "not implemented" and "unknown" are
-different answers and only one of them is honest: a Q factor is not formed
-anywhere in this tree, and a wide matrix needs an LQ route that does not
-exist here (DEVIATION 593).
+The CPU and GPU numerical tests live in linalg_numpy_cases.mojo and
+linalg_numerical.mojo and use stored NumPy float64 reference values.
 """
 import numpy as np
 import pytest
@@ -38,11 +22,6 @@ needs_host = pytest.mark.skipif(
 )
 
 
-def _matrix(rows, cols, seed=5):
-    rng = np.random.default_rng(seed)
-    return np.ascontiguousarray(rng.standard_normal((rows, cols)).astype(np.float32))
-
-
 def test_the_three_doors_ship_in_the_linalg_family():
     """A door nobody declared is a door the CPU column will not check: the
     lane harness REFUSES a lane whose family does not claim it."""
@@ -54,212 +33,35 @@ def test_the_three_doors_ship_in_the_linalg_family():
     assert "decomposition/host/linalg_public.mojo" in fam["host_modules"]
 
 
-@needs_host
-def test_eigh_is_ascending_like_numpy_and_solves_its_own_equation():
-    """numpy's `eigh` returns ASCENDING eigenvalues with vector `i` in COLUMN
-    `i`. `PCA` reads the same sweep DESCENDING; if this door ever silently
-    adopted PCA's order, every caller porting from numpy would get a reversed
-    spectrum that still looks plausible. Hence the explicit order assert, and
-    the residual check that ties `w` to `v`."""
-    a = _matrix(64, 5)
-    sym = a.T @ a
-    sym = np.ascontiguousarray(((sym + sym.T) * np.float32(0.5)).astype(np.float32))
-    w, v = linalg.eigh(sym)
-    w = np.asarray(w)
-    v = np.asarray(v).reshape(5, 5)
-    assert np.all(np.diff(w) >= 0), f"eigh must be ascending like numpy, got {w}"
-    assert np.allclose(w, np.linalg.eigvalsh(sym.astype(np.float64)), rtol=1e-4, atol=1e-4)
-    residual = sym.astype(np.float64) @ v - v * w
-    assert np.max(np.abs(residual)) < 1e-3, "v[:, i] is not the eigenvector of w[i]"
-
 
 @needs_host
-def test_eigh_reads_one_triangle_like_numpy():
-    """numpy's `eigh(a, UPLO)` reads ONE triangle: 'L' (the default) the
-    lower, 'U' the upper; the other triangle is never read. A non-symmetric
-    input therefore decomposes the mirrored triangle, and garbage in the
-    unread triangle changes nothing (lane/algos-decomp, 2026-09-27)."""
-    a = _matrix(64, 5)
-    sym = a.T @ a
-    sym = np.ascontiguousarray(((sym + sym.T) * np.float32(0.5)).astype(np.float32))
-    lower_only = np.ascontiguousarray(np.tril(sym) + np.triu(np.full_like(sym, 7.25), 1))
-    upper_only = np.ascontiguousarray(np.triu(sym) + np.tril(np.full_like(sym, -3.5), -1))
-    w_sym, v_sym = linalg.eigh(sym)
-    for m, uplo in ((lower_only, "L"), (upper_only, "U")):
-        w, v = linalg.eigh(m, UPLO=uplo)
-        assert np.asarray(w).tobytes() == np.asarray(w_sym).tobytes(), uplo
-        assert np.asarray(v).tobytes() == np.asarray(v_sym).tobytes(), uplo
-        ref = np.linalg.eigvalsh(m.astype(np.float64), UPLO=uplo)
-        assert np.allclose(np.asarray(w), ref, rtol=1e-4, atol=1e-4), uplo
-    w_default, _ = linalg.eigh(lower_only)
-    assert np.asarray(w_default).tobytes() == np.asarray(w_sym).tobytes(), "UPLO defaults to 'L'"
+def test_eigh_triangle_argument():
+    a = np.array([[2, 7], [1, 3]], dtype="f4")
+    default = linalg.eigh(a)
+    lower = linalg.eigh(a, UPLO="L")
+    assert len(default) == len(lower) == 2
+    for actual, expected in zip(default, lower):
+        assert np.asarray(actual).tobytes() == np.asarray(expected).tobytes()
     with pytest.raises(ValueError):
-        linalg.eigh(sym, UPLO="X")
-
-
-# The literal diagonal ordering case moved to linalg_numerical_* (4x4,
-# unchanged atol=1e-6). NumPy comparisons and triangle admission stay here.
-
-
-@needs_host
-def test_svdvals_is_descending_like_numpy():
-    a = _matrix(48, 5)
-    s = np.asarray(linalg.svdvals(a))
-    assert np.all(np.diff(s) <= 0), f"svdvals must be descending like numpy, got {s}"
-    assert np.allclose(s, np.linalg.svd(a.astype(np.float64), compute_uv=False),
-                       rtol=1e-4, atol=1e-4)
-
-
-# The original seed-5 duplicated-column 48x4 case moved to native CPU/GPU
-# tests with the same descending order and strict abs(last) < 1e-3 bound.
-# Same input, same bytes (svdvals, qr 'r' and 'reduced', svd's U) is the verify
-# lanes linalg-svdvals, linalg-qr, fn-linalg-qr and fn-linalg-svd. The shape,
-# dtype and refusal checks are in test_linalg_boundary.py.
-
-
-def _close(a, b, tol=2e-4):
-    a, b = np.asarray(a, np.float64), np.asarray(b, np.float64)
-    assert a.shape == b.shape, (a.shape, b.shape)
-    assert np.max(np.abs(a - b)) <= tol * max(1.0, np.max(np.abs(b))), np.max(np.abs(a - b))
+        linalg.eigh(a, UPLO="X")
 
 
 @needs_host
 @pytest.mark.parametrize("rows,cols", [(16, 4), (48, 5), (5, 9), (6, 6)])
-def test_qr_modes_are_numpys(rows, cols):
-    """'reduced', 'complete' and 'raw' (lane/algos-decomp, 2026-09-27):
-    geqrf with dlarfg's signs, so Q, R and even the raw reflectors match
-    LAPACK's to float32, wide shapes included; Q is orthonormal and Q R = a."""
-    a = _matrix(rows, cols)
-    a64 = a.astype(np.float64)
-    q, r = linalg.qr(a, mode="reduced")
-    nq, nr = np.linalg.qr(a64)
-    if rows >= cols:
-        # 'reduced' of a tall matrix (N <= 512) is the blocked TSQR (lane
-        # neural-pass140, `_linalg_impl.qr`'s docstring): R's diagonal is
-        # non-negative, so Q's columns and R's rows match LAPACK's up to one
-        # sign each; Q R = a holds as is.
-        rd = np.diag(np.asarray(r, np.float64))
-        assert (rd >= 0).all(), rd
-        sign = np.where(np.sign(np.diag(nr)) < 0, -1.0, 1.0)
-        _close(np.asarray(q, np.float64) * sign[None, :], nq)
-        _close(np.asarray(r, np.float64) * sign[:, None], nr)
-        _close(np.asarray(q, np.float64) @ np.asarray(r, np.float64), a64)
-    else:
-        _close(q, nq)
-        _close(r, nr)
-    qc, rc = linalg.qr(a, mode="complete")
-    nqc, nrc = np.linalg.qr(a64, mode="complete")
-    _close(rc, nrc)
-    _close(np.asarray(qc).T @ np.asarray(qc), np.eye(rows), 1e-5)
-    _close(np.asarray(qc) @ np.asarray(rc), a64)
-    h, tau = linalg.qr(a, mode="raw")
-    nh, ntau = np.linalg.qr(a64, mode="raw")
-    _close(h, nh)
-    _close(tau, ntau)
-    res = linalg.qr(a, mode="reduced")
-    assert np.asarray(res.Q).tobytes() == np.asarray(q).tobytes()
-    if rows >= cols:
-        # 'r' is the TSQR route (its bits predate the Q modes and are kept):
-        # its R is LAPACK's up to the sign of each row
-        rr = np.asarray(linalg.qr(a, mode="r"), np.float64)
-        _close(np.sign(np.diag(rr) * np.diag(nr))[:, None] * rr, nr)
+def test_qr_and_svd_return_objects(rows, cols):
+    a = np.eye(rows, cols, dtype="f4")
+    k = min(rows, cols)
+    qr = linalg.qr(a, mode="reduced")
+    q, r = qr
+    assert q.shape == qr.Q.shape == (rows, k)
+    assert r.shape == qr.R.shape == (k, cols)
+    assert np.asarray(q).tobytes() == np.asarray(qr.Q).tobytes()
     with pytest.raises(ValueError, match="unrecognized mode"):
         linalg.qr(a, mode="economic")
-
-
-@needs_host
-@pytest.mark.parametrize("rows,cols", [(16, 4), (48, 5), (5, 9), (6, 6)])
-@pytest.mark.parametrize("full", [True, False])
-def test_svd_is_numpys(rows, cols, full):
-    """`svd` returns (U, S, Vh) (lane/algos-decomp, 2026-09-27): S equals
-    numpy's, U and Vh orthonormal, U diag(S) Vh = a, and each singular pair
-    equals numpy's up to its sign."""
-    a = _matrix(rows, cols)
-    a64 = a.astype(np.float64)
-    u, s, vh = (np.asarray(t, np.float64) for t in linalg.svd(a, full_matrices=full))
-    nu, ns, nvh = np.linalg.svd(a64, full_matrices=full)
-    _close(s, ns)
-    assert u.shape == nu.shape and vh.shape == nvh.shape
-    k = min(rows, cols)
-    _close(u.T @ u, np.eye(u.shape[1]), 1e-5)
-    _close(vh @ vh.T, np.eye(vh.shape[0]), 1e-5)
-    _close((u[:, :k] * s) @ vh[:k], a64)
-    for j in range(k):
-        sg = np.sign(u[:, j] @ nu[:, j])
-        _close(u[:, j] * sg, nu[:, j], 1e-3)
-        _close(vh[j] * sg, nvh[j], 1e-3)
-    assert np.asarray(linalg.svd(a, compute_uv=False)).tobytes() == np.asarray(linalg.svdvals(a)).tobytes()
-
-
-@needs_host
-def test_svd_rank_deficient_and_hermitian():
-    a = _matrix(24, 3)
-    dup = np.ascontiguousarray(np.stack([a[:, 0], a[:, 1], a[:, 1], a[:, 2]], 1))
-    u, s, vh = (np.asarray(t, np.float64) for t in linalg.svd(dup))
-    _close(u.T @ u, np.eye(24), 1e-5)
-    _close((u[:, :4] * s) @ vh, dup.astype(np.float64))
-    sym = dup.T @ dup
-    sym = np.ascontiguousarray(((sym + sym.T) * np.float32(0.5)).astype(np.float32))
-    hu, hs, hvh = (np.asarray(t, np.float64) for t in linalg.svd(sym, hermitian=True))
-    _close(hs, np.linalg.svd(sym.astype(np.float64), hermitian=True)[1])
-    _close((hu * hs) @ hvh, sym.astype(np.float64))
-
-
-@needs_host
-def test_a_wide_matrix_takes_the_transpose():
-    """svdvals of a wide A reads A^T (the same singular values); qr of a
-    wide A is geqrf's upper-trapezoidal R."""
-    wide = _matrix(4, 16)
-    _close(linalg.svdvals(wide), np.linalg.svd(wide.astype(np.float64), compute_uv=False))
-    _close(linalg.qr(wide, mode="r"), np.linalg.qr(wide.astype(np.float64), mode="r"))
-
-
-# ===========================================================================
-# THE DEVICE ROUTE AND THE HOST ROUTE AGREE, BIT FOR BIT
-#
-# THIS IS THE CHECK THIS FILE'S OWN HEADER ONCE CLAIMED AND DID NOT HAVE.
-# `decomposition/host/linalg_public.mojo` asserted, from 2026-09-19 morning
-# until that evening, that a `check_linalg_public_orders_match_the_oracle` in
-# `decomposition/checks/linalg_public_check.mojo` held the two spectrum sorts
-# equal. Neither the symbol nor the file has ever existed. A named check that
-# is not in the tree is WORSE than an admitted gap, because a reader stops
-# looking -- so here is a real one.
-#
-# WHAT IT HOLDS. `qr`, `eigh` and `svdvals` run the DEVICE kernels on a GPU
-# install and the HOST oracle on a CPU-only one, chosen by
-# `_linalg_impl._door()`. Two routes through two implementations is exactly
-# where a cross-vendor library goes quietly wrong, and the product claim is
-# that they do not merely agree to a tolerance -- they agree in the BYTES.
-#
-# It compares `.tobytes()`, never `allclose`. A tolerance here would pass on
-# the day the two routes started rounding differently, which is the one day
-# this test exists for.
-# ===========================================================================
-
-
-def _constant_columns(rows=64):
-    """Constant columns beside large-scale ones: numerically null directions
-    next to columns of squared norm ~1e10, the rank-deficient float32 shape
-    the one-sided Jacobi once refused."""
-    base = _matrix(rows, 4) * np.asarray([1e4, 1.0, 1e4, 1.0], np.float32)
-    const = np.broadcast_to(np.asarray([1.0, 3.0, 0.0, 250.0, 0.0, 7.5], np.float32), (rows, 6))
-    return np.ascontiguousarray(np.hstack([base, const]).astype(np.float32))
-
-
-@needs_host
-def test_svdvals_converges_on_constant_columns():
-    """Retain the independent NumPy spectrum comparison at the public door.
-
-    Native linalg_numerical_* also checks the original ordering and all five
-    null directions on this same 64x10 input, with unchanged tolerances.
-    """
-    a = _constant_columns()
-    s = np.asarray(linalg.svdvals(a))
-    ref = np.linalg.svd(a.astype(np.float64), compute_uv=False)
-    assert np.allclose(s[:5], ref[:5], rtol=1e-4, atol=1e-5 * float(ref[0])), f"{s[:5]} vs {ref[:5]}"
-
-
-# The four device-equals-host word comparisons (QR 48x5 and 16x4, svdvals 48x5
-# and the constant-column 64x10, eigh 64x5) run in Mojo:
-# checks/native_tests/linalg_decompositions.mojo
-# (pixi run check-native-linalg-decompositions-gpu).
+    for full in (False, True):
+        u, s, vh = linalg.svd(a, full_matrices=full)
+        assert u.shape == (rows, rows if full else k)
+        assert s.shape == (k,)
+        assert vh.shape == (cols if full else k, cols)
+    values = linalg.svd(a, compute_uv=False)
+    assert np.asarray(values).tobytes() == np.asarray(linalg.svdvals(a)).tobytes()
