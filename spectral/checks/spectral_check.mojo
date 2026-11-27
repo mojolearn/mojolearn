@@ -642,38 +642,39 @@ def _oracle_trace[
         for i in range(len(L.diag)):
             dg.append(Float32(L.diag[i]))
         t.record_list_f32("spectral.diag", dg)
-    var v0 = List[Float32]()
-    for i in range(len(res.v0)):
-        v0.append(Float32(res.v0[i]))
-    t.record_list_f32("spectral.lanczos.v0", v0)
-    var cfg = List[Int32]()
-    cfg.append(Int32(g.n))
-    cfg.append(Int32(k))
-    cfg.append(Int32(ncv))
-    cfg.append(Int32(10 * g.n))
-    cfg.append(Int32(LANCZOS_LA))
-    t.record_list_i32("spectral.lanczos.config", cfg)
-    var step = 0
-    var steps_this = ncv
-    for r in range(res.restarts + 1):
-        for _ in range(steps_this):
-            t.record_scalar_f32(_step_tag(step, "alpha"), Float32(res.step_alpha[step]))
-            t.record_scalar_f32(_step_tag(step, "beta"), Float32(res.step_beta[step]))
-            step += 1
-        var rz = List[Float32]()
-        for c in range(k):
-            rz.append(Float32(res.restart_ritz[r * k + c]))
-        t.record_list_f32(_restart_tag(r, "ritz"), rz)
-        t.record_scalar_f32(_restart_tag(r, "res"), Float32(res.restart_res[r]))
-        var sw = List[Int32]()
-        sw.append(res.restart_sweeps[r])
-        t.record_list_i32(_restart_tag(r, "sweeps"), sw)
-        steps_this = ncv - k
-    var conv = List[Int32]()
-    conv.append(Int32(1) if res.converged else Int32(0))
-    conv.append(Int32(res.restarts))
-    conv.append(Int32(ncv + res.restarts * (ncv - k)))
-    t.record_list_i32("spectral.lanczos.converged_restarts_iter", conv)
+    if len(res.v0) > 0:
+        var v0 = List[Float32]()
+        for i in range(len(res.v0)):
+            v0.append(Float32(res.v0[i]))
+        t.record_list_f32("spectral.lanczos.v0", v0)
+        var cfg = List[Int32]()
+        cfg.append(Int32(g.n))
+        cfg.append(Int32(k))
+        cfg.append(Int32(ncv))
+        cfg.append(Int32(10 * g.n))
+        cfg.append(Int32(LANCZOS_LA))
+        t.record_list_i32("spectral.lanczos.config", cfg)
+        var step = 0
+        var steps_this = ncv
+        for r in range(res.restarts + 1):
+            for _ in range(steps_this):
+                t.record_scalar_f32(_step_tag(step, "alpha"), Float32(res.step_alpha[step]))
+                t.record_scalar_f32(_step_tag(step, "beta"), Float32(res.step_beta[step]))
+                step += 1
+            var rz = List[Float32]()
+            for c in range(k):
+                rz.append(Float32(res.restart_ritz[r * k + c]))
+            t.record_list_f32(_restart_tag(r, "ritz"), rz)
+            t.record_scalar_f32(_restart_tag(r, "res"), Float32(res.restart_res[r]))
+            var sw = List[Int32]()
+            sw.append(res.restart_sweeps[r])
+            t.record_list_i32(_restart_tag(r, "sweeps"), sw)
+            steps_this = ncv - k
+        var conv = List[Int32]()
+        conv.append(Int32(1) if res.converged else Int32(0))
+        conv.append(Int32(res.restarts))
+        conv.append(Int32(ncv + res.restarts * (ncv - k)))
+        t.record_list_i32("spectral.lanczos.converged_restarts_iter", conv)
     var rz = List[Float32]()
     for c in range(k):
         rz.append(Float32(res.ritz[c]))

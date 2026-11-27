@@ -46,7 +46,7 @@ def test_spectral_refuses_python_preparation_factory_without_calling_it(monkeypa
     else:
         # The estimator reads the base image of ITS device (its binding route): on a GPU installation that is
         # the device `_mojolearn` module, not the host one this test patched alone (the GPU fit never read the
-        # patch and ran into lanczos' own 4-row refusal). Both are patched; on a CPU installation they are one.
+        # patch). Both are patched; on a CPU installation they are one.
         device = _backend.binding("_mojolearn", "identical")
         binding = _backend.exact_host_module(device)
         if device is not binding and hasattr(device, "spectral_preparation_native_api_v1"):
@@ -56,7 +56,8 @@ def test_spectral_refuses_python_preparation_factory_without_calling_it(monkeypa
         if operation == "coo":
             _spectral_impl._coo_triples(np.eye(4, dtype=np.float64))
         else:
-            SpectralEmbedding(n_components=2, n_neighbors=2,
+            # Four eigenpairs on four rows makes the fused route decline and exercises preparation.
+            SpectralEmbedding(n_components=3, n_neighbors=2,
                               affinity="precomputed_nearest_neighbors").fit(
                                   np.asarray([[0, 1, 2, 3], [1, 0, 1, 2],
                                               [2, 1, 0, 1], [3, 2, 1, 0]], dtype=np.float32))

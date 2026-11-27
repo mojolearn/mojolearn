@@ -115,11 +115,14 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("spectral-embedding-fit-transform")
 def _(ml, X, yc, yr, Xh=None):
-    """SpectralEmbedding.fit_transform with the spectral-embedding lane's k-NN graph arguments on its
-    512 x 4 rows, fitted afresh."""
+    """Fit both the nearest-neighbor graph and the four-row full eigenspace."""
     E = ml.SpectralEmbedding(n_components=3, n_neighbors=10, random_state=3).fit_transform(
         np.ascontiguousarray(X[:512, :4]))
-    return _fit(dict(fit_transform=_m_transform_h(E)))
+    # Four-cycle with a repeated nontrivial eigenvalue. The two output
+    # components plus the trivial vector leave no room for a Lanczos restart.
+    graph = np.array([[0, 1, 0, 1], [1, 0, 1, 0], [0, 1, 0, 1], [1, 0, 1, 0]], dtype=np.float32)
+    full = ml.SpectralEmbedding(n_components=2, affinity="precomputed", random_state=3).fit_transform(graph)
+    return _fit(dict(fit_transform=_m_transform_h(E), full_eigenspace=_m_transform_h(full)))
 
 
 # ---------------------------------------------------------------- decompositions

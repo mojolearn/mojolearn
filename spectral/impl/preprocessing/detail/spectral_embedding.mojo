@@ -45,6 +45,7 @@ an arithmetic; `cluster/detail/spectral.mojo` wanted row-major anyway (it
 transposes theirs to get it, `spectral.cuh:47-52`).
 """
 
+from x_decomp.device import DevExec
 from core.hostptr import copy_f32
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
@@ -330,6 +331,61 @@ def create_laplacian(
     return lap^
 
 
+def _coo_to_square(
+    dense: MutPointer[Float32, MutAnyOrigin], rows: MutPointer[Int32, MutAnyOrigin],
+    cols: MutPointer[Int32, MutAnyOrigin], vals: MutPointer[Float32, MutAnyOrigin],
+    n: Int, nnz: Int,
+):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < nnz:
+        # The Laplacian's canonical COO has distinct coordinates.
+        dense.unsafe_store(Int(rows.unsafe_load(i)) * n + Int(cols.unsafe_load(i)), vals.unsafe_load(i))
+
+
+def _select_largest_eigenpairs(
+    vectors: MutPointer[Float32, MutAnyOrigin], values: MutPointer[Float32, MutAnyOrigin],
+    all_vectors: MutPointer[Float32, MutAnyOrigin], all_values: MutPointer[Float32, MutAnyOrigin],
+    n: Int, k: Int, value_count: Int,
+):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < n * k:
+        var col = i // n + n - k
+        vectors.unsafe_store(i, all_vectors.unsafe_load((i % n) * n + col))
+    if i < value_count:
+        values.unsafe_store(i, all_values.unsafe_load(i + n - k))
+
+
+def _direct_embedding_eigenpairs(
+    ctx: DeviceContext, lap: DeviceCoo, k: Int, mut vectors: DeviceBuffer[DType.float32],
+    mut values: List[Float32], need_values: Bool, tpb: Int,
+) raises:
+    # k == n - 1. Thick restart needs one more basis column than this
+    # matrix has. The dense solve costs O(n^2) storage, as does the output,
+    # and returns independent vectors even for repeated eigenvalues.
+    var n = lap.n
+    var dense = ctx.enqueue_create_buffer[DType.float32](n * n)
+    ctx.enqueue_memset(dense, Float32(0))
+    ctx.enqueue_function[_coo_to_square](
+        dense.unsafe_ptr(), lap.rows.unsafe_ptr(), lap.cols.unsafe_ptr(), lap.vals.unsafe_ptr(), n, lap.nnz,
+        grid_dim=((lap.nnz + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
+    )
+    var w = ctx.enqueue_create_buffer[DType.float32](n)
+    var v = ctx.enqueue_create_buffer[DType.float32](n * n)
+    DevExec.eigh_into(ctx, dense, w, v, n)
+    # eigh consumed the input. Reuse its first k words if the caller needs the values.
+    ctx.enqueue_function[_select_largest_eigenpairs](
+        vectors.unsafe_ptr(), dense.unsafe_ptr(), v.unsafe_ptr(), w.unsafe_ptr(), n, k, k if need_values else 0,
+        grid_dim=((n * k + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
+    )
+    if need_values:
+        values = download_f32(ctx, dense, k)
+    else:
+        ctx.synchronize()
+    _ = v^
+    _ = w^
+    _ = dense^
+
+
 def compute_eigenpairs(
     ctx: DeviceContext,
     params: SpectralEmbeddingParams,
@@ -472,8 +528,14 @@ def compute_eigenpairs_keep_device(
     var vecs_on_device = False
     comptime if IDN_SPECTRAL_VECS_DEVICE:
         vecs_on_device = not trace.enabled
-    var d_vecs = ctx.enqueue_create_buffer[DType.float32](k * n_samples if vecs_on_device else 1)
-    if vecs_on_device:
+    var direct = k >= 1 and k == n_samples - 1
+    var d_vecs = ctx.enqueue_create_buffer[DType.float32](k * n_samples if direct or vecs_on_device else 1)
+    if direct:
+        _direct_embedding_eigenpairs(ctx, laplacian, k, d_vecs, eigenvalues, keep or trace.enabled, lanczos_tpb)
+        if trace.enabled:
+            trace.record_list_f32("spectral.ritz", eigenvalues)
+            trace.record_device[DType.float32](ctx, "spectral.ritz.vectors", d_vecs, k * n_samples)
+    elif vecs_on_device:
         _ = lanczos_compute_eigenpairs_dev(
             ctx, config, laplacian, eigenvalues, d_vecs, trace, lanczos_tpb,
             scratch_pad, scratch_poison,
