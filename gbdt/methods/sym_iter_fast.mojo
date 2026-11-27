@@ -7,15 +7,7 @@ SYM_BUF_ARENA (2026-11-15, NEUTRAL). What is left is the objective predicate
 the default estimator and the device rounds read.
 """
 
-from gbdt.targets.ranking_options import is_lightgbm_ranking
-from gbdt.targets.kernel.pointwise_targets import (
-    OBJECTIVE_MULTICLASS,
-    OBJECTIVE_MULTICLASS_OVA,
-    OBJECTIVE_MULTIRMSE,
-    OBJECTIVE_PAIR_LOGIT,
-    OBJECTIVE_QUERY_RMSE,
-    OBJECTIVE_YETI_RANK,
-)
+from gbdt.targets.pointwise_bodies import BODY_OBJ_RMSE, BODY_OBJ_HUBER
 
 # TOMBSTONE: MOJOLEARN_SYM_ITER_ALL (NEUTRAL: rab4-symiter 1000-taxi +0.2%, quality identical) umbrella of
 # SYM_BUF_ARENA deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at a768195223.
@@ -38,15 +30,9 @@ from gbdt.targets.kernel.pointwise_targets import (
 def sym_objective_is_pointwise(objective: Int) -> Bool:
     """The objectives whose gradient pass is `launch_approximate` (the
     single-dimensional pointwise oracles)."""
-    return not (
-        objective == OBJECTIVE_MULTICLASS
-        or objective == OBJECTIVE_MULTICLASS_OVA
-        or objective == OBJECTIVE_MULTIRMSE
-        or objective == OBJECTIVE_QUERY_RMSE
-        or objective == OBJECTIVE_PAIR_LOGIT
-        or objective == OBJECTIVE_YETI_RANK
-        or is_lightgbm_ranking(objective)
-    )
+    # The native row-target table assigns consecutive tags RMSE through
+    # Huber. Querywise and multidimensional losses have other kernels.
+    return BODY_OBJ_RMSE <= objective and objective <= BODY_OBJ_HUBER
 
 
 # TOMBSTONE: MOJOLEARN_SYM_LEAF_FROM_STATS (DROPPED-noise: sym-iter-leaf istella/taxi -0.2%, old base) deleted 2026-10-09 on
