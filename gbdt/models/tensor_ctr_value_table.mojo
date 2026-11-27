@@ -656,23 +656,26 @@ def device_uniform_ctr_borders(
     return borders^
 
 
-def device_bins_for_borders(
+def device_bins_for_borders[output_type: DType = DType.uint32](
     ctx: DeviceContext,
     values: DeviceBuffer[DType.float32],
     n_rows: Int,
     borders: List[Float32],
-) raises -> DeviceBuffer[DType.uint32]:
+) raises -> DeviceBuffer[output_type]:
     """Each value's bin, the count of `borders` it strictly exceeds
     (`materialize_tensor_candidate_host`'s comparison), on the device."""
     var nb = len(borders)
+    comptime if output_type == DType.uint8:
+        if nb > 255:
+            raise Error("uint8 target bins support at most 255 borders")
     var h_b = ctx.enqueue_create_host_buffer[DType.float32](max(nb, 1))
     ctx.synchronize()
     if nb > 0:
         unsafe_memcpy(dest=h_b.unsafe_ptr(), src=borders.unsafe_ptr(), count=nb)
     var d_b = ctx.enqueue_create_buffer[DType.float32](max(nb, 1))
     ctx.enqueue_copy(dst_buf=d_b, src_ptr=h_b.unsafe_ptr())
-    var d_bins = ctx.enqueue_create_buffer[DType.uint32](max(n_rows, 1))
-    ctx.enqueue_function[tensor_bins_kernel](
+    var d_bins = ctx.enqueue_create_buffer[output_type](max(n_rows, 1))
+    ctx.enqueue_function[tensor_bins_kernel[output_type]](
         values.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), d_b.unsafe_ptr(), Int32(nb),
         d_bins.unsafe_ptr(), Int32(n_rows),
         grid_dim=tensor_ctr_blocks(n_rows), block_dim=TENSOR_CTR_BLOCK,
