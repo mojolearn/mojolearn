@@ -12,9 +12,10 @@ def applicable(public,method):
 def program_checks(recorder,public,methods):
     import numpy as np
     from . import ops
+    from ._verify_device import current_side
     from .importers._program import ImportedProgram
     def check(method):
-        with ops.Session() as s, tempfile.TemporaryDirectory() as tmp:
+        with ops.Session(device=current_side()) as s, tempfile.TemporaryDirectory() as tmp:
             a=np.array([[.25]],np.float32);x=s.tensor(a);w=s.tensor([[2.]])
             captured=s.capture(x,s.matmul(x,w))
             info=(captured._id,captured.input_shapes,captured.output_shapes,captured.params,captured.input_kinds)
