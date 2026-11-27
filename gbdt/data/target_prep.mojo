@@ -69,7 +69,7 @@ def target_scan_kernel(
     words: MutPointer[Int32, MutAnyOrigin],
     n_rows_in: Int32,
     target_dim_in: Int32,
-    multiclass: Int32,
+    label_limit: Int32,
     use_sw: Int32,
 ):
     """One thread per flat target entry; the label and weight clauses run
@@ -84,11 +84,10 @@ def target_scan_kernel(
         _ = Atomic.min(words.unsafe_offset(0), Int32(i))
     if i >= n:
         return
-    if multiclass != 0:
-        # the host check: `not isfinite(label) or label < 0 or
-        # label >= Float32(n_rows)`; NaN and -inf fail `v >= 0`, +inf fails
-        # `v < n`
-        if not (v >= Float32(0.0) and v < Float32(n)):
+    if label_limit != 0:
+        # Class IDs are below n_rows. A ranking grade has its own fixed
+        # upper bound, independent of the number of training rows.
+        if not (v >= Float32(0.0) and v < Float32(label_limit)):
             _ = Atomic.min(words.unsafe_offset(1), Int32(i))
         else:
             # `Float32(Int(label)) != label`; the label is in [0, n_rows),
@@ -131,6 +130,7 @@ def upload_and_scan_targets(
     multiclass: Bool,
     mut targets: DeviceBuffer[DType.float32],
     mut weights: DeviceBuffer[DType.float32],
+    grade_limit: Int = 0,
 ) raises -> TargetScan:
     """Copy `y` into `targets` (`n_rows * target_dim`) and the sample
     weights (or 1.0) into `weights` (`n_rows`), then scan them. The caller
@@ -156,7 +156,7 @@ def upload_and_scan_targets(
             d.unsafe_ptr(),
             Int32(n_rows),
             Int32(target_dim),
-            Int32(1) if multiclass else Int32(0),
+            Int32(n_rows) if multiclass else Int32(grade_limit),
             Int32(1) if use_sw else Int32(0),
             grid_dim=((total + TARGET_PREP_TPB - 1) // TARGET_PREP_TPB, 1, 1),
             block_dim=(TARGET_PREP_TPB, 1, 1),

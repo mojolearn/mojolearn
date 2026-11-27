@@ -140,10 +140,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 
-#: CatBoost's `ELossFunction` spellings that this implementation trains. The list is
-#: the reachable set of their GPU pointwise target
-#: (`pointwise_target_impl.h:259-299`), minus the ones whose leaf estimator
-#: or kernel family is not implemented.
+#: Native objectives, using CatBoost or LightGBM spellings.
 LOSSES = (
     "MultiClass",
     "MultiClassOneVsAll",
@@ -163,6 +160,8 @@ LOSSES = (
     "PairLogit",
     "YetiRank",
     "MultiRMSE",
+    "lambdarank",
+    "rank_xendcg",
 )
 
 #: Their GPU target keeps numClasses - 1 planes for MultiClass and
@@ -258,7 +257,7 @@ _ORDERED_MIN_ITERATIONS = 500
 #: The greedy searcher's ranking targets form grouped gradients first, then
 #: multiply both statistic planes by row bootstrap weights, as CatBoost's
 #: querywise_targets_impl.h::StochasticDer and weak_objective_impl.h do.
-_QUERYWISE_LOSSES = ("QueryRMSE", "PairLogit", "YetiRank")
+_QUERYWISE_LOSSES = ("QueryRMSE", "PairLogit", "YetiRank", "lambdarank", "rank_xendcg")
 
 #: `TAutoLRParamsGuesser` (`libs/train_lib/options_helper.cpp:176-243`), the
 #: GPU rows (`:221-243`), keyed (target type, use_best_model,
@@ -598,7 +597,7 @@ class GradientBoosting(_NumericModeMixin):
     Parameters
     ----------
     loss : str, default 'RMSE'
-        One of ``LOSSES``, in CatBoost's spellings: ``MultiClass``,
+        One of ``LOSSES``. CatBoost objectives include ``MultiClass``,
         ``MultiClassOneVsAll``, ``RMSE``, ``Logloss``, ``CrossEntropy``,
         ``Quantile``, ``MAE``, ``LogLinQuantile``, ``MAPE``, ``Poisson``, ``Lq``,
         ``Expectile``, ``Tweedie``, ``Huber``, ``QueryRMSE``, ``PairLogit``,
@@ -609,6 +608,15 @@ class GradientBoosting(_NumericModeMixin):
         regression: ``y`` is ``(n_samples, n_targets)`` with ``n_targets >= 2``
         and ``predict`` returns ``(n_samples, n_targets)`` (Plain SymmetricTree,
         numeric features, no eval set, ``boost_from_average`` unset or False).
+        LightGBM objectives ``lambdarank`` and ``rank_xendcg`` train on integer relevance grades
+        from 0 to 30 with contiguous query groups. Both use Plain symmetric trees
+        on numeric features without an evaluation set, and one Newton leaf
+        update per tree. The default split score is NewtonL2 with no bootstrap.
+        LambdaRank uses normalized lambdas, sigmoid 1,
+        gains 2**grade - 1 and truncation at 30. XE_NDCG uses an independent
+        random stream per query, seeded from ``random_state + 5`` modulo 2**32.
+        The training loss curve reports one minus mean NDCG@30. Predictions
+        are raw ranking scores. The objective settings above are fixed.
     n_estimators : int or None, default None
         CatBoost's ``iterations``. None is 1000 under SymmetricTree (CatBoost's
         default) and 100 under Depthwise and Lossguide.
@@ -702,7 +710,7 @@ class GradientBoosting(_NumericModeMixin):
         The truncation never keeps fewer than this many trees.
     score_function : {'Cosine', 'L2', 'NewtonCosine', 'NewtonL2'}, optional
         The split score. None is CatBoost's default for the policy: Cosine for
-        SymmetricTree and Depthwise, NewtonL2 for Lossguide. Only Cosine
+        SymmetricTree and Depthwise, NewtonL2 for Lossguide or a LightGBM ranking loss. Only Cosine
         scores carry ``random_strength`` noise. For RMSE each Newton spelling
         gives the same model as its plain twin. CatBoost's SolarL2, LOOL2 and
         SatL2 are refused by name.
@@ -1029,8 +1037,8 @@ class GradientBoosting(_NumericModeMixin):
             One query id per row (string or integer; integers compare by their
             decimal spelling, so 7 and "7" are one group; floats are refused).
             Rows of a group must be consecutive. Read by ``QueryRMSE``,
-            ``PairLogit`` and ``YetiRank`` (SymmetricTree, no categorical
-            features, no eval set); every other loss refuses it. A QueryRMSE fit
+            ``PairLogit``, ``YetiRank``, ``lambdarank`` and ``rank_xendcg`` (SymmetricTree, no categorical
+            features, no eval set); every other loss refuses it. The LightGBM ranking losses require this argument. A QueryRMSE fit
             with no groups, or one row per group, predicts zero.
         subgroup_id : sequence, optional
             Not read by any loss; refused by name.

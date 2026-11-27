@@ -306,7 +306,7 @@ def gbdt_config(fields: PythonObject, model: PythonObject, texts: Bool, context:
     if explicit is not None:
         c.explicit = _str(explicit)
     c.plain_forced = (not c.grow_symmetric or multi_output or multi_regression or not cosine or c.pointwise
-                      or below_one)
+                      or below_one or _eq(loss, "lambdarank") or _eq(loss, "rank_xendcg"))
     c.ordered_max_rows = Int(py=py_item(t, nk[].k_ordered_max_rows))
     c.ordered_min_iterations = Int(py=py_item(t, nk[].k_ordered_min_iterations))
     c.fold_len = _float(py_get(fields, nk[].k_fold_len_multiplier, PythonObject(2.0)))
@@ -1330,13 +1330,14 @@ def _gbdt_store(model: PythonObject, args: PythonObject, context: PythonObject) 
                         + "(CatBoost's " + _repr(required[0]) + ", which it makes mandatory)")
     var grow = py_item(kw, nk[].k_grow_policy)
     var symmetric = _eq(grow, "SymmetricTree")
+    var lightgbm_rank = _eq(loss, "lambdarank") or _eq(loss, "rank_xendcg")
     var bootstrap = py_item(kw, nk[].k_bootstrap_type)
     var bootstrap_defaulted = bootstrap is None and symmetric
     var n_estimators = py_item(kw, nk[].k_n_estimators)
     if n_estimators is None:
         n_estimators = py_item(t, nk[].k_catboost_iterations) if symmetric else py_item(t, nk[].k_legacy_iterations)
     if bootstrap is None and symmetric:
-        bootstrap = py_item(t, nk[].k_catboost_bootstrap)
+        bootstrap = PythonObject("No") if lightgbm_rank else py_item(t, nk[].k_catboost_bootstrap)
     if bootstrap is not None and not _in(bootstrap, py_item(t, nk[].k_bootstrap_types)):
         raise Error("mojolearn: bootstrap_type must be one of " + _repr(py_item(t, nk[].k_bootstrap_types)) + ", got " + _repr(bootstrap))
     var subsample = py_item(kw, nk[].k_subsample)
@@ -1428,7 +1429,7 @@ def _gbdt_store(model: PythonObject, args: PythonObject, context: PythonObject) 
                     + "or leave it at 1.")
     var score = py_item(kw, nk[].k_score_function)
     if score is None:
-        score = PythonObject("NewtonL2") if _eq(grow, "Lossguide") else PythonObject("Cosine")
+        score = PythonObject("NewtonL2") if lightgbm_rank or _eq(grow, "Lossguide") else PythonObject("Cosine")
     var unsupported = py_get(py_item(t, nk[].k_unsupported_score_functions), score)
     if unsupported is not None:
         raise Error("NotImplementedError: mojolearn: score_function=" + _repr(score) + " is not "

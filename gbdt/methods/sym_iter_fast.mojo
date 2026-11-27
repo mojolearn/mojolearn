@@ -7,6 +7,7 @@ SYM_BUF_ARENA (2026-11-15, NEUTRAL). What is left is the objective predicate
 the default estimator and the device rounds read.
 """
 
+from gbdt.targets.ranking_options import is_lightgbm_ranking
 from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_MULTICLASS,
     OBJECTIVE_MULTICLASS_OVA,
@@ -44,6 +45,7 @@ def sym_objective_is_pointwise(objective: Int) -> Bool:
         or objective == OBJECTIVE_QUERY_RMSE
         or objective == OBJECTIVE_PAIR_LOGIT
         or objective == OBJECTIVE_YETI_RANK
+        or is_lightgbm_ranking(objective)
     )
 
 

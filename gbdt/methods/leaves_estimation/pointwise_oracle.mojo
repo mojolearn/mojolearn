@@ -129,6 +129,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     launch_approximate,
     launch_approximate_move_eval,
 )
+from gbdt.targets.ranking_options import is_lightgbm_ranking
 from gbdt.targets.kernel.query_rmse import (
     QuerywiseTargetBuffers,
     launch_query_rmse_with,
@@ -814,7 +815,8 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                     self.d_eval_stats, self.d_fv, True,
                     self.d_mag_dummy, False,
                 )
-            else:
+            elif not is_lightgbm_ranking(self.objective):
+                # A grouped LightGBM fit already gathered its fixed Newton derivatives.
                 # DEVIATION 2030: a deferred MoveTo is applied INSIDE this
                 # evaluation -- the fused kernel performs the identical
                 # per-row cursor add, stores the identical bytes, and runs

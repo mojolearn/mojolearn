@@ -46,7 +46,7 @@ from gbdt.models.kernel.resident_link import (
     LINK_SOFTMAX,
     resident_link_kernel,
 )
-from gbdt.data.group_layout import device_group_layout
+from gbdt.data.group_layout import GroupLayout, device_group_layout
 from gbdt.data.cat_code_scan import (
     cat_column_codes_resident,
     cat_column_max_code,
@@ -300,6 +300,7 @@ border builder and quantize kernel, so the model is bitwise the default's
 by construction. Checks, one per side: `pixi run check-gbdt-per-round`
 (the default, ON) and `check-gbdt-per-round-2550-host-copy` (the opt-out)
 print one MODEL_HASH per lane, which must agree across the two builds."""
+from gbdt.targets.ranking_options import is_lightgbm_ranking, check_rank_grade, check_rank_estimator
 from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_CROSSENTROPY,
     OBJECTIVE_LOGLOSS,
@@ -335,6 +336,7 @@ from gbdt.options.data_processing_options import (
 from gbdt.options.loss_description import make_loss_description
 from gbdt.options.catboost_options import (
     COUNTER_CALC_FULL,
+    LEAF_ESTIMATION_NEWTON,
     pointwise_policy_check,
     GROW_LOSSGUIDE,
     GROW_SYMMETRIC,
@@ -1559,14 +1561,19 @@ def train(
     # `target_dim` planes for MultiRMSE, dim-major; one for every other loss
     var targets = ctx.enqueue_create_buffer[DType.float32](n_rows * target_dim)
     var weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var lightgbm_rank = is_lightgbm_ranking(objective_code)
     var tscan = upload_and_scan_targets(
         ctx, y, sample_weight, n_rows, target_dim, labels_multiclass,
-        targets, weights,
+        targets, weights, 31 if lightgbm_rank else 0,
     )
+    if lightgbm_rank:
+        check_rank_grade(tscan.first_bad_label() < 0)
+        if len(group_sizes) == 0:
+            raise Error("lambdarank and rank_xendcg require group_id")
     var is_pair_logit = objective_code == OBJECTIVE_PAIR_LOGIT
     var is_yeti_rank = objective_code == OBJECTIVE_YETI_RANK
     var is_querywise = (
-        objective_code == OBJECTIVE_QUERY_RMSE or is_pair_logit or is_yeti_rank
+        objective_code == OBJECTIVE_QUERY_RMSE or is_pair_logit or is_yeti_rank or lightgbm_rank
     )
     # ---- MultiRMSE: what this implementation carries, and what it refuses
     # BY NAME (lane/algos-trees, 2026-09-27). The fit is their
@@ -1655,12 +1662,18 @@ def train(
                 "boosting_type='Ordered' with feature_fraction < 1 is not"
                 " implemented here"
             )
+    var rank_layout = Optional[GroupLayout]()
     if len(group_sizes) > 0:
-        # checked on the device (`gbdt/data/group_layout.mojo`), same words
-        _ = device_group_layout(
-            ctx, group_sizes, n_rows, "group_id: group ",
-            "group_id: the group sizes cover ",
-        )
+        if lightgbm_rank:
+            # The ranking workspace needs these same checked offsets for
+            # every round and the largest query for its reduction depth.
+            rank_layout = Optional(device_group_layout[True](
+                ctx, group_sizes, n_rows, "group_id: group ", "group_id: the group sizes cover ",
+            ))
+        else:
+            _ = device_group_layout(
+                ctx, group_sizes, n_rows, "group_id: group ", "group_id: the group sizes cover ",
+            )
         if not is_querywise:
             raise Error(
                 "group_id is read only by the querywise and pairwise losses"
@@ -1678,10 +1691,12 @@ def train(
     # a groupwise loss given no groups, kept as it is.
     var query_sizes = List[UInt32]()
     if is_querywise:
-        if len(group_sizes) > 0 and len(group_sizes) < n_rows:
-            query_sizes = group_sizes.copy()
-        else:
-            query_sizes.resize(n_rows, UInt32(1))
+        # LightGBM already owns the validated device grouping in rank_layout.
+        if not lightgbm_rank:
+            if len(group_sizes) > 0 and len(group_sizes) < n_rows:
+                query_sizes = group_sizes.copy()
+            else:
+                query_sizes.resize(n_rows, UInt32(1))
         # what the querywise arm of this implementation does not restate yet,
         # refused by name
         if policy != GROW_SYMMETRIC:
@@ -3042,6 +3057,8 @@ def train(
     # host fit's too (`simple_leaves_check`): the greedy SymmetricTree
     # searcher's own leaves on the one-output losses, refused before any
     # tree where no searcher leaf exists
+    if lightgbm_rank:
+        check_rank_estimator(estimation.method, LEAF_ESTIMATION_NEWTON, estimation.iterations)
     simple_leaves_check(
         estimation.method,
         objective == OBJECTIVE_MULTICLASS
@@ -3434,6 +3451,7 @@ def train(
         min_child_hessian=min_child_hessian,
         feature_fraction=feature_fraction,
         group_sizes=query_sizes,
+        ranking_layout=rank_layout^,
         pair_winners=pair_list.winners.copy(),
         pair_losers=pair_list.losers.copy(),
         pair_weights=pair_list.weights.copy(),

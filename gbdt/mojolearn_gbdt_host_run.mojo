@@ -47,6 +47,7 @@ from gbdt.host.gbdt_oracle import (
     gbdt_host_fit_eval,
     gbdt_host_model_text,
 )
+from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG, is_lightgbm_ranking, is_lightgbm_ranking_name, check_rank_estimator
 from gbdt.host.gbdt_oracle_pointwise_rank import gbdt_ranking_pointwise_host_fit
 from gbdt.host.gbdt_oracle_losses import (
     GBDT_LEAF_EXACT,
@@ -236,6 +237,10 @@ def _pointwise_objective(loss: String) -> Int:
         return GBDT_OBJ_PAIR_LOGIT
     if loss == String("YetiRank"):
         return GBDT_OBJ_YETI_RANK
+    if loss == "lambdarank":
+        return OBJECTIVE_LAMBDARANK
+    if loss == "rank_xendcg":
+        return OBJECTIVE_RANK_XENDCG
     return -1
 
 
@@ -323,6 +328,8 @@ def _resolve_pointwise_loss(
         iterations = gradient
     if iterations_override >= 0:
         iterations = iterations_override
+    if is_lightgbm_ranking(objective):
+        check_rank_estimator(method, GBDT_LEAF_NEWTON, iterations)
     if method == GBDT_LEAF_NEWTON:
         if objective == GBDT_OBJ_QUANTILE or objective == GBDT_OBJ_MAE or objective == GBDT_OBJ_LOGLINQUANTILE or objective == GBDT_OBJ_MAPE:
             raise Error("Newton leaves estimation method is not supported for " + name + " loss function")
@@ -483,7 +490,7 @@ def _gbdt_fit_pointwise_arm(
     # MultiRMSE never reach this arm: the caller sends them to the multi-output fit
     # with the doc-parallel searcher (`gbdt_multi_host_fit(
     # use_pointwise_searcher=True)`), as the device trains them now
-    if objective < 0 or objective == GBDT_OBJ_QUERY_RMSE or objective == GBDT_OBJ_PAIR_LOGIT or objective == GBDT_OBJ_YETI_RANK:
+    if objective < 0 or objective == GBDT_OBJ_QUERY_RMSE or objective == GBDT_OBJ_PAIR_LOGIT or objective == GBDT_OBJ_YETI_RANK or is_lightgbm_ranking(objective):
         raise Error(
             "the pointwise searcher's one-output arm takes Logloss, RMSE,"
             " CrossEntropy and the pointwise losses; got loss='" + loss + "'"
@@ -802,7 +809,7 @@ def _gbdt_fit_ordered_arm(
             " (catboost_options.cpp:972-978); Cosine and NewtonCosine are"
             " the two with an ordered kernel"
         )
-    if loss == String("QueryRMSE") or loss == String("PairLogit") or loss == String("YetiRank"):
+    if loss == String("QueryRMSE") or loss == String("PairLogit") or loss == String("YetiRank") or is_lightgbm_ranking_name(loss):
         raise Error(
             "boosting_type='Ordered' with loss='" + loss + "' is not"
             " implemented here: the reference's folds follow the query"
@@ -959,7 +966,7 @@ def _gbdt_fit_ordered_arm(
                 "unknown loss '" + loss + "': this implementation trains RMSE, Logloss,"
                 " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
                 " Expectile, Tweedie, Huber, MultiClass, MultiClassOneVsAll,"
-                " QueryRMSE, PairLogit, YetiRank and MultiRMSE"
+                " QueryRMSE, PairLogit, YetiRank, MultiRMSE, lambdarank and rank_xendcg"
             )
         if leaf_method == GBDT_LEAF_EXACT:
             # an explicit Exact under Ordered: `set_leaves_estimation_default`'s
@@ -1226,7 +1233,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             )
         var gp = u32_ptr(params.i(fixed_and_weights + 3))
         host_group_sizes = gbdt_host_group_sizes(gp, n_groups, tail_rows)
-        if tail_loss != String("QueryRMSE") and tail_loss != String("PairLogit") and tail_loss != String("YetiRank"):
+        if tail_loss != String("QueryRMSE") and tail_loss != String("PairLogit") and tail_loss != String("YetiRank") and not is_lightgbm_ranking_name(tail_loss):
             raise Error(
                 "group_id is read only by the querywise and pairwise losses"
                 " (QueryRMSE, PairLogit and YetiRank are trained here;"
@@ -1257,6 +1264,8 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             "pairs are read only by loss='PairLogit' here; loss='" + tail_loss
             + "' does not use them"
         )
+    if is_lightgbm_ranking_name(tail_loss) and len(host_group_sizes) == 0:
+        raise Error("lambdarank and rank_xendcg require group_id")
     if tail_loss == String("PairLogit") and len(host_group_sizes) == 0:
         if len(host_pair_winners) > 0:
             raise Error(
@@ -1366,7 +1375,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             "unknown loss '" + loss + "': this implementation trains RMSE, Logloss,"
             " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
             " Expectile, Tweedie, Huber, MultiClass, MultiClassOneVsAll,"
-            " QueryRMSE, PairLogit, YetiRank and MultiRMSE"
+            " QueryRMSE, PairLogit, YetiRank, MultiRMSE, lambdarank and rank_xendcg"
         )
     # lane gbdt-cpu-rest-4-pwl (2026-11-23): the pointwise searcher on a
     # one-output (or a multi-output) loss takes its own arm BEFORE the
@@ -1378,6 +1387,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         pw_objective == GBDT_OBJ_QUERY_RMSE
         or pw_objective == GBDT_OBJ_PAIR_LOGIT
         or pw_objective == GBDT_OBJ_YETI_RANK
+        or is_lightgbm_ranking(pw_objective)
     )
     # lane gbdt-cpu-rest-4-simple (2026-11-23): Simple's admission, the
     # device's (`train` calls the same two bodies right after
@@ -1434,11 +1444,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # Depthwise and Lossguide trees through the non-symmetric driver
     # (gbdt_oracle_depthwise.mojo); the grouped ones are SymmetricTree only
     # on both columns, in `train`'s words
-    var pw_grouped = (
-        pw_objective == GBDT_OBJ_QUERY_RMSE
-        or pw_objective == GBDT_OBJ_PAIR_LOGIT
-        or pw_objective == GBDT_OBJ_YETI_RANK
-    )
+    var pw_grouped = pw_grouped_loss
     if pw_grouped and grow_code != 0:
         raise Error(
             "loss='" + loss + "' is implemented on SymmetricTree only here;"
@@ -1456,11 +1462,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # CPU binding compilation passed on Apple M1 at O0 (2026-10-28);
     # runtime/identity remain pending. Existing ranking CPU derivatives are
     # shared; this owner performs the distinct doc-parallel tree search.
-    var ranking_pointwise = use_pointwise and (
-        pw_objective == GBDT_OBJ_QUERY_RMSE
-        or pw_objective == GBDT_OBJ_PAIR_LOGIT
-        or pw_objective == GBDT_OBJ_YETI_RANK
-    )
+    var ranking_pointwise = use_pointwise and pw_grouped_loss
     # The grouped pointwise search's leaf method, admitted where the device
     # fit admits it, in its words (gbdt/options/catboost_options.mojo).
     querywise_pointwise_leaf_check(use_pointwise, ranking_pointwise, GBDT_LEAF_NEWTON if leaf_method == -1 else leaf_method)
