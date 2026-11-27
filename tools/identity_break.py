@@ -1733,6 +1733,12 @@ LANE_REVISIONS = {
     "saved-model-host-infer": "rows-4096-1",
     "rf-reg-gamma-ig": "rows-2048-1",
     "bootstrap": "light-fixture-20261105-1",
+    # 2026-11-26, lane/slow-lanes-1: the fitting generic trees lanes fit every class at the ensemble bound
+    # (generic.py `_generic_ENSEMBLE_BOUND`, checks_generic.py `_checks_generic_ENSEMBLE_BOUND`), not its default size
+    "generic-attrs-trees": "ensemble-bound-8-20261126-1",
+    "generic-pickle-trees": "ensemble-bound-8-20261126-1",
+    "generic-digest-trees": "ensemble-bound-8-20261126-1",
+    "check-generic-trees": "ensemble-bound-8-20261126-1",
     # The neural sequence lanes' 2026-11-05 change is to the batchscale and
     # rlpair PROTOCOLS (SEQ_SCALE_WHOLE, SCALE_LONG_L, SCALE_PREFIXES,
     # RLPAIR_DECODE, RLPAIR_LEAVE_AFTER), not to their train input; those parts
@@ -1971,6 +1977,30 @@ NON_SIZE_REVISIONS = {
         "bootstrap moved from 4096 values x 2048 replicates (1024 for the sorted arms) to 1024 values x "
         "1024 replicates for every arm, in the lane body and its batch part, on 2026-11-05 "
         "(lane/slow-verification-lanes)."),
+    "generic-attrs-trees": (
+        "2026-11-26, lane/slow-lanes-1: every class of the trees group whose n_estimators is unset or above 8 "
+        "fits at 8 (GradientBoosting's unset 1000 -> 8, the forests and other ensembles from their defaults of "
+        "10 to 100 -> 8), so the "
+        "lane stops setting the record's wall (474-666 s a lane, 56-160 s a verify unit on the L40S, "
+        "nvc-ab-20261127T015224Z-34c011); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "generic-pickle-trees": (
+        "2026-11-26, lane/slow-lanes-1: every class of the trees group whose n_estimators is unset or above 8 "
+        "fits at 8 (GradientBoosting's unset 1000 -> 8, the forests and other ensembles from their defaults of "
+        "10 to 100 -> 8), so the "
+        "lane stops setting the record's wall (474-666 s a lane, 56-160 s a verify unit on the L40S, "
+        "nvc-ab-20261127T015224Z-34c011); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "generic-digest-trees": (
+        "2026-11-26, lane/slow-lanes-1: every class of the trees group whose n_estimators is unset or above 8 "
+        "fits at 8 (GradientBoosting's unset 1000 -> 8, the forests and other ensembles from their defaults of "
+        "10 to 100 -> 8), so the "
+        "lane stops setting the record's wall (474-666 s a lane, 56-160 s a verify unit on the L40S, "
+        "nvc-ab-20261127T015224Z-34c011); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "check-generic-trees": (
+        "2026-11-26, lane/slow-lanes-1: every class of the trees group whose n_estimators is unset or above 8 "
+        "fits at 8 (GradientBoosting's unset 1000 -> 8, the forests and other ensembles from their defaults of "
+        "10 to 100 -> 8), so the "
+        "lane stops setting the record's wall (474-666 s a lane, 56-160 s a verify unit on the L40S, "
+        "nvc-ab-20261127T015224Z-34c011); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
 }
 
 

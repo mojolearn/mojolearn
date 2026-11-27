@@ -50,6 +50,37 @@ _checks_generic_NAMESPACES = ("", "model_selection", "models")
 #: rows and features of the generic fixture
 _checks_generic_ROWS = 64
 _checks_generic_FEATURES = 4
+#: THE TREES GROUP'S ENSEMBLE BOUND (lane slow-lanes-1, 2026-11-26): the same bound, for the same reason, as
+#: generic.py `_generic_ENSEMBLE_BOUND` (read its comment: check-generic-trees was 54-85 s a verify unit and 539 s a
+#: record lane at the classes' default sizes, GradientBoosting's 1000 iterations and the forests' 100 trees). check
+#: answers the side's fitted model and its other-device twin from the same fitted state, so 8 members cross the
+#: devices through the same predict, vote and sum kernels as 1000. A fit that refuses the bound runs again at the
+#: class's own size. Each fragment runs in its own namespace, so the bound is spelled here too.
+_checks_generic_ENSEMBLE_BOUND = 8
+_checks_generic_ENSEMBLE_GROUPS = ("trees",)
+_checks_generic_ENSEMBLE_PARAMS = ("n_estimators",)
+
+
+def _checks_generic_bound_ensemble(est, group):
+    """Set `est`'s ensemble-size parameters that are unset or above the bound to the bound (the trees group only);
+    returns {name: its own value} of those it set, to restore on a refusal."""
+    if group not in _checks_generic_ENSEMBLE_GROUPS or not callable(getattr(est, "set_params", None)):
+        return {}
+    try:
+        params = est.get_params(deep=False)
+    except Exception:  # noqa: BLE001 -- a class without get_params keeps its own size
+        return {}
+    own = {}
+    for key in _checks_generic_ENSEMBLE_PARAMS:  # small-loop(the ensemble-size parameter names)
+        if key not in params:
+            continue
+        value = params[key]
+        if value is None or (isinstance(value, (int, np.integer)) and not isinstance(value, (bool, np.bool_))
+                             and int(value) > _checks_generic_ENSEMBLE_BOUND):
+            own[key] = value
+    if own:
+        est.set_params(**{key: _checks_generic_ENSEMBLE_BOUND for key in own})
+    return own
 
 
 def _checks_generic_fixture(X, yc, yr):
@@ -249,8 +280,15 @@ def _checks_generic_run(ml, X, yc, yr, group):
         elif est is not None and method is None:
             why = "it has none of predict, transform, fit_predict, fit_transform"
         elif est is not None:
+            own = _checks_generic_bound_ensemble(est, group)
             try:
-                est.fit(*args)
+                try:
+                    est.fit(*args)
+                except Exception as exc:  # noqa: BLE001 -- the bounded fit refused: the class's own size, never n/a
+                    if not own or "device" in str(exc):
+                        raise
+                    est.set_params(**own)
+                    est.fit(*args)
             except Exception as exc:  # noqa: BLE001 -- the class's own fit on the generic fixture
                 words = _checks_generic_words(exc)
                 if "device" in words:

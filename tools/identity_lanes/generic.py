@@ -73,6 +73,47 @@ _generic_NOT_ARITHMETIC = r"time|elapsed|duration|seconds|vendor|thread|backend|
 #: of one source as different (w3-fix-10-s4, sab2b-mul_add-generic-cpu "restoration changed the clean result").
 _generic_TIMED_RECORDS = {"fit_loop_": 1}
 _generic_MISSING = object()
+#: THE TREES GROUP'S ENSEMBLE BOUND (lane slow-lanes-1, 2026-11-26). The four fitting trees lanes (generic-attrs-,
+#: generic-pickle-, generic-digest-trees here and check-generic-trees in checks_generic.py) fitted every class at its
+#: own default size: GradientBoosting's n_estimators=None is 1000 SymmetricTree iterations, the forests 100 trees.
+#: On the L40S (nvc-ab-20261127T015224Z-34c011, wheels 01a74234110b) that made them the four slowest lanes of both
+#: steps: verify units of 56-160 s (generic-pickle-trees/odd 160 s; every other lane's unit at most 23 s) and record
+#: lanes of 474-666 s, which set the record's 771 s wall. These lanes hold the shared MECHANISMS (attributes, copies,
+#: digests, check), and an ensemble of 8 members runs the same tree build, leaf, vote and sum kernels as one of 1000;
+#: so, before the fit, a class's n_estimators (the canonical member count: every boosting alias resolves to it, see
+#: _boosting_param_names.py) that is unset or above the bound is set to the bound. The class list, the parts, the
+#: fixtures and the fixture's rows are unchanged; params lanes (no fit) are unchanged. What 8 no longer reaches here:
+#: GradientBoosting's auto-resolved Ordered boosting (taken at 500 or more iterations, ensemble.py
+#: _ORDERED_MIN_ITERATIONS) and its default leaf-estimation iterations above 200 iterations
+#: (bindings/gbdt_config_run.mojo gbdt_fit_words); both stay covered by their own lanes (gbdt-ordered-weights,
+#: gbdt-cat-bootstrap, the OrderedRMSE lanes and the gbdt-* families at their recorded sizes). A class whose fit
+#: refuses the bound is fitted again at its own size, so the bound never turns a fitted class into an n/a part.
+#: A correctness-check size (AGENTS.md part 4, bounded fixtures), never a product dispatch rule.
+_generic_ENSEMBLE_BOUND = 8
+_generic_ENSEMBLE_GROUPS = ("trees",)
+_generic_ENSEMBLE_PARAMS = ("n_estimators",)
+
+
+def _generic_bound_ensemble(est, group):
+    """Set `est`'s ensemble-size parameters that are unset or above `_generic_ENSEMBLE_BOUND` to the bound (the
+    `_generic_ENSEMBLE_GROUPS` only); returns {name: its own value} of those it set, to restore on a refusal."""
+    if group not in _generic_ENSEMBLE_GROUPS or not callable(getattr(est, "set_params", None)):
+        return {}
+    try:
+        params = est.get_params(deep=False)
+    except Exception:  # noqa: BLE001 -- a class without get_params keeps its own size
+        return {}
+    own = {}
+    for key in _generic_ENSEMBLE_PARAMS:  # small-loop(the ensemble-size parameter names)
+        if key not in params:
+            continue
+        value = params[key]
+        if value is None or (isinstance(value, (int, np.integer)) and not isinstance(value, (bool, np.bool_))
+                             and int(value) > _generic_ENSEMBLE_BOUND):
+            own[key] = value
+    if own:
+        est.set_params(**{key: _generic_ENSEMBLE_BOUND for key in own})
+    return own
 
 
 def _generic_fixture(X, yc, yr):
@@ -348,10 +389,11 @@ def _generic_fit_args(cls, fixture):
     return ((Xp, ycp) if len(required) == 2 else (Xp,)), None
 
 
-def _generic_prepare(ml, fixture, where, name, cls, fit, label, side, failed):
+def _generic_prepare(ml, fixture, where, name, cls, fit, label, side, failed, group=None):
     """(est, fit args, why). est None and why None: a failure was appended to `failed`. est None with a why: the
     class could not be built. est set with a why: built, not fitted (the why says why). args None with no why: built
-    and not asked to fit."""
+    and not asked to fit. In `_generic_ENSEMBLE_GROUPS` the fit runs at the ensemble bound; a fit that refuses the
+    bound runs again at the class's own size."""
     try:
         est, why = _generic_build(ml, where, name, cls)
     except Exception as exc:  # noqa: BLE001 -- a constructor that refuses the side is a failure, never n/a
@@ -362,8 +404,15 @@ def _generic_prepare(ml, fixture, where, name, cls, fit, label, side, failed):
     args, why = _generic_fit_args(cls, fixture)
     if args is None:
         return est, None, why
+    own = _generic_bound_ensemble(est, group)
     try:
-        est.fit(*args)
+        try:
+            est.fit(*args)
+        except Exception as exc:  # noqa: BLE001 -- the bounded fit refused: the class's own size, never an n/a
+            if not own or "device" in _generic_words(exc):
+                raise
+            est.set_params(**own)
+            est.fit(*args)
     except Exception as exc:  # noqa: BLE001 -- the class's own fit on the generic fixture
         words = _generic_words(exc)
         if "device" in words:
@@ -650,7 +699,7 @@ def _generic_run(ml, X, yc, yr, mechanism, group):
     parts, failed = {}, []
     for where, name, cls in classes:  # driver-loop: over the public classes of one group, one bounded unit each
         label = f"{where}.{name}" if where else name
-        est, args, why = _generic_prepare(ml, fixture, where, name, cls, fit, label, side, failed)
+        est, args, why = _generic_prepare(ml, fixture, where, name, cls, fit, label, side, failed, group)
         if est is None and why is None:
             continue
         if why is not None:
