@@ -1071,8 +1071,6 @@ def _estimate_leaves_for_loss(
     else:
         _gather_rows(targets, row_index, n_rows, g_target)
         _gather_rows(cursor, row_index, n_rows, g_cursor)
-    var bins = List[Int](length=n_rows, fill=0)
-    _leaf_bins(offsets, sizes, n_rows, bins)
     var weights_cpu = List[Float64]()
     var has_weights = len(weights) > 0
     var g_weights = List[Float32]()
@@ -1135,6 +1133,8 @@ def _estimate_leaves_for_loss(
             loss, g_target, g_cursor, offsets, sizes, weights_cpu, n_rows,
             g_weights,
         )
+    var bins = List[Int](length=n_rows, fill=0)
+    _leaf_bins(offsets, sizes, n_rows, bins)
     var row_weights = List[Float32]()
     if loss.objective != GBDT_OBJ_PAIR_LOGIT:
         row_weights = weights.copy()
