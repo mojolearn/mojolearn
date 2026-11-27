@@ -84,7 +84,7 @@ from gbdt.ctrs.fast_prep import (
     read_codes,
     upload_codes,
 )
-from gbdt.ctrs.kernel.ctr_order import launch_ctr_estimation_order
+from gbdt.ctrs.kernel.ctr_order import launch_ctr_estimation_order, launch_grouped_ctr_order
 from gbdt.data.permutation import DEFAULT_PERMUTATION_COUNT
 from gbdt.grid_creator.binarization import (
     IDN_ORDERED_RMSE_DEVICE_GRID,
@@ -1262,6 +1262,7 @@ def train(
     # The fit's device plan, read once at the binding entry (one device by
     # default) and passed to the Plain and the Ordered fit.
     device_plan: DevicePlan = plan_for_single(),
+    eval_group_sizes: List[UInt32] = List[UInt32](),
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -1677,6 +1678,8 @@ def train(
     # is zero and the trees carry zero leaves: the reference's behavior for
     # a groupwise loss given no groups, kept as it is.
     var query_sizes = List[UInt32]()
+    if len(eval_group_sizes) > 0 and not is_querywise:
+        raise Error("held-out query ids require a grouped ranking loss")
     if is_querywise:
         if len(group_sizes) > 0 and len(group_sizes) < n_rows:
             query_sizes = group_sizes.copy()
@@ -1690,31 +1693,8 @@ def train(
                 " grow_policy=" + grow_policy_name(policy) + " is refused"
                 " (the reference registers it, querywise_non_symmetric.cpp:5-14)"
             )
-        # FAIRNESS FIX (2026-10-13 audit): querywise.cpp registers
-        # PairLogit/YetiRank with CatBoost's pointwise trainer. Plain
-        # DocParallel uses TDocParallelObliviousTreeSearcher. Its native
-        # grouped-target path is wired in fit_with_test; the categorical,
-        # held-out and permutation constraints below still apply.
-        for f in range(len(cat_features)):  # small-loop(cat_features: per-feature option flags): option validation, reads no data
-            if cat_features[f]:
-                raise Error(
-                    "loss='" + loss + "' with cat_features is not implemented"
-                    " here: the reference shuffles whole queries for its CTR"
-                    " permutations (permutation.cpp:9-11,"
-                    " GenerateQueryDocsOrder), which this implementation does"
-                    " not restate"
-                )
-        for f in range(len(one_hot)):  # small-loop(one_hot: per-feature option flags): option validation, reads no data
-            if one_hot[f]:
-                raise Error(
-                    "loss='" + loss + "' with one_hot_features is not implemented"
-                    " here"
-                )
-        if len(eval_y) > 0 or len(eval_x_colmajor) > 0:
-            raise Error(
-                "loss='" + loss + "' with eval_set is not implemented here: the"
-                " held-out loss needs the eval pool's own grouping"
-            )
+        if (len(eval_y) > 0) != (len(eval_group_sizes) > 0):
+            raise Error("grouped validation needs one held-out query id per eval row")
         if len(class_weights) > 0:
             raise Error("class_weights do not apply to loss='" + loss + "'")
     # ---- the PairLogit pairs (`gbdt/data/pairs.mojo`) ----
@@ -1937,6 +1917,8 @@ def train(
                 has_permutation_features = True
                 break
 
+    if is_querywise and has_permutation_features and (permutation_count > 1 or cat_params.max_tensor_complexity > 1):
+        raise Error("grouped categorical ranking supports one query permutation and single-feature CTRs")
     var ordered_ctr_column = False
     comptime if CTR_ONEHOT_DEVICE:
         if ordered:
@@ -1979,7 +1961,7 @@ def train(
         )
     var perm_count = permutation_count
     if perm_count == -1:
-        perm_count = DEFAULT_PERMUTATION_COUNT
+        perm_count = 1 if is_querywise else DEFAULT_PERMUTATION_COUNT
     if perm_count < 1:
         # `CB_ENSURE(PermutationCount.Get() > 0)` (`boosting_options.cpp:67`)
         raise Error(
@@ -2019,6 +2001,7 @@ def train(
     #: ON THE DEVICE, written once per fit (lane cpu4-gbdt)
     var d_btarget = ctx.enqueue_create_buffer[DType.uint8](1)
     var d_orders = List[DeviceBuffer[DType.uint32]]()
+    var ctr_query_ids = Optional[DeviceBuffer[DType.uint32]]()
     var target_classes_count = 0
     # DEVIATION 2634 (see `CTR_TARGET_PREP_NEEDS_CAT_2634`): the binarized
     # target, its borders and the CTR orders are read only inside the
@@ -2079,9 +2062,10 @@ def train(
         # column takes the same order).
         for p in range(perm_count):  # small-loop(perm_count: permutations): one order launch per permutation, written on the device
             var d_ord = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-            launch_ctr_estimation_order(
-                ctx, d_ord, n_rows, p, random_seed, ctr_order_block
-            )
+            if is_querywise and has_permutation_features:
+                ctr_query_ids = Optional(launch_grouped_ctr_order(ctx, d_ord, query_sizes, n_rows, random_seed))
+            else:
+                launch_ctr_estimation_order(ctx, d_ord, n_rows, p, random_seed, ctr_order_block)
             d_orders.append(d_ord^)
 
     # DEVIATION 2634, THE REACH MARKER (see `CTR_TRACE_ENV`). Every term of
@@ -2159,7 +2143,7 @@ def train(
         var use_fast_dep = False
         comptime if CTR_FAST_PREP:
             use_fast_dep = (
-                len(dependent_configs) > 0
+                not ctr_query_ids and len(dependent_configs) > 0
                 and len(binarized_target) == n_rows
                 and len(d_orders) == perm_count
             )
@@ -2371,7 +2355,7 @@ def train(
                             unique_values,
                             dependent_configs,
                             d_btarget,
-                            d_orders[p],
+                            d_orders[p], ctr_query_ids,
                         )
                         for c in range(len(dependent_slots)):  # small-loop(dependent_slots: CTR config slots): one device column handle per config
                             if p == est_perm:
@@ -2547,7 +2531,7 @@ def train(
                     unique_values,
                     dependent_configs,
                     d_btarget,
-                    d_orders[p],
+                    d_orders[p], ctr_query_ids,
                 )
                 for c in range(len(dependent_slots)):  # small-loop(dependent_slots: CTR config slots): one device column handle per config, no element copy
                     if p == est_perm:
@@ -3229,6 +3213,7 @@ def train(
     var test_arm = make_test_arm(
         ctx, eval_rows, test_cindex^, test_targets^,
         approx_dim, 1 + approx_dim, min(max_depth, MAX_FULL_TREE_DEPTH),
+        objective=objective, group_sizes=eval_group_sizes,
     )
 
     # TREE CTRS: the fit's state (`TreeCtrFit`), one entry when on.

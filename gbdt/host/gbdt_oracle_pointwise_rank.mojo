@@ -40,7 +40,7 @@ from gbdt.host.gbdt_oracle import (
     _identity_rows,
     _partition_for_tree,
     GBDT_MSE_BLOCK,
-    GbdtHostModel,
+    GbdtHostModel, GbdtHostFitWithEval, GbdtHostGrid,
     GbdtHostParams,
     _binarize_columns,
     _bootstrap_pass,
@@ -59,8 +59,16 @@ from gbdt.host.gbdt_oracle_losses import (
     GBDT_OBJ_YETI_RANK,
     GbdtHostLoss,
     _estimate_leaves_for_loss,
-    _zero_average_host,
+    _zero_average_host, GroupedTestLoss,
 )
+from gbdt.host.gbdt_oracle_eval import (
+    GbdtHostEval, GbdtHostEvalFit, gbdt_eval_add_tree, gbdt_eval_detector,
+    gbdt_eval_test_bins, gbdt_eval_shrink_symmetric,
+)
+from gbdt.host.gbdt_oracle_ctr import GbdtCtrHostFit, gbdt_ctr_host_prelude
+from gbdt.host.gbdt_oracle_tree_ctr import GbdtTreeCtrHost
+from gbdt.models.combination_map import TCombinationCtrs
+from gbdt.models.ctr_value_table import TCtrValueTable
 from gbdt.host.gbdt_oracle_ordered import _OrdSplit, _PwHelper, _ordered_tree_structure
 from gbdt.host.gbdt_oracle_pair import (
     HostPairs,
@@ -221,7 +229,12 @@ def gbdt_ranking_pointwise_host_fit(
     random_strength: Float32,
     weights: List[Float32] = List[Float32](),
     feature_fraction: Float64 = 1.0,
-) raises -> GbdtHostModel:
+    eval: GbdtHostEval = GbdtHostEval.none(),
+    eval_group_sizes: List[Int] = List[Int](),
+    flags: List[UInt32] = List[UInt32](),
+    permutation_count: Int = -1, ctr_estimation_permutation_id: Int = -1,
+    max_ctr_complexity: Int = 1,
+) raises -> GbdtCtrHostFit:
     """Fit grouped targets on numeric columns using pointwise tree search.
 
     `weights` (row order, empty: unit) are the sample weights, the device's
@@ -298,19 +311,60 @@ def gbdt_ranking_pointwise_host_fit(
     if loss.objective == GBDT_OBJ_YETI_RANK:
         yeti_tasks = Optional(yeti_rank_tasks(sizes_u32, n_rows))
 
-    var grid = gbdt_host_grid(
-        x_colmajor, n_rows, n_features, params.border_count,
-        params.border_build_max_samples, params.random_seed, params.nan_mode,
-        params.border_type,
-    )
-    var one_hot = List[Bool](length=n_features, fill=False)
-    var layout = build_layout(grid.fold_counts, one_hot)
-    var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
+    if len(eval.x_colmajor) != eval.n_rows * n_features or len(eval.y) != eval.n_rows:
+        raise Error("eval_set size mismatch")
+    var grid = GbdtHostGrid(List[List[Float32]](), List[Int](), List[Int]())
+    var one_hot = List[Bool]()
+    var cindex = List[UInt32]()
+    var test_cindex = List[UInt32]()
+    var tables = List[TCtrValueTable]()
+    var tree_ctr = List[GbdtTreeCtrHost]()
+    var layout: CompressedIndexLayout
+    var n_cols = n_features
+    var ctr_column_count = 0
+    if len(flags) != 0:
+        if feature_fraction < 1:
+            raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
+        var indexes = List[List[UInt32]]()
+        var shape = gbdt_ctr_host_prelude(
+            x_colmajor, y, n_rows, n_features, params, flags, permutation_count,
+            ctr_estimation_permutation_id, 1, eval.x_colmajor, eval.n_rows, max_ctr_complexity,
+            grid, indexes, test_cindex, one_hot, tables, tree_ctr, query_sizes=group_sizes,
+        )
+        layout = shape.layout.copy()
+        n_cols = shape.n_base_columns
+        ctr_column_count = shape.ctr_column_count
+        cindex = indexes.pop()
+    else:
+        grid = gbdt_host_grid(x_colmajor, n_rows, n_features, params.border_count,
+                              params.border_build_max_samples, params.random_seed, params.nan_mode, params.border_type)
+        one_hot = List[Bool](length=n_features, fill=False)
+        layout = build_layout(grid.fold_counts, one_hot)
+        cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
+        if eval.n_rows > 0:
+            test_cindex = _binarize_columns(eval.x_colmajor, eval.n_rows, n_features, grid, layout)
+    var rank_test = Optional[GroupedTestLoss]()
+    var search_hot = List[Bool]()
+    if len(flags) != 0:
+        search_hot = one_hot.copy()
+    var test_offsets = List[UInt32]()
+    var test_masks = List[UInt32]()
+    var test_shifts = List[UInt32]()
+    var test_cursor = List[Float32](length=eval.n_rows, fill=0.0)
+    var detector = gbdt_eval_detector(eval)
+    var test_losses = List[Float64]()
+    var stopped_early = False
+    if eval.n_rows > 0:
+        rank_test = Optional(GroupedTestLoss(loss.objective, eval_group_sizes, eval.y))
+        for f in range(n_cols):
+            test_offsets.append(layout.features[f].offset)
+            test_masks.append(layout.features[f].mask)
+            test_shifts.append(layout.features[f].shift)
     var helpers = _pw_helpers(layout, n_rows)
     var feat_offset = List[Int]()
     var feat_shift = List[UInt32]()
     var feat_mask = List[UInt32]()
-    _pw_feature_words(layout, n_rows, n_features, feat_offset, feat_shift, feat_mask)
+    _pw_feature_words(layout, n_rows, n_cols, feat_offset, feat_shift, feat_mask)
     # the per-tree feature sample's state (unread at feature_fraction 1)
     var ff_on = feature_fraction < 1.0
     var feature_random = TRandom(params.random_seed ^ UInt64(0x4645415455524553))
@@ -396,14 +450,14 @@ def gbdt_ranking_pointwise_host_fit(
             splits = _ordered_tree_structure(
                 tree_cindex, helpers, params.max_depth, stats, stats, doc_ids,
                 part_bounds, 1, 0, scale, params.l2_leaf_reg, feat_offset,
-                feat_shift, feat_mask, List[Bool](), not cosine_score,
+                feat_shift, feat_mask, search_hot, not cosine_score,
                 score_std_dev, tree_seed, cosine_score, sw_off=0, sg_off=n_rows,
             )
         else:
             splits = _ordered_tree_structure(
                 cindex, helpers, params.max_depth, stats, stats, doc_ids,
                 part_bounds, 1, 0, scale, params.l2_leaf_reg, feat_offset,
-                feat_shift, feat_mask, List[Bool](), not cosine_score,
+                feat_shift, feat_mask, search_hot, not cosine_score,
                 score_std_dev, tree_seed, cosine_score, sw_off=0, sg_off=n_rows,
             )
         var n_leaves = 1 << len(splits)
@@ -439,6 +493,17 @@ def gbdt_ranking_pointwise_host_fit(
             split_bins.append(splits[level].bin)
         tree_split_offsets.append(len(split_features))
         tree_leaf_offsets.append(len(model_leaves))
+        if rank_test:
+            if len(splits) > 0:
+                var bins = gbdt_eval_test_bins(test_cindex, eval.n_rows, tree_features, tree_bins,
+                                               test_offsets, test_masks, test_shifts, one_hot)
+                gbdt_eval_add_tree(test_cursor, bins, scaled)
+            var held_out = rank_test.value().value(eval.y, test_cursor)
+            test_losses.append(held_out)
+            detector.add_error(held_out)
+            if detector.is_need_stop():
+                stopped_early = True
+                break
         if iteration > 0:
             losses.append(-Float64(fv) / loss_norm)
     var fit_loop = fit_loop_stop(fit_loop_t0, len(tree_split_offsets) - 1)
@@ -452,10 +517,16 @@ def gbdt_ranking_pointwise_host_fit(
     else:
         var last = query_rmse_value(y, cursor, group_sizes, n_rows, weights)
         losses.append(-Float64(_deterministic_sum_lanes(last, 1, len(last))[0]) / loss_norm)
+    gbdt_eval_shrink_symmetric(test_losses, eval.want_best_model, eval.best_model_min_trees,
+                              tree_split_offsets, tree_leaf_offsets, split_features, split_bins, model_leaves)
+    # Query-aware CTRs are single-feature columns; the model uses the fitted grid directly.
     var model = GbdtHostModel(
         grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
         tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
-        model_leaves^, losses^, 0, False,
+        model_leaves^, losses^, detector.best_iteration, stopped_early,
     )
     model.fit_loop = fit_loop^
-    return model^
+    return GbdtCtrHostFit(
+        GbdtHostFitWithEval(model^, GbdtHostEvalFit(test_losses^, detector.best_iteration, stopped_early)),
+        one_hot^, tables^, ctr_column_count, TCombinationCtrs(),
+    )

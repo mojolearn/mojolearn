@@ -833,7 +833,12 @@ def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject,
         items = py_call(b.tuple, pair)
     except:
         raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
-    if len(items) != 2:
+    var nk = trees_keys()
+    var loss = _field(fields, model, nk[].k_loss, "loss")
+    var grouped = _eq(loss, "QueryRMSE") or _eq(loss, "PairLogit") or _eq(loss, "YetiRank")
+    if grouped and len(items) != 3:
+        raise Error("mojolearn: grouped validation needs eval_set=(X_eval, y_eval, eval_group_id)")
+    if not grouped and len(items) != 2:
         raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
     var xe: AdmittedX
     var eval_keys = List[UInt64]()
@@ -853,12 +858,16 @@ def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject,
         raise Error("mojolearn: eval_set y has " + String(ye.rows) + " values for "
                     + String(xe.rows) + " rows")
     if not trees_finite_f32(ye.address, ye.rows):
-        var nk = trees_keys()
-        var multi = _in(_field(fields, model, nk[].k_loss, "loss"), py_item(_tables(context), nk[].k_multi_output_losses))
+        var multi = _in(loss, py_item(_tables(context), nk[].k_multi_output_losses))
         raise Error("mojolearn: " + ("eval_set y (the eval_set labels)" if multi else "eval_set y")
                     + " must be finite (no NaN or infinity)")
     _ = ye  # keep the Python object alive through the native calls above
-    var _keep_ret_xe = Python.tuple(xe.array, PythonObject(xe.address), ye.array, PythonObject(ye.address), PythonObject(xe.rows))
+    var eval_groups = PythonObject(None)
+    if grouped:
+        if items[2] is None:
+            raise Error("mojolearn: eval_group_id must name the query of each held-out row")
+        eval_groups = _group_sizes(items[2], xe.rows, context)
+    var _keep_ret_xe = Python.tuple(xe.array, PythonObject(xe.address), ye.array, PythonObject(ye.address), PythonObject(xe.rows), eval_groups)
     _ = ye  # keep the Python object alive through the native call above
     _ = xe  # keep the Python object alive through the native call above
     _ = xe  # keep the Python object alive through the native call above
@@ -1184,6 +1193,12 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
                 gbdt_push_int(words, Int(py=pair_holders[1].size))
                 gbdt_push_int(words, trees_address(pair_holders[1]))
         # (group_holder and pair_holders stay alive in `pins` until PACK.)
+    if held is not None and held[5] is not None:
+        if group_holder is None:
+            raise Error("mojolearn: a grouped eval_set needs training group_id")
+        var eg = held[5]
+        gbdt_push_int(words, trees_address(eg))
+        gbdt_push_int(words, Int(py=eg.size))
     gbdt_check_option_tables(fields, model, context)
     var options = gbdt_fit_options(config, n_rows)
     _check_ordered_options(options.boosting, fields, model, context)

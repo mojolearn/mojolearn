@@ -381,6 +381,44 @@ def _feature_freq_column(
     return column^
 
 
+def _grouped_ctr_order(sizes: List[Int], n: Int, seed: UInt64) raises -> List[UInt32]:
+    var groups = learn_order_host(len(sizes), 0, 1, seed)
+    var starts = List[Int](capacity=len(sizes))
+    var shuffled_starts = List[Int](capacity=len(sizes))
+    var seen = 0
+    var shuffled = 0
+    for i in range(len(sizes)):
+        if sizes[i] <= 0:
+            raise Error("CTR query sizes must be positive")
+        starts.append(seen)
+        shuffled_starts.append(shuffled)
+        seen += sizes[i]
+        shuffled += sizes[Int(groups[i])]
+    if seen != n:
+        raise Error("CTR queries must cover every row")
+    var order = List[UInt32](unsafe_uninit_length=n)
+    var src = rebind[GbdtIntPtr](starts.unsafe_ptr())
+    var dst = rebind[GbdtIntPtr](shuffled_starts.unsafe_ptr())
+    var counts = rebind[GbdtIntPtr](sizes.unsafe_ptr())
+    var g = rebind[HostU32Ptr](groups.unsafe_ptr())
+    var outp = rebind[HostU32Ptr](order.unsafe_ptr())
+    var ng = len(sizes)
+    var units = _gbdt_units(ng, n)
+
+    def expand(unit: Int) {imm units, imm ng, imm src, imm dst, imm counts, imm g, imm outp}:
+        for pos in range(unit, ng, units):
+            var q = Int(g[pos])
+            for k in range(counts[q]):
+                outp[dst[pos] + k] = UInt32(src[q] + k)
+
+    host_parallelize(expand, units)
+    _ = len(starts)
+    _ = len(shuffled_starts)
+    _ = len(groups)
+    _ = len(sizes)
+    return order^
+
+
 def _ordered_target_column_into(
     codes: HostU32Ptr,
     unique_values: Int,
@@ -391,6 +429,7 @@ def _ordered_target_column_into(
     order: HostU32Ptr,
     n: Int,
     column: HostF32Ptr,
+    query_starts: Int = 0,
 ):
     """One ordered Borders column over one estimation order. SERIAL BY
     NATURE: position `i` reads its category's counts of the rows BEFORE it
@@ -398,6 +437,24 @@ def _ordered_target_column_into(
     scan), so the positions of one column are a running prefix."""
     var before = List[Float32](length=unique_values, fill=Float32(0.0))
     var hits = List[Float32](length=unique_values, fill=Float32(0.0))
+    if query_starts != 0:
+        var lengths = GbdtIntPtr(unsafe_from_address=query_starts)
+        var i = 0
+        while i < n:
+            var end = i + lengths[Int(order[i])]
+            # Score the entire query before including any of its labels.
+            for j in range(i, end):
+                var row = Int(order[j])
+                var k = Int(codes[row])
+                column[row] = (hits[k] + num) / (before[k] + denom)
+            for j in range(i, end):
+                var row = Int(order[j])
+                var k = Int(codes[row])
+                before[k] += Float32(1)
+                if UInt32(binarized_target[row]) > param:
+                    hits[k] += Float32(1)
+            i = end
+        return
     for i in range(n):
         var row = Int(order[i])
         var k = Int(codes[row])
@@ -413,6 +470,7 @@ def _ordered_target_columns(
     configs: List[TCtrConfig],
     binarized_target: List[UInt8],
     orders: List[List[UInt32]],
+    group_sizes: List[Int] = List[Int](),
 ) raises -> List[List[Float32]]:
     """`compute_simple_ctrs_gpu` (`ctr_calcers.mojo:801-891`) for Borders
     configs over EVERY estimation order: `TCtrBinBuilderGpu(order)` sorts
@@ -475,7 +533,21 @@ def _ordered_target_columns(
     var column_at_p = rebind[GbdtIntPtr](column_at.unsafe_ptr())
     var order_at_p = rebind[GbdtIntPtr](order_at.unsafe_ptr())
 
-    def column_run(unit: Int) {imm chunk, imm total, imm n, imm n_configs, imm unique_values, imm codes_p, imm target_p, imm nums_p, imm denoms_p, imm params_p, imm column_at_p, imm order_at_p}:
+    var query_lengths = List[Int]()
+    var query_word = 0
+    if len(group_sizes) > 0:
+        query_lengths.resize(n, 0)
+        var start = 0
+        for g in range(len(group_sizes)):
+            if group_sizes[g] <= 0 or group_sizes[g] > n - start:
+                raise Error("invalid CTR query sizes")
+            query_lengths[start] = group_sizes[g]
+            start += group_sizes[g]
+        if start != n:
+            raise Error("CTR queries must cover every row")
+        query_word = Int(query_lengths.unsafe_ptr())
+
+    def column_run(unit: Int) {imm chunk, imm total, imm n, imm n_configs, imm unique_values, imm codes_p, imm target_p, imm nums_p, imm denoms_p, imm params_p, imm column_at_p, imm order_at_p, imm query_word}:
         for k in range(unit * chunk, min(total, (unit + 1) * chunk)):
             var p = k // n_configs
             var c = k - p * n_configs
@@ -483,10 +555,11 @@ def _ordered_target_columns(
                 codes_p, unique_values, nums_p[c], denoms_p[c],
                 UInt32(params_p[c]), target_p,
                 HostU32Ptr(unsafe_from_address=order_at_p[p]), n,
-                HostF32Ptr(unsafe_from_address=column_at_p[k]),
+                HostF32Ptr(unsafe_from_address=column_at_p[k]), query_word,
             )
 
     host_parallelize(column_run, units)
+    _ = len(query_lengths)
     _ = len(codes)
     _ = len(binarized_target)
     _ = len(orders)
@@ -559,6 +632,7 @@ def gbdt_ctr_host_prelude(
     mut one_hot_out: List[Bool],
     mut tables_out: List[TCtrValueTable],
     mut tree_state_out: List[GbdtTreeCtrHost],
+    query_sizes: List[Int] = List[Int](),
 ) raises -> GbdtCtrHostShape:
     """Everything a categorical host fit does before its boosting loop
     (steps 1 to 4 of the module docstring, and the held-out index of step
@@ -619,9 +693,12 @@ def gbdt_ctr_host_prelude(
     var has_permutation_features = (
         len(dependent_configs) > 0 and gbdt_has_ctr_columns(kinds)
     )
+    var grouped = len(query_sizes) > 0
+    if grouped and has_permutation_features and (permutation_count > 1 or max_ctr_complexity > 1):
+        raise Error("grouped categorical ranking supports one query permutation and single-feature CTRs")
     var perm_count = permutation_count
     if perm_count == -1:
-        perm_count = DEFAULT_PERMUTATION_COUNT
+        perm_count = 1 if grouped else DEFAULT_PERMUTATION_COUNT
     if perm_count < 1:
         raise Error(
             "Permutation count should be positive, got " + String(perm_count)
@@ -661,9 +738,10 @@ def gbdt_ctr_host_prelude(
             # the Plain CTR order (`ctr_estimation_order_host`'s words);
             # an Ordered fit passes its fold permutation block, so order
             # p IS its fold permutation p (`ordered_permutations`)
-            ctr_orders.append(
-                learn_order_host(n_rows, p, order_block, params.random_seed)
-            )
+            if grouped and has_permutation_features:
+                ctr_orders.append(_grouped_ctr_order(query_sizes, n_rows, params.random_seed))
+            else:
+                ctr_orders.append(learn_order_host(n_rows, p, order_block, params.random_seed))
 
     # ---- the column loop (`:1532-1676`) ----
     var columns = List[List[Float32]]()
@@ -709,7 +787,7 @@ def gbdt_ctr_host_prelude(
             # one column a task
             var dep = _ordered_target_columns(
                 codes, unique_values, dependent_configs, binarized_target,
-                ctr_orders,
+                ctr_orders, query_sizes,
             )
             var n_dep_cfg = len(dependent_slots)
             for p in range(perm_count):  # driver-loop: over the permutations and configs, filing the columns

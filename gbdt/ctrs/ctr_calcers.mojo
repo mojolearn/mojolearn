@@ -44,6 +44,7 @@ from std.memory import bitcast, unsafe_memcpy
 from core.device_zero import enqueue_fill
 from core.transfer import transfer_upload_list
 
+from gbdt.ctrs.kernel.ctr_order import grouped_ctr_anchor_kernel, CTR_ORDER_BLOCK
 from gbdt.ctrs.ctr import (
     CTR_BORDERS,
     CTR_BUCKETS,
@@ -902,6 +903,7 @@ def compute_simple_ctrs_gpu_resident(
     ctr_configs: List[TCtrConfig],
     binarized_target: DeviceBuffer[DType.uint8],
     order: DeviceBuffer[DType.uint32],
+    query_ids: Optional[DeviceBuffer[DType.uint32]] = None,
 ) raises -> List[DeviceBuffer[DType.float32]]:
     """`compute_simple_ctrs_gpu` with every input and output RESIDENT (lane
     cpu4-gbdt): the feature's codes (`cat_column_codes_resident`), the
@@ -953,8 +955,21 @@ def compute_simple_ctrs_gpu_resident(
             bufs.append(columns[k])
 
     var out = List[DeviceBuffer[DType.float32]]()
-    for c in range(len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): a handful of priors per feature
-        out.append(bufs[slot_buf[c]])
+    if query_ids:
+        var anchors = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+        ctx.enqueue_function[grouped_ctr_anchor_kernel](
+            builder.indices.unsafe_ptr(), cat_codes.unsafe_ptr(), query_ids.value().unsafe_ptr(),
+            anchors.unsafe_ptr(), Int32(n_rows), grid_dim=(n_rows + CTR_ORDER_BLOCK - 1) // CTR_ORDER_BLOCK,
+            block_dim=CTR_ORDER_BLOCK,
+        )
+        for c in range(len(ctr_configs)):
+            var grouped = ctx.enqueue_create_buffer[DType.float32](n_rows)
+            launch_gather_with_mask_f32(ctx, grouped, bufs[slot_buf[c]], anchors, n_rows, CTR_INDEX_MASK)
+            out.append(grouped^)
+        ctx.synchronize()
+    else:
+        for c in range(len(ctr_configs)):
+            out.append(bufs[slot_buf[c]])
     # the builder's and calcer's scratch is read by the enqueued launches
     ctx.synchronize()
     _ = builder^

@@ -210,7 +210,7 @@ from gbdt.host.gbdt_oracle_eval import (
     GbdtHostEvalFit,
     gbdt_eval_add_tree,
     gbdt_eval_detector,
-    gbdt_eval_shrink_point,
+    gbdt_eval_shrink_symmetric,
     gbdt_eval_test_bins,
 )
 
@@ -1127,6 +1127,37 @@ def _estimate_leaves_for_loss(
 # ===========================================================================
 
 
+struct GroupedTestLoss(Movable):
+    """Held-out queries have their own size vector, grades and generated pairs."""
+    var groups: List[Int]
+    var pairs: Optional[HostPairs]
+
+    def __init__(out self, objective: Int, sizes: List[Int], target: List[Float32]) raises:
+        var rows = 0
+        var sizes_u32 = List[UInt32](capacity=len(sizes))
+        for q in range(len(sizes)):
+            if sizes[q] <= 0:
+                raise Error("held-out queries must have positive size")
+            rows += sizes[q]
+            sizes_u32.append(UInt32(sizes[q]))
+        if rows == 0 or rows != len(target):
+            raise Error("held-out queries must cover every eval row")
+        self.groups = sizes.copy()
+        self.pairs = None
+        if objective != GBDT_OBJ_QUERY_RMSE:
+            self.pairs = Optional(host_pair_groups(sizes_u32, target, List[Float32](), rows))
+
+    def value(self, targets: List[Float32], cursor: List[Float32]) -> Float64:
+        var parts = List[Float32]()
+        var weight = Float64(len(targets))
+        if self.pairs:
+            parts = pair_logit_value(self.pairs.value(), cursor)
+            weight = self.pairs.value().total_weight()
+        else:
+            parts = query_rmse_value(targets, cursor, self.groups, len(targets))
+        return -Float64(_deterministic_sum_lanes(parts, 1, len(parts))[0]) / weight
+
+
 def gbdt_losses_host_fit(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -1151,6 +1182,7 @@ def gbdt_losses_host_fit(
     permutation_count: Int = -1,
     ctr_estimation_permutation_id: Int = -1,
     max_ctr_complexity: Int = 1,
+    eval_group_sizes: List[Int] = List[Int](),
 ) raises -> GbdtCtrHostFit:
     """`train` then `fit_with_test` on the covered configurations (see the
     module docstring). `group_sizes` is read by QueryRMSE alone, already
@@ -1274,17 +1306,14 @@ def gbdt_losses_host_fit(
         or loss.objective == GBDT_OBJ_PAIR_LOGIT
         or loss.objective == GBDT_OBJ_YETI_RANK
     )
+    var rank_test = Optional[GroupedTestLoss]()
     if has_test:
         if len(eval.x_colmajor) != eval.n_rows * n_features:
             raise Error("eval_set x_colmajor size mismatch")
         if len(eval.y) != eval.n_rows:
             raise Error("eval_set y size mismatch")
         if grouped:
-            # `train`'s words (gbdt/train.mojo)
-            raise Error(
-                "an eval_set with a grouped loss is not implemented here: the"
-                " held-out loss needs the eval pool's own grouping"
-            )
+            rank_test = Optional(GroupedTestLoss(loss.objective, eval_group_sizes, eval.y))
     var n_eval = eval.n_rows if has_test else 1
 
     # ---- the columns, the grid, the layout and one compressed index per
@@ -1303,11 +1332,6 @@ def gbdt_losses_host_fit(
     var ctr_column_count = 0
     var layout: CompressedIndexLayout
     if cat_arm:
-        if grouped:
-            raise Error(
-                "the grouped losses take no categorical columns here (train"
-                " refuses them, in its words, before this fit)"
-            )
         if feature_fraction < 1.0:
             # `train`'s words (gbdt/train.mojo)
             raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
@@ -1316,7 +1340,7 @@ def gbdt_losses_host_fit(
             permutation_count, ctr_estimation_permutation_id, 1,
             eval.x_colmajor, eval.n_rows if has_test else 0,
             max_ctr_complexity, grid, cindexes, test_cindex, one_hot, tables,
-            tree_ctr,
+            tree_ctr, query_sizes=group_sizes,
         )
         est_p = shape.est_perm
         n_base_columns = shape.n_base_columns
@@ -1760,9 +1784,11 @@ def gbdt_losses_host_fit(
                     feat_offset, feat_mask, feat_shift, feat_one_hot,
                 )
                 gbdt_eval_add_tree(test_cursor, test_bins, scaled)
-            var t_loss = -Float64(
-                _loss_value(loss, eval.y, test_cursor, n_eval)
-            ) / Float64(n_eval)
+            var t_loss: Float64
+            if rank_test:
+                t_loss = rank_test.value().value(eval.y, test_cursor)
+            else:
+                t_loss = -Float64(_loss_value(loss, eval.y, test_cursor, n_eval)) / Float64(n_eval)
             test_losses.append(t_loss)
             detector.add_error(t_loss)
             if detector.is_need_stop():
@@ -1796,21 +1822,10 @@ def gbdt_losses_host_fit(
         )
     # ---- `ShrinkToBestIteration` (`gbdt/train.mojo:2241-2254`), the
     # held-out arm's own tracker ----
-    var shrink_to = gbdt_eval_shrink_point(
-        test_losses, eval.want_best_model, eval.best_model_min_trees
+    gbdt_eval_shrink_symmetric(
+        test_losses, eval.want_best_model, eval.best_model_min_trees, tree_split_offsets,
+        tree_leaf_offsets, split_features, split_bins, model_leaves,
     )
-    var n_trees = len(tree_split_offsets) - 1
-    if 0 < shrink_to and shrink_to < n_trees:
-        while len(tree_split_offsets) - 1 > shrink_to:
-            _ = tree_split_offsets.pop()
-            _ = tree_leaf_offsets.pop()
-        split_features.resize(
-            tree_split_offsets[len(tree_split_offsets) - 1], 0
-        )
-        split_bins.resize(tree_split_offsets[len(tree_split_offsets) - 1], 0)
-        model_leaves.resize(
-            tree_leaf_offsets[len(tree_leaf_offsets) - 1], Float32(0.0)
-        )
     # TREE CTRS: the model's columns (`gbdt_ctr_host_tail`, the CTR
     # Logloss / RMSE fit's statements); a numeric fit and one without
     # combinations keep the grid's columns

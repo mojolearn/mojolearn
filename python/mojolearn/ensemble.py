@@ -1019,18 +1019,25 @@ class GradientBoosting(_NumericModeMixin):
         sample_weight : array-like of shape (n_samples,), optional
             Per-row weights, None meaning all ones. Multiplied with
             ``class_weights`` where both are given.
-        eval_set : tuple (X_eval, y_eval) or list of one such tuple, optional
+        eval_set : tuple or list containing one tuple, optional
             Held-out data for ``test_loss_curve_``, the overfitting detector and
             ``use_best_model``. Unlike CatBoost, only one eval set is accepted;
             more than one raises. Passing it makes ``use_best_model`` default to
             True, so ``model_`` keeps the trees up to the best held-out iteration;
-            pass ``use_best_model=False`` to keep every tree.
+            pass ``use_best_model=False`` to keep every tree. Supply
+            ``(X_eval, y_eval, eval_group_id)`` for QueryRMSE, PairLogit and
+            YetiRank, and ``(X_eval, y_eval)`` for other losses. The held-out
+            query IDs follow the same consecutive-row rule as training IDs.
+            QueryRMSE centers errors within each held-out query. PairLogit and
+            YetiRank score within-query pairs of unequal grades by log loss.
         group_id : sequence, optional
             One query id per row (string or integer; integers compare by their
             decimal spelling, so 7 and "7" are one group; floats are refused).
             Rows of a group must be consecutive. Read by ``QueryRMSE``,
-            ``PairLogit`` and ``YetiRank`` (SymmetricTree, no categorical
-            features, no eval set); every other loss refuses it. A QueryRMSE fit
+            ``PairLogit`` and ``YetiRank`` on symmetric trees. Pass training
+            query IDs when using a grouped eval set. For categorical features
+            above the one-hot limit, these losses encode targets from earlier
+            whole queries with one permutation and single-feature CTRs. A QueryRMSE fit
             with no groups, or one row per group, predicts zero.
         subgroup_id : sequence, optional
             Not read by any loss; refused by name.
