@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Two optimizer updates made in separate public calls must match the uninterrupted fit."""
+# Two optimizer updates made in separate public calls must match the uninterrupted fit.
 
 
 def _mlp_partial_result(incremental, full, prediction, full_prediction):
