@@ -43,7 +43,7 @@ class STL(ParamsMixin):
     Parameters
     ----------
     endog : array-like of shape (n_obs,) or (batch_size, n_obs)
-        The series, float32. float64 raises TypeError.
+        The series, float32 (float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused).
     period : int
         Periodicity of the season, at least 2. Required.
     seasonal : int, default 7
@@ -71,8 +71,8 @@ class STL(ParamsMixin):
 
     Raises
     ------
-    TypeError
-        If ``endog`` is float64.
+    ValueError
+        If a float64 value is outside float32's range.
     ValueError
         If ``period`` is missing or below 2, a degree is not 0 or 1, or
         ``endog`` is not 1-D or 2-D.

@@ -15,6 +15,14 @@ family keeps its own cast loop or finiteness scan.
                                               s0, s1) into C-order `dst`, row
                                               tasks across the host's cores;
                                               True when every word is finite
+    admitted_cast_f32_words(..., transposed) -> Int
+                                              the same cast, its verdict as a
+                                              status: ADMITTED_ALL_FINITE,
+                                              ADMITTED_NONFINITE, or the
+                                              smallest column holding a
+                                              finite float64 that rounds to an
+                                              infinity (never raises)
+    admitted_f64_overflow_refuse(column)      THE refusal of such a column
     admitted_cast_f64(...)                    the same view widened to float64
     admitted_check_f32(..., name, borrowed, dst)
                                               admitted_cast_f32, or for a
@@ -61,6 +69,44 @@ comptime _AI_F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime _AI_U8P = MutPointer[UInt8, MutUntrackedOrigin]
 comptime _AI_U32P = MutPointer[UInt32, MutUntrackedOrigin]
 comptime _AI_EXP = UInt32(0x7F800000)
+comptime _AI_EXP64 = UInt64(0x7FF0000000000000)
+comptime _AI_INTP = MutPointer[Int, MutUntrackedOrigin]
+comptime _AI_NO_COLUMN = 9223372036854775807
+
+# The status words of `admitted_cast_f32_words` (a status >= 0 is a column).
+comptime ADMITTED_ALL_FINITE = -1
+comptime ADMITTED_NONFINITE = -2
+
+# float64 input (Andrew, 2026-11-27). An estimator that computes in float32
+# converts a float64 input ONCE, here, at the native boundary, with one rule
+# on every device and side: IEEE round-to-nearest-even (`f64_to_f32_bits`,
+# core/cast_in.mojo, the soft narrowing every column already runs), a NaN
+# stays a NaN (the quiet NaN 0x7FC00000), an infinity stays that infinity
+# (the door then treats it as it treats a float32 infinity), and a FINITE
+# value whose rounding is an infinity (magnitude at or above float32's
+# largest finite value plus half an ulp, so every value that rounds to
+# 3.4028235e38 or below is kept) is refused, naming its column, never turned
+# into an infinity. The test rides in the cast pass and runs only on a word
+# the cast already found non-finite: a finite input pays no extra work, and a
+# float32 C-order input is still borrowed with no copy.
+comptime ADMITTED_F32_MAX_TEXT = "3.4028234663852886e+38"
+
+
+def admitted_f64_overflow_refuse(column: Int) raises:
+    """THE refusal of a float64 input whose column `column` holds a finite
+    value outside float32's range (every float32-computing door raises this
+    one text)."""
+    raise Error("ValueError: column " + String(column) + " holds a float64 value whose magnitude exceeds"
+                + " float32's largest finite value (" + ADMITTED_F32_MAX_TEXT + "); float64 input is"
+                + " converted to float32 once, with round-to-nearest-even, and this value would become"
+                + " infinity, so it is refused")
+
+
+@always_inline
+def admitted_f64_rounds_to_inf(raw: UInt64, bits: UInt32, wide: Bool) -> Bool:
+    """`raw` is a finite float64 item (`wide`: the item is float64) whose
+    float32 word `bits` is an infinity."""
+    return wide and (raw & _AI_EXP64) != _AI_EXP64 and (bits & UInt32(0x7FFFFFFF)) == _AI_EXP
 
 
 @always_inline
@@ -86,19 +132,40 @@ def admitted_raw_word(address: Int, item: Int) -> UInt64:
 
 def admitted_cast_f32(
     addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int, dst: _AI_F32P,
-) -> Bool:
+    transposed: Bool = False,
+) raises -> Bool:
+    """`admitted_cast_f32_words`, refusing a float64 column that holds a
+    finite value outside float32's range (`admitted_f64_overflow_refuse`);
+    True when every written word is finite. `transposed`: the view is the
+    transpose of the caller's matrix (an F-order cast), so the caller's
+    column is the view's row."""
+    var status = admitted_cast_f32_words(addr, s0, s1, rows, cols, item, kind, dst, transposed)
+    if status >= 0:
+        admitted_f64_overflow_refuse(status)
+    return status == ADMITTED_ALL_FINITE
+
+
+def admitted_cast_f32_words(
+    addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int, dst: _AI_F32P,
+    transposed: Bool = False,
+) -> Int:
     """The classical_f32_bits word of every item of the rows x cols view at
     byte address `addr` (byte strides `s0`, `s1`), written to `dst` in C
-    order, and True when none of the written words is a NaN or an infinity.
+    order, with its finiteness verdict as a status word (below).
     Rows are independent (each writes only its own cells and its task's
     flag), so they are split into contiguous row tasks over the host's cores
     (core/host_predict_threads.mojo, with its grain floor); the output words
     do not depend on the split, and the flag is the AND of the tasks'.
     Each item is one typed load (`admitted_raw_word`), not a byte assembly.
-    A caller that does not refuse non-finite input ignores the flag."""
+    Returns ADMITTED_ALL_FINITE, ADMITTED_NONFINITE, or (a float64 view) the
+    smallest column (the smallest row when `transposed`) holding a finite
+    value whose float32 word is an infinity; that test runs only on a word
+    already found non-finite, so a finite input pays nothing for it. Each
+    task keeps its own smallest column and the result is their minimum, so
+    the split cannot change it."""
     # parallel: cast and finiteness test over row tasks across host cores (0.8.66 regression C1, 13 ns/element serial)
     if rows <= 0 or cols <= 0:
-        return True
+        return ADMITTED_ALL_FINITE
     # Lane fx-rows-rest (2026-11-18): a float32 view whose rows are runs of
     # adjacent words (unit column stride: a column slice X[:, a:b] or a row
     # slice X[::k] of a C-order block, a row-padded block) needs no cast,
@@ -119,12 +186,16 @@ def admitted_cast_f32(
     var chunk = host_predict_chunk(rows, tasks)
     var flags = List[UInt8](length=tasks, fill=UInt8(1))
     var flag_ptr = rebind[_AI_U8P](flags.unsafe_ptr())
+    var firsts = List[Int](length=tasks, fill=_AI_NO_COLUMN)
+    var first_ptr = rebind[_AI_INTP](firsts.unsafe_ptr())
+    var wide = kind == CAST_KIND_FLOAT and item == 8
     var dst_addr = Int(dst)
 
-    def _rows(t: Int) {imm addr, imm s0, imm s1, imm rows, imm cols, imm item, imm kind, imm dst, imm chunk, imm flag_ptr, imm row_runs, imm dst_addr}:
+    def _rows(t: Int) {imm addr, imm s0, imm s1, imm rows, imm cols, imm item, imm kind, imm dst, imm chunk, imm flag_ptr, imm row_runs, imm dst_addr, imm first_ptr, imm wide, imm transposed}:
         var lo = t * chunk
         var hi = min(lo + chunk, rows)
         var finite = True
+        var first = _AI_NO_COLUMN
         if row_runs:
             for r in range(lo, hi):  # native input marshaling: this task's input rows, one run each
                 if not _arg_copy_row(_AI_U32P(unsafe_from_address=addr + r * s0),
@@ -135,23 +206,36 @@ def admitted_cast_f32(
             return
         for r in range(lo, hi):  # native input marshaling: this task's input rows
             for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
-                var bits = classical_f32_bits(admitted_raw_word(addr + r * s0 + c * s1, item), kind, item)
+                var raw = admitted_raw_word(addr + r * s0 + c * s1, item)
+                var bits = classical_f32_bits(raw, kind, item)
                 dst.unsafe_store(r * cols + c, bitcast[DType.float32](bits))
                 if (bits & _AI_EXP) == _AI_EXP:
                     finite = False
+                    if admitted_f64_rounds_to_inf(raw, bits, wide):
+                        var at = r if transposed else c
+                        if at < first:
+                            first = at
         if not finite:
             flag_ptr.unsafe_store(t, UInt8(0))
+        if first < _AI_NO_COLUMN:
+            first_ptr.unsafe_store(t, first)
 
     if tasks <= 1:
         _rows(0)
     else:
         host_parallelize(_rows, tasks)
     var all_finite = True
+    var column = _AI_NO_COLUMN
     for t in range(tasks):  # driver-loop: over the row tasks' flags (at most one per core)
         if flags[t] == UInt8(0):
             all_finite = False
+        if firsts[t] < column:
+            column = firsts[t]
     _ = flags^
-    return all_finite
+    _ = firsts^
+    if column < _AI_NO_COLUMN:
+        return column
+    return ADMITTED_ALL_FINITE if all_finite else ADMITTED_NONFINITE
 
 
 def admitted_cast_f64(
@@ -190,7 +274,7 @@ def admitted_cast_f64(
 
 def admitted_check_f32(
     addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int, name: String,
-    borrowed: Bool, dst: _AI_F32P,
+    borrowed: Bool, dst: _AI_F32P, transposed: Bool = False,
 ) raises:
     """Refuse NaN/infinity in the rows x cols input at `addr` (byte strides
     s0, s1) and, unless `borrowed` (float32 in C order, used as is), write
@@ -207,7 +291,7 @@ def admitted_check_f32(
     if borrowed:
         finite = host_all_finite_f32_strided(addr, s0, s1, rows, cols)
     else:
-        finite = admitted_cast_f32(addr, s0, s1, rows, cols, item, kind, dst)
+        finite = admitted_cast_f32(addr, s0, s1, rows, cols, item, kind, dst, transposed)
     if not finite:
         raise Error("Input " + name + " contains NaN or infinity")
 

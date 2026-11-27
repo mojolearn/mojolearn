@@ -63,8 +63,8 @@ class _Croston(ParamsMixin):
 
         Raises
         ------
-        TypeError
-            If ``y`` is float64.
+        ValueError
+            If a float64 value is outside float32's range.
         ValueError
             If a series has no observations.
         """
@@ -132,7 +132,7 @@ class CrostonClassic(_Croston):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Prediction intervals,
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Prediction intervals,
     fitted values and exogenous regressors are not supported and raise
     NotImplementedError.
 
@@ -171,7 +171,7 @@ class CrostonOptimized(_Croston):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Prediction intervals,
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Prediction intervals,
     fitted values and exogenous regressors are not supported and raise
     NotImplementedError.
 
@@ -209,7 +209,7 @@ class CrostonSBA(_Croston):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Prediction intervals,
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Prediction intervals,
     fitted values and exogenous regressors are not supported and raise
     NotImplementedError.
 

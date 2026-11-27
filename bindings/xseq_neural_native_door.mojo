@@ -418,9 +418,11 @@ def _rnn_cell(model: PythonObject, fields: PythonObject) raises -> Int:
 
 
 def _rnn_x(source: PythonObject, fields: PythonObject, fitting: Bool, context: PythonObject) raises -> PythonObject:
-    """`_RecurrentBase._check_X`: a C-ordered float32 (n, T, F) array."""
+    """`_RecurrentBase._check_X`: a C-ordered float32 (n, T, F) array. A
+    float64 X is converted once by the shared cast (admit_nd_f32:
+    round-to-nearest-even, a finite value outside float32's range refused
+    by its column)."""
     var a = xseq_input(source, context)
-    xseq_refuse_f64(a, "X: float64 is refused; pass float32 (no float64 on the device)")
     var x = admit_nd_f32(a, "X", False, context)
     xseq_run_rnn_rank_check(Int(py=x.ndim))
     var nk = xseq_keys()
@@ -550,8 +552,9 @@ def rnn_field_options(fields: PythonObject) raises -> RnnFieldOptions:
 
 
 def _rnn_f32(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """y, sample_weight or a carried monitor as C-ordered float32 (float64
+    converted once by the shared cast, as `_rnn_x`)."""
     var a = xseq_input(source, context)
-    xseq_refuse_f64(a, name + ": float64 is refused; pass float32 (no float64 on the device)")
     return admit_nd_f32(a, name, False, context)
 
 

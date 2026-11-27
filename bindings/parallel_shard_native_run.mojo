@@ -63,8 +63,10 @@ def rbf_part_admit(rank: Int, columns: Int, components: Int) raises:
 # ------------------------------------------------------------ scalers
 def scaler_input_admit(listed: Bool, dtype: String, rank: Int, rows: Int, columns: Int) raises:
     """`rows` and `columns` are read only for a rank of 2."""
-    if not listed and dtype != "<f4":
-        raise Error("TypeError: Scaler input must have dtype float32")
+    # float64 is converted to float32 once by the shared admission cast
+    # (admit_family_cast: round-to-nearest-even, out-of-range refused).
+    if not listed and dtype != "<f4" and dtype != "<f8":
+        raise Error("TypeError: Scaler input must have dtype float32 or float64")
     if rank != 2 or rows == 0 or columns == 0:
         raise Error("ValueError: Scaler requires a nonempty two-dimensional input")
     if rows * columns > SHARD_INT32_LIMIT:

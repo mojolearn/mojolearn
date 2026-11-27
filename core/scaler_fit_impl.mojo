@@ -7,6 +7,8 @@ These routines preserve the former buffer casts and public validation semantics.
 from std.memory import bitcast
 from core.classical_cast import classical_f32_bits
 from core.host_finite_scan import host_all_finite_f32, host_any_inf_f32
+from core.cast_in import CAST_KIND_FLOAT
+from core.admitted_input import admitted_f64_rounds_to_inf, admitted_f64_overflow_refuse
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -19,14 +21,26 @@ def scaler_inf(value: Float32) -> Bool:
     return (bitcast[DType.uint32](value) & UInt32(0x7fffffff)) == UInt32(0x7f800000)
 
 
-def scaler_cast(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int, native: Bool, dest: F32P):
+def scaler_cast(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int, native: Bool,
+                dest: F32P) raises:
+    """The byte-swapping cast of a NON-native-order input (a native one takes
+    the shared parallel cast, core/admitted_input.mojo `admitted_cast_f32`).
+    A finite float64 outside float32's range is refused by its column, the
+    shared rule (`admitted_f64_overflow_refuse`)."""
+    var wide = kind == CAST_KIND_FLOAT and item == 8
+    var column = -1
     for r in range(rows):
         for c in range(cols):
             var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr + r * s0 + c * s1)
             var raw = UInt64(0)
             for k in range(item):
                 raw |= UInt64(bytes[k if native else item - 1 - k]) << UInt64(k * 8)
-            dest[r * cols + c] = bitcast[DType.float32](classical_f32_bits(raw, kind, item))
+            var bits = classical_f32_bits(raw, kind, item)
+            dest[r * cols + c] = bitcast[DType.float32](bits)
+            if admitted_f64_rounds_to_inf(raw, bits, wide) and (column < 0 or c < column):
+                column = c
+    if column >= 0:
+        admitted_f64_overflow_refuse(column)
 
 
 def scaler_all_finite(x: F32P, size: Int) -> Bool:

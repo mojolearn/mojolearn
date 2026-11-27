@@ -67,7 +67,7 @@ def _promotion(fixture_id: Int) raises:
         plan.add_block(b^, second, bk, False)
         first[0] = 99
         second[0] = 99
-        plan.finish(False, "")
+        plan.finish(False)
         require(plan.rows == 3 and plan.cols == 2, "promoted plan shape")
         require(plan.common_kind == expected_kind[fixture_id] and plan.common_size == expected_width[fixture_id], "dtype promotion")
         require(plan.double_round == rounded[fixture_id], "dtype conversion policy")
@@ -90,7 +90,7 @@ def _strides(fixture_id: Int) raises:
     var positions: List[Int] = [1, 0]
     var plan = PandasInputPlan(False)
     plan.add_block(block^, positions, "f", False)
-    plan.finish(True, "")
+    plan.finish(True)
     require(not plan.double_round, "strict float32 plan policy")
     var dst = List[Float32](length=8, fill=-999)
     plan.numeric_block(0, Int(dst.unsafe_ptr()) + 4)
@@ -131,7 +131,7 @@ def _integer_rounding(fixture_id: Int) raises:
         var other = _block(address, 4, 1, width, _typecode(kind, width), kind, width, 0)
         var second: List[Int] = [1]
         plan.add_block(other^, second, kind, fixture_id == 3)
-    plan.finish(False, "")
+    plan.finish(False)
     require(plan.double_round == (fixture_id != 0), "integer mix promotion policy")
     var dst = List[Float32](length=4 * cols + 2, fill=-999)
     plan.numeric_block(0, Int(dst.unsafe_ptr()) + 4)
@@ -155,7 +155,7 @@ def _endian(fixture_id: Int) raises:
     var plan = PandasInputPlan(False)
     var positions: List[Int] = [0]
     plan.add_block(block^, positions, "f", False)
-    plan.finish(True, "")
+    plan.finish(True)
     var dst = List[Float32](length=5, fill=-999)
     plan.numeric_block(0, Int(dst.unsafe_ptr()) + 4)
     var expected: List[UInt32] = [0x3FC00000, 0xC0000000, 0x3E800000]
@@ -248,10 +248,11 @@ def _refusal(fixture_id: Int) raises:
             plan.add_block(block^, positions, kind, fixture_id == 13)
             if fixture_id == 12:
                 expected = "Scaler input must have dtype float32"
-                plan.finish(True, "")
+                plan.finish(True)
             elif fixture_id == 13:
-                expected = "no double conversion admitted"
-                plan.finish(False, expected)
+                # an object-promoted frame is not float storage: the scalers refuse it
+                expected = "Scaler input must have dtype float32 or float64"
+                plan.finish(True)
     except error:
         refused = True
         message = String(error)
@@ -270,7 +271,7 @@ def _columns(fixture_id: Int) raises:
         positions = [1, 0]
     var plan = PandasInputPlan(False)
     plan.add_block(block^, positions, "f", False)
-    plan.finish(False, "")
+    plan.finish(False)
     var dst = List[Float32](length=6, fill=-999)
     var refused = False
     try:
@@ -336,7 +337,7 @@ def _object_scalar(fixture_id: Int) raises:
     var extra = _block(0, 3, 1, 4, 11, "f", 4, 0)
     var middle: List[Int] = [1]
     plan.add_block(extra^, middle, "f", False)
-    plan.finish(False, "")
+    plan.finish(False)
     require(plan.objects and plan.double_round, "object scalar promotion policy")
     var col = plan.column(0, 1)
     require(col == 0, "object column order")
@@ -370,7 +371,7 @@ def _numeric_finite(fixture_id: Int) raises:
     var positions: List[Int] = [0]
     var plan = PandasInputPlan(allow)
     plan.add_block(block^, positions, "f", False)
-    plan.finish(True, "")
+    plan.finish(True)
     var dst = List[Float32](length=5, fill=-999)
     var refused = False
     try:
@@ -393,7 +394,7 @@ def _series_nullable_policy(fixture_id: Int) raises:
         var positions: List[Int] = [0]
         var plan = PandasInputPlan(False)
         plan.add_block(block^, positions, "b", fixture_id == 1)
-        plan.finish(False, "")
+        plan.finish(False)
         require(plan.double_round == (fixture_id == 1) and plan.objects == (fixture_id == 1), "nullable boolean promotion policy")
         var dst = List[Float32](length=5, fill=-999)
         plan.numeric_block(0, Int(dst.unsafe_ptr()) + 4)
@@ -410,7 +411,7 @@ def _series_nullable_policy(fixture_id: Int) raises:
         var positions: List[Int] = [0]
         var plan = PandasInputPlan(False)
         plan.add_block(block^, positions, "f", False)
-        plan.finish(False, "")
+        plan.finish(False)
         require(plan.rows == 3 and plan.cols == 1 and plan.double_round, "series plan shape/policy")
         var dst = List[Float32](length=5, fill=-999)
         plan.numeric_block(0, Int(dst.unsafe_ptr()) + 4)

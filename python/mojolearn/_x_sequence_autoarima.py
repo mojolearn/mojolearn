@@ -50,7 +50,7 @@ class AutoARIMA(ParamsMixin):
     Parameters
     ----------
     endog : array-like of shape (batch_size, n_obs) or (n_obs,)
-        The series, float32. float64 raises TypeError.
+        The series, float32 (float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused).
 
     Attributes
     ----------

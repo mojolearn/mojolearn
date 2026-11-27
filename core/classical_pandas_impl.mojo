@@ -10,9 +10,9 @@ cell and its task's flag, so the words written and the refusals are the
 serial loop's for any split: no output bit changes.
 """
 from std.memory import bitcast
-from core.cast_in import cast_w64_bits, f64_to_f32_bits
+from core.cast_in import cast_w64_bits, f64_to_f32_bits, CAST_KIND_FLOAT
 from core.classical_cast import classical_f32_bits
-from core.admitted_input import admitted_raw_word
+from core.admitted_input import admitted_raw_word, admitted_f64_rounds_to_inf, admitted_f64_overflow_refuse
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 
@@ -84,35 +84,50 @@ def pd_scatter_numeric(
     strides `row_stride` between rows and `col_stride` between columns) cast
     to float32 into column `dest` of the C-order rows x cols `output`, with
     pandas' promotion (`double_round`: through float64 first). Refuses NaN
-    or infinity unless `allow_nonfinite`. Every row is written before a
+    or infinity unless `allow_nonfinite`. A float64 column holding a finite
+    value outside float32's range is refused by its matrix column `dest`
+    (core/admitted_input.mojo `admitted_f64_overflow_refuse`, the one rule),
+    whatever `allow_nonfinite` says. Every row is written before a
     refusal; `output` is the caller's fresh result, discarded on one."""
     # parallel: typed pandas column cast over row tasks across host cores (R4, one thread with byte assembly)
     if rows <= 0:
         return
     var tasks = host_predict_task_count_work(rows, rows * max(size, 1))
     var chunk = host_predict_chunk(rows, tasks)
+    # Flag word per task: 1 a non-finite word, 2 a finite float64 that
+    # rounds to an infinity (never a NaN or an infinity of the input).
     var flags = List[UInt8](length=tasks, fill=UInt8(0))
     var flag_ptr = rebind[_PD_U8P](flags.unsafe_ptr())
     var column = base + col * col_stride
+    var wide = kind == CAST_KIND_FLOAT and size == 8
 
-    def _rows(t: Int) {imm column, imm size, imm native, imm kind, imm row_stride, imm dest, imm rows, imm cols, imm double_round, imm output, imm chunk, imm flag_ptr}:
+    def _rows(t: Int) {imm column, imm size, imm native, imm kind, imm row_stride, imm dest, imm rows, imm cols, imm double_round, imm output, imm chunk, imm flag_ptr, imm wide}:
         var lo = t * chunk
         var hi = min(lo + chunk, rows)
-        var bad = False
+        var bad = UInt8(0)
         for row in range(lo, hi):  # native input marshaling: numeric conversion preserves pandas promotion before float32
             var raw = pd_raw_at(column, row * row_stride, size, native)
             var bits = f64_to_f32_bits(bitcast[DType.uint64](_pd_double(raw, kind, size))) if double_round else classical_f32_bits(raw, kind, size)
             if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
-                bad = True
+                if admitted_f64_rounds_to_inf(raw, bits, wide):
+                    bad = UInt8(2)
+                elif bad == UInt8(0):
+                    bad = UInt8(1)
             output.unsafe_store(row * cols + dest, bitcast[DType.float32](bits))
-        if bad:
-            flag_ptr.unsafe_store(t, UInt8(1))
+        if bad != UInt8(0):
+            flag_ptr.unsafe_store(t, bad)
 
     if tasks <= 1:
         _rows(0)
     else:
         host_parallelize(_rows, tasks)
     var nonfinite = _pd_any_flag(flags, tasks)
+    var overflow = False
+    for t in range(tasks):  # driver-loop: over the row tasks' flags (at most one per core)
+        if flags[t] == UInt8(2):
+            overflow = True
     _ = flags^
+    if overflow:
+        admitted_f64_overflow_refuse(dest)
     if nonfinite and not allow_nonfinite:
         raise Error("Input contains NaN or infinity")

@@ -72,7 +72,7 @@ class GARCH(ParamsMixin):
 
     Notes
     -----
-    Input must be float32; float64 raises TypeError. Rescaling is not
+    Input is float32: float64 inputs are converted to float32 once, with round-to-nearest-even; values outside float32's range are refused. Rescaling is not
     supported: scale the data yourself if needed.
 
     Examples
@@ -124,8 +124,8 @@ class GARCH(ParamsMixin):
 
         Raises
         ------
-        TypeError
-            If ``y`` is float64.
+        ValueError
+            If a float64 value is outside float32's range.
         ValueError
             If a series has fewer than 10 observations or ``y`` holds a
             non-finite value.

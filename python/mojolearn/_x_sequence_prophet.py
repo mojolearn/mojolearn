@@ -36,7 +36,8 @@ class ProphetForecaster(ParamsMixin):
 
     Not supported: logistic and flat growth, uncertainty intervals and
     sampling (``mcmc_samples``, ``interval_width``), extra regressors beyond
-    holiday indicator columns, conditional seasonalities, float64 ``y``.
+    holiday indicator columns, conditional seasonalities. A float64 ``y`` is converted to float32 once,
+    with round-to-nearest-even; values outside float32's range are refused.
 
     Parameters
     ----------
@@ -171,8 +172,8 @@ class ProphetForecaster(ParamsMixin):
 
         Raises
         ------
-        TypeError
-            If ``y`` is float64.
+        ValueError
+            If a float64 value is outside float32's range.
         ValueError
             If ``t`` holds NaN or is not sorted, ``y`` is not finite, the
             lengths differ, there are fewer than 2 points, or explicit
