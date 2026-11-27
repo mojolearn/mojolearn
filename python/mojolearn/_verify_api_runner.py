@@ -54,8 +54,8 @@ def sources():
 
 
 #: Endpoints that exist only on a build with a device: the optimizers' device-resident
-#: parameter I/O, Embedding's device upload and the cooperative multi-GPU byte-LM trainer
-#: (every method: its sessions live inside the GPU byte-LM binding). The product declares
+#: parameter I/O, Embedding's device upload and the byte-LM trainer run on one GPU
+#: (devices=(0,); every method: its sessions live inside the GPU byte-LM binding). The product declares
 #: a build without a device through `runtime_report()['cpu_only']`; there these endpoints
 #: are recorded 'not applicable' and not run. On every device build they run and are judged
 #: as before, and `admit` still requires the canonical NVIDIA capture to execute all of them.
@@ -70,7 +70,16 @@ DEVICE_ONLY_METHODS=frozenset((('Embedding','to_device'),))
 #: beside a GPU set they run on the GPU side and the CPU side records them
 #: 'not applicable' (kind 'installation side'), never a GPU digest under the
 #: CPU label.
-INSTALLATION_SIDE_CLASSES=frozenset(('ParallelNeuralTrainer',))
+#: gs-fix-7 (2026-11-26): SambaStack has no CPU route beside a GPU set: its blocks'
+#: backward has no host training image loaded there, so the product refuses device='cpu'
+#: on a GPU installation at construction (bindings/samba_route_unpack.mojo
+#: _samba_cpu_refuse). A CPU-only installation runs it on the CPU side and records the
+#: CPU column; the CPU side of a GPU installation records it 'not applicable'.
+INSTALLATION_SIDE_CLASSES={
+    'ParallelNeuralTrainer':"a devices= driver runs on this installation's GPU set; its one digest is the GPU side's",
+    'SambaStack':"no CPU route beside a GPU set: its blocks' host training images are not loaded there "
+                 "(bindings/samba_route_unpack.mojo); the CPU column is a CPU-only installation's",
+}
 
 
 def device_only(family, public, method):
@@ -118,7 +127,7 @@ def capture(path=None, endpoints=None, *, artifacts=None, side=None):
                 continue
             if side=='cpu' and not cpu_only and public.rsplit('.',1)[-1] in INSTALLATION_SIDE_CLASSES:
                 recorder.rows[endpoint]=dict(status='not applicable',kind='installation side',
-                    reason='a devices= driver runs on this installation\'s GPU set; its one digest is the GPU side\'s')
+                    reason=INSTALLATION_SIDE_CLASSES[public.rsplit('.',1)[-1]])
                 continue
             groups.setdefault((family,public),(module,[]))[1].append(method)
         for (family,public),(module,methods) in groups.items():

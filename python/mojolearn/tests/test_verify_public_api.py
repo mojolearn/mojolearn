@@ -317,3 +317,25 @@ def test_device_only_endpoints_are_not_applicable_only_where_the_build_declares_
     assert api.device_only('neural','mojolearn.Embedding','to_device')
     assert not api.device_only('neural','mojolearn.LayerNorm','to_device')
     assert not api.device_only('metadata','mojolearn.ParallelByteLanguageModelTrainer','get_params')
+
+
+@pytest.mark.parametrize('cpu_only',[True,False])
+def test_samba_stack_cpu_side_is_installation_side_beside_a_gpu_set(monkeypatch,cpu_only):
+    # gs-fix-7 (2026-11-26): the product refuses SambaStack(device='cpu') beside a GPU set
+    # (bindings/samba_route_unpack.mojo _samba_cpu_refuse); the CPU side of a GPU install records
+    # it 'not applicable' (installation side) and a CPU-only install still runs it on the CPU side.
+    import mojolearn
+    endpoint='mojolearn.SambaStack.load_weights'
+    ran=[]
+    module=SimpleNamespace(neural_checks=lambda recorder,public,methods:[ran.append(m) or recorder.check(
+        public+'.'+m,lambda:1.0) for m in methods])
+    monkeypatch.setattr(api,'registry',lambda:{endpoint:('neural',module,'mojolearn.SambaStack','load_weights')})
+    monkeypatch.setattr(mojolearn,'runtime_report',lambda:{'cpu_only':cpu_only,'vendor':'cpu' if cpu_only
+        else 'cuda','default_mode':'identical'})
+    report=api.capture(endpoints=[endpoint],artifacts=[],side='cpu')
+    if cpu_only:
+        assert ran==['load_weights'] and report['endpoints'][endpoint]['status']=='captured'
+    else:
+        row=report['endpoints'][endpoint]
+        assert ran==[] and row['status']=='not applicable' and row['kind']=='installation side'
+        assert 'samba_route_unpack.mojo' in row['reason']
