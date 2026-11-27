@@ -1459,3 +1459,4 @@ mojolearn.ops.Program.partition	ops-public-control-graph	The lane constructs thi
 mojolearn.importers._program.ImportedProgram.partition	ops-public-control-graph	The lane constructs this public program type, trains its partition owner and hashes predictions before and after restoring its checkpoint.
 mojolearn.ops.Session.load_distributed	ops-public-control-graph	After program.distribute the fixture saves that owner and hashes predictions from the owner reloaded through Session.load_distributed.
 mojolearn.ops.Session.load_partitioned	ops-public-control-graph	After program.partition the fixture saves that owner and hashes predictions from the owner reloaded through Session.load_partitioned.
+mojolearn.GradientBoostingRegressor.feature_importances_:get	trees-gbdt-importances	The fixture fits the weighted case through the public regressor adapter and hashes its feature_importances_ property.
