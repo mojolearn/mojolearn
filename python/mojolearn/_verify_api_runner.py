@@ -63,6 +63,8 @@ OPTIMIZER_DEVICE_METHODS=frozenset(('params_to_device','params_to_host','grads_t
     'grads_to_host','param_device','step_device'))
 DEVICE_ONLY_CLASSES=frozenset(('ParallelByteLanguageModelTrainer',))
 DEVICE_ONLY_METHODS=frozenset((('Embedding','to_device'),))
+# SambaInference always uses the host neural image, including on GPU installations.
+CPU_ONLY_CLASSES=frozenset(('mojolearn.SambaInference',))
 #: `devices=` drivers whose workers run on the installation's own set whatever
 #: side their member carries (Andrew, 2026-11-24: the parallel drivers keep
 #: `devices=`; verify takes their one digest and lists them single-sided).
@@ -70,17 +72,14 @@ DEVICE_ONLY_METHODS=frozenset((('Embedding','to_device'),))
 #: beside a GPU set they run on the GPU side and the CPU side records them
 #: 'not applicable' (kind 'installation side'), never a GPU digest under the
 #: CPU label.
-#: gs-fix-7 (2026-11-26): SambaStack has no CPU route beside a GPU set: its blocks'
-#: backward has no host training image loaded there, so the product refuses device='cpu'
-#: on a GPU installation at construction (bindings/samba_route_unpack.mojo
-#: _samba_cpu_refuse). A CPU-only installation runs it on the CPU side and records the
-#: CPU column; the CPU side of a GPU installation records it 'not applicable'.
+#: SambaStack connects to the installation's training provider. Its CPU
+#: column comes from a CPU-only installation.
 INSTALLATION_SIDE_CLASSES={
     'ParallelCausalLM':"workers follow the installation vendor (bindings/parallel_causal_native_run.mojo); "
                       "its CPU route runs on a CPU-only installation",
     'ParallelNeuralTrainer':"a devices= driver runs on this installation's GPU set; its one digest is the GPU side's",
-    'SambaStack':"no CPU route beside a GPU set: its blocks' host training images are not loaded there "
-                 "(bindings/samba_route_unpack.mojo); the CPU column is a CPU-only installation's",
+    'SambaStack':"the stack uses the installation's training provider (bindings/samba_route_unpack.mojo); "
+                 "a CPU-only installation supplies its CPU column",
 }
 
 
@@ -90,6 +89,18 @@ def device_only(family, public, method):
     name=public.rsplit('.',1)[-1]
     return (name in DEVICE_ONLY_CLASSES or (name,method) in DEVICE_ONLY_METHODS
             or (family=='optimizers' and method in OPTIMIZER_DEVICE_METHODS))
+
+
+def _absence(family, public, method, side, cpu_only):
+    if side=='gpu' and public in CPU_ONLY_CLASSES:
+        return 'cpu only', public+' runs on the CPU'
+    if side=='cpu' and device_only(family,public,method):
+        reason='this build declares no device (runtime_report cpu_only)' if cpu_only else 'the CPU side (device="cpu")'
+        return 'device only', reason
+    name=public.rsplit('.',1)[-1]
+    if side=='cpu' and cpu_only is False and name in INSTALLATION_SIDE_CLASSES:
+        return 'installation side', INSTALLATION_SIDE_CLASSES[name]
+    return None
 
 
 def sides():
@@ -113,7 +124,7 @@ def capture(path=None, endpoints=None, *, artifacts=None, side=None):
     # Read once per capture, before any endpoint runs: the build's own declaration.
     cpu_only=bool(runtime_report().get('cpu_only'))
     if side=='gpu' and cpu_only:raise ValueError('no GPU side on this installation')
-    no_device=cpu_only or side=='cpu'
+    selected_side=side or ('cpu' if cpu_only else 'gpu')
     temporary=tempfile.TemporaryDirectory() if path is None else None
     scope=vd.side(side) if side else None
     if scope:scope.__enter__()
@@ -122,14 +133,9 @@ def capture(path=None, endpoints=None, *, artifacts=None, side=None):
         groups={}
         for endpoint in sorted(selected & routes.keys()):
             family,module,public,method=routes[endpoint]
-            if no_device and device_only(family,public,method):
-                recorder.rows[endpoint]=dict(status='not applicable',kind='device only',
-                    reason='the CPU side (device="cpu")' if side=='cpu' and not cpu_only
-                    else 'this build declares no device (runtime_report cpu_only)')
-                continue
-            if side=='cpu' and not cpu_only and public.rsplit('.',1)[-1] in INSTALLATION_SIDE_CLASSES:
-                recorder.rows[endpoint]=dict(status='not applicable',kind='installation side',
-                    reason=INSTALLATION_SIDE_CLASSES[public.rsplit('.',1)[-1]])
+            absent=_absence(family,public,method,selected_side,cpu_only)
+            if absent:
+                recorder.rows[endpoint]=dict(status='not applicable',kind=absent[0],reason=absent[1])
                 continue
             groups.setdefault((family,public),(module,[]))[1].append(method)
         for (family,public),(module,methods) in groups.items():
@@ -141,7 +147,7 @@ def capture(path=None, endpoints=None, *, artifacts=None, side=None):
                 getattr(module,name)(recorder,public,methods)
         _runtime=runtime_report()
         report=dict(format='mojolearn.api-endpoints.v1',version=__version__,
-            vendor='cpu' if side=='cpu' else _runtime['vendor'],side=side,
+            vendor='cpu' if side=='cpu' else _runtime['vendor'],side=side,cpu_only=cpu_only,
             numeric_mode=_runtime['default_mode'],expected=sorted(selected),endpoints=recorder.rows,
             pending=sorted(selected-recorder.rows.keys()),sources=sources(),
             families={e:routes[e][0] for e in selected if e in routes},bindings=_verify.binding_artifacts() if artifacts is None else artifacts)
@@ -189,12 +195,16 @@ def differences(actual,expected):
 COLUMNS=('cpu','metal','cuda','hip')
 
 
+def _cpu_only_endpoints():
+    return {row['endpoint'] for row in TARGETS if row.get('public') in CPU_ONLY_CLASSES}
+
+
 def admit(captures):
     """Build one shared reference; retain each other device's actual coverage.
 
-    Reference availability is not release qualification. A complete NVIDIA
-    capture supplies the bytes; partial checks on another device remain
-    explicitly partial, and any observed output disagreement rejects admission.
+    NVIDIA supplies the reference for endpoints with a GPU implementation.
+    CPU-only endpoints take their witness from the CPU capture. Partial
+    checks on any other device remain explicitly partial.
     The CPU column ('cpu': a `capture(side="cpu")`, on a CPU-only installation
     or the CPU side of a GPU one) must reproduce the same bytes on every
     endpoint it executes; the device-only endpoints it records not applicable
@@ -205,6 +215,10 @@ def admit(captures):
     if 'cuda' not in captures or set(captures)-set(COLUMNS):
         raise ValueError('endpoint reference requires a complete NVIDIA capture')
     canonical=captures['cuda']
+    routes=registry()
+    host_only=_cpu_only_endpoints()
+    cpu_witness={e:row for e,row in captures.get('cpu',{}).get('endpoints',{}).items()
+                 if e in host_only and row.get('status')=='captured'}
     validation={}
     for vendor,report in captures.items():
         if report.get('vendor')!=vendor or report.get('numeric_mode')!='identical':
@@ -218,14 +232,30 @@ def admit(captures):
             raise ValueError('incomplete endpoint reference scope')
         if report.get('sources')!=sources() or not report.get('bindings'):
             raise ValueError('stale fixtures or missing native artifact provenance')
-        passed=sorted(e for e,row in report.get('endpoints',{}).items() if row.get('status')=='captured')
-        not_applicable=sorted(e for e,row in report.get('endpoints',{}).items()
-            if vendor=='cpu' and row.get('status')=='not applicable' and row.get('kind') in ('device only','installation side'))
+        passed=[]
+        not_applicable=[]
+        for e,row in sorted(report['endpoints'].items()):
+            status=row.get('status')
+            if status not in ('captured','not applicable'):
+                continue
+            if e not in routes:
+                raise ValueError('endpoint has no verifier route: '+e)
+            family,_,public,method=routes[e]
+            absent=_absence(family,public,method,'cpu' if vendor=='cpu' else 'gpu',report.get('cpu_only'))
+            if status=='captured':
+                if absent:
+                    raise ValueError(vendor+' column claims execution of a '+absent[0]+' endpoint: '+e)
+                passed.append(e)
+            elif not absent or row.get('kind')!=absent[0]:
+                raise ValueError('incorrect not-applicable endpoint for '+vendor+': '+e)
+            else:
+                not_applicable.append(e)
         missing=sorted(expected-set(passed)-set(not_applicable))
         if vendor=='cuda' and (missing or report.get('pending')):
             raise ValueError('canonical reference must execute every endpoint successfully')
         actual=dict(expected=passed,endpoints=report['endpoints'],pending=[])
-        reference=dict(expected=passed,endpoints=canonical['endpoints'],pending=[])
+        reference=dict(expected=passed,endpoints={**canonical['endpoints'],**cpu_witness} if vendor=='cpu'
+                       else canonical['endpoints'],pending=[])
         errors=differences(actual,reference)
         if errors:raise ValueError('; '.join(errors))
         validation[vendor]=dict(compared=len(passed),expected=len(expected),
@@ -233,7 +263,7 @@ def admit(captures):
             failures={e:row.get('error','unexecuted') for e,row in report['endpoints'].items()
                 if row.get('status')!='captured' and e not in not_applicable}, pending=report.get('pending',[]))
     complete=sorted(v for v,row in validation.items() if not row['incomplete'] and not row['pending'])
-    return dict(format='mojolearn.api-reference.v1',witness=canonical,
+    return dict(format='mojolearn.api-reference.v1',witness=canonical,cpu_only_witness=cpu_witness,
         validated_vendors=complete,untested_vendors=sorted(set(COLUMNS)-set(captures)),
         device_validation=validation,release_qualified=False,
         witnesses={v:{k:r[k] for k in ('vendor','version','sources','bindings')} for v,r in captures.items()})
@@ -336,6 +366,14 @@ def _judge_side(clean,reference,scope):
     if reuse:result['evidence_reuse']='unchanged loaded native bytes and numerical fixtures'
     if not stale:
         selected_witness=dict(witness,expected=[e for e in clean['expected'] if e not in not_applicable])
+        if clean['vendor']=='cpu':
+            host_only=_cpu_only_endpoints()
+            cpu_rows={e:row for e,row in reference.get('cpu_only_witness',{}).items() if e in host_only}
+            if host_only.intersection(selected_witness['expected'])-cpu_rows.keys():
+                result['errors'].append('CPU-only endpoints need a recorded CPU witness')
+                result['status']='FAILED' if result['failures'] or result['pending'] else 'OWED'
+                return result
+            selected_witness['endpoints']={**witness.get('endpoints',{}),**cpu_rows}
         result['errors'].extend(differences(dict(clean,expected=selected_witness['expected']),selected_witness))
         result['status']='MATCH' if not result['errors'] else 'FAILED'
         if witness.get('version')!=clean['version'] and not reuse:

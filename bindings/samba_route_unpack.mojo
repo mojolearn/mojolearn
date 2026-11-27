@@ -23,11 +23,9 @@ class): its primitives are the `_mojolearn_neural_host` image's.
 
 No operation reads or compares the device: a hit is the numeric-mode field
 read, one record read and three pointer compares. A SambaStack on a GPU
-installation has no CPU route: the block backward of a CPU-routed block has
-no host training image loaded beside the GPU set (block door,
-`neural_training_selection`), so an explicit `device="cpu"` there is refused
-in words at construction and at restore; nothing of such a stack runs on a
-device its caller did not name.
+installation uses its GPU training image for the stack's primitives, RNG and
+optimizer. An explicit `device="cpu"` there is refused at construction and
+restore. The CPU-only installation connects the stack's host training image.
 
 Metadata only: no independent units to split.
 """
@@ -99,12 +97,10 @@ def samba_process_vendor(context: PythonObject) raises -> Int:
 
 
 def _samba_cpu_refuse(requested: Int, vendor: Int) raises:
-    """A GPU installation asked for `device="cpu"`. The stack's training
-    primitives have a host image, but its blocks' backward has none loaded
-    beside the GPU set, so the whole class is refused (the one sentence)."""
+    """The stack uses the training provider selected for this installation."""
     if requested == DEVICE_CPU and vendor != 0:
         device_cpu_absent(String("SambaStack"),
-            String("the host training images of its blocks are not loaded beside the GPU set in this installation"))
+            String("this installation connects the stack to its GPU training image"))
 
 
 def samba_device_admit(value: PythonObject, context: PythonObject) raises:

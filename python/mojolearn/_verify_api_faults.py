@@ -106,7 +106,7 @@ def check_faults(clean, *, retain=None):
         inapplicable = {
             e: rows[e]['reason'] for e in endpoints
             if rows.get(e, {}).get('status') == 'not applicable'
-            and rows[e].get('kind') in ('device only', 'installation side')
+            and rows[e].get('kind') in ('device only', 'installation side', 'cpu only')
         }
         if len(inapplicable) == len(endpoints):
             result[name] = dict(status='NOT_APPLICABLE', endpoint=endpoints[0],

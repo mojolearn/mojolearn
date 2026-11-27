@@ -154,7 +154,7 @@ run_cols() { # $1 = clean | sab | restored
     [ "$GPU_SIDE" = no ] || cols+=(device)
     [ -z "$CPU_ONLY_LANES" ] || cols+=(cpu_only)
     if [ -n "$CPU_ONLY_LANES" ]; then
-        # SambaStack has host blocks only in the CPU-only binding set. The
+        # SambaStack uses the host training provider on a CPU-only installation. The
         # fresh process must load that set, including the actual patched
         # host bindings for the sabotaged phase. Its records stay separate.
         MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \

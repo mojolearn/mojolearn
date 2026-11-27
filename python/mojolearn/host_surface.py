@@ -1387,7 +1387,7 @@ TRAINING_LANE_NAMES = {
     "m-svr-gamma-scale-score": "SVR: score",
     "nn-ep-embedding": "Embedding: embedding",
     "nn-ep-mamba-blocks": "Mamba1Block, Mamba1State, Mamba2Block: blocks",
-    "nn-ep-samba-inference": "SambaStack, Generator, SambaInference: inference",
+    "nn-ep-samba-inference": "SambaConfig, SambaInference: inference",
     "nn-ep-samba-stack": "SambaConfig, SambaStack, Generator: stack",
     "nn-ep-transformer-block": "TransformerBlock, TransformerState: block",
     "nn-pg-array": "Array: array",
@@ -2042,6 +2042,7 @@ FAMILIES = (
                         # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table was admitted;
                         # RECORD OWED: the release's one verification records them
                         "nn-ep-mamba-blocks",
+                        "nn-ep-samba-inference",
                         "nn-pg-causal-lm",
                         # fixed15-parts-verify (2026-11-25): the fixed15_v1 default and per-part profile; RECORD OWED
                         "numeric-profile-parts",),
@@ -3320,7 +3321,6 @@ FAMILIES = (
                         "fn-training-residual-dropout-backward",
                         "fn-training-rms-norm-backward",
                         "fn-training-rms-norm-forward",
-                        "nn-ep-samba-inference",
                         "nn-ep-samba-stack",
                         "nn-tr-optim-state",
                         "nn-tr-small-mlp",

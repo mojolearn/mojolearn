@@ -1622,6 +1622,7 @@ LANES = {}
 #: next record instead of DIVERGENT on a user's machine. `umap` also joins
 #: host_surface.PUBLIC_PENDING_LANES as `stale reference` until that record.
 LANE_REVISIONS = {
+    "nn-ep-samba-inference": "explicit-inference-weights-1",
     "linalg-eigh": "fixed-order-gram-1",
     "x-metrics-regression": "metrics-undefined-weighted-score-1",
     "trees-dart-options": "tree-shap-zero-cover-path-1",
@@ -1827,6 +1828,8 @@ def lane_floors():
 #: key lands here with a sentence saying what moved. An entry whose key does
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
+    "nn-ep-samba-inference": "The inference fixture supplies deterministic weights directly from the config's "
+                             "registry so it runs on the CPU of a GPU installation as well.",
     "linalg-eigh": "2026-10-12: Gram fixture uses explicit float32 products and ascending-row sums; BLAS and array-layout dependent input bytes removed, fixture dimensions unchanged",
     "x-metrics-regression": "2026-09-28: undefined variance-weighted scores return explicit NaN before zero-times-infinity; platform NaN sign removed at API arithmetic, fixture sizes unchanged",
     "trees-dart-options": "2026-09-28: arithmetic, not input: TreeSHAP skips unreachable zero-cover paths before zero-over-zero unwinding; old NaN output hashes are not valid references; fixture sizes unchanged",
@@ -2199,12 +2202,12 @@ def device_view(ml, side, name=None):
 #: CPU column is verified on the CPU-only install, where the lane runs both
 #: as usual. Decision (Andrew via the coordinator, 2026-11-25, lane gs-fix
 #: row G1): SambaStack(device='cpu') on a GPU install stays refused
-#: (bindings/samba_route_unpack.mojo: no host block images beside the GPU set).
+#: (bindings/samba_route_unpack.mojo: the stack uses the installation's training provider).
 GPU_INSTALL_CPU_NA = {}
-_SAMBA_GPU_INSTALL = ("SambaStack(device='cpu') is refused on a GPU installation (its blocks' host images are "
-                      "not loaded beside the GPU set); the CPU column is verified on the CPU-only installation")
+_SAMBA_GPU_INSTALL = ("SambaStack uses the installation's training provider; "
+                      "the CPU column is verified on the CPU-only installation")
 for _name in ("samba", "samba-bf16w", "samba-int8w", "samba-untied-dropout-accum", "samba-decode-session",
-              "samba-optimizer-state", "nn-ep-samba-stack", "nn-ep-samba-inference"):
+              "samba-optimizer-state", "nn-ep-samba-stack"):
     GPU_INSTALL_CPU_NA[_name] = _SAMBA_GPU_INSTALL
 del _name
 

@@ -81,7 +81,7 @@ def test_installed_endpoint_faults_change_outputs_and_restore_them(side):
     for name, endpoint in controls.FAULTS.items():
         row = clean["endpoints"][endpoint]
         if row["status"] == "not applicable":
-            assert side == "cpu" and row["kind"] in {"device only", "installation side"}
+            assert row["kind"] in ({"device only", "installation side"} if side == "cpu" else {"cpu only"})
             assert faults[name]["status"] == "NOT_APPLICABLE"
         else:
             assert faults[name]["status"] == "CAUGHT_AND_RESTORED", (side, name, faults[name])
@@ -177,6 +177,7 @@ def test_missing_public_reference_cannot_mask_an_existing_mismatch(existing):
 
 def test_reference_admission_requires_complete_matching_current_release(monkeypatch):
     monkeypatch.setattr(api,'TARGETS',[{'endpoint':'example.call'}])
+    monkeypatch.setattr(api,'registry',lambda:{'example.call':('neural',None,'example','call')})
     monkeypatch.setattr(api,'sources',lambda:{'fixture':'current'})
     clean=report()
     clean.update(vendor='cuda',numeric_mode='identical',version='test-release',
@@ -208,10 +209,41 @@ def test_reference_admission_requires_complete_matching_current_release(monkeypa
     with pytest.raises(ValueError):api.admit({'cuda':broken})
 
 
+def test_host_only_reference_uses_cpu_evidence(monkeypatch):
+    endpoint='mojolearn.SambaInference.logits'
+    shared='example.call'
+    monkeypatch.setattr(api,'TARGETS',[{'endpoint':endpoint, 'public':'mojolearn.SambaInference'},{'endpoint':shared}])
+    monkeypatch.setattr(api,'registry',lambda:{endpoint:('neural',None,'mojolearn.SambaInference','logits'),
+                                              shared:('neural',None,'example','call')})
+    monkeypatch.setattr(api,'sources',lambda:{'neural':'current'})
+    cuda=dict(vendor='cuda',side='gpu',numeric_mode='identical',version='release',expected=[endpoint,shared],
+              bindings=[{'sha256':'cuda'}],sources={'neural':'current'},pending=[],
+              families={endpoint:'neural',shared:'neural'},
+              endpoints={endpoint:{'status':'not applicable','kind':'cpu only'},shared:row(3.)})
+    cpu=dict(cuda,vendor='cpu',side='cpu',bindings=[{'sha256':'cpu'}],endpoints={endpoint:row(),shared:row(3.)})
+    reference=api.admit({'cuda':cuda,'cpu':cpu})
+    assert reference['witness']['endpoints']==cuda['endpoints']
+    assert reference['cpu_only_witness']=={endpoint:row()}
+    assert reference['device_validation']['cuda']['compared']==1
+    assert reference['device_validation']['cpu']['compared']==2
+    assert api._judge_side(cpu,reference,'all')['status']=='MATCH'
+    changed=dict(cpu,endpoints={endpoint:row(2.),shared:row(3.)})
+    assert api._judge_side(changed,reference,'all')['status']=='FAILED'
+    reference['cpu_only_witness'][shared]=row(8.)
+    assert api._judge_side(cpu,reference,'all')['status']=='MATCH'
+    assert api._judge_side(dict(cpu,endpoints={endpoint:row(),shared:row(8.)}),reference,'all')['status']=='FAILED'
+    del reference['cpu_only_witness']
+    assert api._judge_side(cpu,reference,'all')['status']=='OWED'
+    with pytest.raises(ValueError,match='cpu only'):
+        api.admit({'cuda':dict(cuda,endpoints=cpu['endpoints']),'cpu':cpu})
+
+
 def test_reference_admits_a_cpu_column_that_reproduces_the_nvidia_bytes(monkeypatch):
     # The CPU column is the CPU side (device="cpu") of a capture; its device-only endpoints
     # read not applicable and are not missing from it; any output it disagrees on refuses.
     monkeypatch.setattr(api,'TARGETS',[{'endpoint':'example.call'},{'endpoint':'example.device'}])
+    monkeypatch.setattr(api,'registry',lambda:{'example.call':('neural',None,'example','call'),
+                                              'example.device':('optimizers',None,'mojolearn.Adam','grads_to_device')})
     monkeypatch.setattr(api,'sources',lambda:{'fixture':'current'})
     clean=report()
     clean.update(vendor='cuda',side='gpu',numeric_mode='identical',version='test-release',
@@ -221,6 +253,13 @@ def test_reference_admits_a_cpu_column_that_reproduces_the_nvidia_bytes(monkeypa
     cpu=copy.deepcopy(clean);cpu.update(vendor='cpu',side='cpu')
     cpu['endpoints']['example.device']={'status':'not applicable','kind':'device only',
                                         'reason':'the CPU side (device="cpu")'}
+    for kind in ('device only','installation side','cpu only'):
+        invalid=copy.deepcopy(cpu)
+        invalid['endpoints']['example.call']={'status':'not applicable','kind':kind}
+        with pytest.raises(ValueError,match='incorrect not-applicable'):
+            api.admit({'cpu':invalid,'cuda':clean})
+    with pytest.raises(ValueError,match='claims execution'):
+        api.admit({'cpu':dict(cpu,endpoints=clean['endpoints']),'cuda':clean})
     accepted=api.admit({'cpu':cpu,'cuda':clean})
     assert accepted['validated_vendors']==['cpu','cuda']
     assert accepted['untested_vendors']==['hip','metal']
@@ -234,6 +273,19 @@ def test_reference_admits_a_cpu_column_that_reproduces_the_nvidia_bytes(monkeypa
     partial=api.admit({'cpu':failed,'cuda':clean})
     assert partial['validated_vendors']==['cuda']
     assert partial['device_validation']['cpu']['incomplete']==['example.call']
+
+
+def test_installation_side_refusal_requires_a_gpu_installation(monkeypatch):
+    endpoint='mojolearn.SambaStack.load_weights'
+    monkeypatch.setattr(api,'TARGETS',[{'endpoint':endpoint, 'public':'mojolearn.SambaStack'}])
+    monkeypatch.setattr(api,'registry',lambda:{endpoint:('neural',None,'mojolearn.SambaStack','load_weights')})
+    monkeypatch.setattr(api,'sources',lambda:{'neural':'current'})
+    gpu=dict(vendor='cuda',side='gpu',cpu_only=False,numeric_mode='identical',version='release',expected=[endpoint],
+             bindings=[{'sha256':'gpu'}],sources={'neural':'current'},pending=[],endpoints={endpoint:row()})
+    cpu=dict(gpu,vendor='cpu',side='cpu',endpoints={endpoint:{'status':'not applicable','kind':'installation side'}})
+    assert api.admit({'cpu':cpu,'cuda':gpu})['device_validation']['cpu']['not_applicable']==[endpoint]
+    with pytest.raises(ValueError,match='incorrect not-applicable'):
+        api.admit({'cpu':dict(cpu,cpu_only=True),'cuda':gpu})
 
 
 def test_recorder_never_overwrites_an_earlier_failed_operation(tmp_path):
@@ -406,6 +458,26 @@ def test_installation_side_cpu_endpoints(monkeypatch,cpu_only,family,public,meth
         row=report['endpoints'][endpoint]
         assert ran==[] and row['status']=='not applicable' and row['kind']=='installation side'
         assert route in row['reason']
+
+
+@pytest.mark.parametrize('side',['cpu','gpu'])
+def test_samba_inference_runs_only_in_cpu_capture(monkeypatch,side):
+    import mojolearn
+    public='mojolearn.SambaInference'
+    endpoint=public+'.logits'
+    calls=[]
+    def check(recorder,name,methods):
+        calls.extend(methods)
+        recorder.check(endpoint,lambda:1.)
+    module=SimpleNamespace(neural_checks=check)
+    monkeypatch.setattr(api,'registry',lambda:{endpoint:('neural',module,public,'logits')})
+    monkeypatch.setattr(mojolearn,'runtime_report',lambda:{'cpu_only':False,'vendor':'cuda','default_mode':'identical'})
+    report=api.capture(endpoints=[endpoint],artifacts=[],side=side)
+    result=report['endpoints'][endpoint]
+    if side=='cpu':
+        assert calls==['logits'] and result['status']=='captured'
+    else:
+        assert not calls and result['status']=='not applicable' and result['kind']=='cpu only'
 
 
 @pytest.mark.parametrize('side',['cpu','gpu'])
