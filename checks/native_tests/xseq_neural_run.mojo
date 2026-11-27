@@ -26,7 +26,7 @@ from sequence.xseq_neural_run import (
     xseq_run_rnn_rank_check, xseq_run_rnn_dims_check, xseq_run_rnn_param_count, xseq_run_rnn_bound,
     xseq_run_rnn_schedule, xseq_run_rnn_fit, xseq_run_rnn_layout, xseq_run_rnn_predict, xseq_run_mlp_scalars_check,
     xseq_run_mlp_hidden_check, xseq_run_mlp_out_name, xseq_run_mlp_sizes, xseq_run_mlp_param_count,
-    xseq_run_mlp_glorot, xseq_run_mlp_fit, xseq_run_copy_f32, xseq_run_mlp_layers_check, xseq_run_mlp_layer_check,
+    xseq_run_mlp_glorot, xseq_run_mlp_fit, xseq_run_mlp_check_order, xseq_run_copy_f32, xseq_run_mlp_layers_check, xseq_run_mlp_layer_check,
     xseq_run_mlp_pack, xseq_run_mlp_output_check, xseq_run_mlp_predict, xseq_run_class_counts,
     xseq_run_balanced_class_weights, xseq_run_remap_codes, xseq_run_lengths_check,
 )
@@ -375,6 +375,19 @@ def run_case(unit: Int) raises:
             require(False, "one-column probability accepted")
         except problem:
             _refuses(problem, "RuntimeError: mlp_predict: this binding predates the two-column probability; rebuild it")
+
+
+def test_saved_mlp_shuffle_order_requires_every_row_once() raises:
+    var order: List[Float32] = [2.0, 0.0, 1.0]
+    var address = Int(order.unsafe_ptr())
+    xseq_run_mlp_check_order(address, len(order))
+    order[2] = 2.0
+    try:
+        xseq_run_mlp_check_order(address, len(order))
+        require(False, "duplicate training row accepted")
+    except problem:
+        _refuses(problem, "ValueError: duplicate row index in saved MLP shuffle order")
+    _ = order^
 
 
 def test_cases() raises:
