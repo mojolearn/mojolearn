@@ -22,5 +22,8 @@ The documented release is the only one published, at the site root. Prose never 
 in by `conf.py` from the installed version and the vendor packages' PyPI summaries.
 
 `tools/gen_api.py` places every public name on one family page; add a new module or name to
-its `FAMILIES` table when it fails. `api/*.rst` are generated at every build and not tracked.
+its `FAMILIES` table when it fails. Class pages use signatures from the installed package and
+include inherited public methods. The autograd family links directly to the Session and Program
+method references. Before removing an entry from `api_exclude.txt`, match its public operation to a
+verifier fixture and check the NVIDIA and AMD columns for the same computed reference. `api/*.rst` are generated at every build and not tracked.
 Deployed as the `mojolearn-docs` Worker (static assets) on docs.mojolearn.org.
