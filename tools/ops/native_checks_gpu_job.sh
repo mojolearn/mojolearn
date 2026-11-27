@@ -116,6 +116,8 @@ IN_FILTER="$FILTER" bash tools/ops/native_testsuite.sh build gpu "$BIN_DIR" "$RE
 brc=$?
 say "$(grep -m 1 '^testsuite: .* files built' "$RES/logs/build-gpu.log")"
 say "$(grep -m 1 '^testsuite cache:' "$RES/logs/build-gpu.log" || echo 'testsuite cache: no reuse (no NC_TS_CACHE or no keys)')"
+# a miss names the nearest stored key and the first key field that differs (tools/ops/native_testsuite_cache.py nearest)
+grep -m 3 ' R2 miss report: ' "$RES/logs/build-gpu.log" | while IFS= read -r line; do say "$line"; done
 kill "$bsampler" 2>/dev/null
 # the largest single compile's peak RSS (a group program's), from the build's /usr/bin/time records
 brss=$(cat "$RES"/logs/build-ts-*.log.time 2>/dev/null | awk -F': *' '/Maximum resident set size/ {if ($2>m) m=$2} END {if (m) print m}')

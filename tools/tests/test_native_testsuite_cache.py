@@ -92,7 +92,7 @@ def test_flags_toolchain_and_build_environment_change_every_key(tmp_path):
     base = _keys(tmp_path)
     changed = {
         "define": _keys(tmp_path, flags=FLAGS + ["-D", "MOJOLEARN_OTHER=1"]),
-        "environment": _keys(tmp_path, env=dict(ENV, MOJOLEARN_SOMETHING="1")),
+        "environment": _keys(tmp_path, env=dict(ENV, MOJO_SOMETHING="1")),
     }
     mojo = tmp_path / ".pixi/envs/default/bin/mojo"
     mojo.write_text("#!/bin/sh\necho 'Mojo 1.2.1 (test)'\n")
@@ -124,9 +124,6 @@ def test_two_box_jobs_get_the_same_keys(tmp_path):
     ("the target", [f for f in FLAGS if f != "x86-64-v3"] + ["x86-64-v4"], {}),
     ("a MOJO_ variable", FLAGS, {"MOJO_ENABLE_ASSERTIONS": "1"}),
     ("a MODULAR_ variable", FLAGS, {"MODULAR_MOJO_MAX_IMPORT_PATH": "/x"}),
-    ("a compile job count", FLAGS, {"MOJOLEARN_COMPILE_JOBS": "4"}),
-    ("an unknown MOJOLEARN_ variable", FLAGS, {"MOJOLEARN_SOMETHING": "1"}),
-    ("the pixi environment", FLAGS, {"MOJOLEARN_BUILD_PIXI_ENV": "nvidia"}),
 ])
 def test_every_byte_deciding_input_changes_the_key_under_a_box_job(tmp_path, why, flags, env):
     _tree(tmp_path)
@@ -134,6 +131,16 @@ def test_every_byte_deciding_input_changes_the_key_under_a_box_job(tmp_path, why
     before = _keys(tmp_path, env=base)
     after = _keys(tmp_path, flags=flags, env=dict(_persist_env("t2", "/r2"), **env))
     assert all(after[u] != before[u] for u in before), why
+
+
+def test_no_mojolearn_variable_is_a_key_field(tmp_path):
+    """rel-fix-1 (2026-11-27): the two-box proof missed all 17 units on build_env.MOJOLEARN_ALLOC_CORES alone (job A
+    nvc-ab-20261127T000837Z-6333cc, job B nvc-ab-20261127T023752Z-a99504). Mojo reads none of ours while it compiles."""
+    _tree(tmp_path)
+    base = _keys(tmp_path)
+    for k, v in (("MOJOLEARN_ALLOC_CORES", "14"), ("MOJOLEARN_COMPILE_JOBS", "4"), ("MOJOLEARN_ANY_NEW_EXPORT", "x")):
+        assert _keys(tmp_path, env=dict(ENV, **{k: v})) == base, k
+    assert _keys(tmp_path, env=dict(ENV, MOJOLEARN_SABOTAGE_X="1")) == {}  # a fault still keeps it out
 
 
 def test_the_gpu_arch_and_ptxas_version_change_the_key(tmp_path, monkeypatch):
@@ -406,3 +413,27 @@ def test_the_runner_refuses_a_program_with_an_rpath_outside_the_checkout():
     run = run[run.index("\nrun)"):]
     assert run.index('LD_LIBRARY_PATH="$PWD/.pixi/envs/default/lib') < run.index("readelf -d \"$prog\"")
     assert "(RPATH)" in run and "refused: DT_RPATH" in run and "tsg/group_[0-9]*" in run
+
+
+def test_a_miss_names_the_nearest_stored_key_and_the_first_differing_field(tmp_path):
+    """rel-fix-1 (2026-11-27): the R2 sidecars (`fields` rows of the map) let a box say why it missed."""
+    _tree(tmp_path)
+    gen = tmp_path / "build/tsgen"
+    here = {f["members"][0]: f for _, _, f in cache.unit_fields(tmp_path.resolve(), "cpu", gen.resolve(), FLAGS, ENV)}
+    stored = json.loads(json.dumps(here["ta"]))
+    stored["toolchain"]["version"] = "Mojo 1.1.0 (older)"
+    side = tmp_path / "r2"
+    side.mkdir()
+    rows = {}
+    for f in (stored, here["tb"]):
+        key = cache.key_of(f)
+        (side / f"{key}.fields.json").write_text(json.dumps(f, sort_keys=True))
+        rows[key] = (side / f"{key}.fields.json").as_uri()
+    m = {"get": {k: "file:///nowhere" for k in rows}, "fields": rows, "header": {}}
+    report = cache.nearest(m, here["ta"], tmp_path / "fields-cache")
+    assert report.startswith(f"nearest stored key {cache.key_of(stored)[:12]} (group ta)"), report
+    assert "first differing field toolchain.version" in report and "Mojo 1.1.0 (older)" in report
+    assert "no field records" in cache.nearest(dict(m, fields={}), here["ta"], tmp_path / "c2")
+    text = (ROOT / "tools/ops/native_testsuite.sh").read_text()
+    assert "R2 miss report:" in text and '> "$log.get"' in text
+    assert "R2 miss report" in (ROOT / "tools/ops/native_testsuite_cache.py").read_text()

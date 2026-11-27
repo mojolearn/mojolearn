@@ -34,9 +34,9 @@ key_of as the binding cache):
   file the members import, transitively (the import parser of tools/development_build.py, the one the binding cache
   uses; an import it cannot resolve widens the key to every source file of the tree); the compile flags (`args`:
   defines and target); the compiler binary's sha256, its version line, the precompiled standard-library packages'
-  sha256 and the locked and installed toolchain; the OS, glibc, linker and C compiler; the MOJOLEARN_/MOJO_/MODULAR_
-  build environment without a job's bookkeeping (`ts_build_env`); on the GPU column the device architecture the build targets (sm_89, gfx942) and
-  the ptxas version. The commit is not in the key: two commits with the same inputs build the same program.
+  sha256 and the locked and installed toolchain; the OS, glibc, linker and C compiler; the MOJO_/MODULAR_ environment
+  the compiler reads (`ts_build_env`); on the GPU column the device architecture the build targets (sm_89, gfx942)
+  and the ptxas version. The commit is not in the key: two commits with the same inputs build the same program.
 A build whose flags or environment name a fault (sabotage) gets no keys: it never reads or fills either level.
 
 A cached program was linked in another checkout. Its runpath names that checkout's toolchain directory, so the
@@ -63,31 +63,33 @@ sys.path[:0] = [str(HERE.parent), str(HERE)]
 
 import bincache  # noqa: E402  (tools/ on the path above)
 
-SCHEMA = "mojolearn.native-testsuite-program.v3"  # v3: ts_build_env (rel-fix-1)
+SCHEMA = "mojolearn.native-testsuite-program.v4"  # v4: the compiler's environment only (rel-fix-1)
 NAMESPACE = "ts"
 key_of = bincache.key_of
 sha256_file = bincache.sha256_file
 
 
-#: NOT INPUTS OF A CHECK PROGRAM (rel-fix-1, 2026-11-26, review of 3423ae229e..8f0d9a9642). `bincache.build_env`
-#: keeps every MOJOLEARN_/MOJO_/MODULAR_ variable it does not know to be neutral, and every box job runs under
-#: tools/box_persist_run.sh, which exports MOJOLEARN_RESULTS_DIR, MOJOLEARN_PERSIST_TAG/_JSON/_RUNNER and
-#: MOJOLEARN_BOX_PERSIST with values of that job (its results dir, its tag): no key ever repeated on a box. Mojo reads
-#: no environment variable while it compiles (a value reaches the program only as a -D define, which is in `args`),
-#: and `native_testsuite.sh build` turns none of these into a flag, so they are dropped here: the job's bookkeeping,
-#: the box's controller state, the run-time switches of the program and the Python package, and one path whose tool
-#: is keyed by its version (MODULAR_NVPTX_COMPILER_PATH: `device.ptxas`). Every other variable with the prefixes stays
-#: keyed, as in the binding cache: one not shown neutral is an input.
-TS_NON_BUILD_ENV = ("MOJOLEARN_RESULTS_DIR", "MOJOLEARN_BOX_PERSIST", "MOJOLEARN_ALLOW_UNPERSISTED",
-                    "MOJOLEARN_ORCHESTRATOR", "MOJOLEARN_REPO_COMMIT", "MOJOLEARN_HOST_PROBE", "MOJOLEARN_TS_FILE",
-                    "MOJOLEARN_NUMERIC_MODE", "MODULAR_NVPTX_COMPILER_PATH")
-TS_NON_BUILD_PREFIXES = ("MOJOLEARN_PERSIST_", "MOJOLEARN_NVC_", "MOJOLEARN_CPC_", "MOJOLEARN_DEVPOD_")
+#: THE BUILD ENVIRONMENT OF A CHECK PROGRAM IS THE COMPILER'S OWN (rel-fix-1, 2026-11-27). A check program is built by
+#: one command, `pixi run mojo build $TS_FLAGS -I . -I <gen> -o <dst> <src>` (tools/ops/native_testsuite.sh
+#: compile_unit). Mojo reads no environment variable of ours while it compiles: a value reaches the program only as a
+#: -D define, and every define is in `args`; that command reads no MOJOLEARN_ variable to compose itself (TS_FLAGS
+#: come from NC_DEFINES / NC_TARGET, again in `args`). So no MOJOLEARN_ variable is a key field; the MOJO_ and MODULAR_
+#: variables, which the compiler and its runtime do read, are, except one path whose tool is keyed by its version
+#: (MODULAR_NVPTX_COMPILER_PATH: `device.ptxas`).
+#: Why not a list of job variables to drop (the first fix, f34c875417): every new job-level export broke it again. Job A
+#: of the two-box proof (nvc-ab-20261127T000837Z-6333cc) and job B (nvc-ab-20261127T023752Z-a99504) differed in ONE
+#: field of all 17 keys, build_env.MOJOLEARN_ALLOC_CORES=14, which box_cores_lib.sh export_alloc began exporting
+#: between the two trees: 17 misses. A fault named in any variable still keeps the build out of the cache
+#: (unit_fields: bincache.is_sabotage over the whole build environment).
+TS_KEYED_ENV_PREFIXES = ("MOJO_", "MODULAR_")
+TS_NON_BUILD_ENV = ("MODULAR_NVPTX_COMPILER_PATH",)
 
 
 def ts_build_env(environ) -> dict:
-    """The build environment of a check program's key: bincache.build_env without TS_NON_BUILD_ENV."""
+    """The build environment of a check program's key: the MOJO_ and MODULAR_ variables of bincache.build_env,
+    without TS_NON_BUILD_ENV."""
     return {k: v for k, v in bincache.build_env(environ).items()
-            if k not in TS_NON_BUILD_ENV and not k.startswith(TS_NON_BUILD_PREFIXES)}
+            if k.startswith(TS_KEYED_ENV_PREFIXES) and k not in TS_NON_BUILD_ENV}
 
 
 def first_line(argv: list[str]) -> str:
@@ -334,6 +336,69 @@ def remote_get(m: dict | None, key: str, fields: dict | None, dst: Path, root: P
     return "hit"
 
 
+def first_difference(here, stored, prefix="") -> tuple[str, str, str] | None:
+    """(dotted field path, this value, the stored value) of the first field, in sorted order, that differs; None when
+    the two are equal."""
+    if isinstance(here, dict) and isinstance(stored, dict):
+        for name in sorted(set(here) | set(stored)):
+            d = first_difference(here.get(name), stored.get(name), f"{prefix}.{name}" if prefix else str(name))
+            if d:
+                return d
+        return None
+    if here == stored:
+        return None
+    return prefix or "<root>", json.dumps(here, sort_keys=True)[:120], json.dumps(stored, sort_keys=True)[:120]
+
+
+def _stored_fields(key: str, url: str, cache: Path) -> dict | None:
+    """A stored program's key fields (its R2 sidecar), downloaded once per build into `cache`; None when unreadable
+    or when they do not hash to their key."""
+    path = cache / f"{key}.json"
+    if not path.is_file():
+        cache.mkdir(parents=True, exist_ok=True)
+        tmp = cache / f".{key}.{os.getpid()}.part"
+        if bincache.http_get(url, str(tmp)) != 200:
+            tmp.unlink(missing_ok=True)
+            return None
+        os.replace(tmp, path)
+    try:
+        fields = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    return fields if key_of(fields) == key else None
+
+
+def nearest(m: dict | None, fields: dict | None, cache: Path) -> str:
+    """THE MISS REPORT (rel-fix-1, 2026-11-27): the stored program nearest this one (the same unit, else the same
+    column and kind with the most members in common) and the first key field that differs, from the field sidecars
+    the map lists (bincache NAMESPACES "fields"). Fetched in parallel, once per build."""
+    if m is None or fields is None:
+        return "no map or no fields to compare"
+    rows = sorted((m.get("fields") or {}).items())
+    if not rows:
+        return f"no stored key's fields to compare (the map lists {len(m['get'])} programs and no field records)"
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=min(16, len(rows))) as pool:
+        stored = list(pool.map(lambda kv: (kv[0], _stored_fields(kv[0], kv[1], cache)), rows))
+    members = set(fields.get("members") or ())
+
+    def rank(item):
+        other = item[1]
+        same_unit = other.get("kind") == fields.get("kind") and other.get("members") == fields.get("members")
+        return (same_unit, other.get("column") == fields.get("column"), other.get("kind") == fields.get("kind"),
+                len(members & set(other.get("members") or ())))
+    candidates = [(k, f) for k, f in stored if f is not None]
+    if not candidates:
+        return f"none of the {len(rows)} stored field records could be read"
+    key, other = max(candidates, key=rank)
+    diff = first_difference(fields, other)
+    unit = f"{other.get('kind')} {' '.join(other.get('members') or [])[:120]}"
+    if diff is None:
+        return f"nearest stored key {key[:12]} ({unit}) has equal fields: its program is not in this map"
+    path, here, there = diff
+    return f"nearest stored key {key[:12]} ({unit}); first differing field {path}: here {here} / stored {there}"
+
+
 def remote_put(m: dict | None, key: str, fields: dict | None, home: Path | None, src: Path,
                uploads: Path | None) -> str:
     """'uploaded <slot>', 'present', or 'skipped: <why>'. Records the upload for the Mac's promote."""
@@ -391,8 +456,11 @@ def main(argv=None) -> int:
     if a.cmd == "get":
         if local_get(root, a.key, Path(a.path)):
             return 0
-        verdict = remote_get(url_map(), a.key, read_fields(fields_dir, a.key), Path(a.path), root)
+        m, fields = url_map(), read_fields(fields_dir, a.key)
+        verdict = remote_get(m, a.key, fields, Path(a.path), root)
         print(f"native_testsuite_cache: R2 {verdict}")
+        if verdict == "miss" and m is not None and fields_dir is not None:
+            print(f"native_testsuite_cache: R2 miss report: {nearest(m, fields, fields_dir.parent / 'r2-fields')}")
         return 0 if verdict == "hit" else 1
     home = local_put(root, a.key, Path(a.path), float(os.environ.get("NC_TS_CACHE_DAYS", "14")))
     uploads = Path(os.environ["NC_TS_UPLOADS"]) if os.environ.get("NC_TS_UPLOADS") else None

@@ -79,7 +79,7 @@ column_flags() {
 # One compile of the build: `group <k>` (the generated driver of group k) or `single <name>` (the file alone). A
 # single that fails writes its result row now. Run by xargs, so exported.
 compile_unit() {
-    local kind=$1 id=$2 log src dst t0 rc tm key
+    local kind=$1 id=$2 log src dst t0 rc tm key miss=
     t0=$(date +%s)
     if [ "$kind" = group ]; then
         log="$TS_OUT/logs/build-ts-group-$id.log"; dst="$TS_BIN/tsg/group_$id"; src="$TS_GEN/ts_group_$id.mojo"
@@ -92,7 +92,8 @@ compile_unit() {
     # is every source file it imports, the flags and the toolchain); TS_KEYS is empty when there is no cache
     key=""
     [ -s "${TS_KEYS:-}" ] && key=$(awk -v k="$kind" -v i="$id" '$1 == k && $2 == i {print $3; exit}' "$TS_KEYS")
-    if [ -n "$key" ] && $TS_PY tools/ops/native_testsuite_cache.py get "$key" "$dst" --fields "$TS_GEN/keys" > "$log" 2>&1; then
+    if [ -n "$key" ] && $TS_PY tools/ops/native_testsuite_cache.py get "$key" "$dst" --fields "$TS_GEN/keys" > "$log.get" 2>&1; then
+        mv "$log.get" "$log"
         local from=local; grep -q '^native_testsuite_cache: R2 hit' "$log" && from=r2
         echo "reused from NC_TS_CACHE ($from), key $key" >> "$log"
         echo "testsuite build $kind $id reused ${key:0:12} from $from $(( $(date +%s) - t0 ))s"
@@ -104,6 +105,9 @@ compile_unit() {
         pixi run mojo build $TS_FLAGS -I . -I "$TS_GEN" -o "$dst" "$src" > "$log" 2>&1
     fi
     rc=$?
+    # the lookup's lines (the miss report: the nearest stored key and the first differing field) stay in the log
+    if [ -f "$log.get" ]; then cat "$log.get" >> "$log"; miss=$(grep -m 1 '^native_testsuite_cache: R2 miss report:' "$log.get"); rm -f "$log.get"; fi
+    [ -n "${miss:-}" ] && echo "testsuite build $kind $id ${miss#native_testsuite_cache: }"
     [ $rc -eq 0 ] && [ -n "$key" ] && $TS_PY tools/ops/native_testsuite_cache.py put "$key" "$dst" --fields "$TS_GEN/keys" >> "$log" 2>&1
     if [ $rc -ne 0 ]; then
         rm -f "$dst"

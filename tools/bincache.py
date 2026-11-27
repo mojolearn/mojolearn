@@ -112,7 +112,10 @@ INBOX_PREFIX = "bincache/inbox"
 # build never reads or fills that cache).
 NAMESPACES = {
     "bin": dict(objects=OBJECT_PREFIX, sabotage=SABOTAGE_PREFIX, inbox=INBOX_PREFIX),
-    "ts": dict(objects="tscache/v1", sabotage=None, inbox="tscache/inbox"),
+    # fields=True: each promoted object has a `<key>.fields.json` sidecar (its key fields), listed in the map as
+    # `fields` rows, so a box that misses can name the nearest stored key and the first field that differs
+    # (tools/ops/native_testsuite_cache.py nearest; rel-fix-1, 2026-11-27)
+    "ts": dict(objects="tscache/v1", sabotage=None, inbox="tscache/inbox", fields=True),
 }
 KEY_ENV_PREFIXES = ("MOJOLEARN_", "MOJO_", "MODULAR_")
 # Variables that name a commit, a thread count for RUNNING, a log or this
@@ -1352,12 +1355,12 @@ def http_put(url, src, tries=4, headers=None):
 
 
 def read_map(path):
-    m = dict(header={}, get={}, sget={}, put=[])
+    m = dict(header={}, get={}, sget={}, put=[], fields={})
     for line in Path(path).read_text().splitlines():
         parts = line.split("\t")
         if len(parts) == 2 and parts[0].startswith("#"):
             m["header"][parts[0][1:]] = parts[1]
-        elif len(parts) == 3 and parts[0] in ("get", "sget") and KEY_RE.match(parts[1]):
+        elif len(parts) == 3 and parts[0] in ("get", "sget", "fields") and KEY_RE.match(parts[1]):
             m[parts[0]][parts[1]] = parts[2]
         elif len(parts) == 3 and parts[0] == "put" and SEG_RE.match(parts[1]):
             m["put"].append((parts[1], parts[2]))
@@ -2522,6 +2525,11 @@ def plan_lines(creds, partition, image, leg_id, slots, max_get=2000, expires=720
         want = set(want_keys) if verb == "get" else set()
         older = [o for o in objs[max_get:] if re.sub(r"\.tar\.gz$", "", o[0].rsplit("/", 1)[-1]) in want]
         for name, _, _ in objs[: max_get] + older:
+            if verb == "get" and ns.get("fields"):
+                f = re.match(r"^%s/%s/([0-9a-f]{64})\.fields\.json$" % (re.escape(prefix), re.escape(partition)), name)
+                if f:
+                    lines.append("fields\t%s\t%s" % (f.group(1), presign("GET", name, expires, creds)))
+                    continue
             m = re.match(r"^%s/%s/([0-9a-f]{64})\.tar\.gz$" % (re.escape(prefix), re.escape(partition)), name)
             if m:
                 lines.append("%s\t%s\t%s" % (verb, m.group(1), presign("GET", name, expires, creds)))
@@ -2590,6 +2598,9 @@ class R2Store:
     def delete(self, name):
         r2_request(self.creds, "DELETE", name)
 
+    def put_bytes(self, name, data):
+        r2_request(self.creds, "PUT", name, data=data)
+
 
 def promote_row(store, leg, slot, dest, key, namespace="bin"):
     """Copy one inbox upload to its content address unless the address already
@@ -2647,6 +2658,13 @@ def cmd_promote(argv, store=None):
             print("  promote failed %s: %s" % (dest, type(exc).__name__))
             bad += 1
             continue
+        if verdict in ("promoted", "same") and NAMESPACES[namespace].get("fields"):
+            # the key fields beside the object (NAMESPACES "fields"); a failure costs only the miss report
+            sidecar = re.sub(r"\.tar\.gz$", ".fields.json", dest)
+            try:
+                store.put_bytes(sidecar, (d / "keys" / (key + ".json")).read_bytes())
+            except Exception as exc:
+                print("  fields sidecar not written %s: %s" % (sidecar, type(exc).__name__))
         if verdict == "promoted":
             ok += 1
             print("  promoted %s" % dest)
