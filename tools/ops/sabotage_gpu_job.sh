@@ -16,7 +16,7 @@
 #   [--env SAB_BATCH_MIN=<minutes>]     one batch's time limit (default 12); past it the batch is stopped, restored,
 #                                       and its arms read TIMEOUT
 #   [--env SAB_DEV_CACHE=<dir>]         the development cache (default /root/.cache/mojolearn-development-sab)
-#   [--env SAB_WHEEL_DIR=<dir>]         the staged candidate wheels of this commit (core + nvidia): the clean set, no base build
+#   [--env SAB_WHEEL_DIR=<dir>]         the staged candidate wheels of this commit (core + the GPU plugin): the clean set, no base build
 #   [--env SAB_BUILD_MIN=<minutes>]     one prebuilt binding build's limit (default 40)
 # Read: tools/box_persist.py fetch --tag <tag>; summary.txt holds one line per arm and column:
 #   SABOTAGE batch=<id> arm=<arm> column=<device|cpu|all> verdict=CAUGHT|MISSED|BUILD-FAIL|TIMEOUT
@@ -228,7 +228,7 @@ say "source $SOURCE (pod HEAD $(git rev-parse --short=10 HEAD)), cores $CORES of
 pixi run -e default python tools/coverage_sabotage.py list > "$RES/arms.tsv" 2> "$RES/arms.err" \
     || { say "coverage_sabotage.py list failed"; exit 2; }
 
-# 1. the clean set. SAB_WHEEL_DIR (the measurement build's staged candidate wheels of THIS commit, core + nvidia, as
+# 1. the clean set. SAB_WHEEL_DIR (the measurement build's staged candidate wheels of THIS commit, core + the active GPU plugin, as
 # tools/ops/proving_job.sh takes them): their natives ARE the clean set, placed into python/ in the release layout
 # (the merged files and their indexes; a per-binding .so beside them wins, python/mojolearn/_merged.py, which is how
 # a batch's patched binding loads). Nothing compiles. Otherwise every development group of identical (sm_89) and host,
@@ -239,11 +239,24 @@ pixi run -e default python tools/coverage_sabotage.py list > "$RES/arms.tsv" 2> 
 DEV_CACHE=${SAB_DEV_CACHE:-/root/.cache/mojolearn-development-sab}
 if [ -n "${SAB_WHEEL_DIR:-}" ]; then
     . "$SELF_DIR/tree_commit.sh"
-    match=$(wheels_match_tree "$TREE" "$SAB_WHEEL_DIR"/*.whl); mrc=$?
+    case "$SAB_REQUIRED_BACKEND" in cuda) vendor=nvidia ;; hip) vendor=amd ;; esac
+    core_wheels=("$SAB_WHEEL_DIR"/mojolearn_core-*.whl)
+    gpu_wheels=("$SAB_WHEEL_DIR"/mojolearn_"${vendor}"-*.whl)
+    if [ "${#core_wheels[@]}" != 1 ] || [ "${#gpu_wheels[@]}" != 1 ] ||
+            [ ! -f "${core_wheels[0]}" ] || [ ! -f "${gpu_wheels[0]}" ]; then
+        say "BASE needs one core wheel and one $vendor wheel in $SAB_WHEEL_DIR"; exit 2
+    fi
+    core_version=${core_wheels[0]##*/mojolearn_core-}
+    gpu_version=${gpu_wheels[0]##*/mojolearn_"${vendor}"-}
+    if [ "${core_version%%-*}" != "${gpu_version%%-*}" ]; then
+        say "BASE core and $vendor wheel versions differ"; exit 2
+    fi
+    wheels=("${core_wheels[0]}" "${gpu_wheels[0]}")
+    match=$(wheels_match_tree "$TREE" "${wheels[@]}"); mrc=$?
     echo "$match" | sed 's/^/  wheel /' >> "$RES/summary.txt"
     [ "$mrc" = 0 ] || { say "BASE the staged wheels are not this tree's commit ($SAB_WHEEL_DIR)"; exit 2; }
     t=$(date +%s)
-    python3 tools/sabotage_natives.py stage "$TREE" "$SAB_WHEEL_DIR"/*.whl > "$RES/base-wheels.log" 2>&1
+    python3 tools/sabotage_natives.py stage "$TREE" "${wheels[@]}" > "$RES/base-wheels.log" 2>&1
     brc=$?
     say "BASE from the staged wheels rc=$brc secs=$(( $(date +%s) - t )): $(tail -n 1 "$RES/base-wheels.log")"
     [ $brc -eq 0 ] || exit 2
