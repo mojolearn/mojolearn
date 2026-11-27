@@ -15,6 +15,7 @@
 # set are staged and handed to the fit entry in the same call (Python
 # returned between each conversion, scan and the launch); the output
 # dimension is read from the fitted text in the same call.
+from gbdt.targets.ranking_options import check_eval_at, check_query_softmax_inputs
 from core.mode_answer import MODE_FAMILY_GBDT, answer_mode_word
 from std.math import isfinite
 from std.memory import bitcast
@@ -327,7 +328,8 @@ def gbdt_config(fields: PythonObject, model: PythonObject, texts: Bool, context:
     var complexity = py_get(fields, nk[].k_max_ctr_complexity, PythonObject(None))
     if complexity is not None:
         c.max_ctr_complexity = Int(py=py_call_typed(b.int, complexity))
-    elif c.has_cat and c.grow_symmetric and not c.pointwise and not below_one:
+    elif (c.has_cat and c.grow_symmetric and not c.pointwise and not below_one
+          and not _in(loss, py_item(t, nk[].k_querywise_losses))):
         c.max_ctr_complexity = 4
     else:
         c.max_ctr_complexity = 1
@@ -828,7 +830,8 @@ def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject,
         raise Error("mojolearn: eval_set must be a tuple of held-out arrays or a list containing one tuple")
     var nk = trees_keys()
     var loss = _field(fields, model, nk[].k_loss, "loss")
-    var grouped = _eq(loss, "QueryRMSE") or _eq(loss, "PairLogit") or _eq(loss, "YetiRank")
+    var grouped = (_eq(loss, "QueryRMSE") or _eq(loss, "PairLogit") or _eq(loss, "YetiRank")
+                   or _eq(loss, "lambdarank") or _eq(loss, "rank_xendcg"))
     if grouped and len(items) != 3:
         raise Error("mojolearn: grouped validation needs eval_set=(X_eval, y_eval, eval_group_id)")
     if not grouped and len(items) != 2:
@@ -1028,6 +1031,9 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
     var nk = trees_keys()
     var cat = _field(fields, model, nk[].k_cat_features, "cat_features")
     var hot = _field(fields, model, nk[].k_one_hot_features, "one_hot_features")
+    var loss = _field(fields, model, nk[].k_loss, "loss")
+    if _eq(loss, "QuerySoftMax"):
+        check_query_softmax_inputs(_truthy(cat) or _truthy(hot), eval_set is not None)
     var gkey = gbdt_entry_of(table)
     var row_major_ok = False
     try:
@@ -1054,7 +1060,6 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
     var n_features = x.cols
     if n_rows == 0 or n_features == 0:
         raise Error("mojolearn: fit requires at least one row and one feature")
-    var loss = _field(fields, model, nk[].k_loss, "loss")
     var target_dim = 1
     var ya: AdmittedX
     if _in(loss, py_item(t, nk[].k_multi_regression_losses)):
@@ -1186,10 +1191,19 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
                 gbdt_push_int(words, Int(py=pair_holders[1].size))
                 gbdt_push_int(words, trees_address(pair_holders[1]))
         # (group_holder and pair_holders stay alive in `pins` until PACK.)
+    var eval_at = args[8] if len(args) > 8 else PythonObject(None)
+    if eval_at is not None:
+        if held is None or not (_eq(loss, "lambdarank") or _eq(loss, "rank_xendcg")):
+            raise Error("eval_at requires a held-out lambdarank or rank_xendcg pool")
+        if py_type(eval_at) is not b.int:
+            raise Error("eval_at must be a positive 32-bit integer")
+        check_eval_at(Int(py=eval_at))
     if held is not None and held[5] is not None:
         if group_holder is None:
             raise Error("mojolearn: a grouped eval_set needs training group_id")
         var eg = held[5]
+        if eval_at is not None:
+            gbdt_push_int(words, Int(py=eval_at))
         gbdt_push_int(words, trees_address(eg))
         gbdt_push_int(words, Int(py=eg.size))
     gbdt_check_option_tables(fields, model, context)
@@ -1395,11 +1409,11 @@ def _gbdt_store(model: PythonObject, args: PythonObject, context: PythonObject) 
         gain = PythonObject(parsed)
     var non_symmetric = not symmetric
     if non_symmetric and not _in(loss, py_item(t, nk[].k_non_symmetric_losses)):
+        if _eq(loss, "QuerySoftMax"):
+            raise Error("QuerySoftMax requires grow_policy='SymmetricTree'")
         raise Error("NotImplementedError: mojolearn: Error: optimization scheme is not supported for "
                     + "GPU learning Loss=" + _str(loss) + ";OptimizationScheme=" + _str(grow) + " "
-                    + "-- CatBoost's GPU registers a non-symmetric trainer for "
-                    + "exactly eleven losses (pointwise_non_symmetric.cpp:7-29; "
-                    + "train.cpp:279 is the refusal): " + _repr(py_call(b.sorted, py_item(t, nk[].k_non_symmetric_losses))))
+                    + "supported non-symmetric objectives: " + _repr(py_call(b.sorted, py_item(t, nk[].k_non_symmetric_losses))))
     var max_leaves = py_item(kw, nk[].k_max_leaves)
     var depth = py_item(kw, nk[].k_max_depth)
     if depth is not None:
@@ -1454,8 +1468,8 @@ def _gbdt_store(model: PythonObject, args: PythonObject, context: PythonObject) 
             raise Error("mojolearn: min_child_hessian requires Depthwise or Lossguide")
         if not (_eq(score, "NewtonL2") or _eq(score, "NewtonCosine")):
             raise Error("mojolearn: min_child_hessian requires NewtonL2 or NewtonCosine")
-        if not (_eq(loss, "RMSE") or _eq(loss, "Logloss") or _eq(loss, "CrossEntropy")):
-            raise Error("mojolearn: min_child_hessian supports RMSE, Logloss and CrossEntropy only")
+        if not (_eq(loss, "RMSE") or _eq(loss, "Logloss") or _eq(loss, "CrossEntropy") or lightgbm_rank):
+            raise Error("mojolearn: min_child_hessian supports RMSE, Logloss, CrossEntropy, lambdarank and rank_xendcg")
         hessian = PythonObject(parsed)
     var nan_mode = py_item(kw, nk[].k_nan_mode)
     if not _in(nan_mode, py_item(t, nk[].k_nan_modes)):

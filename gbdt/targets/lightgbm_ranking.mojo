@@ -18,6 +18,7 @@ and mean loss fit. This arithmetic also runs on Apple GPUs.
 Upstream LightGBM equations and RNG: src/objective/rank_objective.hpp and
 include/LightGBM/utils/random.h at github.com/lightgbm-org/LightGBM.
 """
+from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF
 from std.memory import bitcast
 from core.float_sort_key import sort_key_bits
 from checks.soft_f64 import (
@@ -29,7 +30,7 @@ from gbdt.targets.pointwise_bodies import routed_exp, routed_log
 
 comptime RF = MutPointer[Float32, MutAnyOrigin]
 comptime RU = MutPointer[UInt32, MutAnyOrigin]
-comptime LR_CUTOFF = 30
+comptime LR_CUTOFF = DEFAULT_NDCG_CUTOFF
 # A small stripe bounds pair workspace independently of query length and cutoff.
 comptime LR_STRIPE = 4
 comptime LR_PLANES = 2 * LR_STRIPE + 4
@@ -335,7 +336,7 @@ def rank_row[phase: Int](a: RankView, row: Int, arg: Int, width: Int, col: Int):
         var discounts = a.plane(LR_DISCOUNT)
         comptime if phase == RR_IDCG:
             discounts[row] = identical_div(Float32(0.6931471805599453), routed_log(Float32(pos + 2)))
-        a.plane(0)[row] = identical_mul(_gain(a.labels[Int(a.order[row])]), discounts[row]) if pos < LR_CUTOFF else Float32(0)
+        a.plane(0)[row] = identical_mul(_gain(a.labels[Int(a.order[row])]), discounts[row]) if pos < arg else Float32(0)
     elif phase == RR_CLEAR:
         a.direction[row] = 0
         a.hessian[row] = 0
@@ -414,9 +415,9 @@ def rank_fold[R: RankStages, phase: Int](mut r: R, a: RankView, largest: Int, wi
         step *= 2
 
 
-def rank_ideal[R: RankStages](mut r: R, a: RankView, largest: Int) raises:
+def rank_ideal[R: RankStages](mut r: R, a: RankView, largest: Int, cutoff: Int = LR_CUTOFF) raises:
     r.order_by[True](a)
-    r.rows[RR_IDCG](a, a.n, 0, 0, 0)
+    r.rows[RR_IDCG](a, a.n, cutoff, 0, 0)
     rank_fold[R, RR_SUM](r, a, largest, 1, 0)
     r.rows[RR_SAVE_IDCG](a, a.groups, 0, 0, 0)
 
@@ -444,9 +445,9 @@ def xe_derivatives[R: RankStages](mut r: R, a: RankView, largest: Int) raises:
     r.rows[RR_XE_THIRD](a, a.n, 0, 0, 1)
 
 
-def rank_ndcg[R: RankStages](mut r: R, a: RankView, largest: Int) raises:
+def rank_ndcg[R: RankStages](mut r: R, a: RankView, largest: Int, cutoff: Int = LR_CUTOFF) raises:
     r.order_by[False](a)
-    r.rows[RR_DCG](a, a.n, 0, 0, 0)
+    r.rows[RR_DCG](a, a.n, cutoff, 0, 0)
     rank_fold[R, RR_SUM](r, a, largest, 1, 0)
     r.rows[RR_QUERY_NDCG](a, a.groups, 0, 0, 0)
     var step = 1

@@ -2,6 +2,7 @@
 """Validation for the optional scalar Newton child-Hessian growth guard."""
 from std.math import isfinite
 from std.memory import bitcast
+from gbdt.targets.ranking_options import is_lightgbm_ranking
 from gbdt.options.catboost_options import GROW_SYMMETRIC, SCORE_FUNCTION_NEWTON_COSINE, SCORE_FUNCTION_NEWTON_L2
 from gbdt.targets.kernel.pointwise_targets import OBJECTIVE_RMSE, OBJECTIVE_LOGLOSS, OBJECTIVE_CROSSENTROPY
 
@@ -25,5 +26,5 @@ def child_hessian_threshold(value: Float64, policy: Int, score: Int) raises -> F
     return result
 
 def check_child_hessian_objective(value: Float64, objective: Int) raises:
-    if value >= 0 and objective != OBJECTIVE_RMSE and objective != OBJECTIVE_LOGLOSS and objective != OBJECTIVE_CROSSENTROPY:
-        raise Error("min_child_hessian currently supports RMSE, Logloss and CrossEntropy only")
+    if value >= 0 and objective != OBJECTIVE_RMSE and objective != OBJECTIVE_LOGLOSS and objective != OBJECTIVE_CROSSENTROPY and not is_lightgbm_ranking(objective):
+        raise Error("min_child_hessian supports RMSE, Logloss, CrossEntropy, lambdarank and rank_xendcg")

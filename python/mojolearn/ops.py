@@ -1541,7 +1541,9 @@ class Session:
         every tensor in ``params``, and :meth:`step` trains them. The
         gradient keeps every step's values (backward through time). In an
         inference session the scan is captured with the rest of the model
-        by :meth:`capture`, and a saved program keeps the cell.
+        by :meth:`capture`, and a saved program keeps the cell. A cell can
+        call a :meth:`custom` operation. Each step uses its own saved tensors
+        and incoming gradient, including when checkpointed steps are replayed.
 
         Parameters
         ----------

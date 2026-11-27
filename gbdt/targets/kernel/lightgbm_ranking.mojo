@@ -9,7 +9,7 @@ from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.stable_radix_sort import key_bits_for, stable_radix_bsum_len, stable_radix_counts_len, stable_radix_sort_pairs_u32
 from gbdt.targets.lightgbm_ranking import (
-    LR_PLANES, RF, RU, RankStages, RankView, lambda_derivatives, rank_ideal, rank_ndcg, rank_row, rank_sort_key,
+    LR_CUTOFF, LR_PLANES, RF, RU, RankStages, RankView, lambda_derivatives, rank_ideal, rank_ndcg, rank_row, rank_sort_key,
     xe_derivatives, query_softmax,
 )
 from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XENDCG, OBJECTIVE_QUERY_SOFTMAX
@@ -44,7 +44,7 @@ struct LightGBMRankWorkspace(RankStages, Movable):
     var n: Int
     var groups: Int
     var largest: Int
-    var ready: Bool
+    var ideal_cutoff: Int
     var scratch: DeviceBuffer[DType.float32]
     var order: DeviceBuffer[DType.uint32]
     var other: DeviceBuffer[DType.uint32]
@@ -61,7 +61,7 @@ struct LightGBMRankWorkspace(RankStages, Movable):
         self.groups = n_queries
         # For positive contiguous groups, the largest can hold at most n - (Q - 1).
         self.largest = max_group_size if max_group_size > 0 else n_rows - n_queries + 1
-        self.ready = False
+        self.ideal_cutoff = 0
         self.scratch = ctx.enqueue_create_buffer[DType.float32](LR_PLANES * n_rows)
         self.order = ctx.enqueue_create_buffer[DType.uint32](n_rows)
         self.other = ctx.enqueue_create_buffer[DType.uint32](n_rows)
@@ -107,9 +107,9 @@ def launch_lightgbm_ranking(
                      seed, iteration, has_weights)
     var largest = ws.largest
     if objective == OBJECTIVE_LAMBDARANK:
-        if not ws.ready:
+        if ws.ideal_cutoff != LR_CUTOFF:
             rank_ideal(ws, a, largest)
-            ws.ready = True
+            ws.ideal_cutoff = LR_CUTOFF
         lambda_derivatives(ws, a, largest)
     elif objective == OBJECTIVE_QUERY_SOFTMAX:
         query_softmax[LightGBMRankWorkspace, False](ws, a, largest)
@@ -123,7 +123,7 @@ def launch_lightgbm_ndcg(
     ctx: DeviceContext, mut ws: LightGBMRankWorkspace, mut targets: DeviceBuffer[DType.float32],
     mut scores: DeviceBuffer[DType.float32], mut offsets: DeviceBuffer[DType.uint32],
     mut sizes: DeviceBuffer[DType.uint32], mut qids: DeviceBuffer[DType.uint32], n_rows: Int, n_queries: Int,
-    mut result: DeviceBuffer[DType.float32],
+    mut result: DeviceBuffer[DType.float32], cutoff: Int = LR_CUTOFF,
 ) raises:
     if n_rows != ws.n or n_queries != ws.groups:
         raise Error("LightGBM ranking workspace does not match this pool")
@@ -131,20 +131,20 @@ def launch_lightgbm_ndcg(
                      sizes.unsafe_ptr(), qids.unsafe_ptr(), ws.order.unsafe_ptr(), ws.other.unsafe_ptr(),
                      ws.scratch.unsafe_ptr(), result.unsafe_ptr(), result.unsafe_ptr(), n_rows, n_queries, 0, 0, False)
     var largest = ws.largest
-    if not ws.ready:
-        rank_ideal(ws, a, largest)
-        ws.ready = True
-    rank_ndcg(ws, a, largest)
+    if ws.ideal_cutoff != cutoff:
+        rank_ideal(ws, a, largest, cutoff)
+        ws.ideal_cutoff = cutoff
+    rank_ndcg(ws, a, largest, cutoff)
 
 
 def launch_ranking_metric[reuse_terms: Bool = False](
     ctx: DeviceContext, mut ws: LightGBMRankWorkspace, objective: Int, mut targets: DeviceBuffer[DType.float32],
     mut scores: DeviceBuffer[DType.float32], mut weights: DeviceBuffer[DType.float32], weighted: Bool,
     mut offsets: DeviceBuffer[DType.uint32], mut sizes: DeviceBuffer[DType.uint32], mut qids: DeviceBuffer[DType.uint32],
-    n: Int, groups: Int, mut result: DeviceBuffer[DType.float32],
+    n: Int, groups: Int, mut result: DeviceBuffer[DType.float32], cutoff: Int = LR_CUTOFF,
 ) raises:
     if objective != OBJECTIVE_QUERY_SOFTMAX:
-        launch_lightgbm_ndcg(ctx, ws, targets, scores, offsets, sizes, qids, n, groups, result)
+        launch_lightgbm_ndcg(ctx, ws, targets, scores, offsets, sizes, qids, n, groups, result, cutoff)
         return
     if n != ws.n or groups != ws.groups:
         raise Error("ranking workspace does not match this pool")
