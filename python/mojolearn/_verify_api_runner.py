@@ -256,8 +256,7 @@ def verify(*,self_test=True,reference=None,retain=None,scope='all'):
     CPU side against 'cpu', the GPU side against its vendor), and a side whose
     column the reference does not validate reads UNTESTED (its column is owed).
     The overall status is FAILED when any side failed, else the GPU side's
-    (the CPU side's on a CPU-only installation). The fault controls run on
-    that primary side."""
+    (the CPU side's on a CPU-only installation). Each applicable side runs its own fault and restoration controls."""
     from . import _verify_device as vd
     if reference is None:
         try:
@@ -270,6 +269,16 @@ def verify(*,self_test=True,reference=None,retain=None,scope='all'):
         clean=capture(endpoints=selected_endpoints(scope),side=side)
         if retain:retain('api-clean-'+side,clean)
         results[side]=_judge_side(clean,reference,scope)
+        if self_test:
+            from ._verify_api_faults import check_faults
+            def retain_side(name, data):
+                retain(f"api-{side}-{name}", data)
+            with vd.side(side):
+                faults = check_faults(clean, retain=retain_side if retain else None)
+            results[side]['faults'] = faults
+            if any(row['status'] not in ('CAUGHT_AND_RESTORED', 'NOT_APPLICABLE') for row in faults.values()):
+                results[side]['errors'].append('endpoint fault controls did not all pass')
+                results[side]['status'] = 'FAILED'
     primary=run_sides[-1]
     result=dict(results[primary])
     result['sides']={side:{k:v for k,v in r.items() if k!='evidence'} for side,r in results.items()}
@@ -279,13 +288,6 @@ def verify(*,self_test=True,reference=None,retain=None,scope='all'):
         result['failures'].update({side+':'+e:m for e,m in r['failures'].items()})
         result['pending']=list(result['pending'])+[side+':'+e for e in r['pending']]
         result['errors']=list(result['errors'])+[side+' side: '+e for e in r['errors'] if r['status']!='UNTESTED']
-    if self_test and result['status']!='UNTESTED':
-        from ._verify_api_faults import check_faults
-        with vd.side(primary):
-            result['faults']=check_faults(results[primary]['evidence'],retain=retain)
-        if any(row['status']!='CAUGHT_AND_RESTORED' for row in result['faults'].values()):
-            result['errors'].append('endpoint fault controls did not all pass')
-            result['status']='FAILED'
     if any(r['status']=='FAILED' for r in results.values()) or result['failures'] or result['pending']:
         result['status']='FAILED'
     return result
