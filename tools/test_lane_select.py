@@ -1441,12 +1441,14 @@ def test_package_modules_the_verifier_alone_uses_are_unreachable():
     # `_cc_files`), and a walked directory keeps every file in it reachable (`_path_join_roots`: a join with a
     # variable tail builds paths under it). Pinned to that one walker; another one, or a name, fails here.
     table = "python/mojolearn/verify_reference/table.json"
-    # one file a lane reaches does name it: python/mojolearn/_identity.py writes the string as the `record` label
-    # of the identity comparison's evidence (extra = dict(record="verify_reference/table.json", ...)); a label,
-    # not a read. Any other namer fails here.
+    # two files a lane reaches do name it, and are pinned: python/mojolearn/_identity.py writes the path as the
+    # `record` label of the identity comparison's evidence (extra = dict(record="verify_reference/table.json")),
+    # and python/mojolearn/_verify_reference.py reads it (TABLE_NAME = "table.json", line 334). Any other namer
+    # fails here.
+    known = {"python/mojolearn/_identity.py", "python/mojolearn/_verify_reference.py"}
     for token in (table, "verify_reference/table.json", "table.json"):
         namers = set(lane_select._named_by_the_corpus(token, skip={table}) or ())
-        assert namers <= {"python/mojolearn/_identity.py"}, f"a file a lane reaches names {token}: {sorted(namers)}"
+        assert namers <= known, f"a file a lane reaches names {token}: {sorted(namers - known)}"
     walkers = sorted(lane_select._joined_with("verify_reference", skip={table}))
     assert walkers == ["tools/identity_lanes/composed_cases.py"], walkers
     assert lane_select.unreachable("python/mojolearn/_mode.py") is None
