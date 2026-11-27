@@ -114,18 +114,20 @@ THE STEPS
                      (os.cpu_count(); MOJOLEARN_ADMISSION_JOBS / _WORKER override), into the content-keyed
                      cache that linux-builds and every later ledger read then hit. linux-builds AND
                      macos-build need it, so it never competes with the macOS wheel build for the Mac
-  cross-compile      (core-linux, beside the rehearsal AND the Linux builds) dispatch
+  cross-compile      (core-linux, a rented build backend only) dispatch
                      .github/workflows/cross-compile-check.yml on the frozen
                      commit against the previous release's source commit and
                      wait: every changed Linux GPU binding x tier x arch
                      compiled on GitHub's free runners in parallel. Any FAIL,
                      TIMEOUT, STALLED or MISSING job stops the Linux pipelines
-                     by name at linux-wait, before anything is packed, gated,
-                     rented or published. On the default `github` backend
-                     linux-builds does not wait for it (2026-11-07: it compiles
-                     the same sources for the same targets, 2128 s that were
-                     serial in 0.8.66); on a rented backend (cpu-box, gpu-legs)
-                     linux-builds still waits, so no box is rented before it
+                     by name, and linux-builds waits for it, so no box (cpu-box,
+                     gpu-legs) is rented before it passes. On the default
+                     `github` backend it is NOT RUN (lane xcc-retire-1,
+                     2026-11-27: linux-builds compiles the same sources for the
+                     same targets on the same runners, so it compiled every
+                     changed binding twice): each build leg names a failed build
+                     by binding, tier and arch with its first compiler errors and
+                     stops a STALLED compile after 240 s (tools/compile_watch.py)
   reuse-plan         tools/release_reuse.py: for every binding of every set
                      (cuda sm_89, the cuda sm_80 PTX slot, hip gfx942, the host bindings,
                      the runtime closure, the macOS wheel) REUSE the bytes the
@@ -947,6 +949,8 @@ SELF_OVERLAID = ("cpu-box", "github")
 #: Routes whose linux-builds step rents a box: there linux-builds waits for the free cross-compile
 #: (Release.__init__); on `github` the two compile at once (STEP_TABLE, 2026-11-07).
 RENTED_BUILD_BACKENDS = ("cpu-box", "gpu-legs")
+#: BUILD FAILED lines per failed leg in linux-wait's stop message (the rest stay in the leg's records)
+LEG_FAILURES_IN_STOP = 8
 
 
 def scoped_sets():
@@ -1190,15 +1194,17 @@ STEP_TABLE = [
     # linux-builds dispatches from its cache as soon as reuse-plan and readiness are done (beside cross-compile).
     ("readiness", "common", ["freeze-commit"], None),
     ("cross-compile", "core-linux", ["freeze-commit"], None),
-    # THE CROSS-COMPILE RUNS BESIDE THE LINUX BUILDS (lane post-cross-compile-redundant, 2026-11-07). On the default
-    # `github` backend linux-builds compiles the same changed sources for the same targets (sm_89, sm_80, gfx942) and
-    # tiers with the same tier and column defines, on the same free runners, so waiting for cross-compile first cost
-    # 0.8.66 a serial 2128 s for no finding the builds lack. What cross-compile still gives alone: a per-binding name on
-    # a compile error (the merged layout's builds name the merged group) and STALLED after 240 s of flat compiler CPU
-    # (the builds only time out at their bound). It stays a check: linux-wait NEEDS it, so a FAIL stops the Linux
-    # pipeline before linux-pack and everything after it (gates, boxes, columns, every publish) exactly as before.
-    # A rented backend (cpu-box, gpu-legs) rents inside linux-builds, so there it still NEEDS cross-compile
-    # (Release.__init__, RENTED_BUILD_BACKENDS).
+    # THE CROSS-COMPILE ONLY GATES A RENTAL (lane xcc-retire-1, 2026-11-27; before: lane post-cross-compile-redundant,
+    # 2026-11-07, ran it beside the builds). On the default `github` backend linux-builds compiles the same changed
+    # sources for the same targets (sm_89, sm_80, gfx942) and tiers with the same tier and column defines, on the same
+    # free runners, so cross-compile compiled every changed binding a second time and took runner slots from the legs.
+    # What it gave alone the legs now give: a failed build named by binding, tier and arch with its first compiler
+    # error lines (release_github_build.build_failures, in the leg's failure line and linux-wait's stop message) and
+    # STALLED after 240 s of flat compiler CPU and no output (tools/compile_watch.py, the check's own rule, in
+    # packaging/linux/binding_timeout.sh). So on `github` it is not run (step_cross_compile writes a NOT-RUN receipt)
+    # and linux-wait waits for the legs alone (Release.__init__). A rented backend (cpu-box, gpu-legs) rents inside
+    # linux-builds, so there linux-builds still NEEDS cross-compile and nothing is rented before it passes. The table
+    # below is that rented form; the workflow stays for manual use and for the Apple compile at integration.
     ("linux-builds", "core-linux", ["reuse-plan", "readiness"], None),
     ("macos-build", "macos", ["reuse-plan", "readiness"], "mac"),
     ("macos-smoke", "macos", ["macos-build"], "mac"),
@@ -1664,6 +1670,10 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if args.build_backend in RENTED_BUILD_BACKENDS and "cross-compile" not in self.NEEDS["linux-builds"]:
             # a rented backend rents inside linux-builds: nothing is rented before the free cross-compile passes
             self.NEEDS = dict(self.NEEDS, **{"linux-builds": self.NEEDS["linux-builds"] + ["cross-compile"]})
+        elif args.build_backend not in RENTED_BUILD_BACKENDS:
+            # ON GITHUB THE BUILDS ARE THE COMPILE CHECK (lane xcc-retire-1, 2026-11-27): cross-compile is not run
+            # (step_cross_compile) and linux-wait waits for the legs alone
+            self.NEEDS = dict(self.NEEDS, **{"linux-wait": [n for n in self.NEEDS["linux-wait"] if n != "cross-compile"]})
         self.dry = args.dry_run
         self.readonly = bool(getattr(args, "status", False) or getattr(args, "report", False))
         self.commands_shown = 0
@@ -2790,10 +2800,24 @@ class Release(release_identity_wheels.IdentityOnWheels):
         raise StepFailed(f"the dispatched {self.XCC_WORKFLOW} run (token {token}) never appeared in gh run list")
 
     def step_cross_compile(self):
-        """CROSS-COMPILE ON GITHUB, RELEASE ONLY. The frozen commit's changed
-        Linux GPU bindings, every tier and arch, each on its own free runner;
-        diffed against the previous release's source commit (the reuse plan's
-        base). Refuses when there is no such commit: it never widens."""
+        """CROSS-COMPILE ON GITHUB, RELEASE ONLY, ON A RENTED BUILD BACKEND. The
+        frozen commit's changed Linux GPU bindings, every tier and arch, each on
+        its own free runner; diffed against the previous release's source commit
+        (the reuse plan's base). Refuses when there is no such commit: it never
+        widens. On the github backend it is NOT RUN (lane xcc-retire-1,
+        2026-11-27): linux-builds compiles the same sources for the same targets
+        and tiers on the same free runners, and competed with it for them; the
+        legs now give what only it gave (each failed build named by binding,
+        tier and arch with its first compiler errors, and STALLED after 240 s of
+        flat compiler CPU and no output, packaging/linux/binding_timeout.sh).
+        The receipt says NOT-RUN and why."""
+        if self.args.build_backend not in RENTED_BUILD_BACKENDS:
+            why = (f"not run (--build-backend {self.args.build_backend}: linux-builds compiles every changed binding x "
+                   "tier x arch on the same free runners and names a failed or STALLED build itself)")
+            if not self.dry:
+                write_json(self.cross_compile_receipt(), dict(schema=self.XCC_SCHEMA, verdict="NOT-RUN",
+                           commit=self.commit, backend=self.args.build_backend, reason=why, at=now()))
+            return why
         prev = release_reuse.previous_release() or {}
         base = prev.get("source_commit")
         if not base:
@@ -2832,7 +2856,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
     #: cross-compile-check compiles and how: the toolchain pins, the workflow
     #: and its planner.
     XCC_INPUTS = ("pixi.toml", "pixi.lock", ".github/workflows/cross-compile-check.yml",
-                  "tools/cross_compile_check.py")
+                  "tools/cross_compile_check.py", "tools/compile_watch.py")
 
     def cross_compile_receipt(self):
         return self.rel / "cross-compile.json"
@@ -3832,8 +3856,10 @@ class Release(release_identity_wheels.IdentityOnWheels):
                     told.add(l.name)
                     import release_candidate
                     err = release_candidate.legs_first_error([l.workdir / l.name, l.out_dir])
+                    # BY BINDING, TIER AND ARCH (lane xcc-retire-1): the leg's BUILD FAILED lines
+                    named = release_github_build.leg_build_failures(l.name, l.workdir / l.name, l.out_dir)
                     self.say(f"  {l.name}: FAILED (exit {l.exit_code()}, log {l.log})"
-                             + (f"; first error: {err}" if err else "")
+                             + ("; " + "; ".join(named) if named else f"; first error: {err}" if err else "")
                              + ("; waiting for " + ", ".join(x.name for x in legs if x.running())
                                 if any(x.running() for x in legs) else ""))
             if not any(l.running() for l in legs):
@@ -3853,7 +3879,11 @@ class Release(release_identity_wheels.IdentityOnWheels):
                         closed = [g for g in self.close_stopped_compile_producers(l) if g.get("closed")]
                     except (StepFailed, ValueError, OSError) as error:
                         self.say(f"  {l.name}: open compile runs not closed: {error}")
+                named = release_github_build.leg_build_failures(l.name, l.workdir / l.name, l.out_dir)
                 bad.append(f"{l.name} (exit {l.exit_code()}, log {l.log}"
+                           + ("".join("; " + row for row in named[:LEG_FAILURES_IN_STOP])
+                              + (f"; {len(named) - LEG_FAILURES_IN_STOP} more in its GHA/build-failures.json"
+                                 if len(named) > LEG_FAILURES_IN_STOP else ""))
                            + (f"; {sum(len(g['run_ids']) for g in closed)} open compile run(s) interrupted, "
                               f"producer {closed[0]['state']}; linux-builds relaunches it" if closed else "") + ")")
                 continue

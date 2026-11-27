@@ -66,7 +66,8 @@ class PythonOnlyRefreeze(Base):
         path.write_text(json.dumps(doc))
 
     def test_cross_compile_pass_is_reused_when_no_native_input_changed(self):
-        r = self.release()
+        # the check runs only before a rental (cpu-box, gpu-legs); on github it is not run (lane xcc-retire-1)
+        r = self.release(build_backend="cpu-box")
         self.xcc_receipt(r)
         with mock.patch.object(release.release_reuse, "previous_release",
                                return_value=dict(version="0.8.98", source_commit=BASE)), \
@@ -79,7 +80,7 @@ class PythonOnlyRefreeze(Base):
         self.assertEqual(data["reused_from"], OLD)
 
     def test_cross_compile_runs_when_a_native_input_changed_or_the_base_moved(self):
-        r = self.release()
+        r = self.release(build_backend="cpu-box")
         self.xcc_receipt(r)
         self.xcc_receipt(r, commit="d" * 40, base="e" * 40)
         with mock.patch.object(release.release_reuse, "previous_release",
