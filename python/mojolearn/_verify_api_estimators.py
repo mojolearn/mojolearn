@@ -65,16 +65,17 @@ def estimator_checks(recorder, public, methods):
                 overrides['max_iter'] = 2
             if name in ('LocalOutlierFactor',):
                 overrides['novelty'] = True
+            # Members are built through `resolve` so they carry the endpoint's side, as
+            # the meta-estimator does (gs-fix-7, 2026-11-26). The `devices=` drivers
+            # below (ParallelForestPredictor, ReferenceShardedNeighbors) run on this
+            # installation's GPU set whatever the side, so their fitted members stay unbound.
             if name == 'CalibratedClassifierCV':
-                from . import LogisticRegression
-                overrides.update(estimator=LogisticRegression(max_iter=2), cv=2)
+                overrides.update(estimator=resolve('mojolearn.LogisticRegression')(max_iter=2), cv=2)
             if name in ('GridSearchCV','RandomizedSearchCV'):
-                from . import LinearDiscriminantAnalysis
-                overrides.update(estimator=LinearDiscriminantAnalysis(n_components=1),
+                overrides.update(estimator=resolve('mojolearn.LinearDiscriminantAnalysis')(n_components=1),
                     **{'param_distributions' if name=='RandomizedSearchCV' else 'param_grid': {'n_components':[1]}})
             if name=='RFE':
-                from . import LogisticRegression
-                overrides['estimator']=LogisticRegression(max_iter=2)
+                overrides['estimator']=resolve('mojolearn.LogisticRegression')(max_iter=2)
             if name=='GradientBoosting':
                 overrides['loss']='Logloss'
             if name == 'RandomizedSearchCV':

@@ -11,7 +11,16 @@ PARAMETER_METHODS = ('get_params', 'set_params', '__getattribute__')
 
 def factory(public, **overrides):
     import numpy as np
-    from . import Ridge, LogisticRegression, DecisionTreeRegressor
+    # The member models are built through `resolve`, so they carry the side the
+    # endpoint runs on, as the explainer or meta-estimator that holds them does.
+    # gs-fix-7 (2026-11-26): imported unbound they carried device=None, which on a
+    # GPU install is the GPU; the CPU side's KernelExplainer, PermutationExplainer
+    # and TreeExplainer (device='cpu') were then rightly refused by the fitted-model
+    # rule (core/function_device_fitted.mojo:35): a fitted model is queried where
+    # it was fitted.
+    Ridge = resolve('mojolearn.Ridge')
+    LogisticRegression = resolve('mojolearn.LogisticRegression')
+    DecisionTreeRegressor = resolve('mojolearn.DecisionTreeRegressor')
     cls = resolve(public)
     name = public.rsplit('.', 1)[-1]
     sig = inspect.signature(cls)
