@@ -5687,6 +5687,11 @@ def _gbdt_rank_fits(ml, X, yr, Xh, configs, max_rows=_GBDT_RANK_ROWS):
         pred = m.predict(Xr)
         parts[name] = _h(pred)
         parts[name + ":digest"] = _h(np.frombuffer(str(m.digest_).encode(), dtype=np.uint8))
+        if loss in ("lambdarank", "rank_xendcg"):
+            curve = np.asarray(m.loss_curve_, dtype=np.float64)
+            if curve.shape != (kw["n_estimators"],) or not np.all(np.isfinite(curve)):
+                raise RuntimeError(f"{loss} must report a finite NDCG loss for every fitted tree")
+            parts[name + ":learn_ndcg_loss"] = _h(curve)
         parts[name + ":ndcg"] = _h(_rank_ndcg(ml, groups, rel, pred))
         first = first if first is not None else m
     return _fit(parts, first, lambda e: (e.predict(Xh),))
