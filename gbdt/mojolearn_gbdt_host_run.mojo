@@ -1731,9 +1731,6 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         )
     if pw_grouped and n_eval_rows != 0 and len(eval_group_sizes) == 0:
         raise Error("grouped validation needs one held-out query id per eval row")
-    # (lane gbdt-cpu-rest-4, 2026-11-23: the by-name refusal here had no case
-    # left: an eval set on MultiRMSE and the grouped losses refuses above in
-    # `train`'s words; every other loss has its held-out arm)
     var od = load_overfitting_detector_options(od_type, od_pvalue, od_wait)
     var od_kind = od.od_type
     # (lane gbdt-cpu-rest-4, 2026-11-23: the by-name refusal here had no case

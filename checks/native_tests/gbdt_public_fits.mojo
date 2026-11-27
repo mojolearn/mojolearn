@@ -69,6 +69,12 @@ from gbdt.host.gbdt_host_entries_impl import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gbdt.host.gbdt_oracle import GBDT_ORACLE_HOST_SABOTAGE
 from gbdt.mojolearn_gbdt_run import gbdt_fit_native_run as gbdt_fit_native_run_gpu
+from max.gpu.host import DeviceContext
+from core.transfer import transfer_upload_list, transfer_download_f32_list
+from gbdt.ctrs.ctr import CTR_BORDERS, TCtrConfig, TPrior
+from gbdt.ctrs.ctr_calcers import compute_simple_ctrs_gpu_resident
+from gbdt.host.gbdt_oracle_ctr import _ordered_target_columns
+from gbdt.models.ctr_value_table import TCtrValueTable
 from std.testing import TestSuite
 from std.time import perf_counter_ns
 from checks.native_tests.testsuite_cases import check_cases, require
@@ -77,8 +83,8 @@ from std.sys.compile import is_defined
 
 comptime FIXTURE_DIR = "checks/native_tests/fixtures/gbdt/"
 comptime UNSET = -1.0
-#: units every column runs (CPU and GPU suites); the last is `fit_loop_`
-comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS + 1
+#: units every column runs (CPU and GPU suites); including the grouped CTR and held-out loss examples
+comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS + 5
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
 comptime GBDT_HOST_UNITS = 55
 
@@ -232,6 +238,7 @@ struct GbdtInputs(Movable):
     var weights: List[Float32]
     var eval_x: List[Float32]
     var eval_y: List[Float32]
+    var eval_group_sizes: List[UInt32]
     var group_sizes: List[UInt32]
     var pairs: List[UInt32]
     var pair_weights: List[Float32]
@@ -244,6 +251,7 @@ struct GbdtInputs(Movable):
         self.weights = List[Float32]()
         self.eval_x = List[Float32]()
         self.eval_y = List[Float32]()
+        self.eval_group_sizes = List[UInt32]()
         self.group_sizes = List[UInt32]()
         self.pairs = List[UInt32]()
         self.pair_weights = List[Float32]()
@@ -509,6 +517,9 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
                 s.i(Int(inp.pairs.unsafe_ptr()))
                 s.i(n_pairs)
                 s.i(pw)
+        if len(inp.eval_group_sizes) > 0:
+            s.i(Int(inp.eval_group_sizes.unsafe_ptr()))
+            s.i(len(inp.eval_group_sizes))
     var x_addr = Int(inp.x.unsafe_ptr())
     var y_addr = Int(inp.y.unsafe_ptr())
     var w_addr = Int(inp.weights.unsafe_ptr()) if len(inp.weights) > 0 else x_addr
@@ -1165,8 +1176,72 @@ def fit_loop_rounds[I: GbdtImage]() raises:
         require(not model.stopped_early, "a fit without an eval set stopped early: " + arm)
 
 
+def _query_prior_example() raises:
+    # With a 1/2 prior, only the completed first query contributes to the second.
+    var codes: List[UInt32] = [0, 0, 1, 0, 0, 1]
+    var target: List[UInt8] = [1, 1, 0, 0, 0, 1]
+    var order: List[UInt32] = [0, 1, 2, 3, 4, 5]
+    var config: List[TCtrConfig] = [TCtrConfig(CTR_BORDERS, TPrior(0.5, 1.0), 0, 0)]
+    var expected: List[Float32] = [0.5, 0.5, 0.5, Float32(2.5) / 3, Float32(2.5) / 3, 0.25]
+    var result: List[Float32]
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        var orders = List[List[UInt32]]()
+        orders.append(order^)
+        var columns = _ordered_target_columns(codes, 2, config, target, orders, [3, 3])
+        result = columns.pop()
+    else:
+        var ctx = DeviceContext()
+        var queries: List[UInt32] = [0, 0, 0, 1, 1, 1]
+        var cat = transfer_upload_list[DType.uint32](ctx, codes, 6, 6)
+        var bins = transfer_upload_list[DType.uint8](ctx, target, 6, 6)
+        var rows = transfer_upload_list[DType.uint32](ctx, order, 6, 6)
+        var ids = transfer_upload_list[DType.uint32](ctx, queries, 6, 6)
+        var columns = compute_simple_ctrs_gpu_resident(ctx, cat, 6, 2, config, bins, rows, Optional(ids^))
+        result = transfer_download_f32_list["gbdt-query-prior"](ctx, columns[0], 6)
+    for r in range(6):
+        require(result[r] == expected[r], "CTR included a label from the current query, row " + String(r))
+    var table = TCtrValueTable(0, 0, CTR_BORDERS, 0.5, 1.0, 0.0, 1.0, 0, 2, 0, [2, 2, 1, 1])
+    require(table.value_for(2) == Float32(0.5), "unseen held-out category must use the prior")
+
+
+def _grouped_validation_example[I: GbdtImage](unit: Int) raises:
+    var loss = "QueryRMSE" if unit == 0 else ("PairLogit" if unit == 1 else "YetiRank")
+    var opts = GbdtOpts(loss, 1, 1)
+    opts.deterministic()
+    opts.use_best_model = 0
+    var inp = GbdtInputs([0, 1, 2, 3, 4, 5], 6, 1, [2, 1, 0, 1, 0, 2])
+    inp.group_sizes = [3, 3]
+    inp.eval_x = [2, 2, 2, 2]
+    inp.eval_y = [0, 2, 10, 12]
+    inp.eval_group_sizes = [2, 2]
+    if unit == 0:
+        # A singleton query's centered training gradient is exactly zero.
+        inp.group_sizes = [1, 1, 1, 1, 1, 1]
+        var by_query = fit[I](opts, inp)
+        require(len(by_query.test) == 1 and by_query.test[0] == 1.0, "two centered queries: mean squared error = 1")
+        inp.eval_group_sizes = [4]
+        var pooled = fit[I](opts, inp)
+        require(len(pooled.test) == 1 and pooled.test[0] == 26.0, "one centered query: mean squared error = 26")
+    else:
+        # Identical feature rows give tied predictions. Each of the two pairs costs log(2).
+        var paired = fit[I](opts, inp)
+        require(len(paired.test) == 1 and abs(paired.test[0] - 0.6931471805599453) < 1.0e-6,
+                "held-out " + loss + " should normalize by the two within-query pairs")
+        inp.eval_y = [1, 1, 2, 2]
+        var err = String("")
+        try:
+            _ = fit[I](opts, inp)
+        except error:
+            err = String(error)
+        require_fails_with(err, "Cannot generate pairs", "held-out queries have no contrasting grades")
+
+
 def common_unit[I: GbdtImage](unit: Int) raises:
-    if unit == 26 + FF_UNITS + QW_UNITS:
+    if unit == GBDT_COMMON_UNITS - 1:
+        _query_prior_example()
+    elif unit >= GBDT_COMMON_UNITS - 4:
+        _grouped_validation_example[I](unit - (GBDT_COMMON_UNITS - 4))
+    elif unit == 26 + FF_UNITS + QW_UNITS:
         fit_loop_rounds[I]()
     elif unit >= 26 + FF_UNITS:
         querywise[I](unit - 26 - FF_UNITS)
@@ -1427,20 +1502,12 @@ def host_cat_rest[I: GbdtImage]() raises:
     grouped.group_sizes = List[UInt32](length=60, fill=UInt32(10))
     var qr = _cat_rest_opts("QueryRMSE")
     qr.cat_features = [6]
-    var refused = String("")
-    try:
-        _ = fit[I](qr, grouped)
-    except error:
-        refused = String(error)
-    require_fails_with(refused, "with cat_features is not implemented here", "QueryRMSE with cat_features")
+    var categorical = fit[I](qr, grouped)
+    require("ctr_table " in categorical.text, "grouped QueryRMSE must retain its categorical table")
     var yr = _cat_rest_opts("YetiRank")
     yr.one_hot_features = [8]
-    refused = String("")
-    try:
-        _ = fit[I](yr, grouped)
-    except error:
-        refused = String(error)
-    require_fails_with(refused, "with one_hot_features is not implemented", "YetiRank with one_hot_features")
+    _ = fit[I](yr, grouped)
+    var refused = String("")
     var ff = _cat_rest_opts("RMSE")
     ff.boost_from_average = 0
     ff.leaf_iterations = 1
