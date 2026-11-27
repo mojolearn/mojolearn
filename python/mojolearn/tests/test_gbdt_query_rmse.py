@@ -77,12 +77,28 @@ def test_categorical_ranking_accepts_separate_validation_queries(as_list):
     assert np.asarray(ranker.predict(valid)).shape == (8,)
 
 
+def test_validation_refuses_an_iterable_without_invoking_it():
+    class Callback:
+        def __iter__(self):
+            pytest.fail("eval_set called a user iterator")
+
+    X, rel, groups = _fixture(16)
+    with pytest.raises(Exception, match="eval_set"):
+        _model().fit(X, rel, group_id=groups, eval_set=Callback())
+
+
 @pytest.mark.parametrize("loss", ["lambdarank", "rank_xendcg"])
 def test_lightgbm_objectives_require_query_ids_and_integer_grades(loss):
     X, rel, groups = _fixture(16)
     ranker = _model(loss=loss, n_estimators=1)
     with pytest.raises(Exception, match="require group_id"):
         ranker.fit(X, rel)
+    with pytest.raises(Exception, match="eval_set"):
+        ranker.fit(X, rel, group_id=groups, eval_set=(X, rel))
+    cat_x = X.copy()
+    cat_x[:, 0] = (cat_x[:, 0] > 0).astype(np.float32)
+    with pytest.raises(Exception, match="numeric features"):
+        _model(loss=loss, cat_features=[0]).fit(cat_x, rel, group_id=groups)
     for bad_grade in (-1, 0.5, 31):
         invalid = rel.copy()
         invalid[0] = bad_grade
