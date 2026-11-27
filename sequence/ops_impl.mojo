@@ -10,6 +10,7 @@ from std.memory import bitcast, unsafe_memcpy
 from sequence.perf3_seq_resident_words import seq_resident_words
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_sqrt
 from sequence.exec_trait import Exec
+from sequence.lengths import check_recurrent_lengths
 from sequence.ops import OP_THETA_FORECAST
 from sequence.prophet_prep import prophet_features_on
 from sequence.ops import OP_GEMM, SEQ_FAST_VAR_ONECOPY, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
@@ -115,11 +116,7 @@ def rnn_lengths_of(addr: Int, N: Int, T: Int, operation: String) raises -> Optio
     if addr == 0:
         return None
     var lens = fptr(addr, "lengths")
-    for i in range(N):  # admission: one comparison per row on the host, before any launch
-        var v = lens.unsafe_load(i)
-        if v != v or v < Float32(1.0) or v > Float32(T) or Float32(Int(v)) != v:
-            raise Error("ValueError: " + operation + ": every length must be a whole number from 1 to the "
-                        + "sequence length " + String(T))
+    check_recurrent_lengths(lens, N, T, operation)
     return lens
 
 

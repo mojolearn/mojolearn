@@ -476,8 +476,9 @@ class LSTMRegressor(_RecurrentRegressor):
     `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
     with round-to-nearest-even; values outside float32's range are refused). `y` is (n_samples,) or (n_samples, n_outputs).
 
-    Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float16 or bfloat16 data.
+    Variable-length sequences take ``lengths=`` in every method. For projected LSTMs,
+    use ``Sequential.lstm(proj_size=...)`` or ``ops.Session.lstm(weight_hr=...)``.
+    This estimator uses unprojected cells. Float16 and bfloat16 inputs are unsupported.
 
     Parameters
     ----------
@@ -613,8 +614,9 @@ class LSTMClassifier(_RecurrentClassifier):
     `X` has shape (n_samples, n_timesteps, n_features) and is float32 (float64 inputs are converted to float32 once,
     with round-to-nearest-even; values outside float32's range are refused). `y` holds class labels (at least two classes).
 
-    Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
-    and float16 or bfloat16 data.
+    Variable-length sequences take ``lengths=`` in every method. For projected LSTMs,
+    use ``Sequential.lstm(proj_size=...)`` or ``ops.Session.lstm(weight_hr=...)``.
+    This estimator uses unprojected cells. Float16 and bfloat16 inputs are unsupported.
 
     Parameters
     ----------

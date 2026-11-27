@@ -1017,7 +1017,7 @@ class Session:
         return _SESSION_CALL(self, "lm_head_loss", (hidden, weight, codes))
 
     def lstm(self, x, weight_ih, weight_hh, bias_ih, bias_hh, h_0=None, c_0=None, lengths=None,
-             reverse=False, return_state=False):
+             reverse=False, return_state=False, *, weight_hr=None):
         """One LSTM layer over a whole sequence; returns every hidden state.
 
         ``x`` is ``(steps, batch, inputs)``, time first, as
@@ -1035,8 +1035,10 @@ class Session:
         h_0, c_0 : tensor or None, default None
             The initial hidden and cell states, each ``(batch, hidden)``
             (PyTorch's ``(1, batch, hidden)`` for one layer is accepted
-            too). None starts that state at zero. They are values: no
-            gradient reaches them.
+            too). None starts that state at zero. For an unprojected LSTM
+            these states are constants. With ``weight_hr``, the initial
+            hidden state has width ``proj_size`` and the initial cell state
+            has width ``hidden_size``. Gradients reach both initial states.
         lengths : tensor or None, default None
             One length per sequence (``batch`` values, each from 1 to
             ``steps``) for a batch of padded sequences. The steps of a
@@ -1070,11 +1072,23 @@ class Session:
             for x_t in steps:
                 y, h, c = s.lstm(x_t, w_ih, w_hh, b_ih, b_hh, h_0=h, c_0=c, return_state=True)
 
-        Each step gives the same bits as the whole sequence in one call
-        when ``inputs`` is at most 64.
+        For a projected LSTM pass ``weight_hr`` shaped ``(proj_size, hidden_size)``,
+        with ``0 < proj_size < hidden_size``. The recurrent weight has shape
+        ``(4 * hidden_size, proj_size)``. The layer projects the hidden state
+        before feeding it to the next step. Outputs and hidden states have
+        width ``proj_size``, and cell states keep width ``hidden_size``.
+        Both returned states carry gradients in a recording session.
+        When lengths are supplied on a GPU, their range and integrality are
+        checked on device. Session reads one status word before each projected
+        sequence, including on replay, since lengths may be device-computed.
+        The recurrent steps need no host synchronization.
+
+        Projected layers use the same per-step products for a single step
+        and a whole sequence. For unprojected layers the step and sequence
+        paths agree bit for bit when ``inputs`` is at most 64.
         """
         return _SESSION_CALL(self, "lstm", (x, weight_ih, weight_hh, bias_ih, bias_hh, h_0, c_0, lengths,
-                                            reverse, return_state))
+                                            reverse, return_state, weight_hr))
 
     def gru(self, x, weight_ih, weight_hh, bias_ih, bias_hh, h_0=None, lengths=None, reverse=False,
             return_state=False):

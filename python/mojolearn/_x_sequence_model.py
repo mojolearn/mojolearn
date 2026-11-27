@@ -41,7 +41,7 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "group_norm": 54, "instance_norm1d": 55, "instance_norm2d": 55,
           # nn-norms end
           # nn-losses-2 begin
-          "log_softmax": 77,
+          "log_softmax": 77, "projected_lstm": 78,
           # nn-losses-2 end
           # nn-conv3d begin
           "conv3d": 73, "max_pool3d": 74, "avg_pool3d": 75, "adaptive_avg_pool3d": 76,
@@ -184,7 +184,7 @@ class Sequential(_CheckMixin):
             ``'residual_block'``, ``'parallel'``, ``'gated'``, ``'silu'``,
             ``'gelu'``, ``'softplus'``, ``'rms_norm'``, ``'rotary'``,
             ``'multiply'``, ``'narrow'``, ``'embedding'``, ``'attention'``,
-            ``'lstm'``, ``'gru'``, ``'rnn'``, ``'batch_norm1d'``,
+            ``'lstm'``, ``'projected_lstm'`` (LSTM with ``proj_size``), ``'gru'``, ``'rnn'``, ``'batch_norm1d'``,
             ``'batch_norm2d'``, ``'selective_scan'``, ``'ssd_scan'``,
             ``'trapezoid_scan'``, ``'lm_head'``,
             ``'multihead_attention'``, ``'positional_encoding'``,
@@ -784,7 +784,7 @@ class Sequential(_CheckMixin):
         """
         return _SEQUENTIAL_ENTRY(self, "add", ("attention", (heads, kv_heads, rotary, theta, window, causal), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
-    def lstm(self, hidden_size, num_layers=1, *, bidirectional=False, dropout=0.0, output="sequence"):
+    def lstm(self, hidden_size, num_layers=1, *, bidirectional=False, dropout=0.0, output="sequence", proj_size=0):
         """Append an LSTM over ``(length, features)`` samples from a zero
         state, as PyTorch's ``nn.LSTM``: the same weight layout, gate order
         and initialization (every tensor uniform in
@@ -832,8 +832,11 @@ class Sequential(_CheckMixin):
                      .flatten().linear(2)
                      .compile(loss="cross_entropy"))
             model.fit(X, y, lengths=lengths)
+        With ``0 < proj_size < hidden_size`` each step projects its hidden
+        state before the next step. The output has ``proj_size`` features
+        per direction. The cell state keeps ``hidden_size`` features.
         """
-        return _SEQUENTIAL_ENTRY(self, "add", ("lstm", (hidden_size, num_layers, bidirectional, dropout, output), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "add", ("lstm", (hidden_size, num_layers, bidirectional, dropout, output, proj_size), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def gru(self, hidden_size, num_layers=1, *, bidirectional=False, dropout=0.0, output="sequence"):
         """Append a GRU over ``(length, features)`` samples from a zero
@@ -2302,7 +2305,7 @@ _SEQUENTIAL_CONTEXT = {
                     "", "", "", "",                                                               # 68..71 unused
                     "positional_encoding",                                                        # 72 nn-attention
                     "conv3d", "max_pool3d", "avg_pool3d", "adaptive_avg_pool3d",                  # 73..76 nn-conv3d
-                    "log_softmax",                                                                # 77 nn-losses-2
+                    "log_softmax", "projected_lstm",                                              # 77..78
                     ),
 }
 # nn-conv3d begin

@@ -36,6 +36,7 @@ def _device_values(device, expected):
 # save_checkpoint -> from_checkpoint, export -> load). tools/block_tables_check.py refuses a build whose layer code
 # has no entry here: a lane that adds a code adds its minimal constructor here.
 SEQUENTIAL_LAYER_FIXTURES={
+    'projected_lstm':((3,2),lambda m,S:m.lstm(3,proj_size=2)),
     'linear':((4,),lambda m,S:m.linear(3)),
     'layer_norm':((4,),lambda m,S:m.linear(4).layer_norm()),
     'conv2d':((1,2,2),lambda m,S:m.conv2d(1,1)),
