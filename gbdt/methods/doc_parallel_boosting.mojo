@@ -169,6 +169,7 @@ from std.memory import bitcast, unsafe_memcpy
 from max.gpu import block_dim, block_idx, thread_idx
 from gbdt.methods.cursor_rescale import rescaled_leaf
 from checks.soft_f64 import sf64_div, sf64_from_f32, sf64_from_int, sf64_neg, sf64_to_f32
+from gbdt.targets.heldout_loss_bits import heldout_loss_bits
 from gbdt.methods.kernel.two_level_leaves import (
     TL_BLOCK,
     TL_GRID,
@@ -698,21 +699,16 @@ def _test_loss_div_kernel(
     fv: MutPointer[Float32, MutAnyOrigin],
     pending_in: Int32,
     denominator_bits: UInt64,
+    ranking: Int32,
     losses: MutPointer[UInt64, MutAnyOrigin],
 ):
-    """One thread a pending slot: `-double(fv[j]) / test_weight` in
-    soft-float64 (`checks/soft_f64.mojo`: negation flips the sign bit, the
-    divide is correctly rounded), the bits of the host expression it
-    replaces, written as double bit patterns."""
+    """One thread a pending slot: `_test_loss`'s host expression in
+    soft-float64 (gbdt/targets/heldout_loss_bits.mojo: `1 - NDCG` for the
+    LightGBM ranking objectives, else `-double(fv[j]) / test_weight`),
+    written as double bit patterns."""
     var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if j < Int(pending_in):
-        losses.unsafe_store(
-            j,
-            sf64_div(
-                sf64_neg(sf64_from_f32(fv.unsafe_load(j))),
-                denominator_bits,
-            ),
-        )
+        losses.unsafe_store(j, heldout_loss_bits(fv.unsafe_load(j), denominator_bits, ranking != 0))
 
 
 # TOMBSTONE: MOJOLEARN_GBDT_EVAL_FUSED (NEUTRAL) `_test_loss_flush` deleted 2026-11-15 by lane/expdel-05-trees; code
@@ -724,12 +720,13 @@ def _heldout_loss_bits_gated_kernel(
     gate: MutPointer[Int32, MutAnyOrigin],
     fv: MutPointer[Float32, MutAnyOrigin],
     denominator_bits: UInt64,
+    ranking: Int32,
     losses: MutPointer[UInt64, MutAnyOrigin],
 ):
     """`_test_loss_div_kernel` for one slot, behind the executor gate."""
     if gate.unsafe_load(0) != Int32(0):
         return
-    _test_loss_div_kernel(fv, Int32(1), denominator_bits, losses)
+    _test_loss_div_kernel(fv, Int32(1), denominator_bits, ranking, losses)
 
 
 def tree_op_heldout_loss(
@@ -747,7 +744,7 @@ def tree_op_heldout_loss(
     """Tree op TREE_OP_HELDOUT_LOSS (gbdt/tree_ops.mojo, lane
     t1-tree-builder-ops): the held-out loss of round `it` (1-based) as a
     program value. `_test_loss`'s launches (same target kernel, same fold
-    into `test.fv[0]`), then `-double(fv) / test_weight` in soft float64
+    into `test.fv[0]`), then `1 - NDCG` (ranking) or `-double(fv) / test_weight` in soft float64
     (`_test_loss_div_kernel`: the bits of `_test_loss`'s host expression)
     stored as `losses[it - 1]`, a binary64 bit pattern. The store is behind
     the gate, so the history past the stopping round is never written;
@@ -759,7 +756,7 @@ def tree_op_heldout_loss(
     )
     ctx.enqueue_function[_heldout_loss_bits_gated_kernel](  # small-launch(one word): the round's loss
         gate.unsafe_ptr(), test.fv.unsafe_ptr(), bitcast[DType.uint64](test.loss_weight),
-        losses.unsafe_ptr() + (it - 1),
+        Int32(1 if is_lightgbm_ranking(objective) else 0), losses.unsafe_ptr() + (it - 1),
         grid_dim=(1, 1, 1), block_dim=(64, 1, 1),
     )
 

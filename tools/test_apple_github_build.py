@@ -132,5 +132,46 @@ class Wiring(unittest.TestCase):
             self.assertTrue(need in rc.STEPS or need in skipped, need)
 
 
+class RunnerLanes(unittest.TestCase):
+    """0.9.0 review: a red Apple-lanes smoke on the runner fails macos-build unless the runner reports its Metal
+    unusable."""
+
+    def _verdict(self, rec, wheel_bytes=b"wheel"):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            wheel = tmp / "mojolearn-0.9.0-cp312-cp312-macosx_15_0_arm64.whl"
+            wheel.write_bytes(wheel_bytes)
+            if rec is not None:
+                d = tmp / "out" / "apple-smoke" / "apple-lanes"
+                d.mkdir(parents=True)
+                rec = dict(rec)
+                rec.setdefault("wheel_sha256", agb.sha256(wheel))
+                (d / "apple-lanes.json").write_text(json.dumps(rec))
+            return agb.runner_lanes_verdict(tmp / "out", wheel)
+
+    def test_passed_on_usable_metal_passes(self):
+        self.assertIn("PASSED", self._verdict(dict(status="PASSED", metal_usable=True, lanes=["a"])))
+
+    def test_failed_on_usable_metal_fails_the_build(self):
+        with self.assertRaises(SystemExit):
+            self._verdict(dict(status="FAILED", metal_usable=True, lanes=["a"]))
+
+    def test_unusable_metal_passes_only_when_reported(self):
+        self.assertIn("unusable", self._verdict(dict(status="NO-METAL", metal_usable=False, lanes=["a"])))
+        self.assertIn("unusable", self._verdict(dict(status="PASSED-NO-GPU", metal_usable=False, lanes=["a"])))
+        with self.assertRaises(SystemExit):
+            self._verdict(dict(status="NO-METAL", lanes=["a"]))  # metal_usable not reported
+
+    def test_missing_or_foreign_record_fails(self):
+        with self.assertRaises(SystemExit):
+            self._verdict(None)
+        with self.assertRaises(SystemExit):
+            self._verdict(dict(status="PASSED", metal_usable=True, wheel_sha256="0" * 64))
+
+    def test_run_reads_the_verdict(self):
+        import inspect
+        self.assertIn("runner_lanes_verdict(out, wheels[0])", inspect.getsource(agb.cmd_run))
+
+
 if __name__ == "__main__":
     unittest.main()

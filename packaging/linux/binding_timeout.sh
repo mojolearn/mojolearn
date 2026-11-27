@@ -54,7 +54,10 @@ merged_timeout_seconds() {
 # its log, and after RELEASE_BINDING_STALL_SECONDS (default 240; 0 turns it
 # off) of CPU gaining under 0.5 s and no new log output the build is stopped,
 # logged as STALLED and returns 125, so the leg fails by name in minutes. Not
-# MOJOLEARN_* for the same reason as the bounds (bincache key).
+# MOJOLEARN_* for the same reason as the bounds (bincache key). Only the
+# compiler processes of the tree are timed (compile_watch.COMPILER_NAMES; more
+# through RELEASE_STALL_COMPILERS): a slow cache transfer or the macOS packer
+# at flat CPU, with no compiler live, is never STALLED (0.9.0 review).
 _BINDING_TIMEOUT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 binding_stall_seconds() {
   local t="${RELEASE_BINDING_STALL_SECONDS:-240}"
