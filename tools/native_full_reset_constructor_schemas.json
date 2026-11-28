@@ -2993,6 +2993,101 @@
       ]
     },
     {
+      "public": "mojolearn.DiffusionMap",
+      "status": "source-verified-field-only",
+      "writes": [
+        {
+          "field": "n_comps",
+          "value": {
+            "parameter": "n_comps"
+          },
+          "source": "python/mojolearn/_spectral_impl.py:815"
+        },
+        {
+          "field": "random_state",
+          "value": {
+            "parameter": "random_state"
+          },
+          "source": "python/mojolearn/_spectral_impl.py:815"
+        }
+      ],
+      "trace": [
+        "python/mojolearn/_spectral_impl.py:815"
+      ],
+      "constructor": "python/mojolearn/_spectral_impl.py:815",
+      "signature_source": "def __init__(self, n_comps=15, *, random_state=0)",
+      "parameters": [
+        "n_comps",
+        "random_state"
+      ],
+      "constructor_ast_sha256": "3ac4877cf17967f4e5e65237e67327bfbdbe2a684126aa1fb2bcd454504d96a5",
+      "field_order": [
+        "n_comps",
+        "random_state"
+      ],
+      "final_fields": {
+        "n_comps": {
+          "parameter": "n_comps"
+        },
+        "random_state": {
+          "parameter": "random_state"
+        }
+      },
+      "signature_defaults": {
+        "n_comps": "15",
+        "random_state": "0"
+      },
+      "numeric_mode_injection": false,
+      "module": "mojolearn._spectral_impl",
+      "declared_class": "DiffusionMap",
+      "source_functions": [
+        {
+          "path": "python/mojolearn/_spectral_impl.py",
+          "name": "__init__",
+          "line": 815,
+          "ast_sha256": "3ac4877cf17967f4e5e65237e67327bfbdbe2a684126aa1fb2bcd454504d96a5"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._spectral_impl",
+          "name": "DiffusionMap",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": [
+            "_mojolearn_native_public = True"
+          ]
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
+      ]
+    },
+    {
       "public": "mojolearn.ElasticNet",
       "status": "source-verified-field-only",
       "writes": [
@@ -13039,6 +13134,132 @@
         {
           "module": "mojolearn._expansion_trees",
           "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
+      ]
+    },
+    {
+      "public": "mojolearn.PAGA",
+      "status": "source-verified-field-only",
+      "writes": [
+        {
+          "field": "model",
+          "value": {
+            "parameter": "model"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:2349"
+        },
+        {
+          "field": "numeric_mode",
+          "value": {
+            "parameter": "numeric_mode"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:2349"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:2349"
+        }
+      ],
+      "trace": [
+        "python/mojolearn/_expansion_neighbors.py:2349"
+      ],
+      "constructor": "python/mojolearn/_expansion_neighbors.py:2349",
+      "signature_source": "def __init__(self, model='v1.2', *, numeric_mode=None, device=None)",
+      "parameters": [
+        "model",
+        "numeric_mode",
+        "device"
+      ],
+      "constructor_ast_sha256": "aaaa0411dd689b8bc9c7834f4515b222a581b1c4670d4086ce231c47ec426b3a",
+      "field_order": [
+        "model",
+        "numeric_mode",
+        "device"
+      ],
+      "final_fields": {
+        "model": {
+          "parameter": "model"
+        },
+        "numeric_mode": {
+          "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
+        }
+      },
+      "signature_defaults": {
+        "model": "'v1.2'",
+        "numeric_mode": "None",
+        "device": "None"
+      },
+      "numeric_mode_injection": false,
+      "module": "mojolearn._expansion_neighbors",
+      "declared_class": "PAGA",
+      "source_functions": [
+        {
+          "path": "python/mojolearn/_expansion_neighbors.py",
+          "name": "__init__",
+          "line": 2349,
+          "ast_sha256": "aaaa0411dd689b8bc9c7834f4515b222a581b1c4670d4086ce231c47ec426b3a"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "PAGA",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": [
+            "_mojolearn_native_public = True"
+          ]
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
           "bases": [
             "NumericModeMixin"
           ],
