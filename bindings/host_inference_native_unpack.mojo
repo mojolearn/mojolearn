@@ -29,7 +29,7 @@ from bindings.host_inference_state_unpack import host_inference_state
 from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.classical_arrays_door import classical_input, classical_address, classical_is_f32, classical_is_array, classical_c_order, classical_kind
 from bindings.host_array_native_pack import host_archive_typed
-from bindings.host_tree_native_door import host_tree_input, host_tree_scalar
+from bindings.host_input_native_door import host_tree_input, host_tree_scalar
 from core.host_tree_impl import host_tree_column_copy
 from core.host_inference_impl import host_inference_finite, host_inference_raw_finite
 from bindings.py_optional import py_present

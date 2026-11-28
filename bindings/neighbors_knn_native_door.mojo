@@ -87,7 +87,7 @@ from bindings.device_rows_store_door import door_rows_store
 from bindings.device_rows_door_run import DoorRowsStore
 from bindings.mcls_common_unpack import mc_is_integer_labels, mc_dtype_name
 from bindings.mcls_cluster_door import mcls_cluster_operation
-from bindings.host_archive_native_door import host_archive_rbc_metric_object
+from bindings.neighbors_metric_refusals_door import host_archive_rbc_metric_object
 from core.shared_slot import SharedSlot
 # RUN (typed, no Python): the checks, refusal wording, host scans and copies.
 from neighbors.neighbors_knn_run import (

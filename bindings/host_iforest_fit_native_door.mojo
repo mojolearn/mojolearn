@@ -7,7 +7,7 @@ from bindings.classical_attributes_door import classical_connect_numpy, classica
 from bindings.classical_arrays_door import classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind, classical_f64
 from bindings.classical_pandas_door import classical_admit_value, _pd_type_fields
 from bindings.classical_validate_unpack import RESHAPE_HINT
-from bindings.host_tree_native_door import host_tree_constructor_fields
+from bindings.host_input_native_door import host_tree_constructor_fields
 from bindings.host_kde_fit_native_door import _kde_prepare, _kde_cast, _kde_y, _kde_shape, _kde_fit_mode
 from bindings.host_kde_native_pack import _kde_option_value
 from bindings.host_inference_scalars_door import host_inference_scalar
