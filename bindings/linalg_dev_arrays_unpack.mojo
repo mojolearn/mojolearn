@@ -18,7 +18,7 @@ conversions.
 """
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_type, py_fields, py_get, py_item, py_setitem
-from bindings.optimizer_device_native_door import device_entries, device_shape, device_allocate, device_set, shape_count
+from bindings.optimizer_device_array_door import device_entries, device_shape, device_allocate, device_set, shape_count
 from bindings.optimizer_keys_unpack import optimizer_keys
 from bindings.linalg_keys_unpack import linalg_keys
 from bindings.native_loaded_module_door import native_loaded_module

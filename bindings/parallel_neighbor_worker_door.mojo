@@ -26,7 +26,7 @@ from ivf.ivf_query_run import IVF_NO_HANDLE, IvfSearchRequest
 from bindings.parallel_shard_common_door import shard_model, shard_rows, shard_dtype
 from bindings.parallel_shard_common_run import shard_item
 from bindings.arena_materialize_native_door import arena_ragged_rows
-from bindings.host_archive_native_door import host_archive_rbc_metric_object
+from bindings.neighbors_metric_refusals_door import host_archive_rbc_metric_object
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.neighbors_knn_native_door import (
     _nn_fit, _check_metric_input, _report, knn_release,

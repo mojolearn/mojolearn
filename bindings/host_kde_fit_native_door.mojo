@@ -13,7 +13,7 @@ from bindings.classical_validate_unpack import RESHAPE_HINT
 from bindings.classical_warnings_unpack import classical_warning, _warning_category, COLUMN_WARNING
 from bindings.sequential_admission_door import _ordinary_torch, _one_of
 from bindings.native_torch_admission_door import native_torch_numpy
-from bindings.host_tree_native_door import host_tree_constructor_fields
+from bindings.host_input_native_door import host_tree_constructor_fields
 from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense, _sparse_fields
 from bindings.host_array_native_pack import host_archive_typed
 from bindings.host_inference_scalars_door import host_inference_scalar

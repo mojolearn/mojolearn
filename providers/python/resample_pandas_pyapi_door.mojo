@@ -9,7 +9,7 @@ from bindings.py_cpython_table import cpython_table
 from std.memory import bitcast, unsafe_memcpy
 from std.sys import size_of
 from std.sys.info import CompilationTarget
-from sequence.sequence_string_storage_run import sequence_storage_image, sequence_string_nan_raw
+from core.sequence_string_storage_run import sequence_storage_image, sequence_string_nan_raw
 from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.arena_materialize_native_door import _address
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem

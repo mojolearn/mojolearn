@@ -38,7 +38,7 @@ every target), so a stride that is not a multiple of the item size (a field
 of a structured array) reads the right bytes too; only the words the item
 covers are read, never one past the span."""
 from std.memory import bitcast
-from sequence.ops import FP
+from core.f32_pointer import FP
 
 comptime CAST_KIND_UNSIGNED = 0
 comptime CAST_KIND_SIGNED = 1

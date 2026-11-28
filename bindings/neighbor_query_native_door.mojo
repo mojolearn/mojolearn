@@ -34,7 +34,7 @@ from bindings.neighbors_ann_query_native_door import ann_pq_materialize
 from bindings.parallel_neighbor_worker_door import neighbor_kneighbors, _radius, neighbor_radius_rows, _i32_vector, _flag
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.parallel_public_result_door import parallel_public_result
-from bindings.scaler_lifecycle_native_door import _outside
+from bindings.public_result_door import _outside
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
 from bindings.py_optional import py_present
 from providers.python.estimator_binding_pyapi_door import estimator_binding_routed

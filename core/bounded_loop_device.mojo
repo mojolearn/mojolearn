@@ -13,7 +13,7 @@
 # data, so the bits are the step ops' alone.
 from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from autograd.program_loop import (
+from core.bounded_loop import (
     LOOP_DONE, LOOP_STOP_ITER, LOOP_ITER, LOOP_STOPPED, LOOP_BAD, LOOP_GATE, LOOP_WORDS, EXECUTOR_TIMERS, LoopTimers,
     LOOP_FIT_BEST, LOOP_FIT_STALL,
 )

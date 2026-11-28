@@ -11,7 +11,7 @@ binding (lane thin-core, 2026-10-21: a pure move, no bit change).
 from std.math import fma, isfinite, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from sequence.schedule import fill_epoch_order, splitmix64
+from core.epoch_schedule import fill_epoch_order, splitmix64
 from checks.numerics import portable_cosf, portable_log64
 from metrics.checks.pinned_sum import canonicalize_nan
 

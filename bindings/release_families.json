@@ -135,8 +135,7 @@
    "_mojolearn_runtime_manifold_host"
   ],
   "tokenizer": [
-   "_mojolearn_x_tokenizer",
-   "_mojolearn_runtime_catalog_host"
+   "_mojolearn_x_tokenizer"
   ],
   "neural": [
    "_mojolearn_training",
@@ -158,7 +157,8 @@
    "_mojolearn_runtime_neural_host",
    "_mojolearn_runtime_sequential_host",
    "_mojolearn_runtime_xseq_host",
-   "_mojolearn_runtime_byte_trainer_host"
+   "_mojolearn_runtime_byte_trainer_host",
+   "_mojolearn_runtime_catalog_host"
   ]
  },
  "lanes": {},

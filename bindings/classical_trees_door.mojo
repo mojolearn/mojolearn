@@ -25,7 +25,7 @@ from bindings.host_density_archive_native_door import host_density_save
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_attributes_door import classical_connect_numpy, classical_getattribute
-from bindings.host_tree_native_door import host_tree_constructor_fields
+from bindings.host_input_native_door import host_tree_constructor_fields
 from bindings.host_density_hash_native_pack import (
     _host_fields_hash,
 )

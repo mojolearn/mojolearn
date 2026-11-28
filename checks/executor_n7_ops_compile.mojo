@@ -16,7 +16,7 @@ from core.device_zero import enqueue_fill
 from gbdt.sort_ops import SortScratch, sort_op_f32, sort_op_gather_rows_f32
 from gbdt.sort_ops_host import sort_op_f32_host
 from core.step_gate import step_gate_open_word
-from autograd.program_loop_device import LoopRegisters
+from core.bounded_loop_device import LoopRegisters
 from x_decomp.eigh_ops import eigh_op_dense, eigh_op_status_joins_loop, eigh_op_tridiag
 from x_decomp.eigh_ops_host import eigh_op_dense_host, eigh_op_tridiag_host
 

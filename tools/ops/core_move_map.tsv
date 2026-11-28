@@ -591,3 +591,9 @@ core/xneighbors_member.mojo	stay	-	cluster,trees,prep,shared	cluster	shared, pro
 core/xseq_entry_table.mojo	stay	-	neural,prep,trees,linear,decomp,shared	prep,neural,linear,decomp	shared, proved by neural:_mojolearn_runtime_xseq_host; prep:_mojolearn_preprocessing_host; trees:_mojolearn_runtime_trees_host
 core/xseq_marshal.mojo	stay	-	neural,shared,trees,prep	neural	shared, proved by neural:_mojolearn_runtime_xseq_host; shared:_mojolearn_runtime_parallel_host; trees:_mojolearn_runtime_trees_host | SPLIT CANDIDATE: only neural reaches it once the _mojolearn_runtime_*_host door chains are cut
 core/xtdz_coalesced.mojo	stay	-	kernel,linear,prep,shared,decomp	kernel,linear,prep,shared,decomp	shared, proved by kernel:_mojolearn_kernel_methods; linear:_mojolearn_x_linear; prep:_mojolearn_metrics
+core/bounded_loop.mojo	stay	-	cluster,decomp,linear,neural,prep,shared,tokenizer,trees	-	shared; split out of autograd/program_loop.mojo by lane thin-edges-1 (2026-11-28)
+core/bounded_loop_device.mojo	stay	-	cluster,decomp,linear,prep,shared,trees	-	shared; was autograd/program_loop_device.mojo (lane thin-edges-1, 2026-11-28)
+core/epoch_schedule.mojo	stay	-	cluster,decomp,kernel,linear,neural,prep,shared,tokenizer,trees	-	shared; was sequence/schedule.mojo (lane thin-edges-1, 2026-11-28)
+core/f32_pointer.mojo	stay	-	cluster,decomp,kernel,linear,neural,prep,shared,tokenizer,trees	-	shared; FP split out of sequence/ops.mojo by lane thin-edges-1 (2026-11-28)
+core/sequence_dtype_run.mojo	stay	-	decomp,linear,neural,prep,shared,trees	-	shared; was sequence/sequence_dtype_run.mojo (lane thin-edges-1, 2026-11-28)
+core/sequence_string_storage_run.mojo	stay	-	decomp,kernel,linear,neural,prep,shared,trees	-	shared; was sequence/sequence_string_storage_run.mojo (lane thin-edges-1, 2026-11-28)

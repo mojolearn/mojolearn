@@ -5,7 +5,7 @@ from bindings.native_loaded_module_door import native_loaded_module, NativeModul
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.host_tree_native_door import host_tree_constructor_fields
+from bindings.host_input_native_door import host_tree_constructor_fields
 from bindings.host_rest_keys_unpack import host_rest_keys
 from bindings.py_balanced import py_item
 

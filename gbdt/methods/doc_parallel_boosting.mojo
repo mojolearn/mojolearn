@@ -195,8 +195,8 @@ from checks.numerics import PIN_DETERMINISM
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 # lane t2-trees-on-executor: the boosting round as one step of the executor's
 # bounded device loop (`SymDeviceRounds`, `fit_sym_rounds_on_device`)
-from autograd.program_loop import LoopTimers
-from autograd.program_loop_device import (
+from core.bounded_loop import LoopTimers
+from core.bounded_loop_device import (
     LoopRegisters,
     LoopStep,
     bounded_device_loop,

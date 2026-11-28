@@ -7,7 +7,7 @@ from bindings.classical_attributes_door import classical_connect_numpy, classica
 from bindings.classical_arrays_door import classical_wrap_array
 from bindings.classical_pandas_door import _pd_type_fields
 from bindings.classical_archive_door import classical_archive_write
-from bindings.host_tree_native_door import host_tree_constructor_fields
+from bindings.host_input_native_door import host_tree_constructor_fields
 from bindings.host_density_constructor_native_unpack import _density_option, _density_descriptor
 from bindings.host_density_constructor_native_pack import _density_member, _density_get_slot
 from bindings.host_kde_native_pack import _kde_option_value

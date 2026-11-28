@@ -9,7 +9,7 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_is_array, classical_typed, classical_address
 from bindings.admitted_input_unpack import admit_x
 from bindings.parallel_public_result_run import parallel_result_widens, parallel_result_widen
-from bindings.scaler_lifecycle_native_door import _outside
+from bindings.public_result_door import _outside
 from bindings.sequential_inputs_door import sequential_input
 
 

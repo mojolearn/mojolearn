@@ -20,8 +20,8 @@ sum of squares)."""
 from std.math import sqrt
 from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext
-from autograd.program_loop import LoopTimers
-from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_lap
+from core.bounded_loop import LoopTimers
+from core.bounded_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_lap
 from core.step_gate import STEP_DONE, STEP_ITER, STEP_STOP_ITER
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import xd_ctx

@@ -28,6 +28,7 @@ from core.host_entry_table_calls import fh_ref, fh_vote, fh_groves_prepare, fh_g
 from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
 from bindings.py_balanced import py_item
 from bindings.gbdt_importances_pack import GBDT_IMPORTANCES_FIELD, gbdt_importances_read
+from bindings.host_input_native_door import host_tree_input, host_tree_cast, host_tree_constructor_fields, host_tree_scalar
 
 
 def host_tree_key(context: PythonObject) raises -> EntryRef:
@@ -42,50 +43,6 @@ def host_tree_key(context: PythonObject) raises -> EntryRef:
     if key is None:
         raise Error("ImportError: the CPU tree binding publishes no native entry table")
     return fh_ref(HostEntryKey(Int(py=key[0]), Int(py=key[1])))
-
-
-def host_tree_input(source: PythonObject, context: PythonObject) raises -> PythonObject:
-    classical_admit_value(source, context)
-    var prepared = source
-    if native_pandas_exact(source):
-        prepared = native_pandas_f32(source, context, False, True)
-    elif _ordinary_torch(py_type(source), context):
-        prepared = native_torch_numpy(source)
-    var value = classical_input(prepared, context, "X")
-    var cast = host_tree_cast(value, context)
-    _ = prepared^
-    return cast
-
-
-def host_tree_cast(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The 2-D checks and C-order float32 cast of host_tree_input for an input
-    the caller already admitted and viewed (classical_input), so a door that
-    inspected the view does not admit X a second time (row N279). The caller
-    keeps `value` (and whatever it views) alive through this call."""
-    var nk = host_tree_archive_keys()
-    var rank = Int(py=value.ndim)
-    if rank != 2:
-        # The product's one rank refusal (bindings/admitted_family_door.mojo:167), with the reshape hint
-        # below rank 2; smoke 9685746f95 found this door's bare "X must be 2-D". Refusal path only.
-        var hint = String(". ") + String(RESHAPE_HINT) if rank < 2 else String("")
-        raise Error("mojolearn: X must be 2-D, got " + String(rank) + "-D shape "
-                    + String(py_call(value.shape.__repr__)) + hint)
-    var rows = Int(py=value.shape[0])
-    var cols = Int(py=value.shape[1])
-    if rows < 1 or cols < 1:
-        raise Error("X is empty")
-    if rows > 2147483647 // cols:
-        raise Error("X exceeds the native Int32 indexing bound")
-    var native = classical_is_array(value, context) or Bool(py=value.dtype.isnative)
-    if classical_is_f32(value, context) and classical_c_order(value, context) and native:
-        return value
-    var output = host_archive_typed(Python.tuple(rows, cols), "<f4", py_item(context, nk[].k_output_context))
-    var item = Int(py=value.itemsize)
-    var kind = classical_cast_kind(value, item, "X", context)
-    scaler_cast(Int(py=classical_address(value)), Int(py=value.strides[0]), Int(py=value.strides[1]),
-        rows, cols, item, kind, native,
-        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(output))))
-    return output
 
 
 def host_tree_array(fields: PythonObject, name: String, dtype: String, context: PythonObject) raises -> PythonObject:
@@ -423,27 +380,6 @@ def _host_gbdt_run(fields: PythonObject, x_address: Int, rows: Int, features: In
     if wrote != rows:
         raise Error("RuntimeError: GBDT prediction did not write every input row")
     return out
-
-
-def host_tree_constructor_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    host_archive_check_layout(py_type(model), context)
-    var fields = sequential_fields(model)
-    var b = native_loaded_module("builtins")
-    var keys = py_call(py_type(Python.list()), fields.keys())
-    for i in range(len(keys)):  # driver-loop: native constructor dictionary admission
-        if py_type(keys[i]) is not b.str:
-            raise Error("TypeError: tree state names must be native strings")
-    return fields
-
-
-def host_tree_scalar(value: PythonObject, context: PythonObject) raises:
-    var nk = host_tree_archive_keys()
-    # Conversions below call only native scalar slots. Container formatting
-    # can transitively invoke element repr hooks and is not a scalar contract.
-    var b = native_loaded_module("builtins")
-    var cls = py_type(value)
-    if not _one_of(cls, Python.tuple(b.str, b.bytes, b.bytearray, b.int, b.float, b.bool, py_type(PythonObject(None)))) and not _one_of(cls, py_item(context, nk[].k_scalar_types)):
-        raise Error("TypeError: tree scalar options require native scalar values without Python conversion hooks")
 
 
 def host_tree_initialize_forest(model: PythonObject, args: PythonObject, context: PythonObject) raises:

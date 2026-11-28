@@ -7,7 +7,7 @@ and the k class words narrowed back to the caller's items, by the same
 element functions as the device kernels, so both columns give the same
 bytes."""
 from std.memory import unsafe_memcpy
-from sequence.ops import FP
+from core.f32_pointer import FP
 from core.cast_in import CastIn, cast_raw_bits, cast_w64_bits, narrow_w64
 from core.label_encode import host_unique_inverse
 

@@ -129,8 +129,8 @@ from mixture.checks.mstep import (
     gmm_status_put,
     resp_exp_kernel,
 )
-from autograd.program_loop import LoopTimers
-from autograd.program_loop_device import (
+from core.bounded_loop import LoopTimers
+from core.bounded_loop_device import (
     LoopRegisters, LoopStep, bounded_device_loop, loop_lap,
 )
 from core.step_gate import (

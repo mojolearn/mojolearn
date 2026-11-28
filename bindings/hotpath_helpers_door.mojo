@@ -43,7 +43,7 @@ from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
-from sequence.schedule import fill_epoch_order, splitmix64
+from core.epoch_schedule import fill_epoch_order, splitmix64
 from checks.numerics import portable_cosf, portable_log64
 from metrics.checks.pinned_sum import canonicalize_nan
 # lane calltable-msel: the split plan's host body, published by the
