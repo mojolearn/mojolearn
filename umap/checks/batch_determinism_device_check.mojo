@@ -30,7 +30,6 @@ def _run(
     var params = UMAPParams(
         n_neighbors=K, n_components=C, n_epochs=0, random_seed=UInt64(7),
         negative_sample_rate=negatives,
-        min_dist=Float32(0.1),
     )
     return transform(ctx, training, embedding, batch, N_TRAIN, len(order), D, params)
 

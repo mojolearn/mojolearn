@@ -84,7 +84,7 @@ def surface_x() -> List[Float32]:
     return x^
 
 
-def config(n_neighbors: Int, components: Int, epochs: Int, seed: Int, min_dist: Float64 = 0.5,
+def config(n_neighbors: Int, components: Int, epochs: Int, seed: Int, min_dist: Float64 = 0.1,
            spread: Float64 = 1.0, mix: Float64 = 1.0, rate: Float64 = 1.0, repulsion: Float64 = 1.0,
            negatives: Int = 5) -> UmapConfigWords:
     return UmapConfigWords(n_neighbors, components, epochs, min_dist, spread, mix, 1.0, seed, rate,
@@ -129,9 +129,7 @@ def same_bits(a: List[Float32], b: List[Float32]) -> Bool:
 
 def case_public_layout(entry: NativeDescriptorCall) raises:
     var x = surface_x()
-    # LAYOUT_BITS were pinned at min_dist 0.1 (the public default before lane
-    # leiden-umap-1, 2026-11-28); the case names it so the pins stay valid.
-    var cfg = config(3, 2, 4, 19, min_dist=0.1)
+    var cfg = config(3, 2, 4, 19)
     var layout = fit(entry, x, 8, 1, cfg)
     finite(layout, "public layout")
     var pins = layout_bits()

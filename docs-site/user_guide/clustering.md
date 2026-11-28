@@ -77,6 +77,13 @@ default) repeats the algorithm until the partition stops improving, and `random_
 in which nodes move. The moves run in parallel in a fixed order, so the partition is reproducible but
 can differ from leidenalg's.
 
+In a single-cell workflow the communities are usually drawn on a UMAP map. Scanpy's `tl.umap` uses
+`min_dist=0.5`, while the `UMAP` default is 0.1, so pass it to get the same spacing:
+
+```python
+embedding = mojolearn.UMAP(n_neighbors=15, min_dist=0.5).fit_transform(X)
+```
+
 ## Saving a model
 
 `KMeans`, `DBSCAN`, `HDBSCAN`, `AgglomerativeClustering`, `SpectralClustering` and `GaussianMixture`

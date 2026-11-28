@@ -68,10 +68,10 @@ class UMAP(NumericModeMixin):
         Size of the local neighborhood; at least 2 and at most ``n_samples``.
     n_components : int, default 2
         Dimension of the embedding, 1 to 32.
-    min_dist : float, default 0.5
+    min_dist : float, default 0.1
         Minimum distance between embedded points; ``0 <= min_dist <= spread``.
-        The default is Scanpy's (``sc.tl.umap``); umap-learn's is 0.1, which
-        packs clusters more tightly.
+        Scanpy's ``tl.umap`` uses 0.5, while the default here is 0.1
+        (umap-learn's and cuML's); pass ``min_dist=0.5`` to match Scanpy.
     spread : float, default 1.0
         Scale of the embedded points; must be positive.
     n_epochs : int or None, default None
@@ -169,10 +169,7 @@ class UMAP(NumericModeMixin):
     # core/member_families.mojo (MEMBER_FAMILY_MANIFOLD = 33) and core/manifold_member.mojo.
     _mojolearn_member = (33, 0)
 
-    # min_dist default 0.5 (Andrew, 2026-11-28; lane leiden-umap-1): Scanpy's
-    # `tl.umap` default, not umap-learn's 0.1. Bits of every default UMAP fit
-    # change on every column together (record owed at the next release).
-    def __init__(self, n_neighbors=15, n_components=2, *, min_dist=0.5,
+    def __init__(self, n_neighbors=15, n_components=2, *, min_dist=0.1,
                  spread=1.0, n_epochs=None, random_state=0,
                  set_op_mix_ratio=1.0, local_connectivity=1.0,
                  metric="euclidean", init="spectral", learning_rate=1.0,

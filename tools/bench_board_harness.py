@@ -125,9 +125,7 @@ CUML = {
                           cuml_args=dict(n_folds=4, seed=42, split_method="interleaved",
                                          multi_feature_mode="independent")),
     "HDBSCAN": dict(shared_args={}, cpu_args=dict(core_dist_n_jobs=-1)),
-    # min_dist and spread explicit on both arms (lane leiden-umap-1, 2026-11-28): ours now defaults to
-    # min_dist=0.5 (Scanpy's), cuML and umap-learn to 0.1; the race keeps the 0.1 it always ran.
-    "UMAP-Unsupervised": dict(shared_args=dict(n_neighbors=5, n_epochs=500, min_dist=0.1, spread=1.0)),
+    "UMAP-Unsupervised": dict(shared_args=dict(n_neighbors=5, n_epochs=500)),
     "MBSGDClassifier": dict(shared_args={}, cuml_args=dict(eta0=0.005, epochs=100)),
     "MBSGDRegressor": dict(shared_args={}, cuml_args=dict(eta0=0.005, epochs=100)),
 }

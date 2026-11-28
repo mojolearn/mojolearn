@@ -16,8 +16,7 @@ def check_estimator() raises:
     # two-dimensional public output.
     var x: List[Float32] = [0, 1, 2.2, 4, 6.5, 10, 14.5, 20]
     var params = UMAPParams(
-        n_neighbors=3, n_components=2, n_epochs=4, random_seed=UInt64(19),
-        min_dist=Float32(0.1),
+        n_neighbors=3, n_components=2, n_epochs=4, random_seed=UInt64(19)
     )
     var first = fit_transform(ctx, x, 8, 1, params)
     var second = fit_transform(ctx, x, 8, 1, params)
@@ -41,7 +40,7 @@ def check_estimator() raises:
     try:
         _ = fit_transform(
             ctx, x, 8, 1,
-            UMAPParams(n_neighbors=3, n_components=4, n_epochs=4, min_dist=Float32(0.1)),
+            UMAPParams(n_neighbors=3, n_components=4, n_epochs=4),
         )
     except:
         refused = True

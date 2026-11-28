@@ -47,7 +47,7 @@ def main() raises:
                 for c in range(components):
                     training.append(Float32((i * (c + 1)) % 7) / Float32(4))
             var before = training.copy()
-            var params = UMAPParams(n_neighbors=3, n_components=components, n_epochs=12, random_seed=UInt64(19), min_dist=Float32(0.1))
+            var params = UMAPParams(n_neighbors=3, n_components=components, n_epochs=12, random_seed=UInt64(19))
             var result = transform(ctx, x, training, queries, 10, 3, 1, params)
             var again = transform(ctx, x, training, queries, 10, 3, 1, params)
             if len(result) != 3 * components:

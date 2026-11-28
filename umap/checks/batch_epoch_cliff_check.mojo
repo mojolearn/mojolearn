@@ -112,7 +112,6 @@ def _run(
     var params = UMAPParams(
         n_neighbors=K, n_components=C, n_epochs=n_epochs, random_seed=UInt64(7),
         negative_sample_rate=negatives,
-        min_dist=Float32(0.1),
     )
     print(
         "CLIFF_RUN rows", rows, "n_epochs", n_epochs,

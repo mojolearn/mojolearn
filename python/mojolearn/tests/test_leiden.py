@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """mojolearn.Leiden at the Python API boundary (lane leiden-umap-1, 2026-11-28): the input forms it admits, its
 refusals, its parameters and the labels and attributes it returns. The kernels' numerical checks are native
-(checks/native_tests/x_neighbors_leiden_check.mojo). Also the UMAP min_dist default (0.5, Scanpy's)."""
+(checks/native_tests/x_neighbors_leiden_check.mojo)."""
 import numpy as np
 import pytest
 
@@ -127,7 +127,3 @@ def test_graph_refusals():
     with pytest.raises(ValueError):
         mojolearn.Leiden().fit(np.zeros((3, 4), np.float32))
 
-
-def test_umap_min_dist_default_is_scanpys():
-    assert mojolearn.UMAP().min_dist == 0.5
-    assert mojolearn.UMAP().get_params()["min_dist"] == 0.5

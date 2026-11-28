@@ -143,8 +143,7 @@ def main() raises:
     var ctx = DeviceContext()
     var x: List[Float32] = [0, 1, 2.2, 4, 6.5, 10, 14.5, 20]
     fit_case(ctx, x, 8, 1, UMAPParams(
-        n_neighbors=3, n_components=2, n_epochs=4, random_seed=UInt64(19),
-        min_dist=Float32(0.1),
+        n_neighbors=3, n_components=2, n_epochs=4, random_seed=UInt64(19)
     ), "8x1-2d-e4-seed19")
     var broad = List[Float32]()
     for i in range(16):
