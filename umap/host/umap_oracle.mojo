@@ -290,6 +290,7 @@ def host_umap_fuzzy_graph(
 ) raises -> SparseFuzzySimplicialGraph:
     """`sparse_fuzzy_graph_from_data`, `sparse_estimator.mojo:24-64`, with
     the device k-NN replaced by its host restatement."""
+    params.validate(n_samples)  # before the n x n_neighbors lists are sized
     var distances = List[Float32](length=n_samples * params.n_neighbors, fill=Float32(0.0))
     var indices = List[UInt32](length=n_samples * params.n_neighbors, fill=UInt32(0))
     host_umap_self_knn(x_rowmajor, n_samples, n_features, params, distances, indices)
@@ -308,6 +309,7 @@ def host_umap_neighbors_graph(
     fuzzy set into `conn`, the k-NN with self dropped into the distances CSR
     (rows split across the host's cores). Returns the connectivities' edge
     count."""
+    params.validate(n_samples)  # before the n x n_neighbors lists are sized
     var n = n_samples
     var k = params.n_neighbors
     var distances = List[Float32](length=n * k, fill=Float32(0.0))
