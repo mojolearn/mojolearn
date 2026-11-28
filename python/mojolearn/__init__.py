@@ -161,6 +161,7 @@ _LAZY_NAMES = {
     "AgglomerativeClustering": "._hierarchy_impl", "IsolationForest": "._iforest_impl",
     "ElasticNet": "._solver_impl", "Lasso": "._solver_impl",
     "SpectralClustering": "._spectral_impl", "SpectralEmbedding": "._spectral_impl",
+    "DiffusionMap": "._spectral_impl",
     "manifold": None, "umap": None, "UMAP": ".umap",
     "neural_network": None, "SmallMLPTrainer": ".neural_network",
     # The CPU inference and language-model names (cpu-gpu-cleanup c-core,

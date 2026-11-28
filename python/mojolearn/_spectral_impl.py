@@ -27,7 +27,7 @@ from . import _native_archive_bridge, _native_family_bridge
 from ._mode import ParamsMixin, available_if
 from . import _native_spectral_umap_bridge
 
-__all__ = ["SpectralClustering", "SpectralEmbedding", "spectral_embedding"]
+__all__ = ["SpectralClustering", "SpectralEmbedding", "spectral_embedding", "DiffusionMap"]
 
 #: `SpectralClustering.save`'s format tag (lane/spectral-predict,
 #: 2026-09-15): the prediction data of a `prediction_data=True` fit.
@@ -752,6 +752,119 @@ def spectral_embedding(
     return _NATIVE(None, "family_cfb_spectral_embedding", (
         SpectralEmbedding, A, n_components, affinity, random_state, n_neighbors,
         norm_laplacian, drop_first, device), _NATIVE_CONTEXT)
+
+
+# Reference: Scanpy `tl.diffmap` (`Neighbors.compute_transitions` with
+# density normalization, `Neighbors.compute_eigen` on the symmetric
+# transitions; Coifman & Lafon 2006, Haghverdi et al. 2015). The symmetric
+# transition matrix is the identity minus the normalized Laplacian of the
+# density-normalized kernel, so the eigen solver is SpectralEmbedding's
+# Laplacian and Lanczos (spectral/impl/preprocessing/detail/diffmap.mojo).
+class DiffusionMap(ParamsMixin):
+    """Diffusion map embedding of a weighted neighbor graph.
+
+    Follows Scanpy's ``tl.diffmap``: the connectivities ``W`` are
+    density-normalized (``K = Q W Q`` with ``Q`` the inverse degrees), turned
+    into the symmetric transition matrix ``T = Z K Z`` (``Z`` the inverse
+    square roots of the degrees of ``K``), and the ``n_comps`` eigenvectors of
+    ``T`` with the largest eigenvalues are the embedding. The first component
+    is the stationary one (eigenvalue 1 on a connected graph), as in Scanpy.
+    The eigenvectors come from a seeded Lanczos solver; each is determined
+    up to its sign, which ``random_state`` fixes. Pass the UMAP-style
+    connectivities of a kNN graph, as Scanpy's ``pp.neighbors`` stores them.
+
+    Parameters
+    ----------
+    n_comps : int, default 15
+        Number of eigenvectors to compute; at least 1 and fewer than the
+        number of nodes.
+    random_state : int or None, default 0
+        Seed of the Lanczos start vector, in ``[0, 2**32)``; None means 0.
+
+    Attributes
+    ----------
+    embedding_ : Array of shape (n_nodes, n_comps), float32
+        The diffusion components (Scanpy's ``X_diffmap``).
+    eigenvalues_ : Array of shape (n_comps,), float32
+        Their eigenvalues, decreasing (Scanpy's ``diffmap_evals``).
+    n_features_in_ : int
+        Number of nodes of the graph.
+
+    Notes
+    -----
+    The connectivities must be symmetric, nonnegative and finite, and must
+    not repeat a ``(row, col)`` entry; the diagonal is ignored.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).normal(size=(500, 10)).astype(np.float32)
+    >>> knn = mojolearn.NearestNeighbors(n_neighbors=15).fit(X).kneighbors(X, return_distance=False)
+    >>> W = mojolearn.shared_neighbors_graph(knn)
+    >>> dm = mojolearn.manifold.DiffusionMap(n_comps=10).fit(W)
+    >>> dm.embedding_.shape
+    (500, 10)
+    """
+
+    _mojolearn_native_public = True
+
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
+    def __init__(self, n_comps=15, *, random_state=0):
+        self.n_comps = n_comps
+        self.random_state = random_state
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _NATIVE(self, "family_cfb_spectral_vendor_used", (), _NATIVE_CONTEXT)
+
+    def fit(self, X, y=None):
+        """Compute the diffusion components of the graph.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_nodes, n_nodes) or scipy.sparse matrix
+            Symmetric weighted adjacency (connectivities) of the graph,
+            dense or any scipy.sparse format.
+        y : ignored
+
+        Returns
+        -------
+        self : DiffusionMap
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If the matrix has no nonzero entry, a negative, non-finite or
+            repeated entry, or ``n_comps`` is not below the number of nodes.
+        """
+        return _NATIVE(self, "family_cfb_dm_fit", (X, y), _NATIVE_CONTEXT)
+
+    def fit_transform(self, X, y=None):
+        """Fit to the graph and return the diffusion components.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix
+            As in ``fit``.
+        y : ignored
+
+        Returns
+        -------
+        embedding : Array of shape (n_nodes, n_comps), float32
+            Same as ``embedding_``.
+        """
+        return _NATIVE(self, "family_cfb_dm_fit_transform", (X, y), _NATIVE_CONTEXT)
 
 
 # Import-only constructor schemas; native owners preserve the public signatures.
