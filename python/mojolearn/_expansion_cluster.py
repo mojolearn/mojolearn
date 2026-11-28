@@ -30,7 +30,7 @@ from . import _native_family_bridge
 # binding selected by the shared native provider after admission.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
-__all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "AffinityPropagation", "BayesianGaussianMixture"]
+__all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "AffinityPropagation", "BayesianGaussianMixture", "Harmony"]
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
 _E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT, _E_MEANSHIFT, _E_OPTICS, _E_AFFINITY, _E_BGMM, _E_BGMM_SCORE, _E_MINIBATCH_PARTIAL = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
@@ -1160,12 +1160,152 @@ _native_family_bridge.connect_bindings("_mojolearn_x_cluster")
 from ._native_owner_lifetime import connect_owner_context as _connect_cluster_owner_context
 _connect_cluster_owner_context(_NATIVE_CONTEXT)
 
+class Harmony(_XCluster):
+    """Harmony batch integration of a cell embedding.
+
+    Follows Korsunsky et al. (2019) and harmonypy's ``run_harmony``: cells are softly clustered
+    on the unit-normalized embedding (typically PCA) with a diversity penalty that favors
+    clusters mixing every batch, then each cluster removes its batch effects from the embedding
+    by a ridge regression. The two steps repeat until the objective stops decreasing. The
+    corrected embedding is in `embedding_`; build the neighbor graph, clusters and UMAP from it.
+
+    Several batch keys (harmonypy's ``vars_use``, such as the sample and the technology) are
+    passed as a list of label arrays, one per key, in ``fit(X, [sample, tech])``; `theta` and
+    `lamb` then take one value per key, in the same order.
+
+    The clustering starts from k-means centroids (k-means++, ten initializations, seeded by
+    `random_state`). The update blocks of each clustering pass visit the cells in an order
+    drawn from `random_state`. Computation is float32.
+
+    Parameters
+    ----------
+    n_clusters : int or None, default None
+        Number of soft clusters. None uses ``min(round(n_samples / 30), 100)``, as harmonypy.
+    theta : float or list of float, default 2.0
+        Diversity penalty, one value for every batch covariate or one per covariate. 0 turns
+        the penalty off.
+    sigma : float, default 0.1
+        Width of the soft clustering; larger values give softer assignments.
+    lamb : float or list of float, default 1.0
+        Ridge penalty of the correction, one value or one per covariate. Must be positive.
+    tau : float, default 0.0
+        Protection of small batches: with ``tau > 0`` the penalty of a batch level with N
+        cells is scaled by ``1 - exp(-(N / (n_clusters * tau))**2)``.
+    block_size : float, default 0.05
+        Fraction of the cells updated together; each pass uses ``ceil(1 / block_size)``
+        blocks.
+    max_iter_harmony : int, default 10
+        Maximum number of cluster-and-correct rounds.
+    max_iter_kmeans : int, default 20
+        Maximum number of clustering iterations in a round.
+    epsilon_cluster : float, default 1e-5
+        Relative change of the objective (over a window of three iterations) that ends a
+        round's clustering.
+    epsilon_harmony : float, default 1e-4
+        Relative decrease of the objective between rounds that ends the fit.
+    random_state : int or None, default 0
+        Seed of the k-means initialization and of the update order. None is 0.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode for this estimator. None uses the process default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on the
+        CPU and 'gpu' requires a GPU installation.
+
+    Attributes
+    ----------
+    embedding_ : Array of shape (n_samples, n_features), float32
+        The batch-corrected embedding.
+    R_ : Array of shape (n_samples, n_clusters_), float32
+        Soft cluster assignment of each cell (rows sum to one).
+    cluster_centers_ : Array of shape (n_clusters_, n_features), float32
+        Unit-norm cluster centroids of the last round.
+    objective_ : list of float
+        Objective after the initialization and after each round.
+    n_iter_ : int
+        Number of rounds run.
+    converged_ : bool
+        Whether the objective converged before `max_iter_harmony` rounds.
+    n_clusters_ : int
+        Number of clusters used.
+    n_features_in_ : int
+        Number of embedding dimensions seen in `fit`.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.normal(size=(600, 20)).astype(np.float32)
+    >>> batch = rng.integers(0, 2, 600)
+    >>> X[batch == 1] += 0.5
+    >>> Z = mojolearn.Harmony(random_state=0).fit_transform(X, batch)
+    """
+    _mojolearn_device = True
+
+    def __init__(self, n_clusters=None, *, theta=2.0, sigma=0.1, lamb=1.0, tau=0.0, block_size=0.05,
+                 max_iter_harmony=10, max_iter_kmeans=20, epsilon_cluster=1e-5, epsilon_harmony=1e-4,
+                 random_state=0, numeric_mode=None, device=None):
+        self.n_clusters = n_clusters
+        self.theta = theta
+        self.sigma = sigma
+        self.lamb = lamb
+        self.tau = tau
+        self.block_size = block_size
+        self.max_iter_harmony = max_iter_harmony
+        self.max_iter_kmeans = max_iter_kmeans
+        self.epsilon_cluster = epsilon_cluster
+        self.epsilon_harmony = epsilon_harmony
+        self.random_state = random_state
+        self.numeric_mode = numeric_mode
+        self.device = device
+
+    def fit(self, X, batch):
+        """Integrate the batches of the embedding `X`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Cell embedding, such as the leading principal components, converted to float32.
+            NaN or infinity raises ValueError.
+        batch : array-like of shape (n_samples,), or list or tuple of them
+            Batch label of each cell, or one label array per batch covariate (such as
+            sample and technology) to correct several at once.
+
+        Returns
+        -------
+        self : Harmony
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If `batch` has a different length than `X`, or a parameter is out of range.
+        """
+        return _NATIVE(self, "family_cfa_harmony_fit", (None, X, batch), _NATIVE_CONTEXT)
+
+    def fit_transform(self, X, batch):
+        """Integrate the batches of `X` and return the corrected embedding.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Cell embedding, converted to float32.
+        batch : array-like of shape (n_samples,), or list or tuple of them
+            Batch label of each cell, or one label array per batch covariate.
+
+        Returns
+        -------
+        embedding : Array of shape (n_samples, n_features), float32
+            The batch-corrected embedding (`embedding_`).
+        """
+        return _NATIVE(self, "family_cfa_harmony_fit_transform", (None, X, batch), _NATIVE_CONTEXT)
+
+
 # Import-time schema only; runtime reads each admitted parameter natively.
 from inspect import signature as _cluster_signature
 _native_family_bridge.tables(
     cluster_public_parameters={cls: tuple(name for name in _cluster_signature(cls.__init__).parameters if name != "self")
                                for cls in (MiniBatchKMeans, BisectingKMeans, MeanShift, OPTICS,
-                                           AffinityPropagation, BayesianGaussianMixture)},
+                                           AffinityPropagation, BayesianGaussianMixture, Harmony)},
     cluster_public_array_parameters=("init", "seeds", "preference", "mean_prior", "covariance_prior", "metric_params"),
 )
 del _cluster_signature
@@ -1177,5 +1317,6 @@ _native_family_bridge.tables(cluster_public_replaced_fields={
     MeanShift: ('bandwidth_', 'cluster_centers_', 'labels_', 'n_features_in_', 'n_iter_'),
     OPTICS: ('cluster_hierarchy_', 'core_distances_', 'labels_', 'n_features_in_', 'ordering_', 'predecessor_', 'reachability_'),
     AffinityPropagation: ('affinity_matrix_', 'cluster_centers_', 'cluster_centers_indices_', 'labels_', 'message_diag_', 'n_features_in_', 'n_iter_'),
+    Harmony: ('R_', 'cluster_centers_', 'converged_', 'embedding_', 'n_clusters_', 'n_features_in_', 'n_iter_', 'objective_'),
     BayesianGaussianMixture: ('_full_pchol', '_log_consts', '_score_words', '_warm', 'converged_', 'covariance_prior_', 'covariances_', 'degrees_of_freedom_', 'degrees_of_freedom_prior_', 'lower_bound_', 'mean_precision_', 'mean_precision_prior_', 'mean_prior_', 'means_', 'n_features_in_', 'n_iter_', 'precisions_cholesky_', 'weight_concentration_', 'weight_concentration_prior_', 'weights_'),
 })

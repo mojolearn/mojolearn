@@ -24,6 +24,7 @@ from bindings.prep_owner_route_unpack import prep_route_context, prep_route_vend
 from providers.python.function_device_boundary_door import function_device_admit
 from bindings.prep_iterimp_native_door import prep_iterimp_call
 from bindings.prep_select_native_door import prep_rfe_call, prep_mutual_info_call
+from bindings.prep_markers_native_door import prep_rank_genes_call
 from bindings.prep_composition_lifecycle_door import composition_before, composition_after_fit
 from bindings.parallel_public_result_door import parallel_public_result
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
@@ -31,7 +32,7 @@ from bindings.prep_keys_unpack import (
     prep_keys,
     PREP_OPN_CHI2, PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_F_CLASSIF, PREP_OPN_F_REGRESSION,
     PREP_OPN_INVERSE_TRANSFORM, PREP_OPN_MUTUAL_INFO_CLASSIF, PREP_OPN_MUTUAL_INFO_REGRESSION,
-    PREP_OPN_R_REGRESSION, PREP_OPN_TRANSFORM,
+    PREP_OPN_R_REGRESSION, PREP_OPN_TRANSFORM, PREP_OPN_RANK_GENES_GROUPS,
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
@@ -202,6 +203,10 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             var at = 2 if op == PREP_OPN_F_CLASSIF or op == PREP_OPN_CHI2 else 4
             var run = _function_context(args[at], operation, context)
             result = prep_encode_scores_call(operation, args, run)
+        elif op == PREP_OPN_RANK_GENES_GROUPS:
+            # rank_genes_groups(X, groups, method, reference, tie_correct, corr_method, device)
+            var run = _function_context(args[6], operation, context)
+            result = prep_rank_genes_call(args, run)
         else:
             raise Error("unknown native prep operation")
         return result.steal_data()

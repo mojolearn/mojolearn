@@ -56,6 +56,11 @@ from x_cluster.bodies import (
 from cluster.host.kmeans_oracle import host_kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from x_cluster.ops import ClusterOps
+from x_cluster.harmony_bodies import (
+    hm_codes_cell, hm_rownorm_row, hm_count_cell, hm_scale_row, hm_eo_cell, hm_block_eo_cell, hm_block_r_cell,
+    hm_objective_row, hm_centroid_cell, hm_ridge_a_cell, hm_ridge_rhs_cell, hm_chol_block, hm_solve_cell,
+    hm_correct_cell,
+)
 from x_cluster.bgmm_device import bgmm_host_step
 from x_cluster.post_bodies import (
     FM_MIN,
@@ -540,6 +545,169 @@ struct HostOps(ClusterOps):
             exp_cell(ps, pd, t)
 
         host_cells(body, n, 30)
+
+    # ---------------------------------------------------------------- Harmony (lane sc-stats-1, 2026-11-28)
+    # The bodies of x_cluster/harmony_bodies.mojo over `host_cells`, one call per cell as the device's threads.
+
+    def hm_codes(mut self, raw: Int, offsets: Int, n: Int, c: Int, dst: Int) raises:
+        var pr_ = self._ip(raw)
+        var po = self._ip(offsets)
+        var pd = self._ip(dst)
+
+        def body(t: Int) {imm pr_, imm po, imm pd, imm n, imm c}:
+            hm_codes_cell(pr_, po, n, c, pd, t)
+
+        host_cells(body, n, 3 * c)
+
+    def hm_rownorm(mut self, src: Int, n: Int, d: Int, dst: Int) raises:
+        var ps = self._fp(src)
+        var pd = self._fp(dst)
+
+        def body(t: Int) {imm ps, imm pd, imm d}:
+            hm_rownorm_row(ps, pd, d, t)
+
+        host_cells(body, n, 4 * d)
+
+    def hm_counts(mut self, codes: Int, n: Int, c: Int, nb: Int, dst: Int) raises:
+        var pc = self._ip(codes)
+        var pd = self._fp(dst)
+
+        def body(t: Int) {imm pc, imm pd, imm n, imm c}:
+            hm_count_cell(pc, n, c, pd, t)
+
+        host_cells(body, nb, 2 * n * c)
+
+    def hm_scale(mut self, dist: Int, n: Int, k: Int, sigma: Float32, dst: Int, normalize: Bool) raises:
+        var px = self._fp(dist)
+        var pd = self._fp(dst)
+
+        def body(t: Int) {imm px, imm pd, imm k, imm sigma, imm normalize}:
+            hm_scale_row(px, k, sigma, pd, normalize, t)
+
+        host_cells(body, n, 40 * k)
+
+    def hm_eo(mut self, r: Int, codes: Int, pr: Int, n: Int, k: Int, c: Int, nb: Int, e: Int, o: Int) raises:
+        var pr_ = self._fp(r)
+        var pc = self._ip(codes)
+        var pp = self._fp(pr)
+        var pe = self._fp(e)
+        var po = self._fp(o)
+
+        def body(t: Int) {imm pr_, imm pc, imm pp, imm pe, imm po, imm n, imm k, imm c, imm nb}:
+            hm_eo_cell(pr_, pc, pp, n, k, c, nb, pe, po, t)
+
+        host_cells(body, k * nb, 3 * n * c)
+
+    def hm_block_eo(
+        mut self, r: Int, codes: Int, pr: Int, n: Int, k: Int, c: Int, nb: Int, a: Int, c0: Int, lo: Int, hi: Int,
+        sign: Float32, e: Int, o: Int,
+    ) raises:
+        var pr_ = self._fp(r)
+        var pc = self._ip(codes)
+        var pp = self._fp(pr)
+        var pe = self._fp(e)
+        var po = self._fp(o)
+
+        def body(t: Int) {imm pr_, imm pc, imm pp, imm pe, imm po, imm n, imm k, imm c, imm nb, imm a, imm c0,
+                          imm lo, imm hi, imm sign}:
+            hm_block_eo_cell(pr_, pc, pp, n, k, c, nb, a, c0, lo, hi, sign, pe, po, t)
+
+        host_cells(body, k * nb, 3 * (hi - lo) * c)
+
+    def hm_block_r(
+        mut self, sd: Int, e: Int, o: Int, codes: Int, theta: Int, n: Int, k: Int, c: Int, nb: Int, a: Int,
+        c0: Int, lo: Int, hi: Int, r: Int,
+    ) raises:
+        var ps = self._fp(sd)
+        var pe = self._fp(e)
+        var po = self._fp(o)
+        var pc = self._ip(codes)
+        var pt = self._fp(theta)
+        var pr_ = self._fp(r)
+
+        def body(t: Int) {imm ps, imm pe, imm po, imm pc, imm pt, imm pr_, imm n, imm k, imm c, imm nb, imm a,
+                          imm c0, imm lo}:
+            hm_block_r_cell(ps, pe, po, pc, pt, n, k, c, nb, a, c0, lo, pr_, t)
+
+        host_cells(body, hi - lo, 40 * k * c)
+
+    def hm_objective_cells(
+        mut self, r: Int, dist: Int, e: Int, o: Int, codes: Int, theta: Int, n: Int, k: Int, c: Int, nb: Int,
+        sigma: Float32, dst: Int,
+    ) raises:
+        var pr_ = self._fp(r)
+        var px = self._fp(dist)
+        var pe = self._fp(e)
+        var po = self._fp(o)
+        var pc = self._ip(codes)
+        var pt = self._fp(theta)
+        var pd = self._fp(dst)
+
+        def body(t: Int) {imm pr_, imm px, imm pe, imm po, imm pc, imm pt, imm pd, imm k, imm c, imm nb,
+                          imm sigma}:
+            hm_objective_row(pr_, px, pe, po, pc, pt, k, c, nb, sigma, pd, t)
+
+        host_cells(body, n, 60 * k * c)
+
+    def hm_centroids(mut self, r: Int, z: Int, n: Int, k: Int, d: Int, y: Int) raises:
+        var pr_ = self._fp(r)
+        var pz = self._fp(z)
+        var py = self._fp(y)
+
+        def body(t: Int) {imm pr_, imm pz, imm py, imm n, imm k, imm d}:
+            hm_centroid_cell(pr_, pz, n, k, d, py, t)
+
+        host_cells(body, k * d, 3 * n)
+
+    def hm_ridge(
+        mut self, r: Int, z: Int, codes: Int, lamb: Int, n: Int, k: Int, d: Int, c: Int, b1: Int, am: Int,
+        rhs: Int,
+    ) raises:
+        var pr_ = self._fp(r)
+        var pz = self._fp(z)
+        var pc = self._ip(codes)
+        var pl = self._fp(lamb)
+        var pa = self._fp(am)
+        var pb = self._fp(rhs)
+
+        def body_a(t: Int) {imm pr_, imm pc, imm pl, imm pa, imm n, imm k, imm c, imm b1}:
+            hm_ridge_a_cell(pr_, pc, pl, n, k, c, b1, pa, t)
+
+        host_cells(body_a, k * b1 * b1, 4 * n * c)
+
+        def body_b(t: Int) {imm pr_, imm pz, imm pc, imm pb, imm n, imm k, imm d, imm c, imm b1}:
+            hm_ridge_rhs_cell(pr_, pz, pc, n, k, d, c, b1, pb, t)
+
+        host_cells(body_b, k * b1 * d, 4 * n * c)
+
+    def hm_solve(mut self, am: Int, rhs: Int, k: Int, b1: Int, d: Int, w: Int) raises:
+        var pa = self._fp(am)
+        var pb = self._fp(rhs)
+        var pw = self._fp(w)
+
+        def body_c(t: Int) {imm pa, imm b1}:
+            hm_chol_block(pa, b1, t)
+
+        host_cells(body_c, k, b1 * b1 * b1)
+
+        def body_s(t: Int) {imm pa, imm pb, imm pw, imm b1, imm d}:
+            hm_solve_cell(pa, pb, b1, d, pw, t)
+
+        host_cells(body_s, k * d, 4 * b1 * b1)
+
+    def hm_correct(
+        mut self, z: Int, r: Int, w: Int, codes: Int, n: Int, k: Int, d: Int, c: Int, b1: Int, dst: Int
+    ) raises:
+        var pz = self._fp(z)
+        var pr_ = self._fp(r)
+        var pw = self._fp(w)
+        var pc = self._ip(codes)
+        var pd = self._fp(dst)
+
+        def body(t: Int) {imm pz, imm pr_, imm pw, imm pc, imm pd, imm k, imm d, imm c, imm b1}:
+            hm_correct_cell(pz, pr_, pw, pc, k, d, c, b1, pd, t)
+
+        host_cells(body, n * d, 4 * k * c)
 
     def argmax_rows(mut self, src: Int, n: Int, kc: Int, labels: Int) raises:
         var ps = self._fp(src)

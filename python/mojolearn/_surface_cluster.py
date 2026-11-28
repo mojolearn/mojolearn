@@ -25,6 +25,8 @@ FAMILIES = (
                         "x-cluster-minibatch-options", "x-cluster-bisecting-options", "x-cluster-meanshift-binned", "x-cluster-optics-metrics", "x-cluster-ap-precomputed", "x-cluster-bgmm-inits", "x-cluster-bgmm-covtypes", "x-cluster-minibatch-partial", "x-cluster-gmm-options", "x-cluster-dbscan-metrics", "x-cluster-hdbscan-epsilon", "x-cluster-kmeans-init", "x-cluster-agglo-linkages", "x-cluster-agglo-connectivity", "x-cluster-spectral-affinities",
                         # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table was admitted;
                         # RECORD OWED: the release's one verification records them
+                        # lane sc-stats-1 (2026-11-28): Harmony; RECORD OWED
+                        "x-cluster-harmony",
                         "check-generic-cluster",
                         "generic-attrs-cluster",
                         "generic-digest-cluster",
@@ -47,6 +49,7 @@ FAMILIES = (
             "x_cluster/host/host_ops.mojo", "x_cluster/bodies.mojo", "x_cluster/ops.mojo",
             "x_cluster/common.mojo", "x_cluster/entries.mojo", "x_cluster/out.mojo",
             "x_cluster/minibatch.mojo", "x_cluster/bisect.mojo", "x_cluster/meanshift.mojo", "x_cluster/optics.mojo", "x_cluster/affinity.mojo", "x_cluster/bgmm.mojo", "x_cluster/agglo.mojo", "x_cluster/spectral_assign.mojo", "x_cluster/post_bodies.mojo", "x_cluster/tree_cut.mojo",
+            "x_cluster/harmony.mojo", "x_cluster/harmony_bodies.mojo", "x_cluster/harmony_dispatch.mojo", "x_cluster/harmony_host.mojo",
         ),
         exports=(
             # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
@@ -57,6 +60,8 @@ FAMILIES = (
             "hierarchy_cluster_native_api_v1",
             # the typed BGMM transport the mixture door calls (lane thin-unpack-mixture-cluster)
             "bgmm_native_api_v1",
+            # Harmony's typed fit table (lane sc-stats-1, core/harmony_api.mojo)
+            "harmony_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the cluster expansion lane's CPU route (x_cluster/, lane/algos-cluster).",
@@ -69,6 +74,7 @@ TRAINING_LANE_NAMES = {"x-cluster-minibatch-kmeans": "MiniBatchKMeans",
                        "x-cluster-optics": "OPTICS",
                        "x-cluster-affinity-propagation": "AffinityPropagation",
                        "x-cluster-bgmm": "BayesianGaussianMixture",
+                       "x-cluster-harmony": "Harmony",
                        "x-cluster-minibatch-options": "MiniBatchKMeans options",
                        "x-cluster-bisecting-options": "BisectingKMeans options",
                        "x-cluster-meanshift-binned": "MeanShift bin seeding",

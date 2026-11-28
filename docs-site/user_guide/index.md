@@ -9,6 +9,7 @@ choosing_an_estimator
 trees
 linear
 clustering
+single_cell
 decomposition
 neighbors
 gaussian_process

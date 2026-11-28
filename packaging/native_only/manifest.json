@@ -153,6 +153,7 @@
       "AffinityPropagation",
       "BayesianGaussianMixture",
       "BisectingKMeans",
+      "Harmony",
       "MeanShift",
       "MiniBatchKMeans",
       "OPTICS"
@@ -281,7 +282,8 @@
       "f_regression",
       "mutual_info_classif",
       "mutual_info_regression",
-      "r_regression"
+      "r_regression",
+      "rank_genes_groups"
     ],
     "python/mojolearn/_expansion_sequence.py": [
       "Adafactor",
@@ -3037,6 +3039,15 @@
       "symbol_origin": "mojolearn._expansion_cluster.MeanShift"
     },
     {
+      "algorithm": "mojolearn.Harmony",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/_expansion_cluster.py",
+      "canonical_algorithm": "mojolearn.Harmony",
+      "symbol_origin": "mojolearn._expansion_cluster.Harmony"
+    },
+    {
       "algorithm": "mojolearn.MinCovDet",
       "status": "missing",
       "cases": [],
@@ -4426,6 +4437,15 @@
       "source": "python/mojolearn/_expansion_prep.py",
       "canonical_algorithm": "mojolearn.f_classif",
       "symbol_origin": "mojolearn._expansion_prep.f_classif"
+    },
+    {
+      "algorithm": "mojolearn.rank_genes_groups",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/_expansion_prep.py",
+      "canonical_algorithm": "mojolearn.rank_genes_groups",
+      "symbol_origin": "mojolearn._expansion_prep.rank_genes_groups"
     },
     {
       "algorithm": "mojolearn.f_regression",

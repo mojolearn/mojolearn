@@ -235,6 +235,7 @@ _LAZY_NAMES = {
     "MiniBatchKMeans": "._expansion_cluster", "BisectingKMeans": "._expansion_cluster",
     "MeanShift": "._expansion_cluster", "OPTICS": "._expansion_cluster",
     "AffinityPropagation": "._expansion_cluster", "BayesianGaussianMixture": "._expansion_cluster",
+    "Harmony": "._expansion_cluster",
     # _expansion_neighbors
     "LocalOutlierFactor": "._expansion_neighbors", "NearestCentroid": "._expansion_neighbors",
     "OneClassSVM": "._expansion_neighbors", "KernelPCA": "._expansion_neighbors",
@@ -259,7 +260,7 @@ _LAZY_NAMES = {
     "EllipticEnvelope": "._expansion_decomp", "AlternatingLeastSquares": "._expansion_decomp",
     # _expansion_prep
     "f_classif": "._expansion_prep", "f_regression": "._expansion_prep", "r_regression": "._expansion_prep",
-    "chi2": "._expansion_prep", "mutual_info_classif": "._expansion_prep",
+    "chi2": "._expansion_prep", "rank_genes_groups": "._expansion_prep", "mutual_info_classif": "._expansion_prep",
     "mutual_info_regression": "._expansion_prep", "RobustScaler": "._expansion_prep",
     "MaxAbsScaler": "._expansion_prep", "OrdinalEncoder": "._expansion_prep", "OneHotEncoder": "._expansion_prep",
     "TargetEncoder": "._expansion_prep", "SimpleImputer": "._expansion_prep",

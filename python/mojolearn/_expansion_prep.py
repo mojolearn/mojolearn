@@ -48,7 +48,7 @@ from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_MET
 from ._native_declared_params import ENTRY as _DECLARED_PARAMS_SET, CONTEXT as _DECLARED_PARAMS_CONTEXT
 from ._native_robust_bridge import native_method as _native_robust_method
 
-__all__ = ["f_classif", "f_regression", "r_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
+__all__ = ["f_classif", "rank_genes_groups", "f_regression", "r_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
            "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold", "SelectKBest", "RFE", "ComplementNB", "CategoricalNB"]
@@ -2746,6 +2746,69 @@ def chi2(X, y, *, device=None):
     >>> stat, p = mojolearn.chi2(X, y)
     """
     return _ENCODE_CALL(None, "chi2", (X, y, device), _ENCODE_CONTEXT)
+
+
+def rank_genes_groups(X, groups, *, method="wilcoxon", reference="rest", tie_correct=False,
+                      corr_method="benjamini-hochberg", device=None):
+    """Rank genes for characterizing groups (marker genes).
+
+    Follows Scanpy's ``tl.rank_genes_groups`` (and Seurat's ``FindMarkers``) on a cells x genes matrix:
+    for every gene, each group is tested against the rest of the cells, or against one reference
+    group. ``method="wilcoxon"`` is the Wilcoxon rank-sum test with the normal approximation, ties
+    taking their average rank; ``method="t-test"`` is Welch's t-test (unequal variances, sample
+    variances with one degree of freedom removed). The p-values are two-sided and are adjusted per
+    group over the genes. The log fold change assumes log1p-transformed expression, as Scanpy's:
+    ``log2((expm1(mean_group) + 1e-9) / (expm1(mean_rest) + 1e-9))``. Computation is float32; the
+    rank sums are exact integers.
+
+    Parameters
+    ----------
+    X : array-like or CSR matrix of shape (n_cells, n_genes)
+        Expression matrix, dense, or sparse in CSR form: any object with ``indptr``, ``indices``,
+        ``data`` and ``shape``. Another sparse format raises ValueError; convert it to CSR first.
+    groups : array-like of shape (n_cells,)
+        Group label of each cell, such as cluster labels. Groups are ordered
+        by sorted label. Every group needs at least two cells.
+    method : {'wilcoxon', 't-test'}, default 'wilcoxon'
+        Statistical test.
+    reference : 'rest' or a group label, default 'rest'
+        Compare each group with all other cells (``'rest'``), or with the cells of this group.
+        With a reference group, that group has no row in the result.
+    tie_correct : bool, default False
+        Apply the tie correction to the Wilcoxon variance (Scanpy's ``tie_correct``).
+    corr_method : {'benjamini-hochberg', 'bonferroni'}, default 'benjamini-hochberg'
+        Multiple-testing correction of the p-values, per group over the genes.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on the CPU and
+        'gpu' requires a GPU installation. Other values raise ValueError.
+
+    Returns
+    -------
+    result : dict
+        Scanpy's layout, each row sorted: ``"groups"``, the group labels, one per result row;
+        ``"names"``, an int32 array of shape (n_result_groups, n_genes) holding each group's gene
+        (column) indices by score descending, a tie going to the lower index; ``"scores"``,
+        ``"pvals"``, ``"pvals_adj"`` and ``"logfoldchanges"``, float32 arrays of the same shape in
+        that order. ``names[i, :5]`` are group ``i``'s top five markers.
+
+    Raises
+    ------
+    ValueError
+        If ``groups`` has a different length than ``X`` has rows, fewer than two labels, a group
+        with fewer than two cells, an unknown ``reference``, ``method`` or ``corr_method``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = np.log1p(rng.poisson(1.0, (600, 50))).astype(np.float32)
+    >>> groups = rng.integers(0, 3, 600)
+    >>> res = mojolearn.rank_genes_groups(X, groups, method="wilcoxon")
+    >>> res["scores"].shape
+    (3, 50)
+    """
+    return _ENCODE_CALL(None, "rank_genes_groups", (X, groups, method, reference, tie_correct, corr_method, device),
+                        _ENCODE_CONTEXT)
 
 
 def f_regression(X, y, *, center=True, force_finite=True, device=None):

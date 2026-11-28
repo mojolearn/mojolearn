@@ -137,6 +137,9 @@ def estimator_checks(recorder, public, methods):
             return X.T @ X + np.eye(X.shape[1], dtype=np.float32), None
         if name in ('GridSearchCV', 'RandomizedSearchCV'):
             return X, labels
+        if name == 'Harmony':
+            # the embedding and one batch label per row (lane sc-stats-1)
+            return X, labels
         if name in ('GradientBoosting','ExperimentalTwoLevelFeatureFreq','RFE'):return X,labels
         return X, y
 

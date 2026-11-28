@@ -26,6 +26,9 @@ comptime CFA_OPN_FAMILY_CFA_OPTICS_FIT_PREDICT = 8
 comptime CFA_OPN_FAMILY_CFA_AP_FIT = 9
 comptime CFA_OPN_FAMILY_CFA_AP_FIT_PREDICT = 10
 comptime CFA_OPN_FAMILY_CFA_HDBSCAN_FIT = 11
+# lane sc-stats-1 (2026-11-28): Harmony 12-13 (bindings/harmony_native_door.mojo)
+comptime CFA_OPN_FAMILY_CFA_HARMONY_FIT = 12
+comptime CFA_OPN_FAMILY_CFA_HARMONY_FIT_TRANSFORM = 13
 
 def operation_names_cfa(mut names: List[String], mut leaves: List[Int]):
     """Straight-line appends, once per process."""
@@ -39,6 +42,10 @@ def operation_names_cfa(mut names: List[String], mut leaves: List[Int]):
     leaves.append(CFA_OPN_FAMILY_CFA_FIT_PREDICT)
     names.append("family_cfa_fit_transform")
     leaves.append(CFA_OPN_FAMILY_CFA_FIT_TRANSFORM)
+    names.append("family_cfa_harmony_fit")
+    leaves.append(CFA_OPN_FAMILY_CFA_HARMONY_FIT)
+    names.append("family_cfa_harmony_fit_transform")
+    leaves.append(CFA_OPN_FAMILY_CFA_HARMONY_FIT_TRANSFORM)
     names.append("family_cfa_hdbscan_fit")
     leaves.append(CFA_OPN_FAMILY_CFA_HDBSCAN_FIT)
     names.append("family_cfa_mbk_fit")

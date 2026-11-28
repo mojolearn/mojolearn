@@ -15,6 +15,7 @@ from std.python.bindings import PythonModuleBuilder
 from hierarchy.cluster_descriptor_device import HIERARCHY_CLUSTER_DEVICE_API
 from x_cluster.variants_device import KMEANS_VARIANTS_DEVICE_API
 from x_cluster.centroid_fit_device import CENTROID_FIT_DEVICE_API
+from x_cluster.harmony_device import HARMONY_DEVICE_API
 from x_cluster.optics_fit_device import OPTICS_FIT_DEVICE_API
 from x_cluster.bgmm_native_device import BGMM_NATIVE_DEVICE_API
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
@@ -61,6 +62,12 @@ def bgmm_native_api_v1_binding() raises -> PythonObject:
 
 def optics_fit_native_api_v1_binding() raises -> PythonObject:
     var api = OPTICS_FIT_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def harmony_native_api_v1_binding() raises -> PythonObject:
+    # Harmony's typed fit table (core/harmony_api.mojo; lane sc-stats-1), read by bindings/harmony_native_door.mojo.
+    var api = HARMONY_DEVICE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
@@ -134,6 +141,7 @@ def build__mojolearn_x_cluster() -> PythonObject:
         m.def_function[hierarchy_cluster_native_api_v1_binding]("hierarchy_cluster_native_api_v1")
         m.def_function[kmeans_variants_native_api_v1_binding]("kmeans_variants_native_api_v1")
         m.def_function[cluster_centroid_fit_native_api_v1_binding]("cluster_centroid_fit_native_api_v1")
+        m.def_function[harmony_native_api_v1_binding]("harmony_native_api_v1")
         m.def_function[optics_fit_native_api_v1_binding]("optics_fit_native_api_v1")
         m.def_function[bgmm_native_api_v1_binding]("bgmm_native_api_v1")
         m.def_function[spectral_assign_native_api_v1_binding]("spectral_assign_native_api_v1")

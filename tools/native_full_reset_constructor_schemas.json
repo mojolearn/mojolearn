@@ -10251,6 +10251,262 @@
       ]
     },
     {
+      "public": "mojolearn.Harmony",
+      "status": "source-verified-field-only",
+      "writes": [
+        {
+          "field": "n_clusters",
+          "value": {
+            "parameter": "n_clusters"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:1240"
+        },
+        {
+          "field": "theta",
+          "value": {
+            "parameter": "theta"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:1240"
+        },
+        {
+          "field": "sigma",
+          "value": {
+            "parameter": "sigma"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:1240"
+        },
+        {
+          "field": "lamb",
+          "value": {
+            "parameter": "lamb"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:1240"
+        },
+        {
+          "field": "tau",
+          "value": {
+            "parameter": "tau"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:1240"
+        },
+        {
+          "field": "block_size",
+          "value": {
+            "parameter": "block_size"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:1240"
+        },
+        {
+          "field": "max_iter_harmony",
+          "value": {
+            "parameter": "max_iter_harmony"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:1240"
+        },
+        {
+          "field": "max_iter_kmeans",
+          "value": {
+            "parameter": "max_iter_kmeans"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:1240"
+        },
+        {
+          "field": "epsilon_cluster",
+          "value": {
+            "parameter": "epsilon_cluster"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:1240"
+        },
+        {
+          "field": "epsilon_harmony",
+          "value": {
+            "parameter": "epsilon_harmony"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:1240"
+        },
+        {
+          "field": "random_state",
+          "value": {
+            "parameter": "random_state"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:1240"
+        },
+        {
+          "field": "numeric_mode",
+          "value": {
+            "parameter": "numeric_mode"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:1240"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:1240"
+        }
+      ],
+      "trace": [
+        "python/mojolearn/_expansion_cluster.py:1240"
+      ],
+      "constructor": "python/mojolearn/_expansion_cluster.py:1240",
+      "signature_source": "def __init__(self, n_clusters=None, *, theta=2.0, sigma=0.1, lamb=1.0, tau=0.0, block_size=0.05, max_iter_harmony=10, max_iter_kmeans=20, epsilon_cluster=1e-05, epsilon_harmony=0.0001, random_state=0, numeric_mode=None, device=None)",
+      "parameters": [
+        "n_clusters",
+        "theta",
+        "sigma",
+        "lamb",
+        "tau",
+        "block_size",
+        "max_iter_harmony",
+        "max_iter_kmeans",
+        "epsilon_cluster",
+        "epsilon_harmony",
+        "random_state",
+        "numeric_mode",
+        "device"
+      ],
+      "constructor_ast_sha256": "64a580e5ec810891295ef854df4e86295b596bd0883d23905fb5f128a768f433",
+      "field_order": [
+        "n_clusters",
+        "theta",
+        "sigma",
+        "lamb",
+        "tau",
+        "block_size",
+        "max_iter_harmony",
+        "max_iter_kmeans",
+        "epsilon_cluster",
+        "epsilon_harmony",
+        "random_state",
+        "numeric_mode",
+        "device"
+      ],
+      "final_fields": {
+        "n_clusters": {
+          "parameter": "n_clusters"
+        },
+        "theta": {
+          "parameter": "theta"
+        },
+        "sigma": {
+          "parameter": "sigma"
+        },
+        "lamb": {
+          "parameter": "lamb"
+        },
+        "tau": {
+          "parameter": "tau"
+        },
+        "block_size": {
+          "parameter": "block_size"
+        },
+        "max_iter_harmony": {
+          "parameter": "max_iter_harmony"
+        },
+        "max_iter_kmeans": {
+          "parameter": "max_iter_kmeans"
+        },
+        "epsilon_cluster": {
+          "parameter": "epsilon_cluster"
+        },
+        "epsilon_harmony": {
+          "parameter": "epsilon_harmony"
+        },
+        "random_state": {
+          "parameter": "random_state"
+        },
+        "numeric_mode": {
+          "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
+        }
+      },
+      "signature_defaults": {
+        "n_clusters": "None",
+        "theta": "2.0",
+        "sigma": "0.1",
+        "lamb": "1.0",
+        "tau": "0.0",
+        "block_size": "0.05",
+        "max_iter_harmony": "10",
+        "max_iter_kmeans": "20",
+        "epsilon_cluster": "1e-05",
+        "epsilon_harmony": "0.0001",
+        "random_state": "0",
+        "numeric_mode": "None",
+        "device": "None"
+      },
+      "numeric_mode_injection": false,
+      "module": "mojolearn._expansion_cluster",
+      "declared_class": "Harmony",
+      "source_functions": [
+        {
+          "path": "python/mojolearn/_expansion_cluster.py",
+          "name": "__init__",
+          "line": 1240,
+          "ast_sha256": "64a580e5ec810891295ef854df4e86295b596bd0883d23905fb5f128a768f433"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "Harmony",
+          "bases": [
+            "_XCluster"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "_XCluster",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": [
+            "_mojolearn_native_public = True"
+          ]
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
+      ]
+    },
+    {
       "public": "mojolearn.Louvain",
       "status": "source-verified-field-only",
       "writes": [

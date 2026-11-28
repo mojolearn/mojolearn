@@ -67,6 +67,8 @@ FAMILIES = (
                         # RECORD OWED: the release's one verification records them
                         "check-generic-prep",
                         "fn-chi2",
+                        # lane sc-stats-1 (2026-11-28): rank_genes_groups; RECORD OWED
+                        "fn-rank-genes-groups",
                         "fn-f-classif",
                         "fn-f-regression",
                         "fn-mutual-info-classif",
@@ -200,6 +202,7 @@ TRAINING_LANE_NAMES = {
     # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table (RECORD OWED)
     "check-generic-prep": "estimator.check across devices for every public preprocessing class",
     "fn-chi2": "chi2 on host and device-resident inputs",
+    "fn-rank-genes-groups": "rank_genes_groups: Wilcoxon (rest, tie correction, reference group) and Welch t-test marker scores, p-values, adjusted p-values, log fold changes",
     "fn-f-classif": "f_classif on host and device-resident inputs",
     "fn-f-regression": "f_regression on host and device-resident inputs",
     "fn-mutual-info-classif": "mutual_info_classif on host and device-resident inputs",
