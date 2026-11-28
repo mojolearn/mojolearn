@@ -305,9 +305,15 @@ _batch_decl(_rows_calls("transform", sl=slice(0, 128)), "x-decomp-manifold")
 
 @lane("x-decomp-robust-cov")
 def _(ml, X, yc, yr, Xh=None):
+    # lane verify-light-1, 2026-11-28 (AGENTS.md "Verification has light fixtures"): 49.3 s a cell on the 0.9.0
+    # Apple record, every C-step of three searches paying its launches and one wait on Metal. ONE multivariate
+    # search now: the EllipticEnvelope fit IS a MinCovDet fit (its subclass), so its raw and reweighted state,
+    # support, distances and mahalanobis are the MinCovDet parts (was a second MinCovDet(random_state=0) search
+    # on the same rows at the default support; the default-support MinCovDet is generic-attrs-decomp's and
+    # check-generic-decomp's, the d = 1 default here). Rows 400 (the n <= 500 plan) and every option unchanged.
     S = np.ascontiguousarray(X[:400, :6])
-    m = ml.MinCovDet(random_state=0).fit(S)
     e = ml.EllipticEnvelope(contamination=0.05, random_state=1, support_fraction=0.7).fit(S)
+    m = e
     one = ml.MinCovDet().fit(np.ascontiguousarray(X[:300, 5:6]))
     lab = np.where(X[:128, 0] > 0, 1, -1).astype(np.int32)
     esc = np.float64([e.score(S[:128], lab), e.score(S[:128], lab, sample_weight=np.abs(X[:128, 1]) + np.float32(1))])
@@ -525,25 +531,56 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(out, first, lambda e: (e.transform(_decomp_eigh_wide(Xh, 256, 72)),))
 
 
+#: x-decomp-eigh-wide-rotation's width: the smallest n_components whose rotation eigh (n_components square)
+#: takes the tridiagonal solve, TD_MIN_N = 2 TD_NB = 64 (x_decomp/eigh_tridiag_cells.mojo).
+_decomp_rotation_nc = 64
+
+
+def _decomp_rotation_simple(A, rows, d):
+    """Test input only (lane verify-light-1, 2026-11-28): a (rows, d) matrix whose columns have DISJOINT row
+    supports and come in exact +x / -x row pairs, so every sample covariance off the diagonal is a sum of exact
+    zeros minus a column-mean product that the pairs hold at rounding level. The principal axes, so the
+    unrotated FactorAnalysis loadings, are then the coordinate axes (simple structure), varimax's optimum is the
+    start, and the rotation's stopping test (x_decomp/rotation_dev.mojo: the singular-value sum stops growing by
+    a relative 1e-6) ends it after its second step instead of running toward _ROT_MAX_ITER = 100
+    (x_decomp/fa_owner.mojo:36). Row r holds column (r // 2) % d; its magnitude is 16 (1 + j / 64)(1 + fmod(|v|,
+    1)) for the fixture's own value v at flat offset r // 2, so each fixture kind hands different bytes, the
+    column variances are distinct (the 1 + j / 64 ladder: no exactly repeated eigenvalue even on `ties`, whose
+    fmod is 0) and above the unit noise start, and the spread of A^T A stays well inside float32 (column scales
+    within 4.4x, so its eigenvalues within about 1.4e5). Every step is one IEEE float32 operation (fmod and the power-of-two and j / 64 factors are exact), so
+    every box builds the same bytes."""
+    flat = np.ascontiguousarray(A, dtype=np.float32).reshape(-1)
+    pairs = (rows + 1) // 2
+    if pairs > flat.size:
+        raise ValueError(f"rotation fixture: {rows} rows need {pairs} values, the fixture has {flat.size}")
+    v = flat[:pairs]
+    mag = (np.float32(1.0) + np.fmod(np.abs(v), np.float32(1.0))).astype(np.float32)
+    col = np.arange(pairs) % d
+    ladder = (np.float32(1.0) + col.astype(np.float32) / np.float32(64.0)).astype(np.float32)
+    x = (mag * ladder * np.float32(16.0)).astype(np.float32)
+    S = np.zeros((rows, d), dtype=np.float32)
+    r = np.arange(rows)
+    S[r, col[r // 2]] = np.where(r % 2 == 0, x[r // 2], -x[r // 2]).astype(np.float32)
+    return np.ascontiguousarray(S)
+
+
 @lane("x-decomp-eigh-wide-rotation")
 def _(ml, X, yc, yr, Xh=None):
-    """FactorAnalysis rotations with n_components = 72 (varimax) and 65
-    (quartimax): `_polar`'s eigh of A^T A is n_components x n_components,
-    every rotation step. d = n_components + 8 (so the fit has spare
-    features), 2d rows (the n >= d EM branch), a short EM."""
-    out, first = {}, None
-    # 2026-11-05 lane/slow-verification-lanes: quartimax at 65 (was 128, see
-    # `_decomp_eigh_widths_lean`); 2d rows (was 4d; n >= d still holds, rows
-    # only feed the one QR); 3 EM steps (was 5). The rotation's own up to
-    # _ROT_MAX_ITER = 100 eigh steps (x_decomp/fa_owner.mojo:37) are fixed by
-    # the product, so they, not the EM, carry this lane's cost.
-    for nc, method in ((72, "varimax"), (65, "quartimax")):
-        d = nc + 8
-        S = _decomp_eigh_wide(X, 2 * d, d)
-        m = ml.FactorAnalysis(n_components=nc, rotation=method, max_iter=3).fit(S)
-        out[f"{method}{nc}"] = _h(m.components_, m.noise_variance_, m.transform(S[:64]))
-        first = m if first is None else first
-    return _fit(out, first, lambda e: (e.transform(_decomp_eigh_wide(Xh, 256, 80)),))
+    """A FactorAnalysis varimax rotation at n_components = 64: `_polar`'s eigh of A^T A is n_components x
+    n_components, every rotation step, the smallest width that takes the wide (tridiagonal) solve. d =
+    n_components + 8 (spare features), 16d rows (the n >= d EM branch), a short EM, on loadings that already
+    have simple structure (`_decomp_rotation_simple`), so the rotation stops after two eighs."""
+    # lane verify-light-1, 2026-11-28 (AGENTS.md "Verification has light fixtures"): 2,553 s, 21% of the 0.9.0
+    # Apple record (283.7 s a cell: two fits x up to 100 rotation steps x one ~0.7 s Metal eigh). Now ONE fit:
+    # varimax at 64 (was 72 varimax and 65 quartimax). Quartimax and varimax at a narrow width stay covered by
+    # x-decomp-factor-analysis (n_components 3, both methods); 65's exact-panel arm by x-decomp-eigh-wide-linalg.
+    # The rotation stops on its own test after its second step on this input (was the full 100); EM 2 (was 3).
+    nc = _decomp_rotation_nc
+    d = nc + 8
+    S = _decomp_rotation_simple(X, 16 * d, d)
+    m = ml.FactorAnalysis(n_components=nc, rotation="varimax", max_iter=2).fit(S)
+    out = {f"varimax{nc}": _h(m.components_, m.noise_variance_, m.transform(S[:64]))}
+    return _fit(out, m, lambda e: (e.transform(_decomp_rotation_simple(Xh, 256, d)),))
 
 
 @lane("x-decomp-eigh-wide-factor-analysis")
@@ -570,18 +607,37 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("x-decomp-eigh-wide-mincovdet")
 def _(ml, X, yc, yr, Xh=None):
-    """MinCovDet at d = 72 and 65, 3d rows: precision_ is the pseudo-inverse
-    of the reweighted d x d covariance through eigh (and a C-step whose
-    Cholesky stops falls back to the same pinvh)."""
-    out, first = {}, None
-    for w in _decomp_eigh_widths_lean:
-        S = _decomp_eigh_wide(X, 3 * w, w)
-        m = ml.MinCovDet(random_state=0).fit(S)
-        out[f"fit{w}"] = _h(m.location_, m.covariance_, m.precision_, np.asarray(m.support_, dtype=np.int8),
-                            m.dist_, m.raw_location_, m.raw_covariance_)
-        out[f"maha{w}"] = _h(m.mahalanobis(S[:64]))
-        first = m if first is None else first
-    return _fit(out, first, lambda e: (e.mahalanobis(_decomp_eigh_wide(Xh, 256, 72)),))
+    """MinCovDet at d = 64, 3d rows: precision_ is the pseudo-inverse of the
+    reweighted d x d covariance through eigh, and so is every C-step
+    candidate's precision (DKit.pinvh, x_decomp/kit_device.mojo). The last
+    column repeats the first byte for byte (`_decomp_mcd_singular`), so every
+    covariance carries one exact null direction: the pseudo-inverse's cut is
+    live, and each candidate's log determinant is -inf, so no candidate runs
+    a C-step iteration (the search's loop is x-decomp-robust-cov's)."""
+    # lane verify-light-1, 2026-11-28 (AGENTS.md "Verification has light fixtures"): 267.5 s a cell on the 0.9.0
+    # Apple record: two fits (72, 65) x the 30-trial and 10-candidate search, every C-step a ~0.7 s Metal wide
+    # eigh. Now ONE fit at 64 (the smallest width TD_MIN_N = 2 TD_NB takes; 65's exact-panel arm is
+    # x-decomp-eigh-wide-linalg's) on input whose -inf log determinants stop each candidate before its loop,
+    # so the wide pinvh runs about a dozen times (the 10 initial precisions, the kept candidate, the
+    # reweighting and precision_) instead of a hundred or more.
+    w = 64
+    S = _decomp_mcd_singular(X, 3 * w, w)
+    m = ml.MinCovDet(random_state=0).fit(S)
+    out = {f"fit{w}": _h(m.location_, m.covariance_, m.precision_, np.asarray(m.support_, dtype=np.int8),
+                         m.dist_, m.raw_location_, m.raw_covariance_),
+           f"maha{w}": _h(m.mahalanobis(S[:64]))}
+    return _fit(out, m, lambda e: (e.mahalanobis(_decomp_mcd_singular(Xh, 256, 64)),))
+
+
+def _decomp_mcd_singular(A, rows, width):
+    """Test input only (lane verify-light-1, 2026-11-28): `_decomp_eigh_wide`'s re-cut with the last column a
+    byte copy of the first. Two identical rows and columns stay identical under every elimination step (the
+    same operations on the same operands), so the LU meets an exactly zero pivot and the log determinant is
+    -inf on every box; the eigh sees one isolated null direction, (e_0 - e_last) / sqrt(2), not a cluster, so
+    the tridiagonal solve is taken (as x-decomp-eigh-wide-factor-analysis's n = d - 1)."""
+    S = _decomp_eigh_wide(A, rows, width).copy()
+    S[:, width - 1] = S[:, 0]
+    return np.ascontiguousarray(S)
 
 
 @lane("x-decomp-eigh-wide-kpca")
@@ -604,8 +660,9 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl("n/a:matrix factorization (each eigh consumes a complete square matrix; there is no row "
             "axis whose elements are independent queries)", "x-decomp-eigh-wide-linalg")
 _batch_decl(_rows_calls("transform", prep=lambda Xh: _decomp_eigh_wide(Xh, 256, 72)), "x-decomp-eigh-wide-fastica")
-_batch_decl(_rows_calls("transform", prep=lambda Xh: _decomp_eigh_wide(Xh, 256, 80)), "x-decomp-eigh-wide-rotation")
+_batch_decl(_rows_calls("transform", prep=lambda Xh: _decomp_rotation_simple(Xh, 256, _decomp_rotation_nc + 8)),
+            "x-decomp-eigh-wide-rotation")
 _batch_decl(_rows_calls("transform", "score_samples", prep=lambda Xh: _decomp_eigh_wide(Xh, 256, 72)),
             "x-decomp-eigh-wide-factor-analysis")
-_batch_decl(_rows_calls("mahalanobis", prep=lambda Xh: _decomp_eigh_wide(Xh, 256, 72)), "x-decomp-eigh-wide-mincovdet")
+_batch_decl(_rows_calls("mahalanobis", prep=lambda Xh: _decomp_mcd_singular(Xh, 256, 64)), "x-decomp-eigh-wide-mincovdet")
 _batch_decl(_rows_calls("transform", sl=slice(0, 128)), "x-decomp-eigh-wide-kpca")
