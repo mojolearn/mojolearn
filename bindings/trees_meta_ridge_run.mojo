@@ -15,7 +15,7 @@ Each program is one synchronous launch of the image; the parallelism is
 inside it. Nothing here loops over rows or targets.
 """
 from core.entry_table import EntryRef
-from core.linear_multi_calls import rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_fit_slot
+from xtrees.linear_multi_calls import rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_fit_slot
 
 
 struct RidgeMultiFit(Movable):

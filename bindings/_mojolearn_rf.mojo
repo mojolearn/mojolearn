@@ -48,7 +48,7 @@ from forest_inference_binding_door import (
     forest_unstage_input_gpu_binding,
     forest_ordered_resident_binding,
 )
-from core.forest_inference_run import (
+from ensemble.forest_inference_run import (
     forest_prepare_gpu_native, forest_predict_resident_into_gpu_native,
     forest_predict_resident_labels_gpu_native, forest_gpu_resident_caps,
     forest_resident_rows_native,
@@ -66,17 +66,17 @@ from core.forest_fit_request import (
 from core.forest_store_transport import (
     forest_store_publish, forest_store_words, forest_store_admit,
 )
-from core.mojolearn_rf_run import RF_STORE, rf_store_ctx
+from ensemble.mojolearn_rf_run import RF_STORE, rf_store_ctx
 from core.gbdt_entry_table import gbdt_vendor_word
 from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS, XP_DEV_LIVE
-from core.tree_member import tree_member_publish_image
-from core.forest_member import forest_member_publish_image
-from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish, forest_session_entry_releases
+from xtrees.tree_member import tree_member_publish_image
+from ensemble.forest_member import forest_member_publish_image
+from ensemble.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish, forest_session_entry_releases
 from core.entry_table import ENTRY_OP_GIL_FREE
 from core.native_descriptor_call import native_descriptor_report
 from core.forest_entry_table import FOREST_TABLE_RF
 from core.native_descriptor_abi import NativeDescriptorError
-from core.forest_inference_model import (
+from ensemble.forest_inference_model import (
     resident_prepare,
     resident_release,
     resident_stage_input,
@@ -102,7 +102,7 @@ from ensemble.randomforest import (
     ForestPrep,
     fit_forest,
 )
-from core.mojolearn_rf_run import (
+from ensemble.mojolearn_rf_run import (
     DT,
     CLT,
     RLT,
@@ -177,7 +177,7 @@ def _forest_out_trees(trees: List[TreeMetaDataNode[DT]], notices: Int) raises ->
 # into the export registry retains existing native storage without flattening.
 from forest_export_binding_unpack import (forest_export_py_list_f64, forest_export_py_list_i64,)
 from forest_export_binding_pack import (forest_export_descriptor_py,)
-from core.mojolearn_rf_impl import rf_flatten_trees
+from ensemble.mojolearn_rf_impl import rf_flatten_trees
 
 
 def rf_forest_export_binding(handle: PythonObject, offsets: PythonObject,
@@ -211,7 +211,7 @@ def _rf_classifier_fit[ROWMAJOR: Bool = False, ROWS: Bool = False](params: Fores
     var t_bind = bt.start()
     var forest: RandomForestMetaData[DT, CLT]
     if params.gil_free:
-        # a member's worker: no GIL to release (core/forest_entry.mojo)
+        # a member's worker: no GIL to release (ensemble/forest_entry.mojo)
         forest = _rf_classifier_fit_forest[ROWMAJOR, ROWS](params, bt)
     else:
         with GILReleased(Python()):
@@ -235,7 +235,7 @@ def _kept_forest_out(handle: Int) raises -> PythonObject:
     # lookup (DictKeyError) and the list build (Error) both raise Error to
     # the caller's try/finally, which cannot mix the two error types.
     var registry = RF_EXPORTS.get_or_create_ptr()
-    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # THE LOCK (ensemble/forest_export_run.mojo): the entry is taken out, read with
     # no lock held and put back on every path.
     var entry = registry[].take(handle)
     var out = PythonObject(None)
@@ -346,7 +346,7 @@ def _rf_session_open_native(x_address: Int, n_rows: Int, n_cols: Int, row_major:
     var made = List[RfDataSession]()
     # THE GIL (lane mf-ada2): every data session operation runs with no GIL
     # (`rf_gpu_forest_entry_v1` releases around a door's call; a typed RUN
-    # holds none) and the registry has its own lock (core/mojolearn_rf_run.mojo).
+    # holds none) and the registry has its own lock (ensemble/mojolearn_rf_run.mojo).
     var bad = _rf_data_session_stage(xp, n_rows, n_cols, row_major, share_tables, made)
     if bad:
         raise Error("rf_data_session_open: " + RF_NONFINITE_REFUSAL)
@@ -425,7 +425,7 @@ def _rf_regressor_fit_dart(params: ForestFitArgs) raises -> Int:
     var dart_target = dsess[].target.copy()
     var forest: RandomForestMetaData[DT, RLT]
     if params.gil_free:
-        # a member's worker: no GIL to release (core/forest_entry.mojo)
+        # a member's worker: no GIL to release (ensemble/forest_entry.mojo)
         forest = _rf_dart_member_forest(
             dart_x, dart_target, rows_a, cols_a, n_rows, n_cols, n, d, c, rf_params,
         )
@@ -1039,7 +1039,7 @@ def build__mojolearn_rf() -> PythonObject:
         m.def_function[rf_forest_export_legacy_binding]("forest_export_legacy")
         m.def_function[rf_forest_export_release_binding]("forest_export_release")
         # every snapshot prepared here runs on the registry's process context and
-        # borrows its one I/O workspace (core/forest_inference_model.mojo,
+        # borrows its one I/O workspace (ensemble/forest_inference_model.mojo,
         # FOREST_PER_MODEL_IO; gap-fails2 2026-10-02)
         m.def_function[forest_prepare_gpu_binding[True]]("forest_prepare_gpu")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.

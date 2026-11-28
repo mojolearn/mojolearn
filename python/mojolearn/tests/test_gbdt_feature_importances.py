@@ -1,7 +1,7 @@
 """`feature_importances_` of the gradient-boosting estimators (lane mf-imp6) against what is known without the
 product: the target's driving columns rank first, the values are non-negative and sum to 1, a constant target gives
 zeros, and a constant power-of-two sample weight leaves them exactly unchanged (the integer leaf weights scale
-exactly). The value is computed in Mojo at fit (core/gbdt_importance.mojo on the host column,
+exactly). The value is computed in Mojo at fit (gbdt/gbdt_importance.mojo on the host column,
 gbdt/gpu_importance.mojo on a GPU); its digest on both sides is the verify lane trees-gbdt-importances
 (tools/identity_lanes/trees.py), and the numerical definition is checked natively
 (checks/native_tests/mf_imp6_gbdt_importances.mojo). The returned object, the not-fitted error, save/load, pickle,

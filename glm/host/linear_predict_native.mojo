@@ -3,7 +3,7 @@
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.hostptr import f32_ptr
 from core.host_predict_threads import host_predict_task_count
-from core.estimators_host_impl import _positive
+from glm.estimators_host_impl import _positive
 from core.host_finite_scan import host_all_finite_f32
 from core.classical_host_predict import host_ols_predict_into, host_ols_predict_targets_into
 from core.linear_boundary_types import LINEAR_PREDICT_ABI, LinearPredictRequest, linear_predict_request_from_spans

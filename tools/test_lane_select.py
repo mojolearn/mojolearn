@@ -76,8 +76,8 @@ def _reported_native_limitation(selection, path, lane):
 
 _NUMERICAL_PRECISION_COUNTS = (
     ("cluster/host/kmeans_oracle.mojo", 84, "kmeans"),
-    ("core/gbdt_host_predict.mojo", 55, "gbdt-rmse"),
-    ("core/forest_host_predict.mojo", 93, "rf-clf"),
+    ("gbdt/gbdt_host_predict.mojo", 55, "gbdt-rmse"),
+    ("ensemble/forest_host_predict.mojo", 93, "rf-clf"),
 )
 
 
@@ -392,7 +392,7 @@ def test_a_binding_every_lane_reaches_does_not_hand_over_its_tree():
     doing it: `_bufcheck.py` -> `_buffer.py` is in every lane's closure and
     reaches `_forest_host.py`, `_byte_lm_impl.py` and `_byte_lm_host.py`, so
     all three bindings landed on all 211 lanes and each handed over its whole
-    Mojo tree. `core/forest_host_predict.mojo` and the mamba modeling file
+    Mojo tree. `ensemble/forest_host_predict.mojo` and the mamba modeling file
     still selected every lane, which is the symptom the earlier fix was
     written to remove.
 
@@ -417,11 +417,11 @@ def test_a_binding_every_lane_reaches_does_not_hand_over_its_tree():
     assert not {"ols", "kmeans", "arima"} & carriers, sorted(carriers)[:10]
 
     # The two files that still selected every lane after the syntax fix. They
-    # are shared across families (`core/forest_host_predict.mojo` serves the
+    # are shared across families (`ensemble/forest_host_predict.mojo` serves the
     # extratrees lanes as well as the forest ones), so the check is the one
     # FAMILY_CASES uses: a lane with no relationship to them at all.
-    for path in ("core/forest_host_predict.mojo", "mamba/impl/modeling/modeling_mamba.mojo",
-                 "core/gbdt_host_predict.mojo"):
+    for path in ("ensemble/forest_host_predict.mojo", "mamba/impl/modeling/modeling_mamba.mojo",
+                 "gbdt/gbdt_host_predict.mojo"):
         sel = lane_select.select([path])
         assert not sel["unattributed"], f"{path} is no longer attributable: {sel['reasons'][path]}"
         for other in ("ols", "kmeans", "arima"):
@@ -444,8 +444,8 @@ def test_shared_binding_paths_exclude_unrelated_lanes():
     # dispatcher, whose tree branches cannot be excluded yet; the required
     # half (every such lane carries a native-dispatch record) is checked in
     # test_a_binding_every_lane_reaches_does_not_hand_over_its_tree.
-    for path in ("core/forest_host_predict.mojo", "mamba/impl/modeling/modeling_mamba.mojo",
-                 "core/gbdt_host_predict.mojo"):
+    for path in ("ensemble/forest_host_predict.mojo", "mamba/impl/modeling/modeling_mamba.mojo",
+                 "gbdt/gbdt_host_predict.mojo"):
         selected = lane_select.select([path])["lanes"]
         for other in ("ols", "kmeans", "arima"):
             if other in selected:
@@ -1161,13 +1161,13 @@ def test_the_two_mojo_exemptions_are_the_ones_that_were_measured():
 
 def test_a_mojo_file_something_imports_is_never_unreachable():
     """A Mojo import is a compile-time fact and does not need the corpus to be
-    believed. `core/forest_inference_model.mojo` is imported by
+    believed. `ensemble/forest_inference_model.mojo` is imported by
     `bindings/forest_inference_binding_door.mojo`, which is ITSELF outside the map,
     so nothing in the corpus named either and the model file read "nothing
     reaches it" while being part of a shipped binding's tree. An importer that
     is a standalone program still does not count, which is what keeps three
     new check files that import each other unreachable."""
-    for rel in ("core/forest_inference_model.mojo", "core/forest_inference_pool.mojo"):
+    for rel in ("ensemble/forest_inference_model.mojo", "ensemble/forest_inference_pool.mojo"):
         assert lane_select._mojo_importers(rel), f"{rel} is imported by nothing; pick a new case"
         assert lane_select.unreachable(rel) is None, \
             f"{rel} is imported by a non-program and was still called unreachable"
@@ -1571,7 +1571,7 @@ if __name__ == "__main__":
 
 # --------------------------------------------------------------------------
 # THE FORWARD WALK LOST A SHIPPED SURFACE, 2026-09-16 (lane/lane-map-census).
-# `core/forest_inference.mojo` is imported by `bindings/_mojolearn_rf.mojo`
+# `ensemble/forest_inference.mojo` is imported by `bindings/_mojolearn_rf.mojo`
 # and `bindings/_mojolearn_trees.mojo` and was in NO lane's map. It is not a
 # backward edge and it is not correct as is: the shipped `_mojolearn_rf.so`
 # carries that file's Metal kernels as the AIR blobs
@@ -1593,12 +1593,12 @@ FOREST_INFERENCE_LANES = ("rf-clf", "rf-clf-balanced-parallel", "rf-reg",
 
 
 def test_a_shipped_inference_file_is_in_the_map_of_the_lanes_that_run_it():
-    """`core/forest_inference.mojo` carries the forest prediction kernels the
+    """`ensemble/forest_inference.mojo` carries the forest prediction kernels the
     rf and trees bindings launch. A change to it can move those lanes' bits,
     so they must be named. THE FAILING SIDE: before the three fixes below the
     reverse map held this file under NO lane at all."""
     rev = lane_select.reverse_map()
-    for rel in ("core/forest_inference.mojo", "core/forest_inference_model.mojo",
+    for rel in ("ensemble/forest_inference.mojo", "ensemble/forest_inference_model.mojo",
                 "bindings/forest_inference_binding_door.mojo"):
         lanes = rev.get(rel, set())
         assert lanes, f"{rel} is a shipped forest inference source and is in no lane's map"
@@ -1710,7 +1710,7 @@ def test_native_door_walk_preserves_required_dependencies():
     rev = lane_select.reverse_map()
     for path, target, required in _NUMERICAL_PRECISION_COUNTS:
         _required_numerical_selection(path, target, required)
-    _assert_reviewed_membership(rev, "core/forest_inference.mojo")
+    _assert_reviewed_membership(rev, "ensemble/forest_inference.mojo")
     # __init__ imports _samba_impl, whose import-time native connection imports
     # neural_inference. The new import-region attribution sees those additional
     # callers; they are not numerical call-graph widening.

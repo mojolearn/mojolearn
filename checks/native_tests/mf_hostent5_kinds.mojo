@@ -47,7 +47,7 @@ from gbdt.trees_gbdt_fit_run import (
     gbdt_ordered_order, gbdt_ordered_rows_check, gbdt_ordered_target_check, GBDT_ORDERED_BIJECTION,
 )
 from bindings.gbdt_config_run import GbdtConfig, gbdt_config_words
-from core.gbdt_member import GbdtMemberImage, _member as gbdt_member
+from gbdt.gbdt_member import GbdtMemberImage, _member as gbdt_member
 from core.forest_member_run import fm_member, FM_HEAD
 
 comptime CASES = 5

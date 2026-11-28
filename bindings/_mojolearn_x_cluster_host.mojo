@@ -11,7 +11,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from hierarchy.cluster_descriptor_host import HIERARCHY_CLUSTER_HOST_API
 from x_cluster.variants_host import KMEANS_VARIANTS_HOST_API
-from core.xcluster_member import xcluster_member_publish
+from x_cluster.xcluster_member import xcluster_member_publish
 from x_cluster.centroid_fit_host import CENTROID_FIT_HOST_API
 from x_cluster.harmony_host import HARMONY_HOST_API
 from x_cluster.optics_fit_host import OPTICS_FIT_HOST_API
@@ -29,7 +29,7 @@ from providers.python.x_cluster_out_pyapi_pack import cluster_out_to_py
 
 from core.shared_slot import SharedSlot
 from core.spectral_assignment_api import SpectralAssignmentAPI
-from core.spectral_assignment_host import SpectralAssignmentHost
+from x_cluster.spectral_assignment_host import SpectralAssignmentHost
 from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_IDENTICAL
 
 comptime _SPECTRAL_ASSIGN_SLOT = "MojolearnSpectralAssignHostIdenticalV1" if GLOBAL_NUMERIC_MODE == _SPECTRAL_IDENTICAL else "MojolearnSpectralAssignHostFastV1"
@@ -146,7 +146,7 @@ def build__mojolearn_x_cluster_host() -> PythonObject:
         # TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_cluster.patch
         var published_module = m.finalize()
-        # The x_cluster member entry (core/xcluster_member.mojo) beside its host variants kernel table.
+        # The x_cluster member entry (x_cluster/xcluster_member.mojo) beside its host variants kernel table.
         xcluster_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(KMEANS_VARIANTS_HOST_API.get_or_create_ptr()[].entries.unsafe_ptr()))
         return published_module
     except e:

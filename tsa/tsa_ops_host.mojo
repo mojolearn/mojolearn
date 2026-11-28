@@ -14,7 +14,7 @@ one forecast; it has no independent units to split here.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.hostptr import f32_ptr, i32_ptr
-from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
+from tsa.mojolearn_tsa_host_impl import holtwinters_fit_host_into
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot

@@ -63,8 +63,8 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
-from core.gbdt_member import GbdtMemberImage, gbdt_member_publish_image
-from core.fold_x_scan import fold_x_first_nan
+from gbdt.gbdt_member import GbdtMemberImage, gbdt_member_publish_image
+from gbdt.fold_x_scan import fold_x_first_nan
 from gbdt.data.category_map_device import fold_x_category_fit_into
 from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
 from gbdt.binary_prediction import binary_prediction_device, sigmoid_f64_device
@@ -177,7 +177,7 @@ def gbdt_binary_prediction_binding[probabilities: Bool](
 
 
 #: The identity gate's negative control for `gbdt_sigmoid_pair`: the same
-#: define the forest and GBDT host walks take (`core/forest_host_predict.mojo`),
+#: define the forest and GBDT host walks take (`ensemble/forest_host_predict.mojo`),
 #: passed to this build through MOJOLEARN_EXTRA_DEFINES. A build with it
 #: writes the two probability columns swapped.
 comptime GBDT_PAIR_SABOTAGE = is_defined["MOJOLEARN_FOREST_HOST_SABOTAGE"]()
@@ -621,7 +621,7 @@ def build__mojolearn_gbdt() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_gbdt")
         # The native gbdt entry (core/gbdt_entry_table.mojo) under this image's key.
         gbdt_entry_publish["MojolearnGbdtEntryOwnerGpuV1"](COMPILED_VENDOR, gbdt_gpu_entry_v1)
-        # The Gbdt member (core/gbdt_member.mojo), after the gbdt entry.
+        # The Gbdt member (gbdt/gbdt_member.mojo), after the gbdt entry.
         gbdt_member_publish_image[_GbdtMemberGpuImage](COMPILED_VENDOR)
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")

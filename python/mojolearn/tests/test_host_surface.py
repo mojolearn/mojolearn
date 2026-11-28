@@ -306,7 +306,7 @@ def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
     sources = {"runtime_model_selection": ["bindings/runtime_model_selection_entry_pack.mojo"],
                "tokenizer": ["bindings/_mojolearn_tokenizer_host.mojo",
                              "tokenizer/impl/tokenizer_host_shell_impl.mojo"],
-               "forest": ["core/gbdt_host_ctr.mojo", "bindings/_mojolearn_forest_host.mojo"],
+               "forest": ["gbdt/gbdt_host_ctr.mojo", "bindings/_mojolearn_forest_host.mojo"],
                "linalg": ["gemm/host/gemm_lowbit_oracle.mojo"]}
     sources["tokenizer"].append("tokenizer/train/bpe_train.mojo")
     sources["gbdt"] = ["gbdt/grid_creator/binarization.mojo",
@@ -438,7 +438,7 @@ def test_the_analysis_functions_are_reachable_on_a_cpu_only_install():
     for entry in ("tsa/tsa_ops_host.mojo", "tsa/tsa_ops_forecast_host.mojo"):
         assert "from tsa.tsa_ops_host_inference import" in _read(entry), (
             f"{entry} does not answer kpss_test from the shared module")
-    assert "core/kpss_host_test_impl.mojo" in forecast["host_modules"]
+    assert "tsa/kpss_host_test_impl.mojo" in forecast["host_modules"]
 
 
 def test_promoted_reference_lanes_still_carry_the_classes_that_promoted_them():

@@ -15,7 +15,7 @@ from std.memory import bitcast
 from std.testing import TestSuite
 from core.host_parallel import host_parallelize
 from core.pca_native_api import PCANativeDriver, PCAFoldStore, PCAFitRequest
-from core.pca_native_host import pca_host_native_v1
+from decomposition.pca_native_host import pca_host_native_v1
 from checks.native_tests.testsuite_cases import require
 
 comptime PCA_CONCURRENT_FITS = 100

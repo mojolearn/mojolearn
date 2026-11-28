@@ -38,7 +38,7 @@ from std.math import cos, isfinite, sqrt
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.philox_neural import NRNG_UNIFORM, NRNG_NORMAL, NRNG_DROPOUT_FORWARD, NRNG_DROPOUT_BACKWARD
-from core.mojolearn_training_host_impl import neural_rng_host_into
+from training.mojolearn_training_host_impl import neural_rng_host_into
 from sequence.lr_table import LrSpec, lr_spec_value, LR_ONE_BASED
 from training.optimizer_schedule_plan import optimizer_warmup_schedule
 from checks.native_tests.sequence_port_common import u01, same_bits

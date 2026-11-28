@@ -5,7 +5,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, PRIMITIVE_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.hostptr import f32_ptr, i32_ptr
-from core.mojolearn_training_host_impl import (
+from training.mojolearn_training_host_impl import (
     embedding_forward_host_into, embedding_backward_host_into,
     rms_norm_forward_host_into, rms_norm_backward_host_into,
     linear_forward_host_into, linear_backward_host_into,

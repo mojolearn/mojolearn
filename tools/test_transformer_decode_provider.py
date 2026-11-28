@@ -39,7 +39,7 @@ def test_native_session_owner_preserves_cpu_copies_gpu_provider_and_cleanup():
 
 def test_resident_whole_model_uses_original_run_and_atomic_group_reservation():
     from check_generation_native_boundary import audit
-    _, failures=audit(ROOT,('transformer.native_lm_resident_dispatch','core.native_session_group'))
+    _, failures=audit(ROOT,('transformer.native_lm_resident_dispatch','transformer.native_session_group'))
     assert not failures, failures
     source=(ROOT/'transformer/native_lm_resident_dispatch.mojo').read_text()
     reserve=source.split('def _lm_group_reserve(')[1].split('def _lm_group_release')[0]

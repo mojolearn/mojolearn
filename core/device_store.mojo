@@ -119,7 +119,7 @@ def _store_grid(total: Int) -> Int:
 #: every id is positive (a fold X word `-(id + 1)` stays negative).
 #:
 #: EVERY ID FITS AN INT32 (lane gs-fix, 2026-11-25). Ids travel in Int32
-#: words: the arena range triples' `src` (core/arena_io.mojo
+#: words: the arena range triples' `src` (x_prep/arena_io.mojo
 #: `upload_ranges`, laid out as List[Int32] by
 #: bindings/arena_prog_native_door.mojo) and a slot output's CNT word
 #: `-id - 2`. With 32 slot bits the first id was 1 << 32, which an Int32

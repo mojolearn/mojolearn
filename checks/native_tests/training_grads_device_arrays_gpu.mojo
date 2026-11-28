@@ -16,7 +16,7 @@ from training.chunked_lm_head_v2 import chunked_lm_head_v2_train_host
 from training.estimator import identical_clip_grad_norm_addrs_host
 from training.samba_ops import samba_accumulate_host
 from training.neural_session_mlp import nn_mlp_sessions_device
-from core.mojolearn_training_host_impl import (
+from training.mojolearn_training_host_impl import (
     chunked_lm_head_v2_train_host_into, clip_grad_norm_host_into, accumulate_host_into,
 )
 from std.testing import TestSuite

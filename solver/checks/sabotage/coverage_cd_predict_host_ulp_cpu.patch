@@ -1,7 +1,7 @@
-diff --git a/core/mojolearn_solver_host_impl.mojo b/core/mojolearn_solver_host_impl.mojo
+diff --git a/solver/mojolearn_solver_host_impl.mojo b/solver/mojolearn_solver_host_impl.mojo
 index ae98094dbc..21d90ba97a 100644
---- a/core/mojolearn_solver_host_impl.mojo
-+++ b/core/mojolearn_solver_host_impl.mojo
+--- a/solver/mojolearn_solver_host_impl.mojo
++++ b/solver/mojolearn_solver_host_impl.mojo
 @@ -1,6 +1,8 @@
  # SPDX-License-Identifier: Apache-2.0
  """Typed host solver bodies moved word for word from bindings/_mojolearn_solver_host.mojo."""

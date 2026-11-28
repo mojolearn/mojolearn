@@ -12,9 +12,9 @@ from core.host_parallel import host_parallelize
 from core.gp_native_api import GPDriver, GPThetaRequest
 from checks.native_tests.gp_native_data import reference_values, guards64, failures_clear, GP_GUARD64
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.gp_native_provider import gp_native_v1
-from core.gp_native_host import GPHostKernels
-from core.gp_native_device import GPDeviceKernels
+from gaussian_process.gp_native_provider import gp_native_v1
+from gaussian_process.gp_native_host import GPHostKernels
+from gaussian_process.gp_native_device import GPDeviceKernels
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 

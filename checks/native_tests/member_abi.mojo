@@ -19,28 +19,28 @@ from checks.native_tests.testsuite_cases import check_cases, require
 from core.device_route import DeviceRoute
 from core.entry_table import EntryRef
 from core.decomposition_member import decomposition_member_v2
-from core.extra_trees_member import extra_trees_member_v2
-from core.forest_member import forest_member_v2
-from core.kernel_svm_member import kernel_svm_member_v2
+from extratrees.extra_trees_member import extra_trees_member_v2
+from ensemble.forest_member import forest_member_v2
+from svm.kernel_svm_member import kernel_svm_member_v2
 from core.kmeans_member import kmeans_member_v2
-from core.linear_member import linear_member_v2
-from core.logistic_member import logistic_member_v2
+from glm.linear_member import linear_member_v2
+from glm.logistic_member import logistic_member_v2
 from core.neighbors_member import neighbors_member_v2
 from core.scaler_member import scaler_member_v2
-from core.tree_member import tree_member_v2
+from xtrees.tree_member import tree_member_v2
 from core.xlinear_member import xlinear_member_v2
 from core.sgd_member import sgd_member_v2
 from core.cd_member import cd_member_v2
 from core.linear_svm_member import linear_svm_member_v2
-from core.kernel_ridge_member import kernel_ridge_member_v2
-from core.kernel_approx_member import kernel_approx_member_v2
-from core.gp_member import gp_member_v2
-from core.mlp_member import mlp_member_v2
-from core.sequence_member import sequence_member_v2
-from core.cnn_member import cnn_member_v2
-from core.pls_member import pls_member_v2
-from core.forecast_member import forecast_member_v2
-from core.forecast_seq_member import forecast_seq_member_v2
+from kernel_methods.kernel_ridge_member import kernel_ridge_member_v2
+from kernel_methods.kernel_approx_member import kernel_approx_member_v2
+from gaussian_process.gp_member import gp_member_v2
+from training.mlp_member import mlp_member_v2
+from sequence.sequence_member import sequence_member_v2
+from x_cnn.cnn_member import cnn_member_v2
+from x_decomp.pls_member import pls_member_v2
+from tsa.forecast_member import forecast_member_v2
+from sequence.forecast_seq_member import forecast_seq_member_v2
 from core.member_abi import (
     MemberCall, MemberMatrix, MemberPlan, MemberRef, member_call, member_publish, member_resolve_family,
     member_new, member_free, member_require, member_outputs, MEMBER_NEEDS_PREDICTOR, MEMBER_NEEDS_TRANSFORMER,
@@ -54,13 +54,13 @@ from core.member_abi import (
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     MEMBER_F32, MEMBER_F64, MEMBER_HOME_DEVICE, MEMBER_I32, MEMBER_CAN_TEST_ROWS, MEMBER_CAN_DECISION,
 )
-from core.dart_member import dart_member_v2
-from core.isolation_forest_member import isolation_forest_member_v2
-from core.xcluster_member import xcluster_member_v2
-from core.mixture_member import mixture_member_v2
-from core.density_member import density_member_v2
-from core.hierarchy_member import hierarchy_member_v2
-from core.spectral_member import spectral_member_v2
+from gbdt.dart_member import dart_member_v2
+from isolation_forest.isolation_forest_member import isolation_forest_member_v2
+from x_cluster.xcluster_member import xcluster_member_v2
+from mixture.mixture_member import mixture_member_v2
+from dbscan.density_member import density_member_v2
+from hierarchy.hierarchy_member import hierarchy_member_v2
+from spectral.spectral_member import spectral_member_v2
 from core.member_abi import member_output_dtype, MEMBER_I32, MEMBER_CAN_SCORE_SAMPLES, MEMBER_DTYPE_UNSAID
 from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, member_own
 from core.member_families import MEMBER_FAMILY_SPARE3, MEMBER_FAMILY_COUNT, member_family_name
@@ -621,7 +621,7 @@ def _fixture(unit: Int) raises:
         _refused(MEMBER_OP_PREDICT_STD, call, "has no predict_std")
         _refused(MEMBER_OP_SCORE_SAMPLES, call, "has no score_samples")
         # a selection or an output the linear member does not read is refused before any kernel
-        # A row index alone is the fold route since 9af0046099 / ab944d50d1 (core/linear_member.mojo `_fold_op`:
+        # A row index alone is the fold route since 9af0046099 / ab944d50d1 (glm/linear_member.mojo `_fold_op`:
         # MEMBER_CAN_ROW_INDEX on an image that reads THE FOLD X WORD); on this host route (no such image) it is
         # refused in the fold's words. A column index is still refused as whole-view only.
         var picks: List[Int] = [0]

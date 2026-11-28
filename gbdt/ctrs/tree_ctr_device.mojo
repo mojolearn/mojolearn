@@ -48,7 +48,7 @@ from gbdt.ctrs.ctr_calcers import (
     THistoryBasedCtrCalcerGpu,
     TWeightedBinFreqCalcerGpu,
 )
-from core.sort_ops import (
+from gbdt.sort_ops import (
     SortScratch,
     sort_op_f32,
     sort_op_gather_rows_f32,

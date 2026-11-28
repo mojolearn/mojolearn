@@ -485,7 +485,7 @@ def _round_fit(mut plan: AdaFitPlan, index: Int, rows: List[Int32], yr: List[Flo
     # Without a session (an image without XF_CAP_SESSION, a Mojo check): the
     # drawn rows gathered (`xt_gather_f32`) and laid out column-major
     # (`xt_transpose_f32`), the bytes a host session's row gather writes
-    # (core/mojolearn_rf_host_impl.mojo `rf_host_session_rows_x`), then the
+    # (ensemble/mojolearn_rf_host_impl.mojo `rf_host_session_rows_x`), then the
     # plain unweighted column-major fit, the body the session fit runs.
     _ = xt_gather_f32(plan.glue, plan.x, Int(rows.unsafe_ptr()), Int(all_cols.unsafe_ptr()), Int(xg.unsafe_ptr()),
                       n, plan.d, n, plan.d)

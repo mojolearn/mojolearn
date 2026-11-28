@@ -9,7 +9,7 @@ words; it is no longer a Python object (lane byte-state, 2026-11-21)."""
 from core.state_registry import StateHandle
 from core.byte_lm_entry_table import ByteLmEntryKey
 from core.entry_table import EntryRef
-from core.byte_lm_entry_table_sessions import byte_lm_sessions_ref, byte_lm_resident_open, byte_lm_resident_close
+from training.byte_lm_entry_table_sessions import byte_lm_sessions_ref, byte_lm_resident_open, byte_lm_resident_close
 
 
 struct ByteLmSessionOwner(Movable, Writable):

@@ -31,7 +31,7 @@ from checks.native_tests.testsuite_cases import check_cases, require
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.device_route import DeviceRoute, DEVICE_CPU
 from core.entry_table import EntryRef
-from core.logistic_member import logistic_member_v2
+from glm.logistic_member import logistic_member_v2
 from core.logistic_native_api import QnNativeDriver
 from core.logistic_route import LogisticRoute, logistic_route_pack
 from core.member_abi import (

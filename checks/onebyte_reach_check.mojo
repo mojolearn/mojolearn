@@ -94,7 +94,7 @@ from std.testing import TestSuite
 from checks.native_tests.kit import download_buffer_into, upload_host_into
 
 from max.gpu.host import DeviceContext
-from core.device_units import device_multiprocessor_count
+from gbdt.device_units import device_multiprocessor_count
 
 from gbdt.grid_creator.binarization import binarize
 from gbdt.gpu_data.compressed_index_builder import build_layout

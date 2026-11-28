@@ -1,6 +1,6 @@
-diff --git a/core/forest_auxiliary_units.mojo b/core/forest_auxiliary_units.mojo
---- a/core/forest_auxiliary_units.mojo
-+++ b/core/forest_auxiliary_units.mojo
+diff --git a/ensemble/forest_auxiliary_units.mojo b/ensemble/forest_auxiliary_units.mojo
+--- a/ensemble/forest_auxiliary_units.mojo
++++ b/ensemble/forest_auxiliary_units.mojo
 @@ -105,4 +105,7 @@
                  AuxF32(unsafe_from_address=pred_out), totals, r, features, trees, outputs, leaf_out!=0, prefix_out!=0, pred_out!=0)
          if not ok:

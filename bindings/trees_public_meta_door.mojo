@@ -130,7 +130,7 @@ from bindings.classical_pandas_door import native_pandas_exact
 from bindings.native_unit_threads_unpack import native_unit_jobs, native_unit_device_workers
 from core.host_parallel import host_parallelize
 from bindings.device_rows_door import DoorRows, door_is_device_rows
-from core.meta_fold_rows import meta_rows_index, meta_rows_compose, meta_rows_take_u32
+from xtrees.meta_fold_rows import meta_rows_index, meta_rows_compose, meta_rows_take_u32
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from std.python._cpython import GILReleased
 from std.ffi import c_int, external_call
@@ -146,7 +146,7 @@ from bindings.base_helpers_released_unpack import (
 )
 from core.linear_entry_table import LinearEntryKey
 from core.entry_table import EntryRef
-from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_predict, rm_predict_slot
+from xtrees.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_predict, rm_predict_slot
 from core.entry_table import entry_ref_word
 from bindings.arena_cache_run import arena_scope_store_hold, arena_cache_unhold, arena_store_take_rows, arena_cache_free
 from providers.python.neural_descriptor_pyapi_door import (

@@ -139,7 +139,7 @@ struct ScalerTableCalls(ScalerCalls, ImplicitlyCopyable, Movable):
     def run_slot(self, arena: Int, words: Int, program: Int, stages: Int, x_slot: Int, x_words: Int,
                  host_hi: Int, out_lo: Int, out_hi: Int, keep_lo: Int, keep_hi: Int, keep_slot: Int) raises:
         # Input triples (lo, hi, src: a slot id or -1 host) and output quads (lo, hi, -1 no count, 1; a slot
-        # output's CNT is -slot - 2), core/arena_io.mojo; no scratch, no output region.
+        # output's CNT is -slot - 2), x_prep/arena_io.mojo; no scratch, no output region.
         var ins: List[Int32] = [Int32(0), Int32(x_words), Int32(x_slot)]
         if host_hi > x_words:
             ins.append(Int32(x_words))

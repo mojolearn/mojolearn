@@ -84,7 +84,7 @@ from std.testing import TestSuite
 from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceContext, HostBuffer
-from core.device_units import device_multiprocessor_count
+from gbdt.device_units import device_multiprocessor_count
 
 from gbdt.gpu_util.partitions_reduce import (
     STATS_BLOCK,

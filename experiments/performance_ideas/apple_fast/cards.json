@@ -2339,7 +2339,7 @@
      "mode": "fast",
      "vendor": "apple",
      "source_guard_paths": [
-      "core/forest_inference.mojo",
+      "ensemble/forest_inference.mojo",
       "xtrees/shap_device.mojo"
      ],
      "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
@@ -2419,7 +2419,7 @@
      ],
      "status": "source_ready",
      "implementation_paths": [
-      "core/forest_inference.mojo",
+      "ensemble/forest_inference.mojo",
       "experiments/performance_ideas/apple_fast/callers/F13_caller.py",
       "xtrees/shap_device.mojo",
       "bindings/_mojolearn_trees.mojo",

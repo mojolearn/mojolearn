@@ -82,7 +82,7 @@ from training.optimizer_native_gpu import OPTIMIZER_NATIVE_GPU_API
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojolearnNeuralTrainingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingContextFastV3"
 from checks.vendor import COMPILED_VENDOR
-from core.samba_entry_table_training import publish_samba_training_primitives
+from training.samba_entry_table_training import publish_samba_training_primitives
 from max.gpu.host import DeviceContext, HostBuffer
 
 from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available

@@ -31,7 +31,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from core.shared_slot import SharedSlot
 from core.scaler_native_api import ScalerProviderAPI
-from core.scaler_native_host import ScalerHostKernels
+from preprocessing.scaler_native_host import ScalerHostKernels
 from core.scaler_native_api import SCALER_NATIVE_ABI, SCALER_OP_COUNT
 from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_SCALER
 from core.scaler_member import scaler_member_publish
@@ -49,7 +49,7 @@ from preprocessing.host.scaler_oracle import (
     host_standard_fit,
     host_standard_transform,
 )
-from core.mojolearn_preprocessing_host_impl import (
+from preprocessing.mojolearn_preprocessing_host_impl import (
     ptr, load, validate_dimensions, finite_values, validate_standard, standard_finite,
     minmax_fit_host_into, minmax_transform_host_into, standard_fit_host_into, standard_transform_host_into,
 )

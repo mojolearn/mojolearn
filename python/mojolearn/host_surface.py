@@ -1001,7 +1001,7 @@ TRAINING_LANE_NAMES = {
     # level-order leaf cap); the oracle gained the POISSON, GAMMA and
     # INVERSE_GAUSSIAN gains and the class-weighted bootstrap, the rf binding
     # rf_classifier_fit_weighted, and both forest bindings the resident
-    # parallel_groves entries over core/forest_host_groves.mojo; ExtraTrees'
+    # parallel_groves entries over ensemble/forest_host_groves.mojo; ExtraTrees'
     # best-first growth fits through train_tree_exact_bestfirst. On the M4's
     # CPU column (one core), all 54 train, 108 infer and model and 54 batch
     # cells IDENTICAL x4 against the 166-lane record before the gate ran, and
@@ -1271,7 +1271,7 @@ TRAINING_LANE_NAMES = {
     # host_model's two entries to 24 committed GPU recordings and it passes;
     # what it does not reach is the two one-call entries and the
     # parallel_groves HOST engine, which that gate still refuses by name
-    # ("the host engine is sequential") although core/forest_host_groves.mojo
+    # ("the host engine is sequential") although ensemble/forest_host_groves.mojo
     # landed on lane/forest-groves-cpu-and-speed. It moves under the forest
     # family's OWN define, not the generic one.
     #
@@ -1837,15 +1837,15 @@ FAMILIES = (
         # lane/inference-gbdt-ctr-tables (2026-09-15): the CTR and tensor CTR
         # step of a saved GBDT model, reusing expand_raw_columns and the
         # tensor apply module the GPU predict calls
-        host_modules=("core/forest_host_predict.mojo", "core/forest_host_groves.mojo",
-                      "core/gbdt_host_predict.mojo",
-                      "core/gbdt_host_ctr.mojo", "gbdt/models/tensor_ctr_apply.mojo"),
+        host_modules=("ensemble/forest_host_predict.mojo", "ensemble/forest_host_groves.mojo",
+                      "gbdt/gbdt_host_predict.mojo",
+                      "gbdt/gbdt_host_ctr.mojo", "gbdt/models/tensor_ctr_apply.mojo"),
         exports=(
             "forest_host_numeric_mode", "forest_host_vendor", "forest_host_column",
             "forest_host_sabotage", "forest_host_rf_predict_proba",
             "forest_host_rf_predict_reg", "forest_host_et_predict",
             # lane/forest-groves-cpu-and-speed (2026-09-17): the parallel_groves
-            # engine over core/forest_host_groves.mojo, and DEVIATION 2961's
+            # engine over ensemble/forest_host_groves.mojo, and DEVIATION 2961's
             # association sabotage read-back
             "forest_host_groves_sabotage", "forest_host_groves_prepare",
             "forest_host_groves_predict", "forest_host_groves_release",
@@ -2372,7 +2372,7 @@ FAMILIES = (
             "glm/host/center_host.mojo", "glm/impl/center_items.mojo",
             "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
             "decomposition/host/pca_full_oracle.mojo",
-            "core/labeled_reference_host_predict.mojo",
+            "dbscan/labeled_reference_host_predict.mojo",
             "preprocessing/host/scaler_oracle.mojo",
             "kernel_methods/host/km_host_oracle.mojo",
             "kernel_methods/checks/random_features.mojo",
@@ -2593,7 +2593,7 @@ FAMILIES = (
         display="Holt-Winters",
         host_modules=("holtwinters/host/hw_oracle.mojo", "tsa/checks/kpss_oracle.mojo",
                       "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict_run.mojo",
-                      "core/kpss_host_test_impl.mojo"),
+                      "tsa/kpss_host_test_impl.mojo"),
         exports=(
             "tsa_host_numeric_mode", "tsa_host_vendor", "tsa_host_column",
             "tsa_host_sabotage",
@@ -2712,7 +2712,7 @@ FAMILIES = (
         display="the Extra Trees classifier and regressor",
         host_modules=(
             "extratrees/estimator.mojo", "extratrees/checks/pcg_rng.mojo",
-            "core/forest_host_predict.mojo", "core/forest_host_groves.mojo",
+            "ensemble/forest_host_predict.mojo", "ensemble/forest_host_groves.mojo",
         ),
         exports=(
             "trees_host_numeric_mode", "trees_host_vendor", "trees_host_column",
@@ -2757,8 +2757,8 @@ FAMILIES = (
         classes=("RandomForestClassifier", "RandomForestRegressor"),
         display="the random forest classifier and regressor",
         host_modules=(
-            "ensemble/host/rf_oracle.mojo", "core/forest_host_predict.mojo",
-            "core/forest_host_groves.mojo",
+            "ensemble/host/rf_oracle.mojo", "ensemble/forest_host_predict.mojo",
+            "ensemble/forest_host_groves.mojo",
         ),
         exports=(
             "rf_host_numeric_mode", "rf_host_vendor", "rf_host_column",
@@ -3250,7 +3250,7 @@ FAMILIES = (
             # lane/catboost-parity: the Ordered plan and the quantile
             # constant, host code the device fit calls too
             "gbdt/data/ordered_plan.mojo", "gbdt/metrics/sample_quantile.mojo",
-            "core/gbdt_host_predict.mojo",
+            "gbdt/gbdt_host_predict.mojo",
         ),
         exports=(
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
@@ -3735,7 +3735,7 @@ FAMILIES = (
                  " forecasts and in-sample one-step predictions, additive and multiplicative"),
         host_modules=("arima/host/arima_oracle.mojo", "arima/arima_ops_host_inference.mojo",
                       "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict_run.mojo",
-                      "tsa/checks/kpss_oracle.mojo", "core/kpss_host_test_impl.mojo"),
+                      "tsa/checks/kpss_oracle.mojo", "tsa/kpss_host_test_impl.mojo"),
         exports=(
             "forecast_host_numeric_mode", "forecast_host_vendor", "forecast_host_column",
             "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",

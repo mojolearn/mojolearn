@@ -7,7 +7,7 @@ All independent fixtures run through the existing host parallel policy.
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
-from core.pca_query_state import PCAQueryState, PCAQueryIdentity
+from x_decomp.pca_query_state import PCAQueryState, PCAQueryIdentity
 
 comptime PCA_QUERY_STATE_FIXTURES = 24
 

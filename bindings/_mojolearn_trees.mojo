@@ -43,7 +43,7 @@ from forest_inference_binding_door import (
     forest_unstage_input_gpu_binding,
     forest_ordered_resident_binding,
 )
-from core.forest_inference_run import (
+from ensemble.forest_inference_run import (
     forest_prepare_gpu_native, forest_predict_resident_into_gpu_native,
     forest_predict_resident_labels_gpu_native, forest_gpu_resident_caps,
     forest_resident_rows_native,
@@ -54,23 +54,23 @@ from core.forest_store_transport import forest_store_publish, forest_store_words
 from core.gbdt_entry_table import gbdt_vendor_word
 from core.native_descriptor_call import native_descriptor_report
 from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS, XP_DEV_LIVE
-from core.extra_trees_member import extra_trees_member_publish_image
-from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
+from extratrees.extra_trees_member import extra_trees_member_publish_image
+from ensemble.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
 from core.forest_entry_table import FOREST_TABLE_ET
 from core.native_descriptor_abi import NativeDescriptorError
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import shared_class_counts_mask
 from extratrees.estimator import FitResult
-from core.forest_inference_model import resident_release, resident_stage_input, resident_unstage_input
+from ensemble.forest_inference_model import resident_release, resident_stage_input, resident_unstage_input
 
 
 # DEVIATION 2482: fit/export ownership is separate from inference residency.
 from forest_export_binding_unpack import (forest_export_py_list_f64, forest_export_py_list_i64,)
-from core.forest_export_run import (ForestExportRegistry,)
-from core.forest_export_binding_impl import (validate_forest_export_destinations, copy_forest_export_leaves,)
+from ensemble.forest_export_run import (ForestExportRegistry,)
+from ensemble.forest_export_binding_impl import (validate_forest_export_destinations, copy_forest_export_leaves,)
 from forest_export_binding_pack import (forest_export_descriptor_py,)
-from core.mojolearn_trees_host_impl import et_export_into, et_forest_lists
+from xtrees.mojolearn_trees_host_impl import et_export_into, et_forest_lists
 from extratrees.mojolearn_trees_run import (
     _et_classifier_fit_run,
     _et_regressor_fit_run,
@@ -118,7 +118,7 @@ def _et_export_into_native(id: Int, dst: List[Int], trees: Int, nodes: Int, outp
     var lp = _i32_ptr(dst[3])
     var times = StageTimes()
     var stamp = times.start()
-    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # THE LOCK (ensemble/forest_export_run.mojo): the entry is taken out, read with
     # no lock held and put back on every path.
     var entry = registry[].take(id)
     var failed = False
@@ -139,7 +139,7 @@ def _et_export_verify_native(id: Int, dst: List[Int]) raises -> Int:
     """XF_EXPORT_VERIFY (MOJOLEARN_FOREST_EXPORT=verify): the diagnostic
     lists `forest_export_legacy` returns, against the exported arrays."""
     var registry = ET_EXPORTS.get_or_create_ptr()
-    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # THE LOCK (ensemble/forest_export_run.mojo): the entry is taken out, read with
     # no lock held and put back on every path.
     var entry = registry[].take(id)
     var offsets = List[Int64]()
@@ -231,7 +231,7 @@ def _et_classifier_fit[ROWMAJOR: Bool = False, ROWS: Bool = False](params: Fores
     var total_start = 0
     var result: FitResult
     if params.gil_free:
-        # a member's worker: no GIL to release (core/forest_entry.mojo)
+        # a member's worker: no GIL to release (ensemble/forest_entry.mojo)
         result = _et_classifier_fit_run[ROWMAJOR, ROWS](params, times, total_start)
     else:
         with GILReleased(Python()):
@@ -342,7 +342,7 @@ def _kept_forest_out(handle: Int) raises -> PythonObject:
     # lookup (DictKeyError) and the list build (Error) both raise Error to
     # the caller's try/finally, which cannot mix the two error types.
     var registry = ET_EXPORTS.get_or_create_ptr()
-    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # THE LOCK (ensemble/forest_export_run.mojo): the entry is taken out, read with
     # no lock held and put back on every path.
     var entry = registry[].take(handle)
     var out = PythonObject(None)
@@ -622,7 +622,7 @@ def build__mojolearn_trees() -> PythonObject:
         m.def_function[et_forest_export_legacy_binding]("forest_export_legacy")
         m.def_function[et_forest_export_release_binding]("forest_export_release")
         # every snapshot prepared here runs on the registry's process context and
-        # borrows its one I/O workspace (core/forest_inference_model.mojo,
+        # borrows its one I/O workspace (ensemble/forest_inference_model.mojo,
         # FOREST_PER_MODEL_IO; gap-fails2 2026-10-02)
         m.def_function[forest_prepare_gpu_binding[False]]("forest_prepare_gpu")
         # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.

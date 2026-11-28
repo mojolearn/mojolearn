@@ -32,7 +32,7 @@ from core.ensemble_member import (
     META_BLOCK_SEARCH, META_PARAM_COUNT, META_PARAM_SERVING,
 )
 from core.msel_scorer_run import MselScorerOptions, msel_scorer_group_words
-from core.logistic_member import logistic_member_v2
+from glm.logistic_member import logistic_member_v2
 from core.logistic_native_api import QnNativeDriver
 from core.logistic_route import LogisticRoute, logistic_route_pack
 from core.member_abi import (

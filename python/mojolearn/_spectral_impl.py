@@ -302,7 +302,7 @@ class SpectralClustering(ParamsMixin):
     #: The binding `predict` asks; a host subclass answers the metrics host
     #: binding, which ships in the inference wheel.
     _BINDING = "_mojolearn_metrics"
-    #: Member ABI family 30 (Spectral), kind 0 (core/spectral_member.mojo):
+    #: Member ABI family 30 (Spectral), kind 0 (spectral/spectral_member.mojo):
     #: the affinity='nearest_neighbors', prediction_data=True form.
     _mojolearn_member = (30, 0)
 
@@ -604,7 +604,7 @@ class SpectralEmbedding(ParamsMixin):
     _mojolearn_native_public = True
     _drop_first = True
     _norm_laplacian = True
-    # A native member that fits and exports its embedding (core/spectral_member.mojo kind 1, lane
+    # A native member that fits and exports its embedding (spectral/spectral_member.mojo kind 1, lane
     # mf-member8). No transform, no coef_ or feature_importances_.
     _mojolearn_member = (30, 1)
 

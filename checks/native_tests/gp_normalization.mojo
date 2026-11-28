@@ -25,13 +25,13 @@ from checks.native_tests.gp_native_data import (
     GP_GUARD64,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.gp_native_provider import gp_native_v1
-from core.gp_native_host import GPHostKernels
-from core.scaler_native_host import ScalerHostKernels
-from core.prep_program_native_host import PrepProgramHostKernels
-from core.gp_native_device import GPDeviceKernels
-from core.scaler_native_device import ScalerDeviceKernels
-from core.prep_program_native_device import PrepProgramDeviceKernels
+from gaussian_process.gp_native_provider import gp_native_v1
+from gaussian_process.gp_native_host import GPHostKernels
+from preprocessing.scaler_native_host import ScalerHostKernels
+from x_prep.prep_program_native_host import PrepProgramHostKernels
+from gaussian_process.gp_native_device import GPDeviceKernels
+from preprocessing.scaler_native_device import ScalerDeviceKernels
+from x_prep.prep_program_native_device import PrepProgramDeviceKernels
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 

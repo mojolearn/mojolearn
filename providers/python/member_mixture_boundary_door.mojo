@@ -90,7 +90,7 @@ def mixture_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
     route.entry = EntryRef(connection.driver.entry, entry_ref_word(mode, vendor, MIXTURE_NATIVE_COUNT))
     route.flags = connection.driver.metadata(MIXTURE_NATIVE_CAPABILITIES)
     # The GPU image's resident store (lane vdf-scope-cluster2b): its transport entry in `route.second`, so a
-    # model-selection fold stays on the device (core/mixture_member.mojo `_scoped`).
+    # model-selection fold stays on the device (mixture/mixture_member.mojo `_scoped`).
     var store_pin = PythonObject(None)
     if (route.flags & MIXTURE_CAP_DEV_STORE) != 0:
         store_pin = family_store_route(binding, "mixture_store_v1", route)

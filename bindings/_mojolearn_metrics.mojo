@@ -829,11 +829,11 @@ def metrics_vendor_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 from core.shared_slot import SharedSlot
-from core.spectral_native_provider import SpectralProviderAPI
-from core.spectral_member import spectral_member_publish
+from spectral.spectral_native_provider import SpectralProviderAPI
+from spectral.spectral_member import spectral_member_publish
 from core.manifold_member import manifold_member_publish
-from core.spectral_native_device import SpectralDeviceKernels
-from core.metrics_store import METRICS_STORE_API, metrics_store_v1
+from spectral.spectral_native_device import SpectralDeviceKernels
+from metrics.metrics_store import METRICS_STORE_API, metrics_store_v1
 from core.metrics_store_ref import metrics_store_publish
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_IDENTICAL
@@ -926,11 +926,11 @@ def build__mojolearn_metrics() -> PythonObject:
         m.def_function[metric_slot_create_binding]("metric_slot_create")
         var published_module = m.finalize()
         _publish_umap_ops(published_module)
-        # SpectralClustering's member entry (core/spectral_member.mojo): its predict runs on this
+        # SpectralClustering's member entry (spectral/spectral_member.mojo): its predict runs on this
         # image's spectral queries. A build with no GPU vendor ("none") publishes nothing.
         spectral_member_publish(Int(GLOBAL_NUMERIC_MODE), neighbors_vendor_word(COMPILED_VENDOR),
                                 Int(SPECTRAL_API.get_or_create_ptr()[].entries.unsafe_ptr()))
-        # The image's resident store (core/metrics_store.mojo, lane vdf-scope-cluster4), published where the
+        # The image's resident store (metrics/metrics_store.mojo, lane vdf-scope-cluster4), published where the
         # SpectralClustering and UMAP members resolve it by their route's (mode, vendor)
         # (core/metrics_store_ref.mojo). A build with no GPU vendor publishes nothing.
         metrics_store_publish(Int(GLOBAL_NUMERIC_MODE), neighbors_vendor_word(COMPILED_VENDOR),

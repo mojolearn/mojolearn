@@ -1,7 +1,7 @@
-diff --git a/core/estimators_host_impl.mojo b/core/estimators_host_impl.mojo
+diff --git a/glm/estimators_host_impl.mojo b/glm/estimators_host_impl.mojo
 index 3a1ec8d94d..6cf7c77af0 100644
---- a/core/estimators_host_impl.mojo
-+++ b/core/estimators_host_impl.mojo
+--- a/glm/estimators_host_impl.mojo
++++ b/glm/estimators_host_impl.mojo
 @@ -356,6 +356,14 @@ def labeled_reference_predict_host_run(
      for i in range(n_queries):
          olp[i] = out.labels[i]
@@ -28,10 +28,10 @@ index 3a1ec8d94d..6cf7c77af0 100644
      if core_address != 0:
          var cp = MutPointer[UInt8, MutUntrackedOrigin](
              unsafe_from_address=core_address
-diff --git a/core/hierarchy_member.mojo b/core/hierarchy_member.mojo
+diff --git a/hierarchy/hierarchy_member.mojo b/hierarchy/hierarchy_member.mojo
 index c62ee5b9e2..04591c3a34 100644
---- a/core/hierarchy_member.mojo
-+++ b/core/hierarchy_member.mojo
+--- a/hierarchy/hierarchy_member.mojo
++++ b/hierarchy/hierarchy_member.mojo
 @@ -439,6 +439,15 @@ def _fit(slot: _Slot, call: _Call) raises:
          if slot[].predicting:
              swap(slot[].refs, gathered.gathered)  # the state owns the gathered rows (nothing borrowed)

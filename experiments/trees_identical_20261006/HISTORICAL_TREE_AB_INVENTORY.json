@@ -905,7 +905,7 @@
       "id": "MOJOLEARN_FOREST_PACKED_NODES / MOJOLEARN_FOREST_SEPARATE_NODES",
       "recorded_status": "Historical cross-mode layout A/B: packed is existing default; SEPARATE_NODES selects comparison. Old PACKED_NODES opt-in changes nothing. Apple FAST measurements excluded from this inventory.",
       "sources": [
-        "core/forest_inference.mojo"
+        "ensemble/forest_inference.mojo"
       ],
       "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
     },
@@ -914,7 +914,7 @@
       "id": "MOJOLEARN_FOREST_SHARED_ROWS",
       "recorded_status": "Historical general shared-input staging opt-in; retain current source eligibility. No IDENTICAL keep/drop qualification inferred from Apple FAST comments.",
       "sources": [
-        "core/forest_inference.mojo"
+        "ensemble/forest_inference.mojo"
       ],
       "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
     },
@@ -923,7 +923,7 @@
       "id": "MOJOLEARN_FOREST_ROW_THREADS / MOJOLEARN_FOREST_ROW_THREADS_OFF",
       "recorded_status": "Historical force-on/force-off row schedule; default follows existing target-column dispatch. Recorded legacy threshold is reference only, not a newly adopted tuning rule.",
       "sources": [
-        "core/forest_inference.mojo"
+        "ensemble/forest_inference.mojo"
       ],
       "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
     },
@@ -932,7 +932,7 @@
       "id": "MOJOLEARN_FOREST_SCALAR_GROVES / MOJOLEARN_FOREST_VECTOR_GROVES",
       "recorded_status": "Historical vector/scalar traversal control: vector default for supported output counts; scalar force is diagnostic; old VECTOR_GROVES opt-in no longer required.",
       "sources": [
-        "core/forest_inference.mojo"
+        "ensemble/forest_inference.mojo"
       ],
       "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
     },
@@ -941,7 +941,7 @@
       "id": "MOJOLEARN_FOREST_ROW_THREADS_SABOTAGE",
       "recorded_status": "Historical negative control changes fold order; never a shipping/performance candidate.",
       "sources": [
-        "core/forest_inference.mojo"
+        "ensemble/forest_inference.mojo"
       ],
       "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
     },

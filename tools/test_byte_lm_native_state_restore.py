@@ -26,7 +26,7 @@ def test_validation_precedes_session_mutation_and_uses_shared_admission():
 
 
 def test_buffer_copy_and_state_value_checks_are_native():
-    for name in ('core/training_input_copy.mojo', 'core/training_state_validation.mojo'):
+    for name in ('training/training_input_copy.mojo', 'training/training_state_validation.mojo'):
         source = (ROOT / name).read_text()
         for forbidden in ('PythonObject', 'std.python', 'bindings.', 'providers.'):
             assert forbidden not in source

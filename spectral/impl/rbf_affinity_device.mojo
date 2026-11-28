@@ -15,7 +15,7 @@ cell's bits are the three-launch chain's and the x_decomp host column's
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_decomp.cells import F32Ptr, OP_EXP, OP_SCALE, ew_cell, sqdist_cell
-from core.metrics_store import metrics_store_buffer
+from metrics.metrics_store import metrics_store_buffer
 from core.fold_x_word import fold_x_slot
 
 comptime RBF_TPB = 128

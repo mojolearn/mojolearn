@@ -28,7 +28,7 @@ FAMILIES = (
             "trees-rf-weighted",
             "trees-et-deviance",
             "trees-gbdt-multirmse",
-            # lane mf-imp6: GradientBoosting feature_importances_ (core/gbdt_importance.mojo on the host column)
+            # lane mf-imp6: GradientBoosting feature_importances_ (gbdt/gbdt_importance.mojo on the host column)
             "trees-gbdt-importances",
             "trees-bagging-clf",
             "trees-bagging-reg",

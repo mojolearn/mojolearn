@@ -903,7 +903,7 @@ def _query_rows(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin]
 
 def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String) raises:
     # THE GIL RULE: the route entry is marked once per operation; the image
-    # then runs its fit and walks with no release (core/forest_entry.mojo).
+    # then runs its fit and walks with no release (ensemble/forest_entry.mojo).
     # The marked ref is what the slot keeps for its predicts.
     var key = entry_ref_gil_free(call[].route.entry)
     var cols = call[].x.cols
@@ -947,7 +947,7 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
         if weighted and slot[].oob and not slot[].et:
             # The estimator's own refusal (`_rf_fit_regressor`). Lane mf-rfe6: a weighted fit with the importance
             # fit is served (the same fit, then the same importance body over the fitted trees on both columns:
-            # core/mojolearn_rf_run.mojo `compute_feature_importances_host`, core/mojolearn_rf_host_run.mojo
+            # ensemble/mojolearn_rf_run.mojo `compute_feature_importances_host`, ensemble/mojolearn_rf_host_run.mojo
             # `rf_host_importance`), as the classifier's was.
             raise Error("NotImplementedError: sample_weight is not implemented together with oob_score "
                         + "or a tree-ID shard")
@@ -973,7 +973,7 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
     var y_dev = (fold.store_id >= 0 and call[].scope != MEMBER_SCOPE_NONE and call[].y_pin != 0
                  and (not (slot[].classifier and slot[].et) or y_codes))
     # The RF weights likewise under their own pin (the RF image reads its
-    # weights on the device only: core/mojolearn_rf_run.mojo); ET keeps the
+    # weights on the device only: ensemble/mojolearn_rf_run.mojo); ET keeps the
     # host gather (its builder's weight checks read host words).
     var w_dev = (weighted and not slot[].et and fold.store_id >= 0 and call[].scope != MEMBER_SCOPE_NONE
                  and call[].weights_pin != 0)
@@ -1378,7 +1378,7 @@ def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: B
     # registries and the workspace pool each have their own lock word.
     # Withdrawn at 45e90deaa7 and restored by lane pv-race (2026-11-22): the
     # random crash of parallel meta fits was the export registry's
-    # pre-lock snapshot read (core/forest_export_run.mojo, THE TABLE IS
+    # pre-lock snapshot read (ensemble/forest_export_run.mojo, THE TABLE IS
     # BEHIND A POINTER), now fixed.
     var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_GIL_FREE
     if predict_only:

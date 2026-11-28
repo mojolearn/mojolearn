@@ -29,7 +29,7 @@ from checks.native_tests.testsuite_cases import check_cases_serial, CPU_COLUMN_B
 from max.gpu.host import DeviceContext
 from core.fold_x_device import FOLD_X_STORE, fold_x_word
 from core.neural_context import process_ctx
-from core.gbdt_importance import gbdt_feature_importances_host
+from gbdt.gbdt_importance import gbdt_feature_importances_host
 from gbdt.gpu_importance import gbdt_feature_importances_device
 from gbdt.mojolearn_gbdt_host_run import gbdt_fit_two_level_feature_freq_run
 from checks.native_tests.gbdt_public_fits import GbdtOpts, GbdtInputs, fit, _DeviceFit

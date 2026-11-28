@@ -116,7 +116,7 @@ from dbscan.impl.neighbors.epsilon_neighborhood import (
     DBSCAN_METRIC_L2,
     DBSCAN_METRIC_PRECOMPUTED,
 )
-from core.cosine_rows import cosine_unit_rows
+from dbscan.cosine_rows import cosine_unit_rows
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -132,7 +132,7 @@ from max.gpu import block_dim, block_idx, thread_idx
 #: fam2-cluster (2026-10-04), IDENTICAL, every column: metric='cosine'
 #: scales the rows to unit length on the device. The host copy of X, the
 #: host fold over every element and the second host array are gone; the
-#: kernel is `core/cosine_rows.mojo::cosine_unit_rows` statement for
+#: kernel is `dbscan/cosine_rows.mojo::cosine_unit_rows` statement for
 #: statement (the same ascending fold of pinned products, `identical_sqrt`,
 #: `identical_div`, every intermediate flushed), one thread per row, so the
 #: unit rows carry the bits the host column's call of that function gives.
@@ -278,7 +278,7 @@ def dbscan_fit(
     ctx.synchronize()
 
     # DEVIATION 5113: cosine runs on unit rows scaled on the host by the
-    # code the CPU binding runs too (`core/cosine_rows.mojo`).
+    # code the CPU binding runs too (`dbscan/cosine_rows.mojo`).
     var unit = List[Float32]()
     var cosine_on_device = False
     comptime if IDN_DBSCAN_COSINE_DEVICE:

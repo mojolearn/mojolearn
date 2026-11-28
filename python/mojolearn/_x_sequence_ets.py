@@ -105,7 +105,7 @@ class ETS(ParamsMixin):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
-    #: A member of a meta-estimator (core/forecast_seq_member.mojo: family 43, kind 1).
+    #: A member of a meta-estimator (sequence/forecast_seq_member.mojo: family 43, kind 1).
     _mojolearn_member = (43, 1)
 
     def __init__(self, season_length=1, model="AAN", damped=True, alpha=None, beta=None, phi=None,

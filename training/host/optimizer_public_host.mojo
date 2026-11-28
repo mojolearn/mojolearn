@@ -12,7 +12,7 @@ step; there is no device, so there is no resident state and no
 device-parameter step (refused by name)."""
 from std.memory import unsafe_memcpy
 
-from core.mojolearn_training_host_impl import clip_grad_norm_host_into, optimizer_step_host_into
+from training.mojolearn_training_host_impl import clip_grad_norm_host_into, optimizer_step_host_into
 from training.host.samba_ops_oracle import host_samba_accumulate
 from training.optimizer_public_common import (
     F32P, I32P, Flat, GRADS_HOST, PublicStep, PublicStepOut, gather, registry_check, scatter,

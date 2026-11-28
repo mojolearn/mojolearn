@@ -55,7 +55,7 @@ from x_prep.fastpt import (
     pt_colbatch_fold, cs_tile_stats, ptimpute_part_words,
 )
 from x_prep.dmi_fast import mi_cc_device, mi_cd_device_rank
-from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges, copy_out_ranges_to_store
+from x_prep.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges, copy_out_ranges_to_store
 from core.staged_download import download_f32_into
 from core.device_pool import pool_take, pool_give
 
@@ -384,7 +384,7 @@ def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: 
 
 #: TOMBSTONE: G3 (lane fg-knn-nb, MOJOLEARN_XPREP_NO_SLOT_HOP: large direct
 #: inputs as host spans straight into the arena, `run_program_device_ranges_host`,
-#: core/arena_io.mojo `upload_ranges_host`) deleted 2026-10-09 (lane
+#: x_prep/arena_io.mojo `upload_ranges_host`) deleted 2026-10-09 (lane
 #: postmerge-act-2): slower on the average, gaussian-nb istella NV 1.25x / AMD
 #: 1.00x, taxi NV 1.02x / AMD 1.03x (nv n0668->n0630, amd a1066->a1090),
 #: accuracy SAME, same digests; refused in core/six_lane_experiment_guards.mojo;

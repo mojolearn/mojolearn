@@ -265,7 +265,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
-    #: Member ABI family 25 (XCluster), kind 0 (core/xcluster_member.mojo).
+    #: Member ABI family 25 (XCluster), kind 0 (x_cluster/xcluster_member.mojo).
     _mojolearn_member = (25, 0)
 
     def __init__(self, n_clusters=8, *, init="k-means++", max_iter=100, batch_size=1024,
@@ -406,7 +406,7 @@ class BisectingKMeans(_CentersMixin, _XCluster):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
-    #: Member ABI family 25 (XCluster), kind 1 (core/xcluster_member.mojo).
+    #: Member ABI family 25 (XCluster), kind 1 (x_cluster/xcluster_member.mojo).
     _mojolearn_member = (25, 1)
 
     def __init__(self, n_clusters=8, *, init="random", n_init=1, random_state=None, max_iter=300,
@@ -532,7 +532,7 @@ class MeanShift(_XCluster):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
 
-    #: Member ABI family 25 (XCluster), kind 2 (core/xcluster_member.mojo).
+    #: Member ABI family 25 (XCluster), kind 2 (x_cluster/xcluster_member.mojo).
     _mojolearn_member = (25, 2)
 
     def __init__(self, *, bandwidth=None, seeds=None, bin_seeding=False, min_bin_freq=1,
@@ -687,7 +687,7 @@ class OPTICS(_XCluster):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
-    # A native member that fits and exports its arrays (core/xcluster_member.mojo kind 3, lane mf-member8).
+    # A native member that fits and exports its arrays (x_cluster/xcluster_member.mojo kind 3, lane mf-member8).
     # No predict, no coef_ or feature_importances_.
     _mojolearn_member = (25, 3)
 
@@ -817,7 +817,7 @@ class AffinityPropagation(_XCluster):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
 
-    #: Member ABI family 25 (XCluster), kind 4 (core/xcluster_member.mojo).
+    #: Member ABI family 25 (XCluster), kind 4 (x_cluster/xcluster_member.mojo).
     _mojolearn_member = (25, 4)
 
     def __init__(self, *, damping=0.5, max_iter=200, convergence_iter=15, copy=True,
@@ -1007,7 +1007,7 @@ class BayesianGaussianMixture(_XCluster):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
-    #: Member ABI family 25 (XCluster), kind 5 (core/xcluster_member.mojo).
+    #: Member ABI family 25 (XCluster), kind 5 (x_cluster/xcluster_member.mojo).
     _mojolearn_member = (25, 5)
 
     def __init__(self, *, n_components=1, covariance_type="full", tol=1e-3, reg_covar=1e-6,

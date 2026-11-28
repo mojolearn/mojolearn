@@ -77,7 +77,7 @@ in-envelope protocol.
 """
 
 from std.atomic import Atomic, Ordering
-from core.device_mutex import claim_device_mutex
+from ensemble.device_mutex import claim_device_mutex
 from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.sync import barrier

@@ -37,7 +37,7 @@ from core.ensemble_member import (
     META_VOTE_CLASSIFIER, META_STACK_REGRESSOR, META_CALIBRATED, META_BAG_CLASSIFIER, META_ADA_REGRESSOR,
     META_PARAM_COUNT,
 )
-from core.logistic_member import logistic_member_v2
+from glm.logistic_member import logistic_member_v2
 from core.logistic_native_api import QnNativeDriver
 from core.logistic_route import LogisticRoute, logistic_route_pack
 from core.member_abi import (

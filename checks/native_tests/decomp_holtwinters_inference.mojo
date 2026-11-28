@@ -29,7 +29,7 @@ from checks.native_tests.testsuite_cases import check_cases, require
 from std.math import isfinite, isnan, sin, cos, pi
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr, i32_ptr
-from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
+from tsa.mojolearn_tsa_host_impl import holtwinters_fit_host_into
 from holtwinters.host.hw_predict import hw_predict_in_sample_ptr
 from holtwinters.impl.internal.hw_estimate import HW_INIT_ESTIMATED
 

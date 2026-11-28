@@ -213,7 +213,7 @@ class AgglomerativeClustering(ParamsMixin):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
-    #: Member ABI family 29 (Hierarchy), kind 0 (core/hierarchy_member.mojo):
+    #: Member ABI family 29 (Hierarchy), kind 0 (hierarchy/hierarchy_member.mojo):
     #: the prediction_data=True single-linkage euclidean form on the solver route.
     _mojolearn_member = (29, 0)
 
@@ -363,7 +363,7 @@ class AgglomerativeClustering(ParamsMixin):
         # `||a||^2 + ||b||^2 - 2 a.b` distance, whose value for a row against
         # itself need not be 0. One thread per query row, no fold across rows;
         # the GPU binding and the CPU host binding
-        # (`core/labeled_reference_host_predict.mojo`) compute the same bytes.
+        # (`dbscan/labeled_reference_host_predict.mojo`) compute the same bytes.
         return _NATIVE(self, "family_cfb_agglo_predict", (None, X), _NATIVE_CONTEXT)
 
     # The training rows of a `prediction_data=True` fit stay on the device

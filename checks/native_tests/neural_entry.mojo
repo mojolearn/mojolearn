@@ -33,7 +33,7 @@ from core.neural_entry_table import (
     EMB_OP_TENSOR_ALLOC,
 )
 from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN, SMALL_MLP_PROGRAM_CLOSE
-from core.neural_entry_neural_host import publish_neural_block_neural_host
+from training.neural_entry_neural_host import publish_neural_block_neural_host
 from transformer.host.neural_entry_host import publish_neural_transformer_host
 from mamba.host.neural_entry_host import publish_neural_mamba_host
 from sequence.small_mlp_entry_host import publish_neural_small_mlp_host

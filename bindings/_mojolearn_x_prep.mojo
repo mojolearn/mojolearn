@@ -14,7 +14,7 @@ from std.python.bindings import PythonModuleBuilder
 from core.shared_slot import SharedSlot
 from core.scaler_native_api import PrepProgramAPI
 from x_prep.transport_device import publish_x_prep_transport_device
-from core.prep_program_native_device import PrepProgramDeviceKernels
+from x_prep.prep_program_native_device import PrepProgramDeviceKernels
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST

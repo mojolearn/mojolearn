@@ -424,7 +424,7 @@ _batch_decl(_rows_calls("predict"), "trees-gbdt-multirmse")
 
 @lane("trees-gbdt-importances")
 def _(ml, X, yc, yr, Xh=None):
-    """GradientBoosting `feature_importances_` (lane mf-imp6: core/gbdt_importance.mojo on the host column,
+    """GradientBoosting `feature_importances_` (lane mf-imp6: gbdt/gbdt_importance.mojo on the host column,
     gbdt/gpu_importance.mojo on a GPU, the same bodies and fold order), light: 8 SymmetricTree trees (RMSE),
     the same on fixture-derived sample weights (the exact integer leaf weights), 8 Depthwise trees (the
     non-symmetric descent). The weighted fit uses the public regressor adapter, and a separate fit uses the

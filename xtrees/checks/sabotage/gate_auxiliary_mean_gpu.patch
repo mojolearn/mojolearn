@@ -1,7 +1,7 @@
-diff --git a/core/forest_auxiliary_units.mojo b/core/forest_auxiliary_units.mojo
+diff --git a/ensemble/forest_auxiliary_units.mojo b/ensemble/forest_auxiliary_units.mojo
 index 94b411f1a8..0e7bd52875 100644
---- a/core/forest_auxiliary_units.mojo
-+++ b/core/forest_auxiliary_units.mojo
+--- a/ensemble/forest_auxiliary_units.mojo
++++ b/ensemble/forest_auxiliary_units.mojo
 @@ -4,6 +4,7 @@ Prefix contract: strict tree-order sum / number of trees in that prefix.
  Outputs are row-major. A zero output address requests no allocation/write.
  """

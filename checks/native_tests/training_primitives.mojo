@@ -20,7 +20,7 @@ as a wrong number. Tolerances are the Python test's.
 from std.memory import bitcast
 from std.math import sqrt
 from checks.native_tests.training_check_common import same_words, all_finite, uniform_int
-from core.mojolearn_training_host_impl import (
+from training.mojolearn_training_host_impl import (
     rms_norm_forward_host_into,
     rms_norm_backward_host_into,
     linear_forward_host_into,

@@ -86,7 +86,7 @@ leaf through a one-block grid to keep it from becoming one again.
 
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.device_units import device_multiprocessor_count
+from gbdt.device_units import device_multiprocessor_count
 from max.gpu.primitives.block import sum as block_sum
 
 from gbdt.targets.kernel.pointwise_targets import pinned_block_sum

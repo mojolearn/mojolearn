@@ -3,7 +3,7 @@
 """Pure policy gate for default ordered resident forest inference."""
 
 from std.testing import TestSuite
-from core.forest_inference_model import forest_ordered_resident_policy
+from ensemble.forest_inference_model import forest_ordered_resident_policy
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, COLUMN_AMD
 from checks.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 

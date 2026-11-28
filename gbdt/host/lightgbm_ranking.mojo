@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Grouped LightGBM objectives on the CPU. Scratch belongs to one ordered training pool."""
 from cluster.host.host_cells import host_cells
-from core.sort_ops_host import FRS_BINS, FRS_TILE, stable_radix_pairs_u32_host
+from gbdt.sort_ops_host import FRS_BINS, FRS_TILE, stable_radix_pairs_u32_host
 from gbdt.targets.lightgbm_ranking import (
     LR_CUTOFF, LR_PLANES, RF, RU, RankStages, RankView, lambda_derivatives, rank_ideal, rank_ndcg, rank_row, rank_sort_key,
     xe_derivatives, query_softmax,

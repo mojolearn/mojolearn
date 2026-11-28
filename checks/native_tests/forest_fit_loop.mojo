@@ -33,8 +33,8 @@ from core.forest_fit_request import (
 )
 from bindings.forest_config_run import forest_request
 from xtrees.trees_forest_run import ForestFit
-from core.mojolearn_rf_host_run import RF_HOST_EXPORTS, rf_host_fit_handle
-from core.mojolearn_et_host_run import ET_HOST_EXPORTS, et_host_fit_handle
+from ensemble.mojolearn_rf_host_run import RF_HOST_EXPORTS, rf_host_fit_handle
+from extratrees.mojolearn_et_host_run import ET_HOST_EXPORTS, et_host_fit_handle
 from svm.host.svm_host_impl import iforest_run_host
 from checks.native_tests.py2mojo_forest_fits import RfSpec, rf_config
 from checks.native_tests.bm_trees_et_fits import EtSpec, et_config

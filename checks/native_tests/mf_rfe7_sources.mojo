@@ -38,7 +38,7 @@ from core.member_families import (
     MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_SCALER, MEMBER_FAMILY_KMEANS, MEMBER_FAMILY_DECOMPOSITION,
     MEMBER_FAMILY_XDECOMP, MEMBER_FAMILY_MIXTURE,
 )
-from core.kernel_svm_member import kernel_svm_member_v2
+from svm.kernel_svm_member import kernel_svm_member_v2
 from bindings.prep_select_run import (
     rfe_member_source, rfe_member_source_named, rfe_named_block, rfe_block_of, rfe_row_of, RFE_NO_IMPORTANCES,
 )

@@ -1,6 +1,6 @@
-diff --git a/core/mojolearn_solver_host_impl.mojo b/core/mojolearn_solver_host_impl.mojo
---- a/core/mojolearn_solver_host_impl.mojo
-+++ b/core/mojolearn_solver_host_impl.mojo
+diff --git a/solver/mojolearn_solver_host_impl.mojo b/solver/mojolearn_solver_host_impl.mojo
+--- a/solver/mojolearn_solver_host_impl.mojo
++++ b/solver/mojolearn_solver_host_impl.mojo
 @@ -94,11 +94,11 @@
      if len(children) != (n_rows - 1) * 2 or len(labels) != n_rows:
          raise Error("linkage_fit: the host dendrogram or labels have an unexpected length; nothing written")

@@ -50,7 +50,7 @@ comptime SPECTRAL_RBF = 3
 #: (code, bad row, stored): the connectivity affinity 0.5 (C + C^T) on the
 #: device (embedding; and fit since lane vdf-misc4, 2026-11-24).
 comptime SPECTRAL_KNN = 4
-#: source = the id of a slot of the metrics image's resident store (core/metrics_store.mojo) holding X (rows x
+#: source = the id of a slot of the metrics image's resident store (metrics/metrics_store.mojo) holding X (rows x
 #: features float32, a model-selection fold taken on the device): `fit`'s dataset route without a host X (lane
 #: vdf-scope-cluster4, 2026-11-24; capability SPECTRAL_CAP_DEV_STORE). The same kernels on the same words as
 #: SPECTRAL_DATASET.

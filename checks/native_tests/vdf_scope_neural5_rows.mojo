@@ -44,11 +44,11 @@ from x_decomp.tsvd_owner import tsvd_randomized_fit_run
 from core.msel_device_x import msel_fold_store, msel_device_x_context
 from core.pca_native_api import PCAQueryRequest, PCAFoldStore
 from core.pca_native_fold import PCAFoldKernels
-from core.pca_native_device import PCADeviceKernels
+from decomposition.pca_native_device import PCADeviceKernels
 from core.tsvd_native_api import TSVDQueryRequest, TSVDFitRequest, TSVD_TSQR
 from core.tsvd_native_fold import TSVDFoldKernels
-from core.tsvd_native_device import TSVDDeviceKernels
-from core.tsvd_native_decomp import TSVDDecompKernels
+from decomposition.tsvd_native_device import TSVDDeviceKernels
+from x_decomp.tsvd_native_decomp import TSVDDecompKernels
 
 comptime CASES = 5
 comptime _ROWS = 24

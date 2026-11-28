@@ -17,7 +17,7 @@ from core.entry_table import entry_ref_unresolved
 from core.forest_fit_request import FOREST_ARG_NO_INT
 from bindings.forest_config_run import ForestConfig, forest_request, forest_target_check
 from xtrees.trees_forest_run import ForestFit
-from core.mojolearn_et_host_run import (
+from extratrees.mojolearn_et_host_run import (
     ET_HOST_EXPORTS, et_host_export_into, et_host_fit_result, et_host_predict_walk, et_host_retain,
 )
 from checks.native_tests.py2mojo_forest_fits import Forest

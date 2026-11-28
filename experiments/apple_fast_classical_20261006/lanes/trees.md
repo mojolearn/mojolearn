@@ -4,7 +4,7 @@ All twelve candidate implementations are written on `lane/apple-fast-classical-i
 
 This file records the exact implemented scope, including adaptations from the original idea cards. The machine-readable A/B selector input is `trees.json`. Define arrays contain bare compiler names; enabling a define with `=0` still counts as defined. FAST requires neither IDENTICAL nor DETERMINISTIC mode define. Existing prerequisites must match in both arms.
 
-Only production source and these handoff artifacts were written. No generated binary, execution result or fabricated measurement is included. The coordinator granted narrowly expanded ownership of `core/forest_inference.mojo` for T08; its RF_INPUT guard leaves ExtraTrees launch geometry unchanged. `core/forest_inference_model.mojo` needed no edit.
+Only production source and these handoff artifacts were written. No generated binary, execution result or fabricated measurement is included. The coordinator granted narrowly expanded ownership of `ensemble/forest_inference.mojo` for T08; its RF_INPUT guard leaves ExtraTrees launch geometry unchanged. `ensemble/forest_inference_model.mojo` needed no edit.
 
 ## AFCL-T01 — Quantized boosting histogram row chunks
 
@@ -110,11 +110,11 @@ RF_INPUT specializations use 64 instead of 128 threads per traversal group. Orde
 
 - A defines: (none beyond matching workload settings).
 - B defines: `MOJOLEARN_AFCL_T08`.
-- Paths: `core/forest_inference.mojo`.
+- Paths: `ensemble/forest_inference.mojo`.
 - Callers: RandomForestClassifier GPU inference; RandomForestRegressor GPU inference.
 - Actual scope: Shared launch_forest_inference transient/resident ordered, scalar and vector grove paths, guarded additionally on RF_INPUT=True. ExtraTrees specializations retain 128 threads.
 - Prerequisites: Apple FAST; RF caller reaching core forest inference, including the explicit parallel_groves engine; same engine and layout flags in both arms.
-- Limitations: Legacy/host inference engines and OOB training kernels are unchanged. No source change was needed in core/forest_inference_model.mojo; its existing dispatch consumes launch_forest_inference. Shared-row/packed-node/vector flags must match across arms; their existing eligibility rules are unchanged.
+- Limitations: Legacy/host inference engines and OOB training kernels are unchanged. No source change was needed in ensemble/forest_inference_model.mojo; its existing dispatch consumes launch_forest_inference. Shared-row/packed-node/vector flags must match across arms; their existing eligibility rules are unchanged.
 - Future quality coverage: Scalar/vector probability or regression outputs, label argmax, uneven depths, output capacity tails and leaf comparisons. Heldout quality, same complete forest and every output; repeated calls and model lifetime.
 - Status: `source_written_uncompiled_unverified_unmeasured`; default OFF.
 

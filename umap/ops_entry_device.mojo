@@ -26,7 +26,7 @@ from umap.sparse_estimator import sparse_fit_transform, sparse_fit_transform_dev
 from umap.transform import transform as umap_transform, transform_device as umap_transform_device
 from max.gpu.host import DeviceBuffer
 from core.fold_x_word import fold_x_slot
-from core.metrics_store import metrics_store_buffer
+from metrics.metrics_store import metrics_store_buffer
 from umap.ops_entry_words import (
     UmapWordPtr, UmapFloatPtr, umap_fit_config, umap_fit_ex_config, umap_transform_config, umap_graph_config,
 )

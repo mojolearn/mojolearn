@@ -32,9 +32,9 @@ from core.dbscan_native_api import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.native_tests.dbscan_native_profiles import DBSCAN_I32_GUARD, integer_guards, DBSCANCase, profile, query_count, query_name, query_rows
 from checks.native_tests.pca_native_helpers import guards, unchanged, PCA_TEST_GUARD
-from core.dbscan_native_host import DBSCANHostKernels
+from dbscan.dbscan_native_host import DBSCANHostKernels
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
-from core.dbscan_native_device import DBSCANDeviceKernels
+from dbscan.dbscan_native_device import DBSCANDeviceKernels
 
 
 
@@ -265,7 +265,7 @@ def fixture(driver: DBSCANNativeDriver, unit: Int, host: Bool) raises:
         "DBSCAN actual host/device vendor")
     # The exact word each image answers (no mask: a bit gained or lost is caught). The host image answers none;
     # the device image answers RESIDENT, DEV_STORE (vdf-scope-cluster4) and FOLD_X (512881ce44),
-    # core/dbscan_native_device.mojo capabilities().
+    # dbscan/dbscan_native_device.mojo capabilities().
     var dbscan_caps = driver.metadata(DBSCAN_CAPABILITIES)
     var dbscan_want = 0 if host else (DBSCAN_CAP_RESIDENT | DBSCAN_CAP_DEV_STORE | DBSCAN_CAP_FOLD_X)
     require(dbscan_caps == dbscan_want, "DBSCAN resident capability: " + String(dbscan_caps)

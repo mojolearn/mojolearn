@@ -1,7 +1,7 @@
-diff --git a/core/forest_inference.mojo b/core/forest_inference.mojo
+diff --git a/ensemble/forest_inference.mojo b/ensemble/forest_inference.mojo
 index 271b1c7157..d4b826a053 100644
---- a/core/forest_inference.mojo
-+++ b/core/forest_inference.mojo
+--- a/ensemble/forest_inference.mojo
++++ b/ensemble/forest_inference.mojo
 @@ -95,6 +95,11 @@ def _afcl_rf_block[RF_INPUT: Bool]() -> Int:
  
  @always_inline

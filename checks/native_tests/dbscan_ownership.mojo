@@ -11,8 +11,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from core.host_parallel import host_parallelize
 from core.dbscan_native_api import DBSCANNativeDriver, DBSCANReferenceRequest, DBSCANResidentQuery, dbscan_native_v1
-from core.dbscan_native_device import DBSCANDeviceKernels
-from core.labeled_reference_resident import LabeledReferenceLease, labeled_reference_lease
+from dbscan.dbscan_native_device import DBSCANDeviceKernels
+from dbscan.labeled_reference_resident import LabeledReferenceLease, labeled_reference_lease
 from checks.native_tests.dbscan_native_profiles import integer_guards, DBSCAN_I32_GUARD
 from checks.native_tests.testsuite_cases import require
 

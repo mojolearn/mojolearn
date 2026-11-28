@@ -220,7 +220,7 @@ def cls_prog_execute(key: EntryRef, program: ClsProgram, inputs: List[ClsRunInpu
     var nst = len(program.stages) // CLS_STAGE_WORDS
     var pa = Int(stages.unsafe_ptr())
     if route.ranges:
-        # the shared ranges runner (core/arena_io.mojo): the inputs go up,
+        # the shared ranges runner (x_prep/arena_io.mojo): the inputs go up,
         # the rest of the host arena starts zero on the device, and
         # everything but the inputs (and the in-out inputs) comes back
         var pairs = List[Int]()

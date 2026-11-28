@@ -43,7 +43,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from mixture.gmm_entries import _gmm_sample_run
 from checks.vendor import COMPILED_VENDOR
 from core.device_route import device_vendor_code
-from core.mixture_member import mixture_member_publish
+from mixture.mixture_member import mixture_member_publish
 from mixture.estimator import GaussianMixtureModel
 from mixture.mixture_binding_run import rebuild_model_run
 
@@ -165,7 +165,7 @@ def build__mojolearn_mixture() -> PythonObject:
         m.def_function[mixture_native_api_v1_binding]("mixture_native_api_v1")
         m.def_function[mixture_store_v1_binding]("mixture_store_v1")
         var published_module = m.finalize()
-        # The GaussianMixture member entry (core/mixture_member.mojo) beside its kernel table.
+        # The GaussianMixture member entry (mixture/mixture_member.mojo) beside its kernel table.
         mixture_member_publish(Int(GLOBAL_NUMERIC_MODE), device_vendor_code(String(COMPILED_VENDOR)), Int(GMM_NATIVE_DEVICE_API.get_or_create_ptr()[].entries.unsafe_ptr()))
         return published_module
     except e:

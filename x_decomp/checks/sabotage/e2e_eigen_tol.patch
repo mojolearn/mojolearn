@@ -1,7 +1,7 @@
-diff --git a/core/spectral_native_host.mojo b/core/spectral_native_host.mojo
+diff --git a/spectral/spectral_native_host.mojo b/spectral/spectral_native_host.mojo
 index 7c72e3a24d..b13d7c8125 100644
---- a/core/spectral_native_host.mojo
-+++ b/core/spectral_native_host.mojo
+--- a/spectral/spectral_native_host.mojo
++++ b/spectral/spectral_native_host.mojo
 @@ -63,7 +63,7 @@ struct SpectralHostBackend(SpectralBackend):
          result.columns = host_spectral_embedding_dataset(
              source, r.input.rows, r.input.features, r.options.lanczos_components,

@@ -20,7 +20,7 @@ from std.sys import argv
 from std.time import perf_counter_ns
 from std.testing import assert_equal
 from max.gpu.host import DeviceContext, DeviceBuffer
-from core.forest_inference import forest_grove32_kernel, forest_vector_grove32_kernel, validate_flat_forest_host
+from ensemble.forest_inference import forest_grove32_kernel, forest_vector_grove32_kernel, validate_flat_forest_host
 from checks.numerics import numeric_mode_name
 from checks.vendor import COMPILED_VENDOR
 

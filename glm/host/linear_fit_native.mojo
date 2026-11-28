@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The existing host linear fit kernels behind native primitive requests."""
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.estimators_host_impl import _positive, ridge_fit_host_run, ols_fit_host_run
+from glm.estimators_host_impl import _positive, ridge_fit_host_run, ols_fit_host_run
 from core.hostptr import f32_ptr, f64_ptr
 from core.linear_fit_types import (
     LINEAR_FIT_ABI, LF_FLAGS, LF_MODE, LF_VENDOR, LF_GRAM, LF_RIDGE_RESIDENT, LF_PREP,

@@ -213,7 +213,7 @@ def _rfe_meta_base(estimator: PythonObject, g: PythonObject, y: PythonObject, co
 
 # ---------------------------------------------------------------- RFE over a native member
 #: GradientBoostingRegressor's Gbdt member kind (python/mojolearn/_gbdt_adapters.py `_mojolearn_member = (16, 2)`;
-#: core/gbdt_member.mojo `_KIND_REGRESSOR`): its fit door admits y in its own words.
+#: gbdt/gbdt_member.mojo `_KIND_REGRESSOR`): its fit door admits y in its own words.
 comptime _GBDT_KIND_REGRESSOR_ADAPTER = 2
 
 

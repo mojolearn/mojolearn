@@ -662,19 +662,19 @@ def rfe_named_block(family: Int, kind: Int, name: String) -> Int:
     if family == MEMBER_FAMILY_DISCRIMINANT:
         return _da_named(kind, name)
     if family == MEMBER_FAMILY_KERNEL_SVM:
-        return _F + 1 if name == "support_vectors_" else 0  # core/kernel_svm_member.mojo _B_VECTORS
+        return _F + 1 if name == "support_vectors_" else 0  # svm/kernel_svm_member.mojo _B_VECTORS
     if family == MEMBER_FAMILY_KERNEL_RIDGE:
-        return _F if name == "X_fit_" else 0  # core/kernel_ridge_member.mojo _B_X_FIT
+        return _F if name == "X_fit_" else 0  # kernel_methods/kernel_ridge_member.mojo _B_X_FIT
     if family == MEMBER_FAMILY_KERNEL_APPROX:
         return _F if (kind == 0 and name == "components_") else 0  # Nystroem FAMILY+0
     if family == MEMBER_FAMILY_GP:
-        return _F if name == "X_train_" else 0  # core/gp_member.mojo _B_X
+        return _F if name == "X_train_" else 0  # gaussian_process/gp_member.mojo _B_X
     if family == MEMBER_FAMILY_KMEANS:
         return _F if name == "cluster_centers_" else 0  # core/kmeans_member.mojo _BLOCK_CENTERS
     if family == MEMBER_FAMILY_XCLUSTER:
         # MiniBatchKMeans, BisectingKMeans, MeanShift, AffinityPropagation: PACK's cluster_centers_ is FAMILY+0
         # (lane mf-member8: AffinityPropagation's centers are the centroid-fit entry's exemplar rows, kept in the
-        # state and exported as that block, core/xcluster_member.mojo `_affinity_fit`; an affinity='precomputed'
+        # state and exported as that block, x_cluster/xcluster_member.mojo `_affinity_fit`; an affinity='precomputed'
         # fit publishes none: providers/python/member_rfe_boundary_door.mojo refuses the name there in
         # attrgetter's words, and a fit with no exemplar exports a 0 x features block, squared and summed to
         # zeros as scikit-learn's `_get_feature_importances` sums its empty cluster_centers_).

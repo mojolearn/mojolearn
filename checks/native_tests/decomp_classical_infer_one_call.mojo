@@ -22,9 +22,9 @@ from core.host_parallel import host_parallelize
 from core.pca_native_api import PCANativeDriver, PCAFoldStore
 from checks.native_tests.pca_native_helpers import PCATestState, PCA_TEST_GUARD, guards, unchanged
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.pca_native_host import pca_host_native_v1
+from decomposition.pca_native_host import pca_host_native_v1
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
-from core.pca_native_device import pca_device_native_v1
+from decomposition.pca_native_device import pca_device_native_v1
 
 
 

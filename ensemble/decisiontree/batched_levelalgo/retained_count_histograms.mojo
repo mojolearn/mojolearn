@@ -17,7 +17,7 @@ comptime LOOP_HDR_WORDS = 16
 comptime LOOP_H_CUR = 3
 from max.gpu import block_idx, thread_idx, block_dim, grid_dim
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.launch_clock import log_launch_ctx
+from ensemble.launch_clock import log_launch_ctx
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import NodeWorkItem, WorkloadInfo
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import HistogramArgs, _histogram_inner_loop, _histogram_inner_loop_binned
 from ensemble.decisiontree.batched_levelalgo.objectives import ObjectiveLike

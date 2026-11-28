@@ -12,7 +12,7 @@ part of the generator's public state and advances in registry order.
 from std.math import sqrt
 from core.entry_table import EntryRef, entry_ref_call
 from core.samba_entry_table import SAMBA_PRIM_NEURAL_RNG
-from core.samba_construct_native_impl import samba_fill_ones
+from training.samba_construct_native_impl import samba_fill_ones
 
 
 def samba_initialize_run(entry: EntryRef, names: List[String], addresses: List[Int], sizes: List[Int],

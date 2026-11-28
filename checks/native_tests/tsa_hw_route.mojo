@@ -22,7 +22,7 @@ from core.hostptr import f32_ptr, i32_ptr
 from core.device_route import (
     DeviceRoute, DEVICE_CPU, DEVICE_GPU, DEVICE_INSTALL, device_code, device_installed, device_vendor_word,
 )
-from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
+from tsa.mojolearn_tsa_host_impl import holtwinters_fit_host_into
 from core.tsa_entry_table import (
     TSA_OP_FLAGS, TSA_OP_HW_FIT, TSA_OP_HW_FORECAST, TSA_OP_HW_QUERY_RESIDENT, TSA_OP_HW_RESIDENT_PREPARE,
     TSA_OPERATION_COUNT, TSA_TABLE_FORECAST, TSA_TABLE_TSA, tsa_ops_check_spans,

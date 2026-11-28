@@ -40,7 +40,7 @@ from core.member_abi import (
 )
 from core.member_families import MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
 from core.forest_member_run import FM_BLOCK_OOB, FM_BLOCK_OOB_SCORE
-from core.mojolearn_rf_host_run import _rf_fit_forest
+from ensemble.mojolearn_rf_host_run import _rf_fit_forest
 from bindings.forest_config_run import forest_request
 from xtrees.trees_forest_run import ForestFit
 

@@ -39,7 +39,7 @@ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 # ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.device_units import device_multiprocessor_count
+from gbdt.device_units import device_multiprocessor_count
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import broadcast as block_broadcast
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum

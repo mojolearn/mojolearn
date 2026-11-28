@@ -11,7 +11,7 @@ from x_metrics.descriptor_schema import (
     MP_RUN_OUT, MP_RUN_RANGES, MP_HAS_RANGES, MP_HAS_STORE, MP_DEV_FIRST_NONFINITE, MP_DEV_FIRST_NEGATIVE,
     metrics_check_spans,
 )
-from core.metric_labels_device import metric_first_nonfinite_resident, metric_first_negative_resident
+from metrics.metric_labels_device import metric_first_nonfinite_resident, metric_first_negative_resident
 from x_metrics.device import run_program_device, run_program_device_out, run_program_device_ranges, metrics_ctx
 from x_prep.store_slot import X_PREP_STORE
 

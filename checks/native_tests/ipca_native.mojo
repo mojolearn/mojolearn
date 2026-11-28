@@ -24,7 +24,7 @@ from core.ipca_native_api import (
 )
 from checks.native_tests.pca_native_helpers import close_values, guards, unchanged, write_guarded, PCA_TEST_GUARD
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.ipca_native_provider import ipca_native_v1
+from x_decomp.ipca_native_provider import ipca_native_v1
 from x_decomp.host import HostExec
 from x_decomp.pca_randomized import NoRDev
 from x_decomp.ipca_owner import NoIpcaDev

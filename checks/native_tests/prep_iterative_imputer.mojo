@@ -106,14 +106,14 @@ from core.member_abi import (
 from core.member_families import (
     MEMBER_FAMILY_LINEAR, MEMBER_FAMILY_XLINEAR, MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_LOGISTIC,
 )
-from core.logistic_member import logistic_member_v2
+from glm.logistic_member import logistic_member_v2
 from core.logistic_native_api import QnNativeDriver
 from core.logistic_route import LogisticRoute, logistic_route_pack
 from glm.host.logistic_native_host import qn_host_native_v1
 from core.naive_bayes_member import naive_bayes_member_v2
 from x_prep.transport_host import x_prep_transport_host_v1
 from x_prep.transport_abi import XP_OP_COUNT
-from core.linear_member import linear_member_v2
+from glm.linear_member import linear_member_v2
 from core.xlinear_member import xlinear_member_v2
 from glm.host.linear_fit_native import linear_fit_host_v1
 from glm.host.linear_predict_native import linear_predict_host_v1

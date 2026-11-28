@@ -20,10 +20,10 @@ The sabotage arm (`gp_infer_host_sabotage`) is the reference binding's:
 `gaussian_process/host/gpr_oracle.mojo::GPR_ORACLE_HOST_SABOTAGE`
 (`-D MOJOLEARN_HOST_SABOTAGE=1`).
 """
-from core.gp_native_provider import GPProviderAPI
+from gaussian_process.gp_native_provider import GPProviderAPI
 from core.gp_entry_table import GPEntryKey, GP_COLUMN_HOST_INFER, gp_table_publish
 from bindings.py_balanced import py_setattr
-from core.gp_native_host_infer import GPHostInferenceKernels
+from gaussian_process.gp_native_host_infer import GPHostInferenceKernels
 from core.shared_slot import SharedSlot
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from core.experiment_guards_kernel import KERNEL_GUARDS_OK

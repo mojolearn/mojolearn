@@ -32,8 +32,8 @@ from checks.soft_f64 import (
     sf64_sub,
     sf64_to_f32,
 )
-from core.gbdt_host_predict import GBDT_HOST_SABOTAGE, gbdt_host_predict
-from core.gbdt_host_ctr import gbdt_host_expand_ctr
+from gbdt.gbdt_host_predict import GBDT_HOST_SABOTAGE, gbdt_host_predict
+from gbdt.gbdt_host_ctr import gbdt_host_expand_ctr
 from core.host_archive_gbdt import host_archive_gbdt_text
 from core.host_parallel import host_nested_units, host_parallelize
 from core.host_predict_threads import (

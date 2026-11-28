@@ -9,7 +9,7 @@ index 80c18f45f0..1c1f27259f 100644
 +from std.memory import bitcast  # SABOTAGE coverage (sab-arms-67)
 +from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side key
  from core.host_predict_threads import host_predict_task_count
- from core.estimators_host_impl import _positive
+ from glm.estimators_host_impl import _positive
  from core.host_finite_scan import host_all_finite_f32
 @@ -31,6 +33,9 @@ def linear_predict_host(request: LinearPredictRequest) raises -> Int:
      var intercept = Float32(request.intercept)

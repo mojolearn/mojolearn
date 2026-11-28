@@ -3972,7 +3972,7 @@ struct DevExec(Exec):
         var n = d + 1
         # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear2): a
         # negative X address names a model-selection fold's rows in a device
-        # store slot (core/linear_member.mojo `_fold_device_ols`): one device
+        # store slot (glm/linear_member.mojo `_fold_device_ols`): one device
         # copy instead of the upload, the same words; tested below as uploaded.
         var ta = _up_fold_x(ctx, a, m * d)
         var tb = _up(ctx, b, m)

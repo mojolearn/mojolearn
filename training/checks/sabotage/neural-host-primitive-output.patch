@@ -1,6 +1,6 @@
-diff --git a/core/mojolearn_training_host_impl.mojo b/core/mojolearn_training_host_impl.mojo
---- a/core/mojolearn_training_host_impl.mojo
-+++ b/core/mojolearn_training_host_impl.mojo
+diff --git a/training/mojolearn_training_host_impl.mojo b/training/mojolearn_training_host_impl.mojo
+--- a/training/mojolearn_training_host_impl.mojo
++++ b/training/mojolearn_training_host_impl.mojo
 @@ -115,7 +115,7 @@
 
  def _write_f32(values: List[Float32], dst: MutPointer[Float32, MutUntrackedOrigin]):

@@ -3,7 +3,7 @@
 """Lane py-shared: the shared ranges runner and the resident input store
 move no bit.
 
-`core/arena_io.mojo` uploads only an arena program's input words (the rest
+`x_prep/arena_io.mojo` uploads only an arena program's input words (the rest
 is zeroed on the device) and downloads only its outputs; `DeviceCache` /
 `resident()` keep a big input on the device between programs. Every x_prep
 and x_metrics program below runs three ways on the GPU binding: the

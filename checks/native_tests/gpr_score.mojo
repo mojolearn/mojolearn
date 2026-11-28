@@ -21,11 +21,11 @@ from core.gp_native_api import (
 from core.gp_native_storage import GPKernelStorage
 from core.gp_native_score import GPRScoreValues, GPRScoreProgram, gpr_score_prepare, gp_r2_value
 from checks.native_tests.gp_native_data import input_values, reference_values, GP_GUARD, GP_GUARD64
-from core.gp_native_provider import gp_native_v1
-from core.gp_native_host import GPHostKernels
+from gaussian_process.gp_native_provider import gp_native_v1
+from gaussian_process.gp_native_host import GPHostKernels
 from x_metrics.descriptor_host import metrics_program_host_v1
 from checks.native_tests.gpr_score_contract_suite import fixture as contract, GPR_SCORE_CONTRACT_CASES
-from core.gp_native_device import GPDeviceKernels
+from gaussian_process.gp_native_device import GPDeviceKernels
 from x_metrics.descriptor_device import metrics_program_device_v1
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial

@@ -43,8 +43,8 @@ from core.host_helpers_impl import argmax_rows_f32
 from providers.python.byte_lm_metadata_pyapi_door import _Shape, _shape_of, byte_lm_config_operation
 from providers.python.training_metadata_pyapi_unpack import training_f32_scalar, training_schedule_json
 from providers.python.training_buffer_pyapi_door import training_words32_into
-from core.training_input_copy import training_copy_f32
-from core.training_state_validation import training_admit_moments_and_flags, training_byte_shape_validate
+from training.training_input_copy import training_copy_f32
+from training.training_state_validation import training_admit_moments_and_flags, training_byte_shape_validate
 from bindings.native_json_door import native_json_parse, native_path_exists
 from bindings.native_transport_door import _transport_json
 from core.sha256_file import sha256_file
@@ -56,7 +56,7 @@ from bindings.tsa_hw_native_door import tsa_array, tsa_array_unfilled
 from bindings.native_array_storage_door import native_scratch_bytes, native_scratch_address
 from core.admitted_ids import admitted_ids_i32
 from bindings.byte_perf_helpers_pack import byte_int_list_from_i64
-from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
+from training.byte_lm_teardown_switch import byte_lm_teardown_with_gil
 from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_published, byte_lm_vendor_text_word, BYTE_LM_TABLE_TRAINER
 from bindings.byte_lm_trainer_native_run import (
     BYTE_PLAN_SCALARS, ByteLmStateData, ByteLmTrainerState, ByteLmTrainerOwner,

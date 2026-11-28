@@ -5,9 +5,9 @@ ROOT=Path(__file__).resolve().parents[1]
 
 
 def test_cpu_descriptor_dependencies_resolve():
-    seen, failures=audit(ROOT,('core.neural_host_dispatch',))
+    seen, failures=audit(ROOT,('training.neural_host_dispatch',))
     assert not failures, failures
-    assert 'core.mojolearn_neural_host_impl' in seen
+    assert 'training.mojolearn_neural_host_impl' in seen
     assert 'training.native_primitive_dispatch' not in seen
     assert 'transformer.transformer_binding_impl' not in seen
     assert 'mamba.impl.mamba_shell_impl' not in seen
@@ -15,8 +15,8 @@ def test_cpu_descriptor_dependencies_resolve():
 
 def test_host_binding_and_provider_share_relocated_numerical_functions():
     binding=(ROOT/'bindings/_mojolearn_neural_host.mojo').read_text()
-    core=(ROOT/'core/mojolearn_neural_host_impl.mojo').read_text()
-    provider=(ROOT/'core/neural_host_dispatch.mojo').read_text()
+    core=(ROOT/'training/mojolearn_neural_host_impl.mojo').read_text()
+    provider=(ROOT/'training/neural_host_dispatch.mojo').read_text()
     for name in ('_run_forward','_mamba1_run','_mamba2_run','_mamba3_run'):
         assert f'def {name}(' not in binding
         assert f'def {name}(' in core
@@ -93,7 +93,7 @@ def test_cpu_training_primitives_share_relocated_public_helpers():
     _, failures=audit(ROOT,('training.host.native_primitive_dispatch',))
     assert not failures, failures
     binding=(ROOT/'bindings/_mojolearn_training_host.mojo').read_text()
-    core=(ROOT/'core/mojolearn_training_host_impl.mojo').read_text()
+    core=(ROOT/'training/mojolearn_training_host_impl.mojo').read_text()
     provider=(ROOT/'training/host/native_primitive_dispatch.mojo').read_text()
     for name in ('embedding_forward','embedding_backward','rms_norm_forward','rms_norm_backward',
                  'linear_forward','linear_backward','accumulate','chunked_lm_head_v2_loss','chunked_lm_head_v2_train'):

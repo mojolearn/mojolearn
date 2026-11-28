@@ -1,6 +1,6 @@
-diff --git a/core/mojolearn_solver_host_impl.mojo b/core/mojolearn_solver_host_impl.mojo
---- a/core/mojolearn_solver_host_impl.mojo
-+++ b/core/mojolearn_solver_host_impl.mojo
+diff --git a/solver/mojolearn_solver_host_impl.mojo b/solver/mojolearn_solver_host_impl.mojo
+--- a/solver/mojolearn_solver_host_impl.mojo
++++ b/solver/mojolearn_solver_host_impl.mojo
 @@ -207,7 +207,7 @@
      if len(out.coef) != n_cols:
          raise Error("cd_fit: the host oracle returned coef of an unexpected length; nothing written")

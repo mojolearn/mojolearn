@@ -40,7 +40,7 @@ does (their `functionValue` is a float).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from core.device_units import device_multiprocessor_count
+from gbdt.device_units import device_multiprocessor_count
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx

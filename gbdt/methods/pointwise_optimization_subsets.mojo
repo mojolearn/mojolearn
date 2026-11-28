@@ -4,7 +4,7 @@
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
-from core.device_units import device_multiprocessor_count
+from gbdt.device_units import device_multiprocessor_count
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.apple_fast_classical import AFCL_T04
 

@@ -12,18 +12,18 @@ validated caller buffers; this module never builds a second flattened model.
 # the UNPACK half is `bindings/forest_export_binding_unpack.mojo`.
 from bindings.py_lists import py_list_i64, py_list_f64
 from std.python import Python, PythonObject
-from core.forest_export_binding_impl import (
+from ensemble.forest_export_binding_impl import (
     validate_forest_export_destinations,
     copy_forest_export_leaves,
 )
-from core.forest_export_run import ForestExportRegistry
+from ensemble.forest_export_run import ForestExportRegistry
 
 
 def forest_export_descriptor_py[Model: Movable & Deinitable](
     registry: ForestExportRegistry[Model], handle: Int,
 ) raises -> PythonObject:
     """`[handle, trees, nodes, outputs, [meta...]]` (PACK)."""
-    # Copies taken under the registry's own lock (core/forest_export_run.mojo,
+    # Copies taken under the registry's own lock (ensemble/forest_export_run.mojo,
     # THE LOCK): no reference into its dictionary is held here.
     var shape = registry.shape_of(handle)
     var meta = registry.meta_of(handle)

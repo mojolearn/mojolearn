@@ -10,9 +10,9 @@ diff --git a/transformer/transformer_host_binding_impl.mojo b/transformer/transf
      _write(a[12], out.y)
      if carried:
          _write(a[10], out.k_cache)
-diff --git a/core/mojolearn_neural_host_impl.mojo b/core/mojolearn_neural_host_impl.mojo
---- a/core/mojolearn_neural_host_impl.mojo
-+++ b/core/mojolearn_neural_host_impl.mojo
+diff --git a/training/mojolearn_neural_host_impl.mojo b/training/mojolearn_neural_host_impl.mojo
+--- a/training/mojolearn_neural_host_impl.mojo
++++ b/training/mojolearn_neural_host_impl.mojo
 @@ -138,6 +138,8 @@
      var v_in = read_f32(a[11], cache_n)
      var x = read_f32(a[0], b * l * dm)

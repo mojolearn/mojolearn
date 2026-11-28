@@ -61,7 +61,7 @@ from std.memory import bitcast
 from core.entry_table import EntryRef
 from core.state_registry import StateHandle
 from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_vendor_word
-from core.byte_lm_entry_table_sessions import (
+from training.byte_lm_entry_table_sessions import (
     byte_lm_sessions_ref,
     byte_lm_resident_open,
     byte_lm_resident_run,

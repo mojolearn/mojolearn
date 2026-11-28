@@ -36,8 +36,8 @@ from core.gp_native_api import (
     GP_ROUTE_RESIDENT,
 )
 from core.gp_native_storage import GPKernelStorage
-from core.gp_native_host import GPHostKernels
-from core.gp_native_device import GPDeviceKernels
+from gaussian_process.gp_native_host import GPHostKernels
+from gaussian_process.gp_native_device import GPDeviceKernels
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from x_prep.transport_device import x_prep_transport_device_v1

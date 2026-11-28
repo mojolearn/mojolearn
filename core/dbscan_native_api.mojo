@@ -21,7 +21,7 @@ comptime DBSCAN_RESIDENT_QUERY = 9
 # THE RESIDENT-STORE FORMS (lane vdf-scope-cluster4, 2026-11-24; GPU image only,
 # capability DBSCAN_CAP_DEV_STORE): DBSCAN_FIT's and DBSCAN_CORE_GATHER's words
 # with `x` the id of a slot of the estimators image's resident store
-# (core/estimators_store.mojo, a model-selection fold taken on the device)
+# (glm/estimators_store.mojo, a model-selection fold taken on the device)
 # instead of a host address. The same kernels on the same words, so the same
 # labels, core mask and core arrays as the host-address forms.
 comptime DBSCAN_FIT_STORE = 10

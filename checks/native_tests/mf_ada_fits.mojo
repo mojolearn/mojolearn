@@ -38,9 +38,9 @@ from core.member_abi import (
 )
 from core.forest_member_run import FM_HEAD, FM_WORD_OOB, FM_BLOCK_OOB, FM_BLOCK_OOB_SCORE
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
-from core.tree_member import tree_member_publish_image
-from core.forest_member import forest_member_publish_image
-from core.extra_trees_member import extra_trees_member_publish_image
+from xtrees.tree_member import tree_member_publish_image
+from ensemble.forest_member import forest_member_publish_image
+from extratrees.extra_trees_member import extra_trees_member_publish_image
 from core.label_weights_native_api import LabelWeightsDriver
 from xtrees.label_weights_native import label_weights_native_v1
 from bindings.forest_config_run import ForestConfig, forest_target_need

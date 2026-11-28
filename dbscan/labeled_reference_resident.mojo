@@ -1,0 +1,347 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The device-resident reference rows of `labeled_reference_predict`
+(DBSCAN.predict and AgglomerativeClustering.predict, DEVIATION 2740), in the
+shape of the resident KDE fit set (`kde/resident_fit.mojo`).
+
+`labeled_reference_predict` (core/labeled_reference_predict.mojo) uploaded
+the fitted reference rows, their keys and their labels on EVERY predict
+call. `labeled_reference_prepare` uploads them once (at fit, or at the first
+predict of a loaded or copied model) and returns a handle; every later
+`labeled_reference_predict_resident` uploads the QUERIES only and runs the
+same kernel (`labeled_reference_kernel`, imported, unchanged) with the same
+launch chunks over the same device bytes, so the labels are the one-shot
+entry's bits. Cosine keeps DEVIATION 5113: the reference rows are scaled to
+unit rows by the same `cosine_unit_rows` before their one upload, the
+queries before theirs.
+"""
+from std.memory import unsafe_memcpy
+from max.gpu.host import DeviceBuffer, DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from dbscan.cosine_rows import cosine_unit_rows, cosine_row_norm2, cosine_row_refusal
+from dbscan.estimator import cosine_unit_rows_kernel, COSINE_TPB, COSINE_NO_BAD_ROW
+from dbscan.labeled_reference_host_predict import (
+    LABELED_METRIC_COSINE,
+    labeled_reference_validate,
+)
+from dbscan.labeled_reference_predict import (
+    LABELED_PREDICT_TPB,
+    LABELED_PREDICT_WORK,
+    labeled_reference_kernel,
+)
+from dbscan.impl.neighbors.epsilon_neighborhood import (
+    DBSCAN_METRIC_L1,
+    dbscan_metric_threshold,
+)
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.fold_x_device import fold_x_fill
+
+#: The estimators binding's ONE process-lifetime DeviceContext slot (the
+#: same name `bindings/_mojolearn_estimators.mojo` uses).
+comptime _DEVCTX_SLOT = "MojolearnEstimatorsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEstimatorsContextFastV3"
+
+
+struct ResidentLabeledReference(Movable):
+    """One fitted reference set on the device: the rows (unit rows under
+    cosine), their tie keys and their labels."""
+
+    var ctx: DeviceContext
+    var refs: DeviceBuffer[DType.float32]
+    var keys: DeviceBuffer[DType.int32]
+    var labels: DeviceBuffer[DType.int32]
+    var n_refs: Int
+    var n_features: Int
+    var metric: Int
+
+    def __init__(
+        out self,
+        refs_ptr: MutPointer[Float32, MutUntrackedOrigin],
+        n_refs: Int,
+        keys_ptr: MutPointer[Int32, MutUntrackedOrigin],
+        labels_ptr: MutPointer[Int32, MutUntrackedOrigin],
+        n_features: Int,
+        metric: Int,
+    ) raises:
+        # `labeled_reference_predict`'s refusals that concern the reference
+        # set, in its order (a query count of 1 stands in for the queries,
+        # which the predict call validates).
+        labeled_reference_validate(n_refs, 1, n_features, metric)
+        var d = n_features
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var refs = ctx.enqueue_create_buffer[DType.float32](n_refs * d)
+        var keys = ctx.enqueue_create_buffer[DType.int32](n_refs)
+        var ref_labels = ctx.enqueue_create_buffer[DType.int32](n_refs)
+        ctx.synchronize()
+        var ur = List[Float32]()
+        if Int(refs_ptr) < 0:
+            # THE FOLD X WORD (lane vdf-scope-cluster8, DBSCAN_CAP_FOLD_X): the reference rows are a fold's slot of
+            # the x_prep store (AgglomerativeClustering's fold fit kept it): one device copy, the same words.
+            fold_x_fill(ctx, refs, Int(refs_ptr), n_refs * d)
+            if metric == LABELED_METRIC_COSINE:
+                _cosine_unit_device(ctx, refs, n_refs, d)
+        elif metric == LABELED_METRIC_COSINE:
+            var rr = List[Float32](unsafe_uninit_length=n_refs * d)
+            unsafe_memcpy(dest=rr.unsafe_ptr(), src=refs_ptr, count=n_refs * d)
+            ur = cosine_unit_rows(rr, n_refs, d, "labeled_reference_predict")
+            ctx.enqueue_copy(dst_buf=refs, src_ptr=ur.unsafe_ptr())
+        else:
+            ctx.enqueue_copy(dst_buf=refs, src_ptr=refs_ptr)
+        ctx.enqueue_copy(dst_buf=keys, src_ptr=keys_ptr)
+        ctx.enqueue_copy(dst_buf=ref_labels, src_ptr=labels_ptr)
+        ctx.synchronize()
+        _ = ur^
+        self.n_refs = n_refs
+        self.n_features = n_features
+        self.metric = metric
+        self.refs = refs^
+        self.keys = keys^
+        self.labels = ref_labels^
+        self.ctx = ctx^
+
+    def __deinit__(deinit self):
+        # The buffers before the context they were created on (DEVIATION 1946),
+        # then the drain of their frees (DEVIATION 3010).
+        _ = self.labels^
+        _ = self.keys^
+        _ = self.refs^
+        try:
+            self.ctx.synchronize()
+        except:
+            pass
+        _ = self.ctx^
+
+
+struct LabeledReferenceRegistry(Defaultable, Movable):
+    var entries: Dict[Int, ResidentLabeledReference]
+    var next_id: Int
+    var metadata_lock: List[Int64]
+
+    def __init__(out self):
+        self.entries = Dict[Int, ResidentLabeledReference]()
+        self.next_id = 1
+        self.metadata_lock = List[Int64](length=1, fill=0)
+
+
+comptime LABELED_REFERENCE_REGISTRY = SharedSlot[LabeledReferenceRegistry, ( "MojolearnLabeledReferenceIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnLabeledReferenceFastV2" ), 2]
+
+
+def labeled_reference_prepare(
+    refs_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_refs: Int,
+    keys_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    labels_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    n_features: Int,
+    metric: Int,
+) raises -> Int:
+    """Upload a reference set once; the handle every later predict names."""
+    var state = LABELED_REFERENCE_REGISTRY.get_or_create_ptr()
+    var entry = ResidentLabeledReference(refs_ptr, n_refs, keys_ptr, labels_ptr, n_features, metric)
+    var lock = state[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if state[].next_id == 9223372036854775807:
+            raise Error("resident labeled reference handle space exhausted")
+        var handle = state[].next_id
+        state[].next_id += 1
+        state[].entries[handle] = entry^
+        return handle
+    finally:
+        shared_slot_unlock(lock)
+
+
+def labeled_reference_release(handle: Int) raises:
+    """Drop the device copy; a released handle is refused by every later call."""
+    var state = LABELED_REFERENCE_REGISTRY.get_or_create_ptr()
+    var lock = state[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    var released: Optional[ResidentLabeledReference] = None
+    shared_slot_lock(lock)
+    try:
+        if handle not in state[].entries:
+            raise Error("unknown or released resident labeled reference handle")
+        released = state[].entries.pop(handle)
+    finally:
+        shared_slot_unlock(lock)
+    # Device frees and the existing context drain run after unlocking.
+    _ = released^
+
+
+@fieldwise_init
+struct LabeledReferenceLease(Movable):
+    """Owning references to one registry entry; no tensor bytes are copied."""
+    var ctx: DeviceContext
+    var refs: DeviceBuffer[DType.float32]
+    var keys: DeviceBuffer[DType.int32]
+    var labels: DeviceBuffer[DType.int32]
+    var n_refs: Int
+    var n_features: Int
+    var metric: Int
+
+    def __deinit__(deinit self):
+        _ = self.labels^
+        _ = self.keys^
+        _ = self.refs^
+        _ = self.ctx^
+
+
+def labeled_reference_lease(handle: Int) raises -> LabeledReferenceLease:
+    var state = LABELED_REFERENCE_REGISTRY.get_or_create_ptr()
+    var lock = state[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if handle not in state[].entries:
+            raise Error("unknown or released resident labeled reference handle")
+        ref entry = state[].entries[handle]
+        return LabeledReferenceLease(entry.ctx.copy(), entry.refs.copy(), entry.keys.copy(), entry.labels.copy(),
+                                      entry.n_refs, entry.n_features, entry.metric)
+    finally:
+        shared_slot_unlock(lock)
+
+
+def _cosine_unit_device(ctx: DeviceContext, mut rows: DeviceBuffer[DType.float32], n: Int, d: Int) raises:
+    """`cosine_unit_rows(rows, n, d, "labeled_reference_predict")` in place on the device."""
+    if n * d <= 0:
+        return
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
+    var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    h_bad.unsafe_ptr().unsafe_store(0, COSINE_NO_BAD_ROW)
+    ctx.enqueue_copy(dst_buf=d_bad, src_ptr=h_bad.unsafe_ptr())
+    # The kernel leaves a refused row untouched, so on a refusal that one row's d words (read back below)
+    # are the caller's, and its squared norm is recomputed in the same fold order for the words.
+    ctx.enqueue_function[cosine_unit_rows_kernel](
+        rows.unsafe_ptr(), d_bad.unsafe_ptr(), Int32(n), Int32(d),
+        grid_dim=((n + COSINE_TPB - 1) // COSINE_TPB, 1, 1), block_dim=(COSINE_TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=h_bad.unsafe_ptr(), src_buf=d_bad)
+    ctx.synchronize()
+    var bad = Int(h_bad.unsafe_ptr().unsafe_load(0))
+    _ = d_bad^
+    _ = h_bad^
+    if bad != Int(COSINE_NO_BAD_ROW):
+        var row = List[Float32](length=d, fill=Float32(0.0))
+        ctx.enqueue_copy(dst_ptr=row.unsafe_ptr(), src_buf=rows.create_sub_buffer[DType.float32](bad * d, d))
+        ctx.synchronize()
+        var n2 = cosine_row_norm2(Int(row.unsafe_ptr()), d)
+        _ = len(row)
+        raise cosine_row_refusal("labeled_reference_predict", bad, n2)
+
+
+def labeled_reference_predict_resident(
+    handle: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    metric: Int,
+    eps: Float64,
+    has_thresh: Bool,
+    out_labels_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    src_rows: Optional[DeviceBuffer[DType.float32]] = None,
+) raises:
+    """`labeled_reference_predict` over a resident reference set: the same
+    refusals, the same kernel and launch chunks; only the queries cross.
+    `src_rows`: the query rows already on the device (a slot of the
+    estimators store, lane vdf-scope-cluster6): one device copy, and
+    `queries_ptr` is not read; not for cosine (its unit rows are the host's)."""
+    var entry = labeled_reference_lease(handle)
+    if entry.n_features != n_features or entry.metric != metric:
+        raise Error(
+            "labeled_reference_predict_resident: the handle was prepared with "
+            + String(entry.n_features) + " features and metric " + String(entry.metric)
+            + "; the call names " + String(n_features) + " features and metric " + String(metric)
+        )
+    var n_refs = entry.n_refs
+    labeled_reference_validate(n_refs, n_queries, n_features, metric)
+    var thresh = Float32(0.0)
+    if has_thresh:
+        thresh = dbscan_metric_threshold(metric, eps)
+    var d = n_features
+    var queries = entry.ctx.enqueue_create_buffer[DType.float32](n_queries * d)
+    var out_labels = entry.ctx.enqueue_create_buffer[DType.int32](n_queries)
+    var out_refs = entry.ctx.enqueue_create_buffer[DType.int32](n_queries)
+    entry.ctx.synchronize()
+    var uq = List[Float32]()
+    if Int(queries_ptr) < 0:
+        # THE FOLD X WORD (lane vdf-scope-cluster8, DBSCAN_CAP_FOLD_X): the queries are a fold's x_prep slot.
+        fold_x_fill(entry.ctx, queries, Int(queries_ptr), n_queries * d)
+        if metric == LABELED_METRIC_COSINE:
+            _cosine_unit_device(entry.ctx, queries, n_queries, d)
+    elif src_rows:
+        if n_queries * d > 0:
+            entry.ctx.enqueue_copy(dst_buf=queries,
+                                   src_buf=src_rows.value().create_sub_buffer[DType.float32](0, n_queries * d))
+        if metric == LABELED_METRIC_COSINE:
+            # lane vdf-scope-cluster7: the unit rows made ON THE DEVICE copy (`cosine_unit_rows_kernel`: the host
+            # function's fold order, root and quotient, so its words), with its refusal of the lowest row
+            # without a positive finite norm in its words (that one row's d words read back for the norm).
+            _cosine_unit_device(entry.ctx, queries, n_queries, d)
+    elif metric == LABELED_METRIC_COSINE:
+        var qq = List[Float32](unsafe_uninit_length=n_queries * d)
+        unsafe_memcpy(dest=qq.unsafe_ptr(), src=queries_ptr, count=n_queries * d)
+        uq = cosine_unit_rows(qq, n_queries, d, "labeled_reference_predict")
+        entry.ctx.enqueue_copy(dst_buf=queries, src_ptr=uq.unsafe_ptr())
+    else:
+        entry.ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
+    entry.ctx.synchronize()
+    _ = uq^
+
+    var per_query = n_refs * d
+    var chunk = LABELED_PREDICT_WORK // per_query
+    if chunk < 1:
+        chunk = 1
+    var start = 0
+    while start < n_queries:  # driver-loop: over launch chunks of the query rows
+        var n_launch = n_queries - start
+        if n_launch > chunk:
+            n_launch = chunk
+        var blocks = (n_launch + LABELED_PREDICT_TPB - 1) // LABELED_PREDICT_TPB
+        if metric == DBSCAN_METRIC_L1:
+            comptime kernel_l1 = labeled_reference_kernel[DBSCAN_METRIC_L1]
+            entry.ctx.enqueue_function[kernel_l1](
+                queries.unsafe_ptr(),
+                entry.refs.unsafe_ptr(),
+                entry.keys.unsafe_ptr(),
+                entry.labels.unsafe_ptr(),
+                Int32(start),
+                Int32(n_launch),
+                Int32(n_refs),
+                Int32(d),
+                thresh,
+                Int32(1) if has_thresh else Int32(0),
+                out_labels.unsafe_ptr(),
+                out_refs.unsafe_ptr(),
+                grid_dim=(blocks, 1, 1),
+                block_dim=(LABELED_PREDICT_TPB, 1, 1),
+            )
+        else:
+            comptime kernel_l2 = labeled_reference_kernel[0]
+            entry.ctx.enqueue_function[kernel_l2](
+                queries.unsafe_ptr(),
+                entry.refs.unsafe_ptr(),
+                entry.keys.unsafe_ptr(),
+                entry.labels.unsafe_ptr(),
+                Int32(start),
+                Int32(n_launch),
+                Int32(n_refs),
+                Int32(d),
+                thresh,
+                Int32(1) if has_thresh else Int32(0),
+                out_labels.unsafe_ptr(),
+                out_refs.unsafe_ptr(),
+                grid_dim=(blocks, 1, 1),
+                block_dim=(LABELED_PREDICT_TPB, 1, 1),
+            )
+        entry.ctx.synchronize()
+        start += n_launch
+
+    # Only the labels come back: the chosen reference row was never read.
+    var hl = entry.ctx.enqueue_create_host_buffer[DType.int32](n_queries)
+    entry.ctx.synchronize()
+    entry.ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=out_labels)
+    entry.ctx.synchronize()
+    unsafe_memcpy(dest=out_labels_ptr, src=hl.unsafe_ptr(), count=n_queries)
+    # [[mojo-buffer-freed-at-last-use]]: every buffer outlives the queue.
+    _ = hl^
+    _ = queries^
+    _ = out_labels^
+    _ = out_refs^
+    _ = entry^  # Retain all registry-owned handles through the final download.

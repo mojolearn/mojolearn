@@ -88,7 +88,7 @@ trait GbdtImage:
 
     # `feature_importances_` of a model fitted on the given rows (lane
     # mf-imp6): n_input float32 to `dst`; returns n_input. The host image
-    # runs core/gbdt_importance.mojo, a GPU image gbdt/gpu_importance.mojo.
+    # runs gbdt/gbdt_importance.mojo, a GPU image gbdt/gpu_importance.mojo.
     @staticmethod
     def importances(text: String, x: Int, n_rows: Int, n_input: Int, row_major: Bool, weights: Int,
                     n_weights: Int, dst: Int) raises -> Int:

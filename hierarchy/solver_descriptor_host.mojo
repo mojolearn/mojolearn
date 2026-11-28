@@ -3,7 +3,7 @@
 # callbacks or arithmetic changes belong in this dispatcher.
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.hostptr import i32_ptr
-from core.mojolearn_solver_host_impl import linkage_fit_host_into
+from solver.mojolearn_solver_host_impl import linkage_fit_host_into
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from hierarchy.solver_descriptor_schema import (

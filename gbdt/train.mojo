@@ -32,7 +32,7 @@ from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
 )
-from core.device_units import device_multiprocessor_count
+from gbdt.device_units import device_multiprocessor_count
 from gbdt.gpu_data.kernel.binarize import (
     BINARIZE_BLOCK_SIZE,
     BINARIZE_DOCS_PER_THREAD,

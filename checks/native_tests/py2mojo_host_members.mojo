@@ -31,7 +31,7 @@ from core.member_abi import (
 from core.prep_member import prep_member_v2
 from core.scaler_member import scaler_member_v2
 from core.scaler_native_api import scaler_native_v1, SCALER_OP_COUNT
-from core.scaler_native_host import ScalerHostKernels
+from preprocessing.scaler_native_host import ScalerHostKernels
 from x_prep.transport_host import x_prep_transport_host_v1
 from x_prep.transport_abi import XP_OP_COUNT
 from checks.numerics import GLOBAL_NUMERIC_MODE

@@ -30,12 +30,12 @@ from core.member_abi import (
     MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_OP_EXPORT,
     MEMBER_OP_CAPABILITIES, MEMBER_CAN_SCOPE, MEMBER_CAN_ROW_INDEX, MEMBER_BLOCK_FAMILY,
 )
-from core.spectral_member import spectral_member_v2
+from spectral.spectral_member import spectral_member_v2
 from core.spectral_native_api import SpectralDriver, SPECTRAL_CAPABILITIES, SPECTRAL_NATIVE_COUNT
-from core.spectral_native_provider import spectral_native_v1
-from core.spectral_native_host import SpectralHostKernels
-from core.spectral_native_device import SpectralDeviceKernels
-from core.metrics_store import metrics_store_v1, METRICS_STORE_API
+from spectral.spectral_native_provider import spectral_native_v1
+from spectral.spectral_native_host import SpectralHostKernels
+from spectral.spectral_native_device import SpectralDeviceKernels
+from metrics.metrics_store import metrics_store_v1, METRICS_STORE_API
 from core.metrics_store_ref import metrics_store_publish, metrics_store_find
 from bindings.arena_cache_run import arena_scope_new, arena_scope_close, arena_cache_live
 

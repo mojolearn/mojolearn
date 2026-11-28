@@ -40,7 +40,7 @@ from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call
 from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
+from training.byte_lm_teardown_switch import byte_lm_teardown_with_gil
 from training.byte_lm_binding_impl import (
     ByteLMSession,
     _span_cells, _validate_addresses, _require_inputs_unchanged, _write_f32,

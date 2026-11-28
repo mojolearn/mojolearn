@@ -34,7 +34,7 @@ from std.atomic import Atomic
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from core.compact_ops import CompactScratch, compact_f32_kernel, compact_i32_kernel, compact_scan_enqueue
+from svm.compact_ops import CompactScratch, compact_f32_kernel, compact_i32_kernel, compact_scan_enqueue
 from core.step_gate import step_gate_open_word
 from checks.numerics import ftz
 

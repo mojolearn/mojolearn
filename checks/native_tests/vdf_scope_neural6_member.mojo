@@ -52,14 +52,14 @@ from core.decomposition_member import (
     DECOMP_ROUTE_FOLD, DECOMP_ROUTE_XD_STORE,
 )
 from core.pca_native_api import pca_vendor_code
-from core.pca_native_device import pca_device_native_v1, PCADeviceKernels
-from core.pca_native_host import pca_host_native_v1, PCAHostKernels
+from decomposition.pca_native_device import pca_device_native_v1, PCADeviceKernels
+from decomposition.pca_native_host import pca_host_native_v1, PCAHostKernels
 from core.pca_native_fold import pca_fold_native_v1
 from core.tsvd_native_api import TSVD_CAP_FUSED, TSVD_CAP_RESIDENT
-from core.tsvd_native_device import tsvd_device_native_v1, TSVDDeviceKernels
-from core.tsvd_native_host import tsvd_host_native_v1, TSVDHostKernels
+from decomposition.tsvd_native_device import tsvd_device_native_v1, TSVDDeviceKernels
+from decomposition.tsvd_native_host import tsvd_host_native_v1, TSVDHostKernels
 from core.tsvd_native_fold import tsvd_fold_native_v1
-from core.tsvd_native_decomp import tsvd_decomp_native_v1
+from x_decomp.tsvd_native_decomp import tsvd_decomp_native_v1
 from core.msel_fold_transport import msel_fold_store_v1
 from core.msel_device_x import msel_fold_store
 from x_decomp.device import DevExec

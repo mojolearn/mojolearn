@@ -15,19 +15,19 @@ from core.logistic_native_api import (
 )
 from glm.logistic_native_device import QnDeviceKernels, LOGISTIC_DEVICE_API
 from glm.linear_fit_device import LINEAR_FIT_DEVICE_API
-from core.mojolearn_estimators_run import (
+from glm.mojolearn_estimators_run import (
     _DEVCTX_SLOT, _f32_ptr, _i32_ptr, _f64_ptr, _pca_whiten_pointer, _pca_whiten_dims, _pca_whiten_device,
     _publish_linear_entry_table, _publish_estimators_qn_table,
 )
 from glm.linear_svc_native_device import LINEAR_SVC_DEVICE_API
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
-from core.dbscan_native_device import DBSCAN_DEVICE_API, DBSCANDeviceKernels
+from dbscan.dbscan_native_device import DBSCAN_DEVICE_API, DBSCANDeviceKernels
 from core.dbscan_native_api import DBSCANFitRequest
-from core.kde_native_device import KDE_DEVICE_API, KDEDeviceKernels
-from core.estimators_store import ESTIMATORS_STORE_API
+from kde.kde_native_device import KDE_DEVICE_API, KDEDeviceKernels
+from glm.estimators_store import ESTIMATORS_STORE_API
 from core.kde_native_api import KDEPrepareRequest, KDEQueryRequest, KDEResidentQuery, KDE_CAP_IMMUTABLE
-from core.pca_native_device import PCA_DEVICE_API
-from core.tsvd_native_device import TSVD_DEVICE_API
+from decomposition.pca_native_device import PCA_DEVICE_API
+from decomposition.tsvd_native_device import TSVD_DEVICE_API
 from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -50,8 +50,8 @@ from core.py2mojo_linear import py2mojo_linear_flags
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.device_route import device_vendor_code
-from core.density_member import density_member_publish
-from core.hierarchy_member import hierarchy_member_publish
+from dbscan.density_member import density_member_publish
+from hierarchy.hierarchy_member import hierarchy_member_publish
 
 from glm.linear_route_controls import RIDGE_FAST_RESIDENT
 
@@ -59,9 +59,9 @@ from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
 
 
-from core.labeled_reference_predict import labeled_reference_predict
+from dbscan.labeled_reference_predict import labeled_reference_predict
 from core.hostptr import f32_ptr, i32_ptr
-from core.labeled_reference_resident import (
+from dbscan.labeled_reference_resident import (
     labeled_reference_prepare,
     labeled_reference_release,
     labeled_reference_predict_resident,
@@ -95,7 +95,7 @@ from decomposition.pca_ops_entry_device import PCA_OPS_DEVICE_API, pca_ops_devic
 from core.decomp_entry_table_pca import pca_ops_publish
 from core.neighbors_entry_table import NeighborsEntryKey, neighbors_vendor_word
 from bindings.py_balanced import py_setattr
-from core.linear_multi_device import (
+from glm.linear_multi_device import (
     lm_col_sums_run, lm_means_finish_run, lm_center_run, publish_ridge_multi,
 )
 from core.estimators_impl import (
@@ -106,7 +106,7 @@ from core.estimators_impl import (
 # ---- from bindings/labeled_reference_resident_binding_pack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
 # The estimators binding's resident entries of `labeled_reference_predict`
-# (core/labeled_reference_resident.mojo): DBSCAN and AgglomerativeClustering
+# (dbscan/labeled_reference_resident.mojo): DBSCAN and AgglomerativeClustering
 # keep their fitted reference rows on the device under a handle minted at
 # fit, and predict uploads only the queries. Same kernel, same launches,
 # same bits as `labeled_reference_predict`.
@@ -958,7 +958,7 @@ def ridge_resident_default_binding() raises -> PythonObject:
 
 
 # TOMBSTONE: ridge_fit_multi / ridge_predict_multi Python exports (no live caller: MultiOutputRegressor's
-# one-program ridge reaches core/linear_multi_device.mojo through the ridge multi table) deleted
+# one-program ridge reaches glm/linear_multi_device.mojo through the ridge multi table) deleted
 # 2026-11-11 by lane calltable-base-helpers; code recoverable at 17b0a91b04.
 
 def qn_decision_function_binding(
@@ -1322,9 +1322,9 @@ def build__mojolearn_estimators() -> PythonObject:
         register_native_owner_type[TsvdResidentLease](published_module, native_owner_no_pins)
         _publish_linear_entry_table()
         _publish_estimators_qn_table()
-        # DBSCAN's member entry (core/density_member.mojo) beside its kernel table.
+        # DBSCAN's member entry (dbscan/density_member.mojo) beside its kernel table.
         density_member_publish(Int(GLOBAL_NUMERIC_MODE), device_vendor_code(String(COMPILED_VENDOR)), Int(DBSCAN_DEVICE_API.get_or_create_ptr()[].entries.unsafe_ptr()))
-        # AgglomerativeClustering's member entry (core/hierarchy_member.mojo): its predict runs on
+        # AgglomerativeClustering's member entry (hierarchy/hierarchy_member.mojo): its predict runs on
         # this image's labeled-reference queries.
         hierarchy_member_publish(Int(GLOBAL_NUMERIC_MODE), device_vendor_code(String(COMPILED_VENDOR)), Int(DBSCAN_DEVICE_API.get_or_create_ptr()[].entries.unsafe_ptr()))
         # The ridge multi table (core/linear_entry_table_multi.mojo).

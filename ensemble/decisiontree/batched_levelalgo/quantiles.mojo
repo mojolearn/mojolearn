@@ -281,7 +281,7 @@ from max.gpu.sync import barrier
 from max.gpu import block_dim, block_idx, thread_idx
 
 from core.launch_log import log_launch
-from core.launch_clock import log_launch_ctx
+from ensemble.launch_clock import log_launch_ctx
 from core.segmented_sort import segmented_sort_keys_f32
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 

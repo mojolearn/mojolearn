@@ -21,7 +21,7 @@ The units are independent and run across the native host worker pool.
 """
 from std.memory import bitcast
 from std.math import isfinite
-from core.mojolearn_training_host_impl import neural_rng_host_into
+from training.mojolearn_training_host_impl import neural_rng_host_into
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
 

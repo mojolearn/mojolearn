@@ -84,17 +84,17 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, identical_exp64
-from core.forest_host_groves import FOREST_GROVES_SABOTAGE
-from core.forest_host_predict import (
+from ensemble.forest_host_groves import FOREST_GROVES_SABOTAGE
+from ensemble.forest_host_predict import (
     FOREST_HOST_SABOTAGE,
     et_host_predict,
     et_host_trees,
     rf_host_predict,
     rf_host_trees,
 )
-from core.gbdt_host_ctr import GBDT_CTR_HOST_SABOTAGE, gbdt_host_expand_ctr
-from core.gbdt_host_predict import gbdt_host_predict
-from core.host_entry_table_forest import (
+from gbdt.gbdt_host_ctr import GBDT_CTR_HOST_SABOTAGE, gbdt_host_expand_ctr
+from gbdt.gbdt_host_predict import gbdt_host_predict
+from ensemble.host_entry_table_forest import (
     forest_host_et_predict_run,
     forest_host_gbdt_expand_ctr_run,
     forest_host_gbdt_predict_run,
@@ -198,7 +198,7 @@ def _words(values: PythonObject) raises -> List[Int]:
 
 
 # The bodies of the entries below are the typed runs of
-# core/host_entry_table_forest.mojo, which the native forest host entry
+# ensemble/host_entry_table_forest.mojo, which the native forest host entry
 # (published at module init) runs too. These Python exports only unpack and
 # pack; they remain for the Python callers (python/mojolearn/host_surface.py,
 # the legacy reference tests and the identity tools). The saved-model owner

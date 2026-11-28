@@ -29,7 +29,7 @@ from core.host_entry_table import (
     HostEntryKey, host_table_entry, HOST_TABLE_FOREST_HOST, FOREST_HOST_ABI, FH_OP_COUNT,
     FH_RF_PREDICT_PROBA, FH_RF_PREDICT_REG, FH_ET_PREDICT,
 )
-from core.host_entry_table_forest import publish_forest_host_entries
+from ensemble.host_entry_table_forest import publish_forest_host_entries
 from core.host_entry_table_calls import (
     fh_ref, fh_call, fh_vote, fh_groves_prepare, fh_groves_predict, fh_gbdt_expand_ctr, fh_gbdt_predict,
     fh_gbdt_sigmoid_pair,

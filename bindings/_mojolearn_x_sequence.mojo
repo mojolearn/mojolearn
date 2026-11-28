@@ -35,10 +35,10 @@ from sequence.exec_device import DeviceExec
 from sequence.perf3_seq_resident import seq_resident_release_owner, seq_resident_slots
 from sequence.xseq_glue_device import publish_x_sequence_device, XSEQ_DEVICE_OWNER
 from core.xseq_entry_table import xseq_vendor_word
-from core.mlp_member import mlp_member_publish
-from core.cnn_member import cnn_member_publish
-from core.sequence_member import sequence_member_publish
-from core.forecast_seq_member import forecast_seq_member_publish
+from training.mlp_member import mlp_member_publish
+from x_cnn.cnn_member import cnn_member_publish
+from sequence.sequence_member import sequence_member_publish
+from sequence.forecast_seq_member import forecast_seq_member_publish
 from providers.python.sequence_pyapi_door import opt_step_py, rnn_fit_py, rnn_predict_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT
 from providers.python.sequence_opt_resident_pyapi_unpack import adafactor_resident_open_py, lamb_resident_open_py, opt_resident_open_py
@@ -82,7 +82,7 @@ from providers.python.autograd_pyapi_door import model_fit_py, model_labels_chec
 from providers.python.autograd_pyapi_door import model_gather_labels_py
 from providers.python.autograd_pyapi_door import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
 from providers.python.autograd_pyapi_door import model_import_params_py
-from core.label_cast_device import device_unique_inverse_cast
+from sequence.label_cast_device import device_unique_inverse_cast
 from sequence.exec_device import sequence_ctx
 from providers.python.autograd_pyapi_door import ops_shape_py
 from autograd.ops_api import OPS_DEVICE

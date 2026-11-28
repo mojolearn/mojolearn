@@ -73,7 +73,7 @@ from bindings.forest_export_binding_unpack import (
 from bindings.forest_export_binding_pack import (
     forest_export_descriptor_py,
 )
-from core.mojolearn_rf_host_impl import (
+from ensemble.mojolearn_rf_host_impl import (
     rf_host_dart_member_xy,
     rf_host_forest_lists,
 )
@@ -83,18 +83,18 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.forest_host_predict import rf_host_predict, rf_host_trees
+from ensemble.forest_host_predict import rf_host_predict, rf_host_trees
 from bindings.forest_host_strict_binding_pack import (
     forest_strict_prepare_host_binding, forest_strict_predict_host_binding, forest_strict_release_host_binding,
     forest_strict_predict_host_native,
 )
-from core.forest_host_strict_run import forest_strict_prepare_host_native, forest_strict_release_host_native
+from ensemble.forest_host_strict_run import forest_strict_prepare_host_native, forest_strict_release_host_native
 from bindings.forest_host_groves_binding_pack import (
     forest_predict_resident_host_binding,
     forest_prepare_host_binding,
     forest_release_host_binding,
 )
-from core.forest_host_groves_run import (
+from ensemble.forest_host_groves_run import (
     forest_prepare_host_native, forest_predict_resident_host_native, forest_release_host_native,
 )
 from bindings.forest_fit_boundary_unpack import forest_fit_args_py
@@ -103,9 +103,9 @@ from core.forest_fit_request import (
     XF_CAP_STRICT,
     XF_CAP_DART,
 )
-from core.tree_member import tree_member_publish_image
-from core.forest_member import forest_member_publish_image
-from core.forest_entry import forest_entry_dispatch, forest_entry_publish, forest_host_entry_releases
+from xtrees.tree_member import tree_member_publish_image
+from ensemble.forest_member import forest_member_publish_image
+from ensemble.forest_entry import forest_entry_dispatch, forest_entry_publish, forest_host_entry_releases
 from core.entry_table import ENTRY_OP_GIL_FREE
 from core.native_descriptor_call import native_descriptor_report
 from core.forest_entry_table import FOREST_TABLE_RF
@@ -116,7 +116,7 @@ from ensemble.host.rf_oracle import (
     RfHostForest,
     rf_host_fit,
 )
-from core.mojolearn_rf_host_run import (
+from ensemble.mojolearn_rf_host_run import (
     RF_HOST_EXPORTS,
     _rf_export_into_native,
     _rf_export_verify_native,
@@ -229,7 +229,7 @@ def _kept_forest_out(handle: Int) raises -> PythonObject:
     # lookup (DictKeyError) and the list build (Error) both raise Error to
     # the caller's try/finally, which cannot mix the two error types.
     var registry = RF_HOST_EXPORTS.get_or_create_ptr()
-    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # THE LOCK (ensemble/forest_export_run.mojo): the entry is taken out, read with
     # no lock held and put back on every path.
     var entry = registry[].take(handle)
     var out = PythonObject(None)
@@ -366,7 +366,7 @@ def rf_regressor_fit_shard_binding(
 # TOMBSTONE: rf_data_session_open / rf_data_session_close / rf_regressor_fit_session_rows_export / rf_classifier_fit_weighted_session_export (the Python entries of the data session: superseded by the forest entry's typed XF_SESSION_OPEN / XF_SESSION_CLOSE / XF_FIT_SESSION, no caller left) deleted 2026-11-21 by lane dw-trees-boost; code recoverable at cc2c81eb61.
 # Restore: git apply experiments/removed/dead_entries_rf_session_ada_calls.patch
 # The data session bodies (XF_SESSION_OPEN / XF_SESSION_CLOSE / XF_FIT_SESSION) moved to
-# core/mojolearn_rf_host_run.mojo on 2026-11-23 (lane mf-ada2): with the registry's own lock
+# ensemble/mojolearn_rf_host_run.mojo on 2026-11-23 (lane mf-ada2): with the registry's own lock
 # they need no GIL, so the image serves them itself.
 
 

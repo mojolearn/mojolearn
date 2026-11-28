@@ -15,10 +15,10 @@ from core.gp_native_accuracy import GPCAccuracyProgram
 from core.gp_native_api import GPDriver, GPCFitRequest, GPCQueryRequest
 from checks.native_tests.gp_native_data import input_values, input_labels, failures_clear, GP_GUARD, GP_GUARD64
 from checks.native_tests.gp_native_classifier_cases import classifier_kernel
-from core.gp_native_provider import gp_native_v1
-from core.gp_native_host import GPHostKernels
+from gaussian_process.gp_native_provider import gp_native_v1
+from gaussian_process.gp_native_host import GPHostKernels
 from x_metrics.descriptor_host import metrics_program_host_v1
-from core.gp_native_device import GPDeviceKernels
+from gaussian_process.gp_native_device import GPDeviceKernels
 from x_metrics.descriptor_device import metrics_program_device_v1
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial

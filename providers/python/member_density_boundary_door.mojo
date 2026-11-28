@@ -112,7 +112,7 @@ def _kde_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
     route.entry = EntryRef(connection.driver.entry, entry_ref_word(mode, vendor, KDE_NATIVE_COUNT))
     route.flags = connection.capabilities
     # The GPU image's resident store (lane vdf-scope-cluster2b): its transport entry in `route.second`, so a
-    # model-selection fold stays on the device (core/density_member.mojo `_kde_rows`).
+    # model-selection fold stays on the device (dbscan/density_member.mojo `_kde_rows`).
     var store_pin = PythonObject(None)
     if (route.flags & KDE_CAP_DEV_STORE) != 0:
         store_pin = family_store_route(binding, "estimators_store_v1", route)

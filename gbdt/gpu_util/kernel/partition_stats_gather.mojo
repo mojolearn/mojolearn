@@ -38,7 +38,7 @@ modes and the ROUTE decides who calls it.
 
 from max.gpu import block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.device_units import device_multiprocessor_count
+from gbdt.device_units import device_multiprocessor_count
 
 from gbdt.gpu_util.partitions_reduce import (
     STATS_BLOCK,

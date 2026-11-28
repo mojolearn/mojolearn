@@ -39,7 +39,7 @@ from core.member_abi import (
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
 from providers.python.member_xdecomp_boundary_door import _store_route as xdecomp_store_route
 
-# The family blocks `MEMBER_BLOCK_FAMILY + j` (core/pls_member.mojo) that
+# The family blocks `MEMBER_BLOCK_FAMILY + j` (x_decomp/pls_member.mojo) that
 # are public fields, by j; j 11 (the iteration counts) is `n_iter_`.
 comptime _FAMILY_FIELD_COUNT = 11
 

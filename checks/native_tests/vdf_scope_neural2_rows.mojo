@@ -54,10 +54,10 @@ from core.msel_device_x import msel_fold_store, msel_device_x_context
 from core.msel_fold_transport import msel_fold_store_v1
 from core.pca_native_api import PCAFitRequest, PCAQueryRequest, PCAFoldStore
 from core.pca_native_fold import PCAFoldKernels
-from core.pca_native_device import PCADeviceKernels
+from decomposition.pca_native_device import PCADeviceKernels
 from core.tsvd_native_api import TSVDFitRequest, TSVD_GRAM, TSVD_EXPLAINED, TSVD_FOLD
 from core.tsvd_native_fold import TSVDFoldKernels
-from core.tsvd_native_device import TSVDDeviceKernels
+from decomposition.tsvd_native_device import TSVDDeviceKernels
 from core.native_descriptor_call import native_descriptor_call
 from x_prep.transport_abi import XP_DEV_TAKE_ROWS
 

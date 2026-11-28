@@ -29,7 +29,7 @@ from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_MSE,
     CRITERION_POISSON,
 )
-from core.forest_inference_model import (
+from ensemble.forest_inference_model import (
     resident_prepare, resident_predict_into, resident_release, ET_CTX_SLOT,
 )
 from core.device_store import DeviceStore
@@ -87,7 +87,7 @@ NOT_IMPLEMENTED.tsv rows validity_check does.
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
 #: Lane vdf-scope-trees2a (2026-11-24): the fits run on the image's resident
-#: inference context (core/forest_inference_model.mojo `ET_CTX_SLOT`), so the
+#: inference context (ensemble/forest_inference_model.mojo `ET_CTX_SLOT`), so the
 #: device store below, the fits and the resident predictions are ONE context
 #: and a predict reads the store's rows in place (XF_RESIDENT_*_ROWS). Was
 #: its own "MojolearnTreesContext" slot. Same kernels: no bit moves.
@@ -402,7 +402,7 @@ def et_predict_native(model: List[Int], x_address: Int, out_address: Int, n_rows
     var op = _f32_ptr(out_address)
 
     # cpu-gpu-cleanup t-gbdt: the `sequential` engine runs on the device.
-    # The host walk (`core/forest_host_predict.mojo`'s `et_host_predict`,
+    # The host walk (`ensemble/forest_host_predict.mojo`'s `et_host_predict`,
     # DEVIATION 2900) is the CPU-only install's (`_mojolearn_trees_host`);
     # here `forest_vote_host`'s arithmetic -- zero, add every tree's leaf in
     # increasing tree order, divide by `Float32(n_trees)` -- is

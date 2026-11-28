@@ -17,7 +17,7 @@ Sabotage: in `rbf_affinity_device` read slot `fold_x_slot(x_addr) + 1` -> both c
 from std.testing import TestSuite
 from std.memory import bitcast
 from checks.native_tests.testsuite_cases import check_cases_serial, CPU_COLUMN_BUILD, require
-from core.metrics_store import METRICS_STORE, metrics_store_ctx
+from metrics.metrics_store import METRICS_STORE, metrics_store_ctx
 from core.fold_x_word import fold_x_word
 from spectral.estimator import spectral_embedding_rbf_host, spectral_fit_predict_rbf_host
 from spectral.impl.spectral_predict_common import SpectralPredictionState

@@ -837,7 +837,7 @@ struct HostExec(Exec):
         uploads (the door defers them to this entry; one wording)."""
         if Int(a) < 0:
             # THE FOLD X WORD (core/fold_x_device.mojo) names a device slot: the
-            # host column reads host X only (core/linear_member.mojo sends it on GPU routes).
+            # host column reads host X only (glm/linear_member.mojo sends it on GPU routes).
             raise Error("x_decomp: the host column reads no device fold X word")
         if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(a)), m * d):
             raise Error("mojolearn: X contains NaN or infinity")

@@ -17,8 +17,8 @@ skip `_cosine_unit_device` -> case 2 fails.
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases_serial, CPU_COLUMN_BUILD, require
 from core.dbscan_native_api import DBSCANReferenceRequest, DBSCANResidentQuery
-from core.dbscan_native_device import DBSCANDeviceKernels
-from core.estimators_store import ESTIMATORS_STORE, estimators_store_ctx
+from dbscan.dbscan_native_device import DBSCANDeviceKernels
+from glm.estimators_store import ESTIMATORS_STORE, estimators_store_ctx
 
 comptime _D = 3
 comptime _Q = 12

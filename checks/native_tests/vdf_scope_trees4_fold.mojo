@@ -36,11 +36,11 @@ from checks.native_tests.testsuite_cases import check_cases, check_cases_serial,
 from core.member_abi import MemberCall, MemberMatrix, MEMBER_I64, MEMBER_F32
 from core.member_fold_x import MemberFoldX
 from core.device_route import DeviceRoute
-from core.gbdt_member import _fold_keys, _fold_pairs
+from gbdt.gbdt_member import _fold_keys, _fold_pairs
 from core.shared_slot import SharedSlot
 from max.gpu.host import DeviceContext
 from core.fold_x_device import FOLD_X_STORE, fold_x_word
-from core.fold_x_scan import fold_x_first_nan
+from gbdt.fold_x_scan import fold_x_first_nan
 from gbdt.data.category_map_device import fold_x_category_fit_into
 from core.neural_context import process_ctx
 from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome

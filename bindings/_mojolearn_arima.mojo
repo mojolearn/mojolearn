@@ -90,7 +90,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 
 from arima.arima_ops_device import publish_arima_ops_device, ARIMA_OPS_DEVICE_API, _VENDOR_CODE
-from core.forecast_member import forecast_member_publish
+from tsa.forecast_member import forecast_member_publish
 from arima.resident_state import arima_resident_count
 
 

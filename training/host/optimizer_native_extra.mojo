@@ -8,7 +8,7 @@ the device-array words by the last branch."""
 from core.hostptr import f32_ptr
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
-from core.mojolearn_training_host_impl import chunked_lm_head_v2_loss_host_into, chunked_lm_head_v2_train_host_into
+from training.mojolearn_training_host_impl import chunked_lm_head_v2_loss_host_into, chunked_lm_head_v2_train_host_into
 from training.neural_session_mlp_host import nn_mlp_sessions_host
 from training.residual_dropout_common_run import residual_dropout_addresses
 from training.residual_dropout_host import residual_dropout_host

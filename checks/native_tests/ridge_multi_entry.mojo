@@ -19,10 +19,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.linear_entry_table import LinearEntryKey
 from core.linear_entry_table_multi import ridge_multi_table_entry, RIDGE_MULTI_ABI, RM_OP_COUNT
-from core.linear_multi_calls import (
+from xtrees.linear_multi_calls import (
     ridge_multi_ref, ridge_multi_available, rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_predict,
 )
-from core.linear_multi_device import publish_ridge_multi
+from glm.linear_multi_device import publish_ridge_multi
 from glm.impl.ridge_multi import MULTIOUT_RIDGE
 from checks.native_tests.testsuite_cases import require
 

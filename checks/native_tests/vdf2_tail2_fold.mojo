@@ -29,17 +29,17 @@ word 1 of the rows (device 1); in `_fit_tree_shards` pass `src_addr=0` to owners
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, CPU_COLUMN_BUILD, require
-from core.gbdt_member import _has_nan
+from gbdt.gbdt_member import _has_nan
 from bindings.trees_public_inputs_run import trees_finite_f32
 from max.gpu.host import DeviceContext
 from core.fold_x_device import FOLD_X_STORE, fold_x_word
-from core.fold_x_scan import fold_x_first_nan
+from gbdt.fold_x_scan import fold_x_first_nan
 from core.neural_context import process_ctx
 from core.device_plan import DevicePlan
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from isolation_forest.estimator import IsolationForestEstimator as IFEstimator
 from max.gpu.host import DeviceBuffer
-from core.mojolearn_rf_run import RF_STORE, rf_store_ctx, rf_store_rows_y
+from ensemble.mojolearn_rf_run import RF_STORE, rf_store_ctx, rf_store_rows_y
 from extratrees.mojolearn_trees_run import ET_STORE, et_store_ctx, et_store_take_column
 from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     upload_dataset_codes_i32, upload_dataset_labels_quantized, upload_dataset_labels_quantized_weighted,

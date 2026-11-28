@@ -47,7 +47,7 @@ come back (first refused row and its bits, kept count, refused count).
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.launch_clock import log_launch_ctx
+from ensemble.launch_clock import log_launch_ctx
 from ensemble.decisiontree.batched_levelalgo.quantiles import (
     PCGenerator,
     custom_next_uniform_int_u64,

@@ -16,7 +16,7 @@ Sabotage: in spectral/impl/preprocessing/detail/spectral_embedding.mojo `transfo
 from std.testing import TestSuite
 from std.memory import bitcast
 from checks.native_tests.testsuite_cases import check_cases_serial, CPU_COLUMN_BUILD, require
-from core.metrics_store import METRICS_STORE, metrics_store_ctx, metrics_store_buffer
+from metrics.metrics_store import METRICS_STORE, metrics_store_ctx, metrics_store_buffer
 from spectral.estimator import spectral_embedding_dataset_host, spectral_embedding_dataset_resident
 
 comptime _ROWS = 80

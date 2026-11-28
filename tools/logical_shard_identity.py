@@ -111,7 +111,7 @@ MAX_LANES = 16
 #   iforest      trees, active = min(count, n_estimators) (isolation_forest/multi_gpu.mojo:112): default 100
 #   gbdt         one-byte packed feature groups of 4 (border_count=128; pointwise_multi_gpu.mojo:130-132,452):
 #                features >= 2*4 + 1
-#   forest       groves = min(32, trees), active = min(count, groves) (core/forest_inference_pool.mojo:418):
+#   forest       groves = min(32, trees), active = min(count, groves) (ensemble/forest_inference_pool.mojo:418):
 #                n_estimators >= 3 (the recipe fits 16)
 #   logistic     gradient columns, active = min(count, features) (glm/impl/qn/multi_gpu.mojo `gradient_columns`,
 #                lane ne2-i-j 2026-11-07): features >= 3. The recipe fits a binary model (the C == 1 tiled objective,
@@ -119,7 +119,7 @@ MAX_LANES = 16
 #                the GLM objective shard.
 #   ridge-gram   Ridge's identical fit takes `linear_gram_fit` first (bindings/classical_ridge.mojo); its centered
 #                Gram and cross go in whole leaves of contract_leaf_size(n) rows (= 128 below 128 * 128 rows),
-#                active = min(count, leaves) (core/blocked_moments_multi_gpu.mojo): rows >= 3 * 128 + 1
+#                active = min(count, leaves) (glm/blocked_moments_multi_gpu.mojo): rows >= 3 * 128 + 1
 #   ols-tsqr     LinearRegression's identical fit (fit_intercept, no weights) takes the centered TSQR
 #                (x_decomp/device.mojo `ols_tsqr_factor`); whole row blocks of TS_ROWS rows (4096, or 2048 under
 #                C24_ROWS2048; x_decomp/tsqr_core.mojo), blocks = rows // TS_ROWS, active = min(count, blocks)
@@ -136,9 +136,9 @@ LANES = (
     ("cholesky", "cholesky/multi_gpu.mojo", "cholesky", "spd", 384, 384, 19),
     ("iforest", "isolation_forest/multi_gpu.mojo", "iforest", "regress", 2000, 8, 20),
     ("gbdt", "gbdt/methods/pointwise_multi_gpu.mojo", "gbdt", "regress", 2000, 16, 21),
-    ("forest-predict", "core/forest_inference_pool.mojo", "forest", "classify", 2000, 16, 22),
+    ("forest-predict", "ensemble/forest_inference_pool.mojo", "forest", "classify", 2000, 16, 22),
     ("glm-logistic", "glm/impl/qn/multi_gpu.mojo", "logistic", "blobs", 2000, 8, 23),
-    ("ridge-gram", "core/blocked_moments_multi_gpu.mojo", "ridge", "regress", 2000, 16, 24),
+    ("ridge-gram", "glm/blocked_moments_multi_gpu.mojo", "ridge", "regress", 2000, 16, 24),
     ("ols-tsqr", "x_decomp/tsqr_multi_gpu.mojo", "ols", "regress", 13000, 8, 25),
 )
 

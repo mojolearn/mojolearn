@@ -6,7 +6,7 @@ here. One request is one forecast; it has no independent units to split.
 """
 from bindings.holtwinters_host_predict_run import holtwinters_forecast_run, holtwinters_predict_run
 from core.hostptr import f32_ptr, i32_ptr
-from core.kpss_host_test_impl import _kpss_flags_host, kpss_select_d_host
+from tsa.kpss_host_test_impl import _kpss_flags_host, kpss_select_d_host
 from core.tsa_entry_table import TSA_OP_HW_FORECAST, TSA_OP_HW_PREDICT, TSA_OP_KPSS_TEST, TSA_OP_SELECT_D
 from holtwinters.impl.tsa.holtwinters_params import seasonal_name
 

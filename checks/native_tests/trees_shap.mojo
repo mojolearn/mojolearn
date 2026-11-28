@@ -69,7 +69,7 @@ from core.naive_bayes_member import naive_bayes_member_v2, NB_KIND_GAUSSIAN, NB_
 from x_prep.transport_host import x_prep_transport_host_v1
 from x_prep.transport_abi import XP_OP_COUNT
 from core.device_route import DEVICE_CPU
-from core.logistic_member import logistic_member_v2
+from glm.logistic_member import logistic_member_v2
 from core.logistic_native_api import QnNativeDriver
 from core.logistic_route import LogisticRoute, logistic_route_pack
 from core.member_abi import (

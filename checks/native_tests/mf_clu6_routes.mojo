@@ -44,11 +44,11 @@ from core.member_abi import (
     MEMBER_OP_PREDICT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_IMPORT_DONE,
     member_call,
 )
-from core.density_member import density_member_v2
-from core.hierarchy_member import hierarchy_member_v2
-from core.spectral_member import spectral_member_v2
-from core.mixture_member import mixture_member_v2
-from core.xcluster_member import xcluster_member_v2
+from dbscan.density_member import density_member_v2
+from hierarchy.hierarchy_member import hierarchy_member_v2
+from spectral.spectral_member import spectral_member_v2
+from mixture.mixture_member import mixture_member_v2
+from x_cluster.xcluster_member import xcluster_member_v2
 from checks.native_tests.testsuite_cases import require
 
 

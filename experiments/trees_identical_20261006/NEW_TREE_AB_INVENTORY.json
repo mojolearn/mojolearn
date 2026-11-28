@@ -9690,8 +9690,8 @@
             "ET"
           ],
           "production_callers": [
-            "core/forest_inference.mojo:launch_forest_inference",
-            "core/forest_inference_model.mojo:ResidentForest.predict_into",
+            "ensemble/forest_inference.mojo:launch_forest_inference",
+            "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
             "python/mojolearn/_forest_protocol.py"
           ],
           "default": false,
@@ -9902,8 +9902,8 @@
         }
       ],
       "production_callers": [
-        "core/forest_inference.mojo:launch_forest_inference",
-        "core/forest_inference_model.mojo:ResidentForest.predict_into",
+        "ensemble/forest_inference.mojo:launch_forest_inference",
+        "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
         "python/mojolearn/_forest_protocol.py"
       ],
       "supported_estimators": [
@@ -10169,8 +10169,8 @@
             "ET"
           ],
           "production_callers": [
-            "core/forest_inference.mojo:launch_forest_inference",
-            "core/forest_inference_model.mojo:ResidentForest.predict_into",
+            "ensemble/forest_inference.mojo:launch_forest_inference",
+            "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
             "python/mojolearn/_forest_protocol.py"
           ],
           "default": false,
@@ -10202,8 +10202,8 @@
         }
       ],
       "production_callers": [
-        "core/forest_inference.mojo:launch_forest_inference",
-        "core/forest_inference_model.mojo:ResidentForest.predict_into",
+        "ensemble/forest_inference.mojo:launch_forest_inference",
+        "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
         "python/mojolearn/_forest_protocol.py"
       ],
       "supported_estimators": [
@@ -10325,8 +10325,8 @@
             "ET"
           ],
           "production_callers": [
-            "core/forest_inference.mojo:launch_forest_inference",
-            "core/forest_inference_model.mojo:ResidentForest.predict_into",
+            "ensemble/forest_inference.mojo:launch_forest_inference",
+            "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
             "python/mojolearn/_forest_protocol.py"
           ],
           "default": false,
@@ -10358,8 +10358,8 @@
         }
       ],
       "production_callers": [
-        "core/forest_inference.mojo:launch_forest_inference",
-        "core/forest_inference_model.mojo:ResidentForest.predict_into",
+        "ensemble/forest_inference.mojo:launch_forest_inference",
+        "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
         "python/mojolearn/_forest_protocol.py"
       ],
       "supported_estimators": [
@@ -10484,12 +10484,12 @@
             "ET"
           ],
           "production_callers": [
-            "core/forest_inference.mojo:launch_forest_inference",
-            "core/forest_inference_model.mojo:ResidentForest.predict_into",
+            "ensemble/forest_inference.mojo:launch_forest_inference",
+            "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
             "python/mojolearn/_forest_protocol.py",
             "core/forest_experiments.mojo:forest_chunk_sum",
-            "core/forest_host_predict.mojo",
-            "core/forest_host_groves.mojo"
+            "ensemble/forest_host_predict.mojo",
+            "ensemble/forest_host_groves.mojo"
           ],
           "default": false,
           "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
@@ -10699,12 +10699,12 @@
         }
       ],
       "production_callers": [
-        "core/forest_inference.mojo:launch_forest_inference",
-        "core/forest_inference_model.mojo:ResidentForest.predict_into",
+        "ensemble/forest_inference.mojo:launch_forest_inference",
+        "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
         "python/mojolearn/_forest_protocol.py",
         "core/forest_experiments.mojo:forest_chunk_sum",
-        "core/forest_host_predict.mojo",
-        "core/forest_host_groves.mojo"
+        "ensemble/forest_host_predict.mojo",
+        "ensemble/forest_host_groves.mojo"
       ],
       "supported_estimators": [
         "RF",
@@ -10969,8 +10969,8 @@
             "ET"
           ],
           "production_callers": [
-            "core/forest_inference.mojo:launch_forest_inference",
-            "core/forest_inference_model.mojo:ResidentForest.predict_into",
+            "ensemble/forest_inference.mojo:launch_forest_inference",
+            "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
             "python/mojolearn/_forest_protocol.py"
           ],
           "default": false,
@@ -11181,8 +11181,8 @@
         }
       ],
       "production_callers": [
-        "core/forest_inference.mojo:launch_forest_inference",
-        "core/forest_inference_model.mojo:ResidentForest.predict_into",
+        "ensemble/forest_inference.mojo:launch_forest_inference",
+        "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
         "python/mojolearn/_forest_protocol.py"
       ],
       "supported_estimators": [
@@ -11450,8 +11450,8 @@
             "ET"
           ],
           "production_callers": [
-            "core/forest_inference.mojo:launch_forest_inference",
-            "core/forest_inference_model.mojo:ResidentForest.predict_into",
+            "ensemble/forest_inference.mojo:launch_forest_inference",
+            "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
             "python/mojolearn/_forest_protocol.py"
           ],
           "default": false,
@@ -11674,8 +11674,8 @@
             "ET"
           ],
           "production_callers": [
-            "core/forest_inference.mojo:launch_forest_inference",
-            "core/forest_inference_model.mojo:ResidentForest.predict_into",
+            "ensemble/forest_inference.mojo:launch_forest_inference",
+            "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
             "python/mojolearn/_forest_protocol.py"
           ],
           "default": false,
@@ -11886,8 +11886,8 @@
         }
       ],
       "production_callers": [
-        "core/forest_inference.mojo:launch_forest_inference",
-        "core/forest_inference_model.mojo:ResidentForest.predict_into",
+        "ensemble/forest_inference.mojo:launch_forest_inference",
+        "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
         "python/mojolearn/_forest_protocol.py"
       ],
       "supported_estimators": [
@@ -12156,8 +12156,8 @@
             "ET"
           ],
           "production_callers": [
-            "core/forest_inference.mojo:launch_forest_inference",
-            "core/forest_inference_model.mojo:ResidentForest.predict_into",
+            "ensemble/forest_inference.mojo:launch_forest_inference",
+            "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
             "python/mojolearn/_forest_protocol.py"
           ],
           "default": false,
@@ -12368,8 +12368,8 @@
         }
       ],
       "production_callers": [
-        "core/forest_inference.mojo:launch_forest_inference",
-        "core/forest_inference_model.mojo:ResidentForest.predict_into",
+        "ensemble/forest_inference.mojo:launch_forest_inference",
+        "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
         "python/mojolearn/_forest_protocol.py"
       ],
       "supported_estimators": [
@@ -12635,8 +12635,8 @@
             "ET"
           ],
           "production_callers": [
-            "core/forest_inference.mojo:launch_forest_inference",
-            "core/forest_inference_model.mojo:ResidentForest.predict_into",
+            "ensemble/forest_inference.mojo:launch_forest_inference",
+            "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
             "python/mojolearn/_forest_protocol.py",
             "bindings/forest_inference_binding.mojo:forest_identical_fused_labels_binding"
           ],
@@ -12671,8 +12671,8 @@
         }
       ],
       "production_callers": [
-        "core/forest_inference.mojo:launch_forest_inference",
-        "core/forest_inference_model.mojo:ResidentForest.predict_into",
+        "ensemble/forest_inference.mojo:launch_forest_inference",
+        "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
         "python/mojolearn/_forest_protocol.py",
         "bindings/forest_inference_binding.mojo:forest_identical_fused_labels_binding"
       ],
@@ -12784,8 +12784,8 @@
             "ET"
           ],
           "production_callers": [
-            "core/forest_auxiliary_units.mojo",
-            "core/forest_auxiliary_device.mojo",
+            "ensemble/forest_auxiliary_units.mojo",
+            "ensemble/forest_auxiliary_device.mojo",
             "xtrees/api.mojo:forest_auxiliary_binding",
             "python/mojolearn/_forest_protocol.py:ForestProtocol"
           ],
@@ -12853,8 +12853,8 @@
         }
       ],
       "production_callers": [
-        "core/forest_auxiliary_units.mojo",
-        "core/forest_auxiliary_device.mojo",
+        "ensemble/forest_auxiliary_units.mojo",
+        "ensemble/forest_auxiliary_device.mojo",
         "xtrees/api.mojo:forest_auxiliary_binding",
         "python/mojolearn/_forest_protocol.py:ForestProtocol"
       ],
@@ -14420,7 +14420,7 @@
           "production_callers": [
             "gbdt/resident_model.mojo:ResidentGbdtModel._apply",
             "gbdt/models/add_non_symmetric_tree_doc_parallel.mojo:add_non_symmetric_trees_packed",
-            "core/gbdt_host_predict.mojo:gbdt_host_predict"
+            "gbdt/gbdt_host_predict.mojo:gbdt_host_predict"
           ],
           "default": false,
           "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
@@ -14461,7 +14461,7 @@
       "production_callers": [
         "gbdt/resident_model.mojo:_apply",
         "gbdt/models/add_non_symmetric_tree_doc_parallel.mojo:add_non_symmetric_trees_packed",
-        "core/gbdt_host_predict.mojo:gbdt_host_predict",
+        "gbdt/gbdt_host_predict.mojo:gbdt_host_predict",
         "bindings/_mojolearn_gbdt.mojo:gbdt_resident_predict_binding"
       ],
       "supported_estimators": [

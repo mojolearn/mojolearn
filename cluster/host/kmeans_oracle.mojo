@@ -220,7 +220,7 @@ comptime KMEANS_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 #:
 #: One unit, not an order, in both: an argmin walked in another order need not
 #: move, which is why this family's arms are units
-#: (`core/labeled_reference_host_predict.mojo` uses the same shape for the
+#: (`dbscan/labeled_reference_host_predict.mojo` uses the same shape for the
 #: transductive predicts).
 comptime KMEANS_PREDICT_HOST_SABOTAGE = is_defined[
     "MOJOLEARN_KMEANS_PREDICT_SABOTAGE"

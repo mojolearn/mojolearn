@@ -51,7 +51,7 @@ from ensemble.decisiontree.batched_levelalgo.random_utils import (
 from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     row_ids_tiled_sequence_kernel,
 )
-from core.device_liveness import assert_device_alive
+from gbdt.device_liveness import assert_device_alive
 from std.memory import bitcast, unsafe_memcpy
 from ensemble.oob_device import (
     OOB_STATS,
@@ -79,7 +79,7 @@ from ensemble.weighted_bootstrap_device import (
     scan_weights_device,
 )
 from core.launch_log import log_launch
-from core.launch_clock import log_launch_ctx
+from ensemble.launch_clock import log_launch_ctx
 from ensemble.instruments import FitInstruments
 from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from core.philox import (
@@ -3429,6 +3429,6 @@ def fit_forest_prepared[
     # records and done flags the host queue is driven by -- deliver stale
     # zeros with no error, so every node quietly leafs out and the fit
     # returns a well-formed forest of stumps. The end-of-fit canary
-    # (`core/device_liveness.mojo`) raises instead; one drain per fit.
+    # (`gbdt/device_liveness.mojo`) raises instead; one drain per fit.
     assert_device_alive(ctx, "randomforest fit (fit_forest)")
     return forest^

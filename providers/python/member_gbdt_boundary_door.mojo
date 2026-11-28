@@ -146,7 +146,7 @@ def gbdt_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
             return False
         return _learner_admit(model, 1.0, trees_route_context(model, context), owner, List[Float64]())
     if kind == 3:
-        # ExperimentalTwoLevelFeatureFreq (lane mf-meta5; core/gbdt_member.mojo kind 3): the booster's
+        # ExperimentalTwoLevelFeatureFreq (lane mf-meta5; gbdt/gbdt_member.mojo kind 3): the booster's
         # admission over its own fields, plus the FeatureFreq fit's settings as its fit door reads them
         # (`feature_freq_unpack`: float(learning_rate), float(l2_leaf_reg), int(random_state), the source
         # columns), before the feature-list tail.
@@ -165,7 +165,7 @@ def gbdt_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
         extra.append(Float64(len(sources)))
         return _learner_admit(model, 3.0, trees_route_context(model, context), owner, extra^)
     if kind == 4:
-        # OrderedRMSE (lane mf-hostent5; core/gbdt_member.mojo kind 4): its fit door's settings checks
+        # OrderedRMSE (lane mf-hostent5; gbdt/gbdt_member.mojo kind 4): its fit door's settings checks
         # (`_ordered_options`, in its words), then the booster's admission over its own fields plus the five
         # settings as `ordered_rmse_unpack` reads them, before the feature-list tail.
         if name != "OrderedRMSE":
@@ -269,7 +269,7 @@ def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut ow
     route.vendor = vendor
     route.entry = entry
     if kind == 2.0:
-        # GradientBoostingRegressor's own score (lane w3f3-c; core/gbdt_member.mojo
+        # GradientBoostingRegressor's own score (lane w3f3-c; gbdt/gbdt_member.mojo
         # `_score_r2`): the R^2 entry of the metrics image its score door reads
         # (`trees_r2`: the estimator's tier, the route's device), resolved once
         # here. Not loaded: the member's score refuses in words; fit and
@@ -283,7 +283,7 @@ def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut ow
     var words: List[Float64] = [kind]
     words.extend(gbdt_config_words(config))
     words.extend(extra^)
-    # The feature-list tail (core/gbdt_member.mojo NEW): cat_features, then
+    # The feature-list tail (gbdt/gbdt_member.mojo NEW): cat_features, then
     # one_hot_features, as the estimator holds them (`int` of each, the fit
     # door's `gbdt_category_columns` / `_flags` reads), then their counts.
     var counts = List[Int](length=2, fill=0)
@@ -335,7 +335,7 @@ struct GbdtMemberFitParams(Movable):
 
 
 #: The classifier adapter's refusal of a target with more than two classes (its fit door's words,
-#: bindings/trees_public_gbdt_fit_door.mojo `adapter_classifier_fit`, and core/gbdt_member.mojo's).
+#: bindings/trees_public_gbdt_fit_door.mojo `adapter_classifier_fit`, and gbdt/gbdt_member.mojo's).
 comptime GBDT_ADAPTER_MULTICLASS = "Only binary classification is supported. The type of the target is multiclass."
 
 

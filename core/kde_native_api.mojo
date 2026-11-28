@@ -18,7 +18,7 @@ comptime KDE_CAP_RESIDENT = 2
 comptime KDE_CAP_IMMUTABLE = 4
 # THE RESIDENT-STORE FORMS (lane vdf-scope-cluster2b, 2026-11-24; GPU image only,
 # capability KDE_CAP_DEV_STORE): KDE_PREPARE's words with `train` the id of a slot
-# of the image's resident store (core/estimators_store.mojo) instead of a host
+# of the image's resident store (glm/estimators_store.mojo) instead of a host
 # address, and KDE_RESIDENT_QUERY's with `query` a slot id. The same kernels on
 # the same words, so the same bits as the host-address forms.
 comptime KDE_PREPARE_STORE = 7

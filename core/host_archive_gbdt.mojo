@@ -98,7 +98,7 @@ def host_archive_gbdt_text(text: String) raises -> HostArchiveGBDT:
         counts.extend(table.counts.copy())
     # THE COMBINATION SECTION (tree CTRs), the tail of the three CTR arrays
     # after the `n_ctr_tables` records; a model without combinations writes
-    # no tail, so its arrays are what they were. `core/gbdt_host_ctr.mojo::
+    # no tail, so its arrays are what they were. `gbdt/gbdt_host_ctr.mojo::
     # _combination_section` reads it back.
     #   ctr_ints:   n_maps, n_combination_tables; per map: n_members, groups,
     #               (kind, feature, value, nan_side) per member, then the

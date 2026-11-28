@@ -14,7 +14,7 @@ def binding():
     host = _backend.load_host_module(HOST_BASENAME)
     if _BINDING is not host:
         # The resident session, its handle factory and the trainer provider
-        # are native table entries now (core/byte_lm_entry_table_sessions.mojo,
+        # are native table entries now (training/byte_lm_entry_table_sessions.mojo,
         # lane byte-lm-sessions-native); they are not admitted by name here.
         for name in ("byte_lm_trainer_step", "byte_lm_run_configured"):
             entry = vars(host).get(name)

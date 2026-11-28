@@ -63,7 +63,7 @@ from x_decomp.descriptor_schema import xd_vendor_code
 
 # The scale_gamma bit of the SVC table's flags (bindings/svc_kernel_params_unpack.mojo).
 comptime _PY2MOJO_SCALE_GAMMA = 1
-# core/kernel_svm_member.mojo's block names (docstring order).
+# svm/kernel_svm_member.mojo's block names (docstring order).
 comptime _B_SUPPORT = MEMBER_BLOCK_FAMILY
 comptime _B_VECTORS = MEMBER_BLOCK_FAMILY + 1
 comptime _B_DUAL = MEMBER_BLOCK_FAMILY + 2
@@ -132,7 +132,7 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         route.has_second = True
     var svr_owner = PythonObject(None)
     # The SVR table: SVR's own entries, and on a GPU binding the lease of the
-    # state's device copies for SVC too (core/kernel_svm_member.mojo `_lease`).
+    # state's device copies for SVC too (svm/kernel_svm_member.mojo `_lease`).
     if not classifier or drivers.has_device:
         var svr = svr_connection(binding)
         route.third = EntryRef(svr.driver.entry, entry_ref_word(mode, vendor, SVR_NATIVE_COUNT))

@@ -50,7 +50,7 @@ def test_both_columns_take_n_steps_through_operation_1():
 def test_binding_admits_once_and_runs_every_step_in_one_call():
     native = _read('bindings/byte_lm_trainer_native_door.mojo')
     # lane byte-lm-sessions-native: the resident session runs through the
-    # image's native session entry (core/byte_lm_entry_table_sessions.mojo)
+    # image's native session entry (training/byte_lm_entry_table_sessions.mojo)
     # 39a067f5c7: the session owner resolves the entry once at construction; every step calls through it
     # lane dw-neural-c: the typed call is the door's RUN file; the door releases or keeps the GIL around it
     run = _read('bindings/byte_lm_trainer_native_run.mojo')

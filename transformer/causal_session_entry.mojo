@@ -20,7 +20,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.state_registry import StateRegistry
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
-from core.native_session_group import NativeSessionGroup
+from transformer.native_session_group import NativeSessionGroup
 from core.shared_slot import SharedSlot
 from core.causal_lm_entry_table_sessions import (
     causal_session_handle_word, causal_session_handle_of, CAUSAL_SESSIONS_SCHEMA, CAUSAL_SESSIONS_OPERATIONS,

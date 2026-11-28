@@ -33,7 +33,7 @@ from checks.native_tests.testsuite_cases import check_cases_serial, CPU_COLUMN_B
 from core.shared_slot import SharedSlot
 from max.gpu.host import DeviceContext
 from core.fold_x_device import FOLD_X_STORE, fold_x_word
-from core.fold_x_scan import fold_x_first_nan
+from gbdt.fold_x_scan import fold_x_first_nan
 from gbdt.data.category_map_device import fold_x_category_fit_into
 from gbdt.data.category_map import CategoryMaps, CategoryKeyPtr, CategoryF32Ptr, category_keys_from_f32
 from core.neural_context import process_ctx
@@ -41,7 +41,7 @@ from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
 from gbdt.gbdt_entry import GbdtImage
 from gbdt.mojolearn_gbdt_run import gbdt_fit_native_run
 from gbdt.gpu_importance import gbdt_feature_importances_device
-from core.gbdt_importance import gbdt_feature_importances_host
+from gbdt.gbdt_importance import gbdt_feature_importances_host
 from checks.native_tests.gbdt_public_fits import GbdtOpts, GbdtInputs, fit, _DeviceFit
 
 comptime N = 240

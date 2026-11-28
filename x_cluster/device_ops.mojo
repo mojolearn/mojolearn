@@ -5,7 +5,7 @@ launch shape can move a bit. Only the GPU binding imports this file."""
 from std.sys.compile import is_defined
 from core.classical_identical_controls.stats_controls import C53_BGMM_STATS
 from mixture.checks.mstep import center_pair_kernel
-from core.em_loop_chunk import em_loop_check_every
+from mixture.em_loop_chunk import em_loop_check_every
 from x_cluster.spectral_df64_device import cluster_qr_df64_device, discretize_df64_device
 # TOMBSTONE: MOJOLEARN_XCLUSTER_ROW_ASSIGN (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-05-base); code recoverable at 456dbd4bca.
 # Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_ROW_ASSIGN.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.

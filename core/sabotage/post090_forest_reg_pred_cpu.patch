@@ -1,6 +1,6 @@
-diff --git a/core/forest_host_groves_run.mojo b/core/forest_host_groves_run.mojo
---- a/core/forest_host_groves_run.mojo
-+++ b/core/forest_host_groves_run.mojo
+diff --git a/ensemble/forest_host_groves_run.mojo b/ensemble/forest_host_groves_run.mojo
+--- a/ensemble/forest_host_groves_run.mojo
++++ b/ensemble/forest_host_groves_run.mojo
 @@ -52,8 +52,10 @@
      var lease = state[].lease(handle)
      if not lease:

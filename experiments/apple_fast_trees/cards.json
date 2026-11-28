@@ -340,8 +340,8 @@
       "caller_chain": [
        "python/mojolearn/_forest_protocol.py",
        "bindings/forest_inference_binding.mojo imported by rf/trees extensions",
-       "core/forest_inference_model.mojo:ResidentForest prediction methods",
-       "core/forest_inference.mojo:launch_forest_inference/launch_forest_argmax"
+       "ensemble/forest_inference_model.mojo:ResidentForest prediction methods",
+       "ensemble/forest_inference.mojo:launch_forest_inference/launch_forest_argmax"
       ],
       "scope_notes": [
        "Public FAST auto names parallel_groves but accepts the compiled resident ordered policy; P01/P03 need the explicit equal-arm OFF prerequisite recorded below",
@@ -2934,8 +2934,8 @@
      "source_evidence": [
       "python/mojolearn/_forest_protocol.py:_prediction_engine returns parallel_groves for FAST auto",
       "python/mojolearn/_forest_protocol.py:_resident_ordered_flag returns None for FAST parallel_groves, accepting the compiled policy",
-      "core/forest_inference_model.mojo:forest_ordered_resident_policy returns not disabled and a supported FAST/IDENTICAL GPU condition; disabled is MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF",
-      "core/forest_inference_model.mojo:ResidentForest branches on self.ordered before selecting GROVE=False/True"
+      "ensemble/forest_inference_model.mojo:forest_ordered_resident_policy returns not disabled and a supported FAST/IDENTICAL GPU condition; disabled is MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF",
+      "ensemble/forest_inference_model.mojo:ResidentForest branches on self.ordered before selecting GROVE=False/True"
      ],
      "title": "Two logical forest groves per block",
      "status": "source_added_uncompiled_unverified_unmeasured",
@@ -2949,8 +2949,8 @@
       "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"
      ],
      "source_paths": [
-      "core/apple_fast_tree_experiments.mojo",
-      "core/forest_inference.mojo"
+      "xtrees/apple_fast_tree_experiments.mojo",
+      "ensemble/forest_inference.mojo"
      ],
      "affected_estimators": [
       "RandomForestClassifier",
@@ -2999,8 +2999,8 @@
       "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"
      ],
      "source_evidence": [
-      "core/forest_inference_model.mojo:FOREST_ORDERED_RESIDENT uses forest_ordered_resident_policy[TARGET_COLUMN, GLOBAL_NUMERIC_MODE, forced, disabled]",
-      "core/forest_inference_model.mojo:forest_ordered_resident_policy returns not disabled and ((mode FAST or IDENTICAL) and supported GPU column, or forced IDENTICAL)",
+      "ensemble/forest_inference_model.mojo:FOREST_ORDERED_RESIDENT uses forest_ordered_resident_policy[TARGET_COLUMN, GLOBAL_NUMERIC_MODE, forced, disabled]",
+      "ensemble/forest_inference_model.mojo:forest_ordered_resident_policy returns not disabled and ((mode FAST or IDENTICAL) and supported GPU column, or forced IDENTICAL)",
       "python/mojolearn/_forest_protocol.py:_resident_ordered_flag returns None for FAST parallel_groves, making the OFF define bypass ordered traversal in the common experiment route",
       "Explicit public inference_engine=sequential can still force ordered traversal, but that is a separate route-specific experiment rather than a P01/P03 combination"
      ],
@@ -3013,8 +3013,8 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "core/apple_fast_tree_experiments.mojo",
-      "core/forest_inference.mojo"
+      "xtrees/apple_fast_tree_experiments.mojo",
+      "ensemble/forest_inference.mojo"
      ],
      "affected_estimators": [
       "RandomForestClassifier/Regressor with ordered resident prediction",
@@ -3056,9 +3056,9 @@
      "id": "P03",
      "caller_integration": "The public resident OFF prerequisite selects _launch_grove_lanes; forest_grove32_kernel and forest_vector_grove32_kernel allocate the selected capacity and stage rows before their unchanged traversals when feature bytes fit",
      "source_evidence": [
-      "core/forest_inference_model.mojo:forest_ordered_resident_policy returns False when disabled=MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF",
+      "ensemble/forest_inference_model.mojo:forest_ordered_resident_policy returns False when disabled=MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF",
       "python/mojolearn/_forest_protocol.py:_resident_ordered_flag lets FAST parallel_groves accept that compiled False",
-      "core/forest_inference.mojo:launch_forest_inference[GROVE=True] selects _launch_grove_lanes unless the existing row-thread override applies"
+      "ensemble/forest_inference.mojo:launch_forest_inference[GROVE=True] selects _launch_grove_lanes unless the existing row-thread override applies"
      ],
      "title": "Forest shared rows with a two KiB block budget",
      "status": "source_added_uncompiled_unverified_unmeasured",
@@ -3072,8 +3072,8 @@
       "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"
      ],
      "source_paths": [
-      "core/apple_fast_tree_experiments.mojo",
-      "core/forest_inference.mojo"
+      "xtrees/apple_fast_tree_experiments.mojo",
+      "ensemble/forest_inference.mojo"
      ],
      "affected_estimators": [
       "RandomForestClassifier",
@@ -3122,7 +3122,7 @@
      "source_evidence": [
       "python/mojolearn/_forest_protocol.py:_predict_forest_labels returns None unless effective mode is fast and _prediction_engine() is parallel_groves; FAST auto resolves to that name",
       "bindings/_mojolearn_rf.mojo and bindings/_mojolearn_trees.mojo register forest_predict_resident_labels_gpu",
-      "core/forest_inference_model.mojo:ResidentForest label paths call launch_forest_argmax after either ordered or grove traversal, so the default ordered resident policy does not bypass P04"
+      "ensemble/forest_inference_model.mojo:ResidentForest label paths call launch_forest_argmax after either ordered or grove traversal, so the default ordered resident policy does not bypass P04"
      ],
      "title": "Paired row forest class argmax",
      "status": "source_added_uncompiled_unverified_unmeasured",
@@ -3133,8 +3133,8 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "core/apple_fast_tree_experiments.mojo",
-      "core/forest_inference.mojo"
+      "xtrees/apple_fast_tree_experiments.mojo",
+      "ensemble/forest_inference.mojo"
      ],
      "affected_estimators": [
       "forest classifiers through launch_forest_argmax"
@@ -3182,7 +3182,7 @@
       "MOJOLEARN_GBDT_PREDICT_PACKED"
      ],
      "source_paths": [
-      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/apple_fast_tree_experiments.mojo",
       "gbdt/models/kernel/add_bin_values.mojo",
       "gbdt/resident_model.mojo"
      ],
@@ -3235,7 +3235,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/apple_fast_tree_experiments.mojo",
       "gbdt/models/kernel/resident_link.mojo",
       "gbdt/resident_model.mojo"
      ],
@@ -3284,7 +3284,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/apple_fast_tree_experiments.mojo",
       "xtrees/shap_device.mojo"
      ],
      "affected_estimators": [
@@ -3331,7 +3331,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/apple_fast_tree_experiments.mojo",
       "xtrees/shap_device.mojo"
      ],
      "affected_estimators": [
@@ -3376,7 +3376,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/apple_fast_tree_experiments.mojo",
       "xtrees/shap_device.mojo"
      ],
      "affected_estimators": [
@@ -3422,7 +3422,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/apple_fast_tree_experiments.mojo",
       "xtrees/shap_device.mojo"
      ],
      "affected_estimators": [
@@ -3468,7 +3468,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/apple_fast_tree_experiments.mojo",
       "xtrees/dart_device.mojo"
      ],
      "affected_estimators": [
@@ -3517,7 +3517,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/apple_fast_tree_experiments.mojo",
       "xtrees/dart_device.mojo"
      ],
      "affected_estimators": [

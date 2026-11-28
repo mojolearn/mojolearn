@@ -41,7 +41,7 @@ from glm.host.linear_fit_native import linear_fit_host_v1
 from x_linear.ridge_descriptor_host import ridge_fit_host_v1
 from x_linear.ridge_descriptor_device import ridge_fit_device_v1
 from glm.impl.ols_prep_device import ols_prep_device, OLS_PREP_SEPARATE
-from core.p3_linear_impl import ols_predict_device_targets
+from glm.p3_linear_impl import ols_predict_device_targets
 from core.entry_table import EntryRef, entry_ref_word
 from core.linear_score_run import member_r2_score, member_r2_score_slot
 from x_metrics.descriptor_device import metrics_program_device_v1

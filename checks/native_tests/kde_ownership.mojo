@@ -12,7 +12,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from core.host_parallel import host_parallelize
 from core.kde_native_api import KDENativeDriver, KDEPrepareRequest, KDEResidentQuery, kde_native_v1
-from core.kde_native_device import KDEDeviceKernels
+from kde.kde_native_device import KDEDeviceKernels
 from kde.resident_fit import KdeFitLease, _kde_fit_lease, _kde_fit_return
 # TOMBSTONE: MOJOLEARN_IDN_KDE_PARTIAL_POOL (unmeasured opt-in arm (I20 mixed, no promotion)) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 3af082d6f4.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_PARTIAL_POOL.patch; record in docs/TOMBSTONES.md.

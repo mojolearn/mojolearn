@@ -18,7 +18,7 @@
       "production_callers": [
         "gbdt/resident_model.mojo:ResidentGbdtModel._apply",
         "gbdt/models/add_non_symmetric_tree_doc_parallel.mojo:add_non_symmetric_trees_packed",
-        "core/gbdt_host_predict.mojo:gbdt_host_predict"
+        "gbdt/gbdt_host_predict.mojo:gbdt_host_predict"
       ],
       "default": false,
       "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
@@ -59,7 +59,7 @@
   "production_callers": [
     "gbdt/resident_model.mojo:_apply",
     "gbdt/models/add_non_symmetric_tree_doc_parallel.mojo:add_non_symmetric_trees_packed",
-    "core/gbdt_host_predict.mojo:gbdt_host_predict",
+    "gbdt/gbdt_host_predict.mojo:gbdt_host_predict",
     "bindings/_mojolearn_gbdt.mojo:gbdt_resident_predict_binding"
   ],
   "supported_estimators": [

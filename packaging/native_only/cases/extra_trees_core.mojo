@@ -7,7 +7,7 @@ from extratrees.estimator import (
     fit_extra_trees_classifier_device, fit_extra_trees_regressor_device,
 )
 from extratrees.impl.randomforest.randomforest import Forest
-from core.forest_inference import forest_predict_gpu
+from ensemble.forest_inference import forest_predict_gpu
 
 
 def predict_fitted(

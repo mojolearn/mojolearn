@@ -400,7 +400,7 @@ class RandomForestClassifier(_RandomForestBase):
     >>> proba = model.predict_proba(X)
     """
     # The member ABI mark (core/member_abi.mojo, family 14 MEMBER_FAMILY_FOREST): fit and predict run native
-    # inside a meta-estimator (core/forest_member.mojo).
+    # inside a meta-estimator (ensemble/forest_member.mojo).
     _mojolearn_member = (14, 0)
     predict = _ForestClassifierPredict.predict
 
@@ -586,7 +586,7 @@ class RandomForestRegressor(_RandomForestBase):
     >>> pred = model.predict(X)
     """
     # The member ABI mark (core/member_abi.mojo, family 14 MEMBER_FAMILY_FOREST): fit and predict run native
-    # inside a meta-estimator (core/forest_member.mojo).
+    # inside a meta-estimator (ensemble/forest_member.mojo).
     _mojolearn_member = (14, 1)
 
     def __init__(

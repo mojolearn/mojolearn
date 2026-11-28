@@ -89,7 +89,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
 )
 from std.time import perf_counter_ns
 
-from core.device_liveness import assert_device_alive
+from gbdt.device_liveness import assert_device_alive
 from core.identity_trace import IdentityTrace
 from extratrees.checks.rescue import rescue_key, rescue_pick
 from extratrees.impl.decisiontree.flatnode import SparseTreeNode
@@ -162,8 +162,8 @@ from checks.numerics import (
 )
 from core.philox import launch_uniform_int
 from core.abs_sum_blocked import device_abs_sum_blocked
-from core.weight_scan_device import device_scan_weights
-from core.weight_compact_device import (
+from extratrees.weight_scan_device import device_scan_weights
+from extratrees.weight_compact_device import (
     device_gather_rows,
     device_gather_rows_colmajor,
     device_nonzero_weight_rows,
@@ -6854,7 +6854,7 @@ def train_forest_classification_device(
     # Metal context death) this loop's per-cycle split readbacks deliver
     # stale zeros, every node quietly becomes a leaf, and the fit returns
     # a well-formed forest of stumps with no error. The end-of-fit canary
-    # (`core/device_liveness.mojo`) raises instead. One drain per FOREST
+    # (`gbdt/device_liveness.mojo`) raises instead. One drain per FOREST
     # fit; `_timed` direct callers (bench, checks) are check-tier and
     # uncovered on purpose.
     assert_device_alive(ctx, "extratrees classification forest fit")
@@ -8003,7 +8003,7 @@ def train_forest_regression_device(
         clock, bootstrap, n_sampled_rows, bf_sabotage,
     )
     # DEVIATION 2002: same dead-device canary as the classification twin
-    # directly above -- see that banner and `core/device_liveness.mojo`.
+    # directly above -- see that banner and `gbdt/device_liveness.mojo`.
     assert_device_alive(ctx, "extratrees regression forest fit")
     print_stage_times(clock, "extratrees regression forest fit")
     return out^

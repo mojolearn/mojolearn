@@ -10,11 +10,11 @@ validated caller buffers; this module never builds a second flattened model.
 """
 from bindings.py_lists import py_list_i64, py_list_f64
 from std.python import Python, PythonObject
-from core.forest_export_binding_impl import (
+from ensemble.forest_export_binding_impl import (
     validate_forest_export_destinations,
     copy_forest_export_leaves,
 )
-from core.forest_export_run import ForestExportRegistry
+from ensemble.forest_export_run import ForestExportRegistry
 
 
 from bindings.forest_export_binding_pack import (

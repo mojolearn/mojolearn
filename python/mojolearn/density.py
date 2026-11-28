@@ -141,7 +141,7 @@ class DBSCAN(_NumericModeMixin):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
-    #: Member ABI family 27 (Density), kind 1 (core/density_member.mojo; prediction_data=True only).
+    #: Member ABI family 27 (Density), kind 1 (dbscan/density_member.mojo; prediction_data=True only).
     _mojolearn_member = (27, 1)
 
     #: `algorithm` names the eps-NEIGHBORHOOD SEARCH, and the two values
@@ -239,7 +239,7 @@ class DBSCAN(_NumericModeMixin):
     # (`dbscan/impl/neighbors/epsilon_neighborhood.mojo::_eps_acc`, features ascending, the core row
     # flushed): squared distance vs `Float32(eps * eps)` on euclidean, L1 sum vs `Float32(eps)` on
     # manhattan. Ties by (distance, core sample index). One thread per query row, no fold across rows;
-    # the GPU binding and the CPU host binding (`core/labeled_reference_host_predict.mojo`) compute the
+    # the GPU binding and the CPU host binding (`dbscan/labeled_reference_host_predict.mojo`) compute the
     # same bytes. On 'rbc' the noise guarantee holds where the ball cover's predicate agrees with the
     # brute arm's (`check_dbscan_rbc_matches_brute`) and is not promised past that.
     @_available_if(lambda self: bool(self.prediction_data))
@@ -428,7 +428,7 @@ class KernelDensity(_NumericModeMixin):
     _mojolearn_device = True
 
     _mojolearn_native_public = True
-    #: Member ABI family 27 (Density), kind 0 (core/density_member.mojo): fit,
+    #: Member ABI family 27 (Density), kind 0 (dbscan/density_member.mojo): fit,
     #: score_samples and score (no predict).
     _mojolearn_member = (27, 0)
 

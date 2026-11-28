@@ -66,7 +66,7 @@ THE CALL CYCLE, theirs (`pointwise_oracle.cpp`):
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from core.device_units import device_multiprocessor_count
+from gbdt.device_units import device_multiprocessor_count
 from gbdt.gpu_util.arena import BufferArena
 # TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, opt-in arm, no A/B recorded, rule a; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 99c7ba636e.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.

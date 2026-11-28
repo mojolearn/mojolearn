@@ -72,7 +72,7 @@ from glm.impl.center_device import center_buf, col_means_buf, col_sums_buf, col_
 
 
 # _add_scalar_kernel (the intercept epilogue, DEVIATION 527) and ols_predict_host
-# moved into core/p3_linear_impl.mojo ols_predict_device's one epilogue launch
+# moved into glm/p3_linear_impl.mojo ols_predict_device's one epilogue launch
 # (lane ols-regression, 2026-11-14); no other caller.
 
 

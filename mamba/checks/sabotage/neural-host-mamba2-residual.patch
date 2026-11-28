@@ -10,9 +10,9 @@ diff --git a/mamba/host/mamba_host_shell_impl.mojo b/mamba/host/mamba_host_shell
      _write(a[14], st.residual_out, b * l * dm)
      _write(a[15], st.h_last, h_n)
      _write(a[10], state.conv_win, b * cd * M2_D_CONV)
-diff --git a/core/mojolearn_neural_host_impl.mojo b/core/mojolearn_neural_host_impl.mojo
---- a/core/mojolearn_neural_host_impl.mojo
-+++ b/core/mojolearn_neural_host_impl.mojo
+diff --git a/training/mojolearn_neural_host_impl.mojo b/training/mojolearn_neural_host_impl.mojo
+--- a/training/mojolearn_neural_host_impl.mojo
++++ b/training/mojolearn_neural_host_impl.mojo
 @@ -265,6 +265,8 @@
      state.buf_dtraw = read_f32(a[13], b * M2_CHUNK_SIZE * nh)
      state.buf_len = q0

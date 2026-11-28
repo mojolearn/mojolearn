@@ -13,7 +13,7 @@ binding's caller does.
 """
 from std.python import PythonObject
 
-from core.forest_host_groves_run import (
+from ensemble.forest_host_groves_run import (
     forest_prepare_host_native,
     forest_predict_resident_host_native,
     forest_release_host_native,

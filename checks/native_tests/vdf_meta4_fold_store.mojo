@@ -36,13 +36,13 @@ FAIL-PROOF EDITS (each must fail the named case): in `member_rows` drop the `too
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases_serial, CPU_COLUMN_BUILD, require
-from core.meta_fold_rows import meta_rows_index, meta_rows_compose, meta_rows_take_u32
+from xtrees.meta_fold_rows import meta_rows_index, meta_rows_compose, meta_rows_take_u32
 from core.member_abi import MEMBER_OP_PREDICT_PROBA
 from xtrees.trees_meta_vote_run import VoteRows
 from xtrees.trees_calibrated_fit_run import CalFitPlan
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
-from core.p3_linear_impl import ols_predict_device
+from glm.p3_linear_impl import ols_predict_device
 from core.fold_x_device import FOLD_X_STORE, fold_x_word
 
 comptime NB = 40000

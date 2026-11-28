@@ -7,7 +7,7 @@ from core.shared_slot import SharedSlot
 from core.native_scalar_decode import NativeRealBits, native_scalar_real, _scalar_ieee
 from core.native_array_layout import native_array_itemsize
 from core.logistic_query_state import LogisticQueryWidth, logistic_width_integer
-from core.logistic_query_boundary_run import logistic_torch_width_run
+from glm.logistic_query_boundary_run import logistic_torch_width_run
 from core.sequence_array_cast import SEQ_CAST_OVERFLOW
 from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get

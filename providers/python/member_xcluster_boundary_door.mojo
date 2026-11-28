@@ -440,7 +440,7 @@ def _bgmm_data(model: PythonObject, k: Int, ct: Int, context: PythonObject) rais
         return words^
     var mean_size = -1 if mean is None else Int(py=mean.size)
     var warm_size = 0 if warm is None else Int(py=warm.size)
-    # [21 ..] the GaussianMixture words (core/xcluster_member.mojo): not plain, no starts.
+    # [21 ..] the GaussianMixture words (x_cluster/xcluster_member.mojo): not plain, no starts.
     var head: List[Float64] = [Float64(mean_size), Float64(cov_mode), Float64(cov_rows), Float64(cov_cols),
         0.0 if warm is None else 1.0, Float64(warm_d), lower, Float64(warm_size), 0.0, -1.0, -1.0, 0.0, -1.0, 1.0]
     words = head^
@@ -864,7 +864,7 @@ def xcluster_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
     var call = MemberCall(plan.route, state)
     if kind == _KIND_OPTICS:
         # Lane mf-member8: `optics_fit`'s publications, the same names,
-        # dtypes, shapes and order (core/xcluster_member.mojo blocks 0 .. 5).
+        # dtypes, shapes and order (x_cluster/xcluster_member.mojo blocks 0 .. 5).
         _export(plan, call, MEMBER_BLOCK_FAMILY + 40)
         var n = call.dst.cols
         var core_distances = _f32_shaped(call.dst, Python.tuple(n), context)
