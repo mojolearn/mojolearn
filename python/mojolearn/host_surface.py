@@ -5206,6 +5206,9 @@ PUBLIC_PENDING_LANES = {
     "x-neighbors-label-spreading-score": "no reference",
     "x-neighbors-lof-decision-function": "no reference",
     "x-neighbors-louvain-fit-predict": "no reference",
+    # lane leiden-umap-1 (2026-11-28): new Leiden lanes; RECORD OWED (the next release record)
+    "x-neighbors-leiden": "no reference",
+    "x-neighbors-leiden-fit-predict": "no reference",
     "x-neighbors-nearest-centroid-score": "no reference",
     "x-neighbors-ocsvm-fit-predict": "no reference",
     "x-neighbors-ocsvm-score-samples": "no reference",

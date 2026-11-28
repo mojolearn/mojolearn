@@ -235,6 +235,7 @@
       "KernelPCA",
       "LabelPropagation",
       "LabelSpreading",
+      "Leiden",
       "LocalOutlierFactor",
       "Louvain",
       "NearestCentroid",
@@ -2878,6 +2879,15 @@
       "source": "python/mojolearn/_expansion_linear.py",
       "canonical_algorithm": "mojolearn.LogisticRegressionCV",
       "symbol_origin": "mojolearn._expansion_linear.LogisticRegressionCV"
+    },
+    {
+      "algorithm": "mojolearn.Leiden",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/_expansion_neighbors.py",
+      "canonical_algorithm": "mojolearn.Leiden",
+      "symbol_origin": "mojolearn._expansion_neighbors.Leiden"
     },
     {
       "algorithm": "mojolearn.Louvain",

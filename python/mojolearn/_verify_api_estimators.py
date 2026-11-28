@@ -125,7 +125,7 @@ def estimator_checks(recorder, public, methods):
             return X.reshape(8,2,2), y
         if name in ('CCA', 'PLSCanonical', 'PLSRegression'):
             return X, np.column_stack([target, target*.5])
-        if name in ('Louvain', 'PageRank'):
+        if name in ('Louvain', 'Leiden', 'PageRank'):
             return np.array([[0,1,0,1],[1,0,1,0],[0,1,0,1],[1,0,1,0]],np.float32), None
         if name == 'Cholesky':
             # symmetric positive definite: X'X plus the identity

@@ -9978,6 +9978,171 @@
       ]
     },
     {
+      "public": "mojolearn.Leiden",
+      "status": "source-verified-field-only",
+      "writes": [
+        {
+          "field": "resolution",
+          "value": {
+            "parameter": "resolution"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:2186"
+        },
+        {
+          "field": "objective_function",
+          "value": {
+            "parameter": "objective_function"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:2186"
+        },
+        {
+          "field": "n_iterations",
+          "value": {
+            "parameter": "n_iterations"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:2186"
+        },
+        {
+          "field": "random_state",
+          "value": {
+            "parameter": "random_state"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:2186"
+        },
+        {
+          "field": "numeric_mode",
+          "value": {
+            "parameter": "numeric_mode"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:2186"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:2186"
+        }
+      ],
+      "trace": [
+        "python/mojolearn/_expansion_neighbors.py:2186"
+      ],
+      "constructor": "python/mojolearn/_expansion_neighbors.py:2186",
+      "signature_source": "def __init__(self, resolution=1.0, *, objective_function='modularity', n_iterations=-1, random_state=0, numeric_mode=None, device=None)",
+      "parameters": [
+        "resolution",
+        "objective_function",
+        "n_iterations",
+        "random_state",
+        "numeric_mode",
+        "device"
+      ],
+      "constructor_ast_sha256": "a0c03559c0522b7afd700cdfe4d333db0929924eb4794210ff9191907f4f326a",
+      "field_order": [
+        "resolution",
+        "objective_function",
+        "n_iterations",
+        "random_state",
+        "numeric_mode",
+        "device"
+      ],
+      "final_fields": {
+        "resolution": {
+          "parameter": "resolution"
+        },
+        "objective_function": {
+          "parameter": "objective_function"
+        },
+        "n_iterations": {
+          "parameter": "n_iterations"
+        },
+        "random_state": {
+          "parameter": "random_state"
+        },
+        "numeric_mode": {
+          "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
+        }
+      },
+      "signature_defaults": {
+        "resolution": "1.0",
+        "objective_function": "'modularity'",
+        "n_iterations": "-1",
+        "random_state": "0",
+        "numeric_mode": "None",
+        "device": "None"
+      },
+      "numeric_mode_injection": false,
+      "module": "mojolearn._expansion_neighbors",
+      "declared_class": "Leiden",
+      "source_functions": [
+        {
+          "path": "python/mojolearn/_expansion_neighbors.py",
+          "name": "__init__",
+          "line": 2186,
+          "ast_sha256": "a0c03559c0522b7afd700cdfe4d333db0929924eb4794210ff9191907f4f326a"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "Leiden",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": [
+            "_mojolearn_native_public = True"
+          ]
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
+      ]
+    },
+    {
       "public": "mojolearn.Louvain",
       "status": "source-verified-field-only",
       "writes": [

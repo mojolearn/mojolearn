@@ -50,7 +50,7 @@ _OP = _operation_codes()
 
 __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch",
            "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer",
-           "PageRank", "connected_components", "Louvain", "SVGP"]
+           "PageRank", "connected_components", "Louvain", "Leiden", "SVGP"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -2112,6 +2112,127 @@ class Louvain(_XNeighbors):
             Community of each node.
         """
         return _NATIVE(self, _OP.family_xn_graph_louvain_fit_predict, (None, A), _NATIVE_CONTEXT)
+
+
+# ====================================================================== Leiden
+# Reference: Traag, Waltman & van Eck 2019 ("From Louvain to Leiden"),
+# leidenalg `Optimiser.optimise_partition` and igraph `community_leiden` (the
+# CPM quality), as Scanpy `tl.leiden` calls them. Louvain's graph stages with
+# the refinement step between local moving and aggregation
+# (x_neighbors/graph_par.mojo `ld_drive`). Parallel and fixed-order: the
+# colour classes of a seeded graph colouring move together, the refinement
+# merges greedily (leidenalg's randomness theta -> 0) in one pass over the
+# colours, ties to the smallest community id; random_state seeds the
+# colouring, not a random stream. The same bits on every device in
+# `identical`; the partition can differ from leidenalg's.
+class Leiden(_XNeighbors):
+    """Leiden community detection on an undirected weighted graph.
+
+    Finds communities with the Leiden algorithm (Traag, Waltman and van Eck,
+    2019), the method behind Scanpy's ``tl.leiden``: local moving of nodes,
+    then a refinement that splits every community into well-connected
+    parts, then aggregation of the graph on the refined partition. Unlike
+    Louvain, every community it returns is connected. Local moving and
+    refinement run in parallel in a fixed order (the nodes of one color of
+    a graph coloring move together, ties go to the lowest community id),
+    so the result is reproducible for a given ``random_state``; it can
+    differ from leidenalg's partition. The graph is a symmetric weighted
+    adjacency matrix given as a dense square array, a scipy.sparse matrix
+    (any format; indices sorted within each row), or an
+    ``(indptr, indices, n)`` CSR tuple in which every edge weighs 1. A
+    non-symmetric matrix or a graph without edges raises ``ValueError``.
+
+    Parameters
+    ----------
+    resolution : float, default 1.0
+        Resolution of the quality function; larger values favor smaller
+        communities.
+    objective_function : {'modularity', 'CPM'}, default 'modularity'
+        Quality to optimize: modularity with resolution, or the Constant
+        Potts Model, in which ``resolution`` is the edge density a community
+        must exceed.
+    n_iterations : int, default -1
+        Number of iterations of the whole algorithm, each starting from the
+        previous partition; a negative value runs until the quality stops
+        improving.
+    random_state : int or None, default 0
+        Seed of the node coloring that fixes the order of the moves.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode for this estimator. None uses the process default.
+
+    Attributes
+    ----------
+    labels_ : Array of shape (n,), int32
+        Community of each node, numbered in order of each community's lowest
+        node.
+    n_communities_ : int
+        Number of communities.
+    quality_ : float
+        Value of the objective function for the partition (computed in
+        float32): the modularity, or the CPM quality.
+    n_iterations_ : int
+        Number of iterations run.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> M = np.random.default_rng(0).random((500, 500)) < 0.02
+    >>> A = (M | M.T).astype(np.float32)
+    >>> labels = mojolearn.Leiden(resolution=1.0).fit_predict(A)
+    """
+    _mojolearn_native_public = True
+    _mojolearn_device = True
+
+    def __init__(self, resolution=1.0, *, objective_function="modularity", n_iterations=-1, random_state=0,
+                 numeric_mode=None, device=None):
+        self.resolution = resolution
+        self.objective_function = objective_function
+        self.n_iterations = n_iterations
+        self.random_state = random_state
+        self.numeric_mode = numeric_mode
+        self.device = device
+
+    def fit(self, A, y=None):
+        """Detect communities in the graph.
+
+        Parameters
+        ----------
+        A : array-like of shape (n, n), scipy.sparse matrix, or tuple
+            Symmetric weighted adjacency matrix: a dense square array, a
+            scipy.sparse matrix, or an ``(indptr, indices, n)`` CSR tuple.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : Leiden
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If ``objective_function`` is not 'modularity' or 'CPM',
+            ``n_iterations`` is 0, the matrix is not symmetric, or the graph
+            has no edges.
+        """
+        return _NATIVE(self, _OP.family_xn_graph_leiden_fit, (None, A), _NATIVE_CONTEXT)
+
+    def fit_predict(self, A, y=None):
+        """Detect communities and return ``labels_``.
+
+        Parameters
+        ----------
+        A : array-like of shape (n, n), scipy.sparse matrix, or tuple
+            Symmetric weighted adjacency matrix.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        labels : Array of shape (n,), int32
+            Community of each node.
+        """
+        return _NATIVE(self, _OP.family_xn_graph_leiden_fit_predict, (None, A), _NATIVE_CONTEXT)
 
 # ====================================================================== SVGP
 # Reference: GPflow `gpflow/models/svgp.py` (SVGP with a Gaussian

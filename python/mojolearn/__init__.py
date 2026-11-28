@@ -241,7 +241,7 @@ _LAZY_NAMES = {
     "SkewedChi2Sampler": "._expansion_neighbors", "LabelPropagation": "._expansion_neighbors",
     "LabelSpreading": "._expansion_neighbors", "KNNImputer": "._expansion_neighbors",
     "PageRank": "._expansion_neighbors", "connected_components": "._expansion_neighbors",
-    "Louvain": "._expansion_neighbors", "SVGP": "._expansion_neighbors",
+    "Louvain": "._expansion_neighbors", "Leiden": "._expansion_neighbors", "SVGP": "._expansion_neighbors",
     # _expansion_decomp
     "IncrementalPCA": "._expansion_decomp", "GaussianRandomProjection": "._expansion_decomp",
     "SparseRandomProjection": "._expansion_decomp", "johnson_lindenstrauss_min_dim": "._expansion_decomp",
