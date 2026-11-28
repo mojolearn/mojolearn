@@ -30,7 +30,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 from bindings.parallel_base_entry_host import publish_parallel_base_host
 from bindings.parallel_base_entry_device import publish_parallel_base_device
-from sequence.schedule import splitmix64
+from core.epoch_schedule import splitmix64
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, require, CPU_COLUMN_BUILD
 

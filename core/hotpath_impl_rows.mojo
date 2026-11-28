@@ -13,7 +13,7 @@ binding returned).
 """
 from std.math import fma, sqrt
 from std.memory import bitcast
-from sequence.schedule import fill_epoch_order, splitmix64
+from core.epoch_schedule import fill_epoch_order, splitmix64
 from checks.numerics import portable_cosf, portable_log64
 from metrics.checks.pinned_sum import canonicalize_nan
 from core.hotpath_impl import HOTPATH_SABOTAGE, HP_F32, HP_F64, HP_I32, HP_I64, _ptr
