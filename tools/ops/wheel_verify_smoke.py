@@ -96,7 +96,8 @@ CRASH_RERUN_TIMEOUT = 600.0
 #: ENVIRONMENT, not a fault (smoke-triage 2026-11-15): public modules that cannot import on this CPU-only Linux
 #: install by design, each with the EXACT refusal its log must carry. A unit is marked `env` (listed in SUMMARY.txt,
 #: not failed) only when it exits nonzero AND its log matches; any other failure of the same module stays a failure.
-#: - adapters.max / adapters.torch: optional dependencies (`mojolearn[max]`, `mojolearn[torch]`) that the smoke
+#: - adapters.max / adapters.torch / adapters.anndata: optional dependencies (`mojolearn[max]`, `mojolearn[torch]`,
+#:   `mojolearn[anndata]`) that the smoke
 #:   venv does not install; the adapter refuses by name.
 #: (linalg_fast left this table 2026-11-24, vdf2-public: its BF16 entries resolve at first access and the host
 #: binding answers fast_bf16_available False, so the module imports on a CPU-only install.)
@@ -104,6 +105,9 @@ IMPORT_ENVIRONMENT = {
     "mojolearn.adapters.max": (r"ImportError: mojolearn\.adapters\.max needs MAX\.", "optional dependency MAX absent"),
     "mojolearn.adapters.torch": (r"ImportError: mojolearn\.adapters\.torch needs (PyTorch|torch)",
                                  "optional dependency torch absent"),
+    # the AnnData front-end (sc-anndata-1, 2026-11-28): optional `mojolearn[anndata]`, refused by name
+    "mojolearn.adapters.anndata": (r"ImportError: mojolearn\.adapters\.anndata needs anndata\.",
+                                   "optional dependency anndata absent"),
 }
 
 
