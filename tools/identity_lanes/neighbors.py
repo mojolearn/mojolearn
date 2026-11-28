@@ -211,6 +211,26 @@ def _(ml, X, yc, yr, Xh=None):
                      lab_r=_h(r.labels_), q_r=_h(np.float32(r.modularity_))))
 
 
+@lane("x-neighbors-leiden")
+def _(ml, X, yc, yr, Xh=None):
+    """Leiden (lane leiden-umap-1, 2026-11-28; RECORD OWED): modularity at
+    two resolutions on the weighted graph, until stable and two fixed
+    iterations, a second random_state; CPM on the weighted graph and on the
+    unweighted (indptr, indices, n) CSR tuple of the same edges."""
+    A = _neighbors_graph(X)
+    m = ml.Leiden(resolution=1.0).fit(A)
+    r = ml.Leiden(resolution=0.5, n_iterations=2, random_state=7).fit(A)
+    c = ml.Leiden(resolution=0.05, objective_function="CPM").fit(A)
+    nz = A != 0
+    indptr = np.concatenate([[0], np.cumsum(nz.sum(axis=1))]).astype(np.int32)
+    indices = np.nonzero(nz)[1].astype(np.int32)
+    u = ml.Leiden(resolution=0.2, objective_function="CPM", n_iterations=1).fit((indptr, indices, A.shape[0]))
+    return _fit(dict(lab=_h(m.labels_), q=_h(np.float32(m.quality_)), it=_h(np.int64(m.n_iterations_)),
+                     lab_r=_h(r.labels_), q_r=_h(np.float32(r.quality_)),
+                     lab_c=_h(c.labels_), q_c=_h(np.float32(c.quality_)),
+                     lab_u=_h(u.labels_), q_u=_h(np.float32(u.quality_))))
+
+
 @lane("x-neighbors-svgp")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.SVGP(n_inducing=24, kernel_variance=2.0, lengthscale=3.0, noise_variance=0.5).fit(X[:512], yr[:512])
@@ -472,6 +492,8 @@ _batch_decl("n/a:whole-graph partition (connected components requires edges betw
             "x-neighbors-connected-components", revision="expansion-batch-2026-09-28-v1")
 _batch_decl("n/a:whole-graph partition (Louvain optimizes graph-wide modularity; node subsets change "
             "the objective and there is no held-out prediction API)", "x-neighbors-louvain", revision="expansion-batch-2026-09-28-v1")
+_batch_decl("n/a:whole-graph partition (Leiden optimizes a graph-wide quality; node subsets change "
+            "the objective and there is no held-out prediction API)", "x-neighbors-leiden", revision="expansion-batch-2026-09-28-v1")
 
 
 def _neighbors_batch_gp_cov(ml, e, Xh):

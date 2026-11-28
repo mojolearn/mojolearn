@@ -147,6 +147,11 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(fit_predict=_m_predict_h(ml.Louvain(resolution=1.0).fit_predict(_neighbors_graph(X)))))
 
 
+@lane("x-neighbors-leiden-fit-predict")
+def _(ml, X, yc, yr, Xh=None):
+    return _fit(dict(fit_predict=_m_predict_h(ml.Leiden(resolution=1.0).fit_predict(_neighbors_graph(X)))))
+
+
 @lane("x-neighbors-ocsvm-fit-predict")
 def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(fit_predict=_m_predict_h(ml.OneClassSVM(nu=0.2).fit_predict(np.ascontiguousarray(X[:256])))))
@@ -553,6 +558,7 @@ _batch_decl("n/a:fit-endpoint (fit_predict labels the rows it fits on, so each r
             "x-cluster-meanshift-fit-predict",
             "x-cluster-optics-fit-predict",
             "x-neighbors-louvain-fit-predict",
+            "x-neighbors-leiden-fit-predict",
             "x-neighbors-ocsvm-fit-predict",
             "x-decomp-robust-cov-fit-predict")
 # forecast(y, h) fits each series and forecasts it in one call; there are no input rows, and the horizon's
