@@ -17,7 +17,7 @@ from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input_unpack import admit_f32
 from bindings.classical_labels_door import classical_encode_labels
 from bindings.cluster_public_native_pack import _xc_array
-from bindings.cluster_fit_public_native_unpack import _set, _attr
+from bindings.cluster_fit_public_native_unpack import _set, _attr, _seed
 from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
@@ -135,8 +135,7 @@ def harmony_fit(model: PythonObject, binding: PythonObject, source: PythonObject
     var max_iter_kmeans = _int(model, "max_iter_kmeans")
     var epsilon_cluster = _float(model, "epsilon_cluster")
     var epsilon_harmony = _float(model, "epsilon_harmony")
-    var random_state = _attr(model, "random_state")
-    var seed = 0 if random_state is None else Int(py=py_call(b.int, random_state))
+    var seed = _seed(_attr(model, "random_state"))
     if not (sigma > 0.0):
         raise Error("ValueError: Harmony: sigma must be positive")
     if tau < 0.0:
@@ -147,7 +146,7 @@ def harmony_fit(model: PythonObject, binding: PythonObject, source: PythonObject
         raise Error("ValueError: Harmony: max_iter_harmony and max_iter_kmeans must be positive")
     var request = HarmonyRequest(x.address, Int(codes.unsafe_ptr()), Int(offsets.unsafe_ptr()),
                                  Int(theta.unsafe_ptr()), Int(lamb.unsafe_ptr()), n, d, k, c, nb, max_iter_harmony,
-                                 max_iter_kmeans, seed & 0x7FFFFFFFFFFFFFFF, sigma, tau, block_size, epsilon_cluster,
+                                 max_iter_kmeans, seed, sigma, tau, block_size, epsilon_cluster,
                                  epsilon_harmony)
     var connection = harmony_connection(binding)
     var result = HarmonyResultSlot()

@@ -234,6 +234,7 @@ _LAZY_NAMES = {
     "MiniBatchKMeans": "._expansion_cluster", "BisectingKMeans": "._expansion_cluster",
     "MeanShift": "._expansion_cluster", "OPTICS": "._expansion_cluster",
     "AffinityPropagation": "._expansion_cluster", "BayesianGaussianMixture": "._expansion_cluster",
+    "Harmony": "._expansion_cluster",
     # _expansion_neighbors
     "LocalOutlierFactor": "._expansion_neighbors", "NearestCentroid": "._expansion_neighbors",
     "OneClassSVM": "._expansion_neighbors", "KernelPCA": "._expansion_neighbors",
