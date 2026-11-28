@@ -279,16 +279,17 @@ def recording(fplan):
 
 def render(fplan):
     fs = (fplan or {}).get("families") or []
-    n_b = sum(f["decision"] == "BUILD" for f in fs)
+    n_b = sum(f.get("decision") == "BUILD" for f in fs)
     out = ["== release families: %d REUSE / %d BUILD; %d record their lanes on every device%s" % (
         len(fs) - n_b, n_b, sum(bool(f.get("record")) for f in fs),
         " (--rebuild-all)" if (fplan or {}).get("rebuild_all") else "")]
-    out.append("   %-10s %-6s %-7s %8s  %s" % ("family", "bytes", "lanes", "bindings", "reason"))
+    out.append("   %-10s %-6s %-7s %8s  %s" % ("family", "bytes", "lanes", "built", "reason"))
     for f in fs:
         out.append("   %-10s %-6s %-7s %8s  %s%s" % (
-            f["family"], f["decision"], "RECORD" if f.get("record") else "KEEP",
-            "%d/%d" % (f.get("built", 0), f.get("bindings", 0)), f["reason"][:220],
-            "" if not f.get("record") or f["decision"] == "BUILD" else "; records: " + f.get("record_reason", "")))
+            f["family"], f.get("decision", "-"), "RECORD" if f.get("record") else "KEEP",
+            "%d/%d" % (f.get("built", 0), f.get("bindings", 0)), str(f.get("reason", ""))[:220],
+            "" if not f.get("record") or f.get("decision") == "BUILD"
+            else "; records: " + str(f.get("record_reason", ""))[:220]))
     return out
 
 
@@ -436,7 +437,11 @@ def main(argv=None):
     p.add_argument("--cache-dir", default=str(ROOT / ".release-family-facts"))
     lanes_p = sub.add_parser("lanes")
     lanes_p.add_argument("--plan", default="", help="a plan JSON carrying `families` (release_reuse plan or this plan)")
-    lanes_p.add_argument("--families", default="", help="comma list of families to record, instead of --plan")
+    lanes_p.add_argument("--families", default="", help="comma list of families to record (`none`: no family), "
+                                                         "instead of --plan")
+    lanes_p.add_argument("--settle", action="store_true",
+                         help="with a release_reuse --plan: also move the kept families whose columns do not rest "
+                              "on the shipped bytes to RECORD (kept_refusals, over this tree's reference table)")
     lanes_p.add_argument("--lanes-file", default="")
     a = ap.parse_args(argv)
     fam = load()
@@ -476,16 +481,25 @@ def main(argv=None):
             RR.atomic_write_text(a.json, json.dumps(plan, indent=1, sort_keys=True) + "\n")
         return 0
     if a.cmd == "lanes":
+        lanes = given_lanes(a.lanes_file)
         if a.families:
-            want = [f for f in a.families.split(",") if f]
+            want = [] if a.families == "none" else [f for f in a.families.split(",") if f]
             unknown = [f for f in want if f not in fam.families]
             if unknown:
                 raise SystemExit("release_families: unknown famil(y/ies) %s" % ", ".join(unknown))
             fplan = dict(families=[dict(family=f, record=f in want) for f in fam.names()])
         else:
-            doc = read_json(a.plan) or {}
+            doc = read_json(a.plan) if a.plan else None
+            if not doc:
+                raise SystemExit("release_families: lanes needs --families or a readable --plan")
+            if a.settle:
+                if not doc.get("rows") or not isinstance(doc.get("families"), dict):
+                    raise SystemExit("release_families: --settle needs a release_reuse plan with families")
+                settle(doc, lanes, fam)
             fplan = doc.get("families") if isinstance(doc.get("families"), dict) else doc
-        print(",".join(lanes_to_record(fplan, given_lanes(a.lanes_file), fam)))
+        for line in render(fplan):
+            print("FAMILY " + line.strip(), file=sys.stderr)
+        print(",".join(lanes_to_record(fplan, lanes, fam)))
         return 0
     return 2
 

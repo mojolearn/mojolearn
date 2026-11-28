@@ -51,21 +51,19 @@
 #   REPEATS=1               fits per cell (default 1). Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
 #                           NVIDIA == AMD is the identity rule; a second fit on
 #                           one box adds nothing the other vendor's column does not
-#   (default)               EVERY LANE (Andrew 2026-11-05, decided 2026-11-09: reuse of old
-#                           runs is opt-in): with no LANES, SHARD, ONLY_CHANGED or REUSE, every
-#                           lane of the scope is recorded; nothing is reused
-#   REUSE=1                 opt into reuse: with no LANES, SHARD or ONLY_CHANGED, only the lanes
-#                           whose source closure (tools/lane_select.py, this column's backend)
-#                           changed since the newest good evidence of THIS device class are
-#                           recorded: the admitted table's rows and every admissible record under
-#                           verification/records/identity (retained/ included), <outdir> and
-#                           MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2. Prints REUSED n / RECORD m,
-#                           and NOTHING-CHANGED (exit 0) when no lane is owed; decisions in
-#                           <outdir>/<label>.reuse.json. A depth-1 box tree is enough: the reuse
-#                           step fetches HEAD's history back to the oldest reuse commit from the
-#                           tree's own remote (MOJOLEARN_IDENTITY_REUSE_REMOTE, default origin)
-#                           and names the release tags it holds. (FULL=1, the old way to record
-#                           every lane, is retired with the reuse default and refused.)
+#   (default)               THE FAMILIES THAT RECORD (AGENTS.md part 4, Andrew 2026-11-28): with no
+#                           LANES, SHARD or ONLY_CHANGED, the lanes of the release families that
+#                           record (tools/release_families.py: a family records when one of its
+#                           binding identities changed, it shares a merged file with one that did,
+#                           shared changed, or its kept columns do not rest on the shipped bytes);
+#                           every other lane keeps its admitted rows. NOTHING-CHANGED (exit 0) when
+#                           no family records. The plan is HEAD's against the previous release
+#                           (<outdir>/<label>.family-plan.json); it needs the release evidence set
+#                           and the history of the previous release's commit in this tree
+#   FAMILIES=a,b            the families to record instead of the plan (tools/release.py passes its own
+#                           decision); FAMILIES=none records nothing
+#   REBUILD_ALL=1           every lane of the scope (tools/release.py --rebuild-all). REUSE=1 and
+#                           SELECT_ONLY=1 (the per-lane selector) are removed and refused; FULL=1 is retired
 #   ONLY_CHANGED=table|<sha> INCREMENTAL RE-RECORD: only the lanes whose source
 #                           closure (tools/lane_select.py) changed between the
 #                           commit each lane's admitted rows rest on (`table`)
@@ -77,9 +75,9 @@
 #   WITH_CPU=1              with a GPU label: the CPU column from the same process (--side both,
 #                           device="cpu" after the GPU column's device="gpu"), written as
 #                           cpu<the GPU record's suffix>.identical.json beside it, with its own
-#                           provenance, check line and RECORDED line. Excludes REUSE=1 and
-#                           ONLY_CHANGED (their lane selection is per device class: record the cpu
-#                           label on its own for those)
+#                           provenance, check line and RECORDED line. Excludes ONLY_CHANGED (its
+#                           lane selection is per device class: record the cpu label on its own);
+#                           the family selection is the same on every class
 #   CPU_THREADS=3           every CPU thread pool (MOJOLEARN_CPU_THREADS, OMP...)
 #   PYTHON=...              the interpreter (default: `pixi run -e default python`
 #                           when pixi and pixi.toml are present, else python3)
@@ -103,11 +101,10 @@
 #   IDENTITY_RECORD_WHEELS  set here from INSTALLED_WHEELS under RECORD_FROM_INSTALLED=1 (never by hand): the
 #                           record's run.wheels [{name, sha256, version}]. Neither variable starts with MOJO, so
 #                           the resume signature never sees them; the run block is provenance, never hashed
-#   SELECT_ONLY=1           with REUSE=1, the reuse selection only: prints LANES-SELECTED <csv> (or
-#                           NOTHING-CHANGED) and records nothing
-#   LANE_SELECTION=auto-reuse-chunk  with LANES: this record is one chunk of a SELECT_ONLY selection
-#   LANE_SELECTION=full-chunk  with LANES: one chunk of a full column (every lane; release.py --identity-on-wheels
-#                           default, Andrew 2026-11-05: run everything once per release, no selector)
+#   LANE_SELECTION=family-chunk  with LANES: one chunk of the recording families' lanes (identity_wheel_record.py
+#                           --record-families a,b: tools/release.py's family plan)
+#   LANE_SELECTION=full-chunk  with LANES: one chunk of a full column (every lane; --record-families all,
+#                           tools/release.py --rebuild-all)
 #                           (tools/identity_wheel_record.py runs the chunks in parallel)
 #
 # Start ledger-managed release columns through release_identity_run.py after
@@ -150,8 +147,8 @@ WITH_CPU=${WITH_CPU:-0}
 case $WITH_CPU in 0|1) ;; *) die "WITH_CPU is 0 or 1, not $WITH_CPU";; esac
 if [ "$WITH_CPU" = 1 ]; then
     [ "$BACKEND" != cpu ] || die "WITH_CPU=1 adds the CPU column to a GPU label's record; the cpu label records it alone"
-    [ "${REUSE:-0}" = 0 ] && [ -z "${ONLY_CHANGED:-}" ] \
-        || die "WITH_CPU=1 excludes REUSE=1 and ONLY_CHANGED (their selection is per device class); record the cpu label on its own"
+    [ -z "${ONLY_CHANGED:-}" ] \
+        || die "WITH_CPU=1 excludes ONLY_CHANGED (its selection is per device class); record the cpu label on its own"
 fi
 mkdir -p "$OUT" || die "cannot create $OUT"
 
@@ -290,84 +287,50 @@ fi
 # --- which lanes -----------------------------------------------------------
 NAME=$LABEL
 SELECTION=explicit
-# EVERY LANE BY DEFAULT; REUSE IS OPT-IN (Andrew 2026-11-05, decided 2026-11-09,
-# AGENTS.md "Reuse of old runs is opt-in"). With no LANES, SHARD or ONLY_CHANGED
-# the column records every lane of the scope. REUSE=1 records only the lanes
-# whose source closure changed since the newest good evidence THIS device class
-# already holds and reuses the rest. FULL=1 (the old opt-out of the reuse
-# default) is retired with it.
-[ -z "${FULL:-}" ] || die "FULL=$FULL is retired: every lane is recorded by default; REUSE=1 opts into reuse"
-case "${REUSE:-0}" in 0|1) ;; *) die "REUSE=$REUSE: 1 reuses unchanged lanes, 0 (default) records every lane" ;; esac
-if [ "${REUSE:-0}" = 0 ]; then
-    if [ -z "${ONLY_CHANGED:-}" ] && [ -z "${LANES:-}" ] && [ -z "${SHARD:-}" ]; then
+# FAMILY REUSE IS THE DEFAULT (AGENTS.md part 4, "A release rebuilds and re-records
+# only the families that changed", Andrew 2026-11-28; tools/release_families.py).
+# With no LANES, SHARD or ONLY_CHANGED the column records the lanes of the release
+# families that record: FAMILIES=a,b names them (`none`: no family; what
+# tools/release.py decides from its plan), else the family plan of HEAD against the
+# previous release decides (tools/release_families.py plan + lanes --settle: the
+# binding identities of tools/release_reuse.py, whole families, and the kept-column
+# check), every other lane keeping its admitted rows. REBUILD_ALL=1 records every
+# lane of the scope. Removed 2026-11-28 with the opt-in it served: REUSE=1 (the
+# per-lane closure selector) and SELECT_ONLY=1; FULL=1 stays retired.
+[ -z "${FULL:-}" ] || die "FULL=$FULL is retired: REBUILD_ALL=1 records every lane"
+[ -z "${REUSE:-}" ] || die "REUSE=$REUSE is removed (2026-11-28): family reuse is the default; FAMILIES=a,b names the families, REBUILD_ALL=1 records every lane"
+[ -z "${SELECT_ONLY:-}" ] || die "SELECT_ONLY is removed (2026-11-28): tools/release_families.py lanes prints a family selection"
+case "${REBUILD_ALL:-0}" in 0|1) ;; *) die "REBUILD_ALL=$REBUILD_ALL: 1 records every lane, 0 (default) the families that record" ;; esac
+if [ -z "${ONLY_CHANGED:-}" ] && [ -z "${LANES:-}" ] && [ -z "${SHARD:-}" ]; then
+    if [ "${REBUILD_ALL:-0}" = 1 ]; then
         SELECTION=full
-        echo "FULL $LABEL: every ${SCOPE:-routine} lane is recorded; no lane is reused (REUSE=1 opts into reuse)"
+        echo "FULL $LABEL: every ${SCOPE:-routine} lane is recorded (REBUILD_ALL=1)"
+    else
+        SELECTION=family
+        "${PY[@]}" tools/identity_columns.py lanes --scope "${SCOPE:-routine}" > "$OUT/$LABEL.scope-lanes.txt" \
+            || die "could not list the ${SCOPE:-routine} lanes"
+        if [ -n "${FAMILIES+set}" ]; then
+            fam_args=(--families "${FAMILIES:-none}")
+        else
+            "${PY[@]}" tools/release_families.py plan --commit HEAD --json "$OUT/$LABEL.family-plan.json" \
+                > "$OUT/$LABEL.family-plan.txt" 2>&1 \
+                || die "no family plan for HEAD (see $OUT/$LABEL.family-plan.txt); FAMILIES=a,b or REBUILD_ALL=1"
+            fam_args=(--plan "$OUT/$LABEL.family-plan.json" --settle)
+        fi
+        FAMILY_LANES=$("${PY[@]}" tools/release_families.py lanes "${fam_args[@]}" \
+                --lanes-file "$OUT/$LABEL.scope-lanes.txt" 2> "$OUT/$LABEL.family-lanes.txt" | tail -n 1) \
+            || die "could not select the families' lanes (see $OUT/$LABEL.family-lanes.txt)"
+        grep -m 12 -E '^(FAMILY|== release families)' "$OUT/$LABEL.family-lanes.txt" || true
+        if [ -z "$FAMILY_LANES" ]; then
+            echo "NOTHING-CHANGED $LABEL: no release family records; every row is kept"
+            exit 0
+        fi
+        ALL_LANES=$(tail -n 1 "$OUT/$LABEL.scope-lanes.txt")
+        [ "$FAMILY_LANES" = "$ALL_LANES" ] || LANES=$FAMILY_LANES
     fi
-else
-    [ -z "${ONLY_CHANGED:-}" ] && [ -z "${LANES:-}" ] && [ -z "${SHARD:-}" ] \
-        || die "REUSE=1 excludes LANES, SHARD and ONLY_CHANGED"
-    SELECTION=auto-reuse
-    CLASS=$("${PY[@]}" -c 'import sys; sys.path.insert(0, "tools"); import identity_columns as c; print(c.label_class(sys.argv[1]))' "$LABEL") \
-        || die "no device class for label $LABEL"
-    reuse_args=(--class "$CLASS" --records "$ROOT/verification/records/identity" --records "$OUT"
-                --summary-json "$OUT/$LABEL.reuse.json")
-    # Admissible records that are not committed yet (a previous box run, a
-    # retained archive): MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2.
-    IFS=: read -r -a extra_dirs <<< "${MOJOLEARN_IDENTITY_REUSE_RECORDS:-}"
-    for d in ${extra_dirs[@]+"${extra_dirs[@]}"}; do
-        [ -z "$d" ] && continue
-        [ -d "$d" ] || die "MOJOLEARN_IDENTITY_REUSE_RECORDS: no such directory $d"
-        reuse_args+=(--records "$d")
-    done
-    # The column's backend (lane_select's derived rules): a host-binding-only
-    # change cannot move an NVIDIA or AMD column; the other platform's packaging
-    # tree cannot reach binaries built here (Apple and a Mac cpu column build on
-    # macOS, the NVIDIA and AMD columns from the Linux sets).
-    case "$LABEL" in
-        nvidia-*) reuse_args+=(--backend cuda) ;;
-        amd-*) reuse_args+=(--backend hip) ;;
-        apple-*) reuse_args+=(--backend metal) ;;
-        cpu) reuse_args+=(--backend cpu) ;;
-    esac
-    AUTO_LANES=$("${PY[@]}" tools/identity_columns.py changed-lanes --scope "${SCOPE:-routine}" "${reuse_args[@]}" \
-            2> "$OUT/$LABEL.changed-lanes.txt" | tail -n 1) \
-        || die "could not decide which lanes to reuse (see $OUT/$LABEL.changed-lanes.txt)"
-    summary=$(grep -m 1 'REUSE-SUMMARY' "$OUT/$LABEL.changed-lanes.txt") \
-        || die "no reuse summary (see $OUT/$LABEL.changed-lanes.txt)"
-    reused=$(sed -n 's/.* REUSED \([0-9]*\) .*/\1/p' <<< "$summary")
-    record=$(sed -n 's/.* RECORD \([0-9]*\) .*/\1/p' <<< "$summary")
-    bad=$(sed -n 's/.* KNOWN-BAD \([0-9]*\) .*/\1/p' <<< "$summary")
-    # n/a: lanes the harness declares have no side on this class (`_one_sided`, ONE_SIDED), not known-bad.
-    na=$(sed -n 's|.* N/A \([0-9]*\).*|\1|p' <<< "$summary")
-    echo "REUSED $reused / RECORD $record $LABEL (class $CLASS, known-bad $bad, n/a ${na:-0}; decisions $OUT/$LABEL.reuse.json; without REUSE=1 every lane is recorded)"
-    # RELEASE FLOOR = THE LEDGER'S RULE (lane ledger-floor-receipts): changed-lanes measures a row
-    # from the release floor only with an admitted receipt at the floor (identity_columns.py
-    # floor_receipts_for -> release_identity_reference.floor_receipts); a tag alone is no floor.
-    grep -m 1 '^# release floor' "$OUT/$LABEL.changed-lanes.txt" | cut -c1-240 || true
-    # Reused rows from records that are not committed yet must reach admission.
-    "${PY[@]}" -c '
-import json, sys
-doc = json.load(open(sys.argv[1]))
-src = sorted({r["source"] for r in doc["reused"].values() if r.get("source") not in (None, "table") and not r.get("committed")})
-if src:
-    print("ADMIT-WITH %d uncommitted reuse source(s): pass their directories to tools/admit_identity_columns.sh: %s"
-          % (len(src), " ".join(src[:8])))
-' "$OUT/$LABEL.reuse.json"
-    if [ -z "$AUTO_LANES" ]; then
-        echo "NOTHING-CHANGED $LABEL: no lane's closure moved since this class's newest good evidence; every row is reused"
-        exit 0
-    fi
-    ALL_LANES=$("${PY[@]}" tools/identity_columns.py lanes --scope "${SCOPE:-routine}") \
-        || die "could not list the ${SCOPE:-routine} lanes"
-    # Nothing to reuse: an ordinary full column under its own label.
-    [ "$AUTO_LANES" = "$ALL_LANES" ] || LANES=$AUTO_LANES
-    # SELECT_ONLY=1 (tools/identity_wheel_record.py): print the owed lanes and stop, so one selection by THIS
-    # rule feeds every parallel worker (each then records its chunk with LANES=... LANE_SELECTION=auto-reuse-chunk)
-    if [ "${SELECT_ONLY:-0}" = 1 ]; then echo "LANES-SELECTED $AUTO_LANES"; exit 0; fi
 fi
-[ "${SELECT_ONLY:-0}" = 0 ] || [ "$SELECTION" = auto-reuse ] || die "SELECT_ONLY=1 needs REUSE=1 (the reuse selection)"
 if [ -n "${LANE_SELECTION:-}" ]; then
-    case "$LANE_SELECTION" in auto-reuse-chunk|full-chunk) ;; *) die "LANE_SELECTION is auto-reuse-chunk or full-chunk";; esac
+    case "$LANE_SELECTION" in family-chunk|full-chunk) ;; *) die "LANE_SELECTION is family-chunk or full-chunk";; esac
     [ "$SELECTION" = explicit ] && [ -n "${LANES:-}" ] \
         || die "LANE_SELECTION=$LANE_SELECTION names a chunk given as LANES"
     SELECTION=$LANE_SELECTION
