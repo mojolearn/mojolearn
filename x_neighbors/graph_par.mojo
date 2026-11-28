@@ -308,7 +308,16 @@ comptime LD_REFC = 58
 comptime LD_PNEXT = 59
 comptime LD_PCOPY = 60
 comptime LD_LABP = 61
-comptime GP_NST = 62
+# lane sc-graph-1 (2026-11-28): the shared-nearest-neighbor graph and PAGA
+comptime SN_KIP = 62
+comptime SN_ROW = 63
+comptime PG_LMAX = 64
+comptime PG_EDGE = 65
+comptime PG_ES = 66
+comptime PG_STAT = 67
+comptime PG_FW = 68
+comptime PG_TREE = 69
+comptime GP_NST = 70
 
 
 # ------------------------------------------------------------------ generic stages
@@ -1620,6 +1629,251 @@ def _ld_labp(t: Int, g: GA):
     lab.unsafe_store(t, _is(g, L_PSAVE).unsafe_load(Int(lab.unsafe_load(t))))
 
 
+# ------------------------------------------------------------------ shared-nearest-neighbor graph
+# (lane sc-graph-1, 2026-11-28; Seurat `FindNeighbors` / `ComputeSNN`). The
+# neighbor lists are a CSR in PageRank's CSR-entry slots (P_IP, P_IDX), and
+# their transpose (the rows that list each node) is built by PageRank's own
+# stages: `_pr_csr_row` (the (column, entry) keys), `gp_sort`, `_pr_csr_off`
+# (P_CNT: each node's first position) and `_pr_csr_fill` (P_ROWS: the
+# listing rows, ascending). Then one item per row merges the transposed
+# lists of its neighbors (`sn_row_item`).
+comptime SN_PTR = P_NSLOT
+"""int32 per input entry: the read position of the k-way merge in the
+transposed list of that entry's neighbor (each row owns its entries)."""
+comptime SN_OFF = P_NSLOT + 1
+"""int32 n + 1: a row's kept-edge count, then (scanned) its offset."""
+comptime SN_PART = P_NSLOT + 2
+comptime SN_COL = P_NSLOT + 3
+"""int32 cap: the output columns (each row ascending)."""
+comptime SN_VAL = P_NSLOT + 4
+"""float32 cap: the output Jaccard weights."""
+comptime SN_NSLOT = P_NSLOT + 5
+
+
+@always_inline
+def _sn_kip(t: Int, g: GA):
+    """Row offset t of an (n, k) neighbor-index array (n4 = k): P_IP[t] =
+    t * k, so the array is a CSR without a host-built indptr."""
+    _is(g, P_IP).unsafe_store(t, Int32(t * g.n4))
+
+
+@always_inline
+def sn_row_item(t: Int, g: GA):
+    """Row t of the shared-nearest-neighbor graph. Every node j that shares
+    a neighbor with t appears in the transposed lists of t's neighbors (the
+    rows listing each, ascending); one k-way merge of those sorted lists
+    yields the j ascending with s = |N(t) & N(j)| as the multiplicity, with
+    no scratch beyond one read position per entry (SN_PTR). The weight is
+    the Jaccard index s / (|N(t)| + |N(j)| - s) (Seurat's
+    s / (k + (k - s)) when every row lists k), a float32 quotient of two
+    exact integers; it is kept when it is at least the prune value x0
+    (Seurat drops a weight below `prune.SNN`). n5 = 0 counts the kept
+    entries into SN_OFF[t]; n5 = 1 writes them from the scanned offset:
+    the columns ascending, so every row of the result is sorted and its
+    mirror (s and the denominator are symmetric in t and j) holds the same
+    float32. A node listed twice in one row would put the same j at the
+    head twice in a row: IC[2] = 1 (every writer stores 1)."""
+    var n = g.n0
+    var ip = _is(g, P_IP)
+    var idx = _is(g, P_IDX)
+    var cnt = _is(g, P_CNT)
+    var inv = _is(g, P_ROWS)
+    var ptr = _is(g, SN_PTR)
+    var lo = Int(ip.unsafe_load(t))
+    var hi = Int(ip.unsafe_load(t + 1))
+    var deg = hi - lo
+    for e in range(lo, hi):
+        ptr.unsafe_store(e, cnt.unsafe_load(Int(idx.unsafe_load(e))))
+    var base = Int(_is(g, SN_OFF).unsafe_load(t)) if g.n5 != 0 else 0
+    var kept = 0
+    var prev = -1
+    while True:
+        var best = n
+        for e in range(lo, hi):
+            var v = Int(idx.unsafe_load(e))
+            var p = Int(ptr.unsafe_load(e))
+            if p < Int(cnt.unsafe_load(v + 1)):
+                var r = Int(inv.unsafe_load(p))
+                if r < best:
+                    best = r
+        if best == n:
+            break
+        var s = 0
+        for e in range(lo, hi):
+            var v = Int(idx.unsafe_load(e))
+            var p = Int(ptr.unsafe_load(e))
+            if p < Int(cnt.unsafe_load(v + 1)) and Int(inv.unsafe_load(p)) == best:
+                s += 1
+                ptr.unsafe_store(e, Int32(p + 1))
+        if best == prev:
+            _is(g, P_IC).unsafe_store(2, Int32(1))
+        prev = best
+        var dj = Int(ip.unsafe_load(best + 1)) - Int(ip.unsafe_load(best))
+        var jac = ftz(identical_div(Float32(s), Float32(deg + dj - s)))
+        if jac >= g.x0:
+            if g.n5 != 0:
+                _is(g, SN_COL).unsafe_store(base + kept, Int32(best))
+                _fs(g, SN_VAL).unsafe_store(base + kept, jac)
+            kept += 1
+    if g.n5 == 0:
+        _is(g, SN_OFF).unsafe_store(t, Int32(kept))
+
+
+# ------------------------------------------------------------------ PAGA
+# (lane sc-graph-1, 2026-11-28; Scanpy `tl.paga`, Wolf et al. 2019, the
+# v1.2 statistic of `PAGA._compute_connectivities_v1_2`). The graph is
+# Louvain's slot G0, filled by Louvain's loaders (`_lv_rowcnt` / `_lv_fill`
+# for a dense input, `_lv_csrsrc` for a CSR); every stored edge counts once,
+# in its stored direction (Scanpy reads the directed kNN distances with
+# every entry set to one). c groups, the labels in PG_LAB.
+comptime PG_LAB = L_NSLOT
+"""int32 n: the caller's group labels."""
+comptime PG_CNT = L_NSLOT + 1
+"""int32 c x c: edges from group a to group b (the diagonal: inside a)."""
+comptime PG_NS = L_NSLOT + 2
+"""int32 c: the group sizes."""
+comptime PG_ES = L_NSLOT + 3
+"""int32 c: the edges leaving the nodes of each group (inside included)."""
+comptime PG_EK = L_NSLOT + 4
+"""int64 c x c: the inter-group edge key (0: no edge)."""
+comptime PG_W = L_NSLOT + 5
+"""int64 c x c: the widest-path closure of the keys."""
+comptime PG_CON = L_NSLOT + 6
+"""float32 c x c: the connectivities."""
+comptime PG_TREE = L_NSLOT + 7
+"""float32 c x c: the connectivities on the tree's edges."""
+comptime PG_NSLOT = L_NSLOT + 8
+comptime PG_INF = Int64(0x7FFFFFFFFFFFFFFF)
+
+
+@always_inline
+def _pg_lmax(t: Int, g: GA):
+    """Node t's label: IC[0] = max label + 1 by an integer atomic max (the
+    group count, order-free); a negative label sets IC[1] = 1."""
+    var v = Int(_is(g, PG_LAB).unsafe_load(t))
+    if v < 0:
+        _is(g, L_IC).unsafe_store(1, Int32(1))
+    else:
+        _ = Atomic[Int32].max(_is(g, L_IC), Int32(v + 1))
+
+
+@always_inline
+def _pg_edge(t: Int, g: GA):
+    """Node t (n1 = c): its group's size and, for each stored edge t -> u of
+    G0, one more edge from group(t) to group(u), by 32-bit integer atomics:
+    integer addition is order-free, so the counts are the same on every
+    column (igraph's `subgraph(i).ecount()` on the diagonal and the summed
+    `cluster_graph` off it)."""
+    var c = g.n1
+    var lab = _is(g, PG_LAB)
+    var a = Int(lab.unsafe_load(t))
+    _ = Atomic[Int32].fetch_add(_is(g, PG_NS) + a, Int32(1))
+    var ip = _gip(g, L_G0)
+    var col = _gcol(g, L_G0)
+    var cnt = _is(g, PG_CNT)
+    for e in range(Int(ip.unsafe_load(t)), Int(ip.unsafe_load(t + 1))):
+        var b = Int(lab.unsafe_load(Int(col.unsafe_load(e))))
+        _ = Atomic[Int32].fetch_add(cnt + (a * c + b), Int32(1))
+
+
+@always_inline
+def _pg_es(t: Int, g: GA):
+    """Group t's edge total (Scanpy's es: its inner edges plus the edges it
+    sends to other groups), the integer row sum of PG_CNT. n1 = c."""
+    var c = g.n1
+    var cnt = _is(g, PG_CNT)
+    var s = 0
+    for b in range(c):
+        s += Int(cnt.unsafe_load(t * c + b))
+    _is(g, PG_ES).unsafe_store(t, Int32(s))
+
+
+@always_inline
+def pg_stat_item(t: Int, g: GA):
+    """Cell t = a * c + b of the c x c result (n0 = n nodes, n1 = c, n6 = 0
+    for `_lv_q2f`): for a != b with v = edges(a, b) + edges(b, a) > 0, the
+    PAGA v1.2 connectivity min(1, v / E) with E = (es_a n_b + es_b n_a) /
+    (n - 1) the edge count expected between a and b when edges connect at
+    random (1 when E is 0, as Scanpy sets it); 0 on the diagonal and where
+    no edge joins the groups. The integers are exact in int64, converted
+    once to float32 (`_lv_q2f`'s conversions, software binary64 on Apple)
+    and divided through the pinned quotient. Then the spanning tree's edge
+    key of the pair: v * c^2 + (c^2 - 1 - (lo * c + hi)) for lo < hi the
+    pair, unique per pair and symmetric, so more edges win and, between
+    equal counts, the pair of lower index (scipy's minimum_spanning_tree of
+    1 / v leaves that tie to its sort). The closure starts from the keys,
+    the diagonal +inf."""
+    var c = g.n1
+    var a = t // c
+    var b = t % c
+    var con = _fs(g, PG_CON)
+    var ek = _ls(g, PG_EK)
+    var w = _ls(g, PG_W)
+    if a == b:
+        con.unsafe_store(t, Float32(0))
+        ek.unsafe_store(t, Int64(0))
+        w.unsafe_store(t, PG_INF)
+        return
+    var cnt = _is(g, PG_CNT)
+    var v = Int64(Int(cnt.unsafe_load(a * c + b))) + Int64(Int(cnt.unsafe_load(b * c + a)))
+    if v == 0:
+        con.unsafe_store(t, Float32(0))
+        ek.unsafe_store(t, Int64(0))
+        w.unsafe_store(t, Int64(0))
+        return
+    var ns = _is(g, PG_NS)
+    var es = _is(g, PG_ES)
+    var num = (Int64(Int(es.unsafe_load(a))) * Int64(Int(ns.unsafe_load(b)))
+               + Int64(Int(es.unsafe_load(b))) * Int64(Int(ns.unsafe_load(a))))
+    var r = Float32(1)
+    if num != 0:
+        var expected = ftz(identical_div(_lv_q2f(num, g), _lv_q2f(Int64(g.n0 - 1), g)))
+        r = ftz(identical_div(_lv_q2f(v, g), expected))
+        if r > Float32(1):
+            r = Float32(1)
+    con.unsafe_store(t, r)
+    var lo = a if a < b else b
+    var hi = b if a < b else a
+    var cc = Int64(c) * Int64(c)
+    var key = v * cc + (cc - Int64(1) - Int64(lo * c + hi))
+    ek.unsafe_store(t, key)
+    w.unsafe_store(t, key)
+
+
+@always_inline
+def _pg_fw(t: Int, g: GA):
+    """One round of the widest-path closure through group n4 (n1 = c):
+    W[a, b] = max(W[a, b], min(W[a, k], W[k, b])). Row k and column k do
+    not change in round k (W[k, k] = +inf), so no item reads a word another
+    item of the launch writes. After every round, W[a, b] is the largest
+    bottleneck key over all paths; with unique keys an edge is on the
+    maximum spanning tree exactly when its key is that bottleneck."""
+    var c = g.n1
+    var k = g.n4
+    var a = t // c
+    var b = t % c
+    var w = _ls(g, PG_W)
+    var x = w.unsafe_load(a * c + k)
+    var y = w.unsafe_load(k * c + b)
+    var via = x if x < y else y
+    if via > w.unsafe_load(t):
+        w.unsafe_store(t, via)
+
+
+@always_inline
+def _pg_tree(t: Int, g: GA):
+    """Cell t of the tree: the connectivity where the pair's edge key is
+    its widest-path bottleneck (an edge of the maximum spanning forest of
+    the edge counts: Scanpy's minimum_spanning_tree of their inverses),
+    else 0. Both directions are kept."""
+    var k = _ls(g, PG_EK).unsafe_load(t)
+    var tree = _fs(g, PG_TREE)
+    if k > Int64(0) and k == _ls(g, PG_W).unsafe_load(t):
+        tree.unsafe_store(t, _fs(g, PG_CON).unsafe_load(t))
+    else:
+        tree.unsafe_store(t, Float32(0))
+
+
 @always_inline
 def gp_item[S: Int](t: Int, g: GA):
     """Stage S's item t."""
@@ -1747,6 +2001,22 @@ def gp_item[S: Int](t: Int, g: GA):
         _ld_pcopy(t, g)
     elif S == LD_LABP:
         _ld_labp(t, g)
+    elif S == SN_KIP:
+        _sn_kip(t, g)
+    elif S == SN_ROW:
+        sn_row_item(t, g)
+    elif S == PG_LMAX:
+        _pg_lmax(t, g)
+    elif S == PG_EDGE:
+        _pg_edge(t, g)
+    elif S == PG_ES:
+        _pg_es(t, g)
+    elif S == PG_STAT:
+        pg_stat_item(t, g)
+    elif S == PG_FW:
+        _pg_fw(t, g)
+    elif S == PG_TREE:
+        _pg_tree(t, g)
 
 
 # ------------------------------------------------------------------ drivers (shared by both columns)
