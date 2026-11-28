@@ -35,11 +35,12 @@ WHAT IS REFUSED HERE, AND WHY IT IS REFUSED HERE
 -------------------------------------------------
 Every unimplemented neighbour of IVF-FLAT in the cuVS tree raises BY NAME from
 `ivf_refuse_algorithm` rather than by absence, because absence is a silent
-answer and this repository has paid for those. HNSW is refused
-PERMANENTLY (`ivf/README.md`, and `cpp/include/cuvs/neighbors/hnsw.hpp` is
-the header a future reader will find and wonder about); IVF-PQ, IVF-SQ,
-IVF-RaBitQ, CAGRA, ScaNN, Vamana and NN-Descent are refused as UNIMPLEMENTED,
-which is a different sentence and `ivf/NOT_IMPLEMENTED.tsv` says which is which.
+answer and this repository has paid for those. HNSW is refused with the
+one sentence `ivf/NOT_IMPLEMENTED.tsv` and `neighbors/NOT_IMPLEMENTED.tsv`
+also carry (not implemented and not planned: sequential, insertion-order
+dependent inserts; the approximate graph is `knn_graph(method='ivf')`, lane
+sc-ann-1, 2026-11-28); ScaNN, Vamana and NN-Descent are refused as
+UNIMPLEMENTED, and `ivf/NOT_IMPLEMENTED.tsv` says which is which.
 """
 
 from std.memory import bitcast
@@ -402,16 +403,8 @@ def ivf_refuse_algorithm(name: String) raises:
     instead of an attribute error four layers down.
     """
     if name == "hnsw":
-        raise Error(
-            "hnsw: NOT IMPLEMENTED HERE. cuVS's"
-            " cpp/include/cuvs/neighbors/hnsw.hpp is a CPU search over a"
-            " graph built on the GPU (hnsw::from_cagra). It is assigned to"
-            " the ann expansion lane as CAGRA's CPU-serving form"
-            " (algorithm expansion lane 9). The"
-            " sentence that stood here, that CONTRIBUTING.md forbids a CPU"
-            " path, was wrong: CONTRIBUTING has no such rule, and CPU-only"
-            " installs train and predict (corrected 2026-09-27)."
-        )
+        # the one HNSW sentence (ivf/NOT_IMPLEMENTED.tsv, neighbors/NOT_IMPLEMENTED.tsv; lane sc-ann-1)
+        raise Error("hnsw: HNSW is not implemented and not planned: its graph is built by sequential inserts at random levels, so the graph depends on the insertion order and the build is serial, which the parallel GPU path and the same-bits contract rule out. The approximate all-rows graph is mojolearn.knn_graph(method='ivf'); the approximate index is CagraIndex.")
     if name == "ivf_pq" or name == "ivfpq":
         raise Error(
             "ivf_pq: NOT IMPLEMENTED. cuvs/src/neighbors/ivf_pq/ is a different"
