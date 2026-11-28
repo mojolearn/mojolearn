@@ -570,6 +570,8 @@ def spectral_initialize_device_coo_report(
         raise Error("UMAP spectral initialization needs n_components >= 1")
     if n_samples < 2 * n_components + 4:
         raise Error("UMAP spectral initialization has too few samples")
+    if nnz <= 0:
+        raise Error("UMAP spectral graph has no edges")
     var n = n_samples
     var dim = n_components
     var cp = _sc_params(n_components, n_neighbors, seed)
