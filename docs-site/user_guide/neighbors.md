@@ -8,6 +8,7 @@ every stored row. Approximate indexes answer large searches much faster by looki
 | Exact nearest neighbors | `NearestNeighbors`, `RadiusNeighbors` |
 | Classification and regression by neighbors | `KNeighborsClassifier`, `KNeighborsRegressor`, `NearestCentroid` |
 | Approximate vector search | `IVFIndex`, `IVFPQIndex`, `IVFSQIndex`, `IVFRaBitQIndex`, `CagraIndex` |
+| The neighbor graph of every row | `knn_graph` |
 | Outlier scores from neighbors | `LocalOutlierFactor` |
 | Labels spread over a neighbor graph | `LabelPropagation`, `LabelSpreading` |
 
@@ -49,6 +50,22 @@ distances, indices = graph.search(X[:10])
 ```
 
 `IVFIndex.extend` adds rows to a fitted index without refitting it.
+
+## The neighbor graph of every row
+
+`knn_graph` returns each row's nearest other rows, for every row of `X` at once: the graph that UMAP,
+t-SNE, clustering and community detection start from. `method="exact"` compares every pair of rows.
+`method="ivf"` groups the rows into `n_lists` lists with k-means and compares each row only with the rows
+of its own list and of the `n_probes - 1` nearest lists, which is much faster on large data; this is the
+approximate graph single-cell pipelines such as Scanpy use. More probes find more of the true neighbors;
+`n_probes == n_lists` gives the exact graph.
+
+```python
+distances, indices = mojolearn.knn_graph(X, n_neighbors=15, method="ivf")
+```
+
+By default `n_lists` is `n_samples // 384` (at most 16,384) and `n_probes` is 16; inputs under 12,288 rows
+use the exact graph. In `identical` mode both methods return the same bits on every device.
 
 ## Saving an index
 
