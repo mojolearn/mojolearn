@@ -28,7 +28,6 @@ from bindings.x_linear_common_unpack import _truth, _float, _int
 from bindings.x_linear_keys_unpack import x_linear_keys
 from bindings.x_linear_cd_unpack import _xl_cd_validate, xl_cd_host_fit_words
 from bindings.x_linear_route_unpack import xl_route, xl_ops_require, xl_host_only
-from core.entry_table import EntryRef, entry_ref_word
 from core.hostptr import f32_ptr
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,

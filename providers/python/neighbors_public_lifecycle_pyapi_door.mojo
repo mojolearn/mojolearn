@@ -27,7 +27,6 @@ from bindings.classifier_public_lifecycle_door import _public_labels
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.native_array_view_pack import native_array_ndarray_view
 from core.p3nc_scan import p3nc_widen_f32_f64, P3NC_REAL_OK, P3NC_REAL_NONFINITE, P3NC_REAL_CONTINUOUS
-from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_label_lists_unpack import p3nc_float_list_verdict
 from bindings.family_common_unpack import FAMILY_F32P, FAMILY_F64P
 from bindings.family_common_pack import family_array

@@ -14,8 +14,6 @@ from bindings.py_provider_pins import ProviderPins, provider_word
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
-from bindings.tsvd_keys_unpack import tsvd_keys
-from bindings.py_balanced import py_item
 
 
 comptime TSVD_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnTSVDProviderPinsV1"]

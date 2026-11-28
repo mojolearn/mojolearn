@@ -13,7 +13,6 @@ from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_scalar_decode_unpack import native_scalar_buffer_dtype, native_scalar_buffer_bytes
 from bindings.native_scalar_promotion_unpack import native_scalar_weak_promotion
-from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.native_torch_admission_door import native_torch_exact, native_torch_scalar
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.sequence_array_native_unpack import sequence_array_release

@@ -154,7 +154,6 @@ from providers.python.neural_descriptor_pyapi_door import (
 )
 from x_prep.transport_abi import XP_TRANSPORT_ABI, XP_OP_COUNT
 from bindings.trees_meta_ridge_run import RidgeMultiFit, ridge_multi_fit_run
-from bindings.py_optional import py_or_none
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_scatter, xt_device_folds, xt_transpose_f64,
     xt_stack_w64, xt_rows_any_unset, xt_indicator_codes, xt_binary_proba, xt_normalize_rows,

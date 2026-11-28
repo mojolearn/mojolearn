@@ -20,7 +20,6 @@ from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_arr
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze_foreign
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit
-from bindings.native_instance_item_pack import native_instance_item
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.causal_model_config_door import model_dict, model_plain, model_string, model_integer, model_sequence
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
@@ -473,7 +472,6 @@ def causal_layer_route(kind: String, entries: PythonObject) raises -> CausalLaye
 # boundary owns token/layer execution.
 from bindings.py_balanced import py_setitem
 from bindings.generation_buffers_door import generation_mutable
-from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider
 from providers.python.transformer_block_session_pyapi_door import transformer_block_session_open, transformer_block_session_handle
 from core.neural_entry_table import NeuralEntryKey, neural_ref, NEURAL_TABLE_BLOCK_FORWARD
 from providers.python.native_execution_pyapi_door import AdmittedNativeExecution

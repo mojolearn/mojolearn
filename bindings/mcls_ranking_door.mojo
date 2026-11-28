@@ -28,7 +28,6 @@ from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
 from bindings.arena_prog_run import MetricArenaOwner, metric_source_word
-from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.classical_arrays_door import classical_address, classical_dtype_str
 from bindings.family_common_unpack import (
     FAMILY_F32P,

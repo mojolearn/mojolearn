@@ -11,12 +11,10 @@
 # The PACK half of the former `bindings/decomp_public_lifecycle.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/decomp_public_lifecycle_unpack.mojo`.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_get, py_fields, py_contains
 from bindings.public_lifecycle_owner_door import (
     lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result, lifecycle_check_width,
     lifecycle_check_x, lifecycle_x_shape, lifecycle_depth_value,
 )
-from bindings.classical_validate_unpack import classical_estimator_name
 
 
 def decomp_public_finish(model: PythonObject, method: String, args: PythonObject, result: PythonObject,

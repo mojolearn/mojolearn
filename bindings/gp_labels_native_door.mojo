@@ -16,7 +16,6 @@ from core.native_label_codes import NativeLabelCodes
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
-from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address, classical_is_array
 from bindings.family_common_unpack import (
     family_is_str,

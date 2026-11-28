@@ -38,7 +38,6 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_setitem, py_get
 from bindings.boundary_read_door import admitted_buffer_view
 from core.boundary_layout import gather_i64, gather_f64
-from bindings.py_attr import py_attr
 from bindings.user_object_flatten_door import user_object_flatten
 from bindings.py_cpython_table import cpython_table
 from bindings.cpython_borrowed_unpack import borrowed_type_word

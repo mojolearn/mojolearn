@@ -13,7 +13,6 @@ Used by both gbdt bindings' Python entries and by the GBDT door
 (bindings/trees_public_gbdt_fit_door.mojo), which then calls the fit natively.
 """
 from std.python import Python, PythonObject
-from bindings.py_lists import py_list_f64
 from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome, GBDT_ARG_NO_INT, GBDT_ARG_NO_FLOAT
 
 

@@ -4,17 +4,12 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_item, py_setattr, py_setitem, py_type, py_contains
-from providers.python.autograd_python_errors_pyapi_pack import graph_int
 from sequence.exec_trait import Exec
 from bindings.autograd_keys_unpack import autograd_keys, AutogradKeys
 from bindings.py_keys import py_op_add, py_op_code
 from core.shared_slot import SharedSlot
 from sequence.ops import FP
 from autograd.ops_api import ops_session, ops_session_registry_token
-from autograd.optimizer_requests import OpsOptimizerExtras
-from autograd.optimizer_requests import (
-    OpsOptimizerRequest, OpsOptimizerRestoreRequest, ops_optimizer_codes,
-)
 from providers.python.autograd_program_pyapi_door import program_input, _integer, ops_program_fit_native_py, ops_program_execute_py, fit_stop_options
 from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
 from autograd.ops_block_frontend import (

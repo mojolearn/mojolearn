@@ -5,22 +5,11 @@
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import ExternalFunction, PyObjectPtr
-from core.shared_slot import SharedSlot
-from core.native_scalar_decode import NativeRealBits, native_scalar_real, _scalar_ieee
-from core.native_array_layout import native_array_itemsize
-from core.logistic_query_state import LogisticQueryWidth, logistic_width_integer
-from core.logistic_query_boundary_run import logistic_torch_width_run
-from core.sequence_array_cast import SEQ_CAST_OVERFLOW
 from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get
-from bindings.native_scalar_decode_unpack import native_scalar_buffer_dtype, native_scalar_buffer_bytes
-from bindings.native_scalar_promotion_unpack import native_scalar_weak_promotion
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
-from bindings.native_torch_admission_door import native_torch_exact, native_torch_scalar
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.sequence_array_native_unpack import sequence_array_release
-from bindings.sequence_array_warnings_unpack import sequence_array_warn, sequence_array_report
-from bindings.sequence_array_warnings_pack import sequence_array_errstate
 from bindings.logistic_keys_unpack import logistic_keys
 from bindings.py_balanced import py_item
 

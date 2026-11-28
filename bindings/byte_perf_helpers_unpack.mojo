@@ -6,7 +6,6 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.ffi import c_int
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
-from bindings.py_cpython_table import cpython_table
 
 
 def byte_view_bytes(view: PythonObject, minimum: Int) raises -> List[UInt8]:

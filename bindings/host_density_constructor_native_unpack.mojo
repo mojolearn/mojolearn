@@ -5,10 +5,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_attributes_door import classical_check_layout, classical_connect_numpy, _descriptor_slot
-from bindings.classical_pandas_door import _pd_type_fields
 from bindings.host_logistic_native_door import _logistic_label_kind
-from bindings.native_owner_lifetime_door import native_release_admit
-from bindings.py_cpython_table import cpython_table
 from bindings.host_rest_keys_unpack import host_rest_keys
 from bindings.py_balanced import py_item
 

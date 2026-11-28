@@ -12,7 +12,6 @@ replies; no Python object reaches this file. Each function here is word or
 text comparison done once per driver call or once per device run; the layers
 themselves run in the workers, one worker per device."""
 from core.parallel_worker_request import WorkerRequest, WORKER_NO_HANDLE, PC_RUN, PC_RUN_LAYERS
-from core.parallel_worker_frame import WIRE_REQUEST
 
 comptime CAUSAL_ROUTE_GPU = 0
 comptime CAUSAL_ROUTE_CPU = 1

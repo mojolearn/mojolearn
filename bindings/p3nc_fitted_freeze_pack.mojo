@@ -18,11 +18,6 @@ taken BEFORE the first resident copy (that view keeps its writeable flag)."""
 # The PACK half of the former `bindings/p3nc_fitted_freeze.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/p3nc_fitted_freeze_unpack.mojo`.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_type, py_setattr, py_get
-from bindings.native_loaded_module_door import native_loaded_module, native_namespace_string_keys
-from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
-from bindings.native_array_storage_admission_door import array_storage_admit, array_storage_context
-from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.py_cpython_table import cpython_table
 
 

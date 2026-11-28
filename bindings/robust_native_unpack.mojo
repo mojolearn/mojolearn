@@ -4,29 +4,13 @@ from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 # TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
-from bindings.classical_attributes_door import classical_connect_numpy, classical_check_layout, classical_getattribute
-from bindings.classical_arrays_door import classical_typed, classical_is_array, classical_input
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.classical_warnings_unpack import classical_warning, _warning_fields
-from providers.python.linear_metadata_boundary_door import classical_is_fitted
-from bindings.classical_exceptions_door import classical_not_fitted_class
-from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from bindings.sequential_admission_door import _one_of, sequential_admit_value
-from bindings.x_prep_native_inputs_door import _target
-from bindings.scaler_native_door import _input, _ptr
-from core.preprocessing_program import prep_program_stage as _stage
-from x_prep.robust_native_run import _robust_fit_program
-from bindings.p3_prep_fitted_unpack import prep_fitted_vector
-from bindings.scaler_lifecycle_native_door import _entries, _public_result
-from bindings.x_prep_native_owner_run import xprep_r3
-from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run
-from gemm.f16_widen import f16_bits_to_f32
-from bindings.py_optional import py_or_none, py_present
 from core.shared_slot import SharedSlot
 from bindings.py_keys import py_key, py_op_add
 from bindings.py_balanced import py_item

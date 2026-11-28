@@ -4,7 +4,6 @@
 # validation point. These native records never escape through the Python ABI.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_get, py_type
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.sequential_admission_door import sequential_admit_value

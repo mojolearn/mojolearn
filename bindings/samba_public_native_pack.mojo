@@ -76,7 +76,6 @@ from bindings.samba_decode_native_unpack import (
 )
 from bindings.py_balanced import py_item
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
-from bindings.generation_buffers_door import generation_initialize_binding, generation_array
 from bindings.causal_lm_public_door import _mutable, _writeback
 from bindings.samba_state_native_door import samba_fields
 from bindings.samba_inference_native_door import (

@@ -6,15 +6,9 @@ from std.python import PythonObject
 from bindings.py_balanced import py_fields, py_get, py_setitem
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.classical_arrays_door import classical_numpy
-from bindings.classical_archive_door import (
-    _archive_unpack_member, _archive_open, _archive_methods, _archive_pack_members,
-    _archive_file_call,
-)
-from bindings.classical_archive_read_door import _archive_read_input
 from bindings.classical_archive_output_door import archive_events_pack, archive_numeric_pack
 from bindings.classical_archive_linear_unpack import archive_class_names_unpack, archive_print_mode_unpack
 from core.native_archive_read import NativeArchiveDecoded, native_archive_read_status
-from core.native_archive_write import NativeArchiveMember
 from core.native_archive_standard import (
     NativeStandardArchiveSaved, native_standard_archive_plan, native_standard_vector_view,
     native_standard_statistic_names, native_standard_scalar_count, native_standard_archive_members,

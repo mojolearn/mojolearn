@@ -3,12 +3,9 @@
 # has no numerical provider call: it reads the already fitted support once
 # and builds the final independent public list in native code.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.mode_metadata_native_door import _fields, _truth
-from bindings.params_metadata_native_door import _resolved, _value
 from bindings.sequential_admission_door import _one_of
-from bindings.py_cpython_table import cpython_table
 from bindings.prep_keys_unpack import prep_keys
 
 

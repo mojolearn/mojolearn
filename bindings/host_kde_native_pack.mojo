@@ -9,7 +9,6 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_attributes_door import classical_getattribute
 from bindings.classical_pandas_door import _pd_type_fields
-from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.classical_arrays_door import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind
 from bindings.host_array_native_pack import host_archive_typed
 from bindings.host_inference_scalars_door import host_inference_scalar, host_inference_primitive_number

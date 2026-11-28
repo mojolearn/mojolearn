@@ -3,15 +3,8 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
-from bindings.native_instance_item_pack import native_instance_item
-from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.native_array_view_pack import native_array_ndarray_view
 from bindings.arena_array_metadata_pack import arena_array_metadata
 from bindings.msel_common_door import msel_admit, msel_is_bool, msel_is_integral, msel_is_real
-from bindings.msel_split_door import _splitter_fields, msel_flag_truth
-from bindings.msel_estimator_native_door import msel_estimator_plan
-from bindings.msel_scorer_native_door import msel_scorer_fields, msel_metric_plan
-from bindings.py_optional import py_or_none, py_present
 
 
 def _metadata_repr(value: PythonObject, context: PythonObject, depth: Int = 0) raises -> String:

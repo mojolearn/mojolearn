@@ -28,7 +28,6 @@ from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, pr
 from bindings.py_model_records import records_open, model_generation
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider
-from providers.python.autograd_pyapi_door import cast_in_of
 from bindings.sequential_arrays_door import sequential_array, sequential_address, sequential_descriptor
 from bindings.optimizer_admission_door import opt_schedule
 from bindings.optimizer_schedule_native_door import schedule_run

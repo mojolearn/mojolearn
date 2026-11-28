@@ -1,18 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Fixed native CV wire records. No Python class/function, pickle reducer or
 # import name from the request is executed. Import-time maps select all owners.
-from bindings.native_array_storage_door import native_array_empty
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
-from bindings.native_buffer_owner_pack import native_storage_allocate, native_buffer_view
-from bindings.native_numpy_metadata_unpack import native_numpy_dtype
-from bindings.native_numpy_metadata_pack import native_numpy_type
-from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.msel_estimator_native_door import msel_native_clone, msel_estimator_plan, msel_clone_parameter
-from bindings.msel_scorer_native_door import msel_scorer_fields, msel_metric_plan
-from bindings.family_common_pack import family_call
-from core.msel_parallel_wire_run import _depth
 
 def _record_size(record: PythonObject, size: Int) raises:
     if len(record) != size:

@@ -37,7 +37,6 @@ from training.optimizer_config import optimizer_keyword_refusal
 from training.optimizer_owner_control import OptimizerOwnerControl
 from training.optimizer_native_api import OptimizerNativeDriver
 from bindings.optimizer_owner_boundary_unpack import OptimizerOwner, OptimizerOwnerLease, optimizer_owner_idle
-from bindings.optimizer_owner_boundary_pack import optimizer_owner_new
 from training.optimizer_state_plan import (
     OptimizerStateSnapshot, optimizer_state_span, optimizer_checkpoint_spans,
     optimizer_state_download_needed, optimizer_host_moment_plan, OptimizerRegistryPlan, optimizer_registry_plan,

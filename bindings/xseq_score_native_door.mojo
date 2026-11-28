@@ -21,8 +21,6 @@ from std.python._cpython import GILReleased
 from core.metrics_entry_table import MetricsEntryKey, MR_R2, MR_R2_WEIGHTED
 from bindings.xseq_native_common_door import xseq_addr, xseq_reshape, xseq_route, XseqRoute
 from bindings.xseq_neural_native_door import xseq_as_f32_c
-from core.xseq_marshal import xseq_min_max_f32
-from core.host_finite_scan import host_all_finite_f32
 from bindings.metrics_reg_door import metrics_reg_operation
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
 from bindings.operation_names_metric import METRIC_OPN_FAMILY_METRIC_R2_OPTIONS
@@ -32,7 +30,6 @@ from sequence.xseq_score_run import (
     xseq_run_metrics_mode, xseq_run_r2,
 )
 from bindings.xseq_keys_unpack import xseq_keys
-from bindings.py_balanced import py_item
 
 
 def _shape_words(value: PythonObject) raises -> List[Int]:

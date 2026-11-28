@@ -23,8 +23,6 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_address, classical_wrap_array, classical_typed
-from bindings.admitted_input_unpack import admit_x
-from bindings.classical_validate_unpack import classical_view
 from bindings.prep_lda_admission_door import (
     lda_native_fields, lda_native_labels, lda_native_context, lda_native_initialize,
     lda_native_get_params, lda_native_set_params, lda_require_fitted,

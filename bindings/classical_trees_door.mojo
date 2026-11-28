@@ -26,10 +26,6 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_attributes_door import classical_connect_numpy, classical_getattribute
 from bindings.host_tree_native_door import host_tree_constructor_fields
-from bindings.native_numpy_metadata_unpack import native_numpy_dtype
-from bindings.sequential_admission_door import _one_of
-from bindings.optimizer_public_words_unpack import stash_python_error
-from core.sha256 import Sha256
 from bindings.host_density_hash_native_pack import (
     _host_fields_hash,
 )

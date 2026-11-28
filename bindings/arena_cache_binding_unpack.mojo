@@ -5,9 +5,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_item
 from bindings.arena_cache_stats_unpack import _mapping, _string_keys
-from bindings.arena_cache_stats_pack import _attribute
 from bindings.optimizer_public_words_unpack import stash_python_error
-from bindings.py_cpython_table import cpython_table
 
 
 def _cache_cpu_refusal(fields: PythonObject, name: PythonObject, host: Bool,

@@ -35,7 +35,6 @@ from x_cnn.conv_run import (
     conv_run_forward_m, conv_run_backward, conv_run_backward_m, conv_run_chan_copy_m, conv_run_map2_m,
     conv_run_relu_forward, conv_run_relu_backward, conv_run_add,
 )
-from bindings.sequential_inputs_door import sequential_input
 from bindings.py_optional import py_present
 from bindings.xcnn_keys_unpack import (
     xcnn_keys, XCNN_OPN_BN_INIT, XCNN_OPN_BN_TRAIN, XCNN_OPN_BLOCK_BACKWARD, XCNN_OPN_BLOCK_FIT, XCNN_OPN_BLOCK_FORWARD, XCNN_OPN_BLOCK_INIT,

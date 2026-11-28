@@ -40,7 +40,6 @@ from bindings.xseq_native_common_door import (
     xseq_reshape, xseq_copy, xseq_item, xseq_first, xseq_column_f32, xseq_column_i64, xseq_mean_dict, xseq_int,
     xseq_float, xseq_truth,
 )
-from core.xseq_marshal import xseq_var_blocks
 from sequence.xseq_forecast_run import (
     forecast_run_letter, forecast_run_copy_f32_words, forecast_run_theta_check_n, forecast_run_theta_mask,
     forecast_run_theta, forecast_run_theta_forecast, forecast_run_theta_codes, forecast_run_croston_check_n,

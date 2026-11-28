@@ -6,13 +6,11 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.manifold_settings_native_door import ManifoldSettings, manifold_fit_only, manifold_fit_transform
 from bindings.operation_names_mani import MANI_OPN_FAMILY_MANI_ISO_RECONSTRUCTION_ERROR
-from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_validate_unpack import classical_view, RESHAPE_HINT
 from bindings.classical_pandas_door import classical_admit_value, native_pandas_exact, _classical_admit, _ClassicalAdmitTypes
 from bindings.sequential_admission_door import _SequentialValueTypes
 from bindings.classical_exceptions_door import classical_not_fitted_class
 from bindings.classical_warnings_unpack import _warning_category, COLUMN_WARNING
-from bindings.classifier_public_lifecycle_door import _feature_names
 from bindings.metrics_native_support_door import metric_warn
 from bindings.sequential_admission_door import _one_of, _ordinary_torch
 from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense, _sparse_fields

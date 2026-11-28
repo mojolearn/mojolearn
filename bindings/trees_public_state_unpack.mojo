@@ -9,7 +9,6 @@ from bindings.native_owner_lifetime_door import native_release_admit, native_rel
 from bindings.classical_attributes_door import classical_check_layout
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.trees_lifetime_door import TreesResident
-from bindings.py_model_records import bump_model_generation
 from bindings.trees_keys_unpack import trees_keys
 from bindings.py_balanced import py_item
 

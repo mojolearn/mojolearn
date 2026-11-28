@@ -28,12 +28,10 @@
 # The PACK half of the former `bindings/label_input_sources.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/label_input_sources_unpack.mojo`.
 from std.python import Python, PythonObject
-from bindings.label_sequence_source_unpack import label_source_count, label_source_raw
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_type, py_get
 from bindings.classical_pandas_door import _pd_class, _pd_fields, _pd_get
-from bindings.p3_labels_metrics_native_door import p3_item
 
 
 def labels_series_values(value: PythonObject, context: PythonObject) raises -> PythonObject:

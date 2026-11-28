@@ -4,11 +4,6 @@
 # the UNPACK half is `bindings/optimizer_owner_boundary_unpack.mojo`.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
-from bindings.py_cpython_table import cpython_table
-from bindings.optimizer_admission_door import opt_value, opt_schedule
-from bindings.py_balanced import py_fields, py_get, py_type
-from training.optimizer_owner_control import OptimizerOwnerControl
-from training.optimizer_native_api import OptimizerNativeDriver
 
 
 from bindings.optimizer_owner_boundary_unpack import (

@@ -6,12 +6,9 @@
 # The PACK half of the former `bindings/gp_label_snapshot_native.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/gp_label_snapshot_native_unpack.mojo`.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type
-from bindings.classical_labels_door import _label_list, _flatten_label_pins
 from bindings.native_scalar_decode_unpack import NativeScalarBuffer
 from core.native_scalar_decode import NativeRealBits, native_scalar_real
 from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_BOOL
-from providers.python.array_metadata_pyapi_door import ArrayPin, array_shape_once, array_metadata_once
 
 
 def _gp_label_word(data: MutPointer[UInt8, MutUntrackedOrigin], offset: Int,

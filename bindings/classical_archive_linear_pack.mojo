@@ -14,7 +14,6 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.classical_archive_output_door import archive_numeric_pack
 from bindings.classical_arrays_door import classical_numpy, classical_array, classical_address
-from bindings.classical_archive_door import _archive_class_name_unpack
 from providers.python.linear_state_boundary_door import linear_state_publish
 from core.native_archive_read import NativeArchiveDecoded
 from core.native_archive_linear import NativeLinearArchivePlan, native_archive_needs_float_text

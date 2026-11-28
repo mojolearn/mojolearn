@@ -15,15 +15,9 @@ from bindings.host_projection_native_door import host_projection_inference, host
 from bindings.host_svr_native_door import host_svr_admit_state, host_svr_predict
 from bindings.host_svc_native_door import host_svc_admit_state, host_svc_inference
 from std.python._cpython import PyObjectPtr
-from bindings.classical_attributes_door import classical_getattribute
-from bindings.classical_pandas_door import _pd_type_fields
-from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.classical_arrays_door import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind
 from bindings.host_inference_scalars_door import host_inference_scalar, host_inference_primitive_number
 from bindings.host_kde_bandwidth_native_unpack import kde_bandwidth_code, kde_native_bandwidth
-from bindings.host_kernel_inference_native_unpack import _kernel_entry, _kernel_buffer
-from bindings.host_svc_native_door import _svc_input
-from bindings.host_iforest_native_door import host_iforest_alias_types
 from bindings.host_kde_native_pack import (
     _kde_option_value,
 )

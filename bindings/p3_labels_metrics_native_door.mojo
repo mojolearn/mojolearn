@@ -25,7 +25,6 @@
 # (this module's own table moved there, lane ne1-e-table, 2026-11-06).
 from std.python import Python, PythonObject
 from bindings.label_sequence_source_unpack import label_source_count, label_source_raw
-from bindings.label_sequence_source_pack import label_source_value
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_cpython_table import cpython_table

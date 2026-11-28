@@ -4,7 +4,6 @@
 # internals or a Python catch-and-rethrow callback.
 from std.python._cpython import PyObjectPtr
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_type
 from std.python.bindings import ExceptionType, raise_python_exception
 
 

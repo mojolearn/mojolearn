@@ -27,7 +27,6 @@
 # converts X once for the fit and the transform.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item
-from bindings.trees_boost_admission_unpack import trees_member_kind
 from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.native_f32_view_pack import native_f32_view_array
 from bindings.py_attr import py_attr

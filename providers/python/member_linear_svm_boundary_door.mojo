@@ -47,7 +47,6 @@ from bindings.linear_svc_boundary_unpack import linear_svc_route
 from bindings.svc_linear_boundary_unpack import linear_svc_check_fields, linear_svr_check_fields, linear_svm_strengths
 from bindings.svc_common_unpack import svc_field, svc_attr, svc_float, svc_int, svc_truthy
 from bindings.svm_keys_unpack import svm_keys
-from core.entry_table import EntryRef, entry_ref_word
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS,

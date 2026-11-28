@@ -3,21 +3,15 @@
 from std.python import Python, PythonObject
 from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners
 from std.python._cpython import PyObjectPtr
-from bindings.optimizer_public_words_unpack import optimizer_python_error
 from bindings.py_balanced import py_call, py_type, py_get
-from bindings.py_typed_call import py_call_typed
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_admission_door import opt_scalar, opt_value
-from bindings.optimizer_device_native_door import device_shape, shape_count
 from bindings.optimizer_public_door import tensor_view
 from bindings.tensor_view import TensorView, base_format
-from training.optimizer_input_plan import same_shape
 from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.sequence_optimizer_native_door import seq_binding, seq_device, seq_device_get, seq_cast
 from bindings.classical_arrays_door import classical_input, classical_typed, classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.sequence_array_native_unpack import sequence_array_cast
-from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.sequence_keys_unpack import sequence_keys
 from bindings.py_balanced import py_item
 

@@ -5,7 +5,6 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, native_namespace_string_keys
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native_door import _fields, _truth
 from bindings.params_metadata_native_door import _resolved, _value
 from bindings.native_loaded_module_door import NativeModules

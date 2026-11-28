@@ -15,7 +15,6 @@
 # The PACK half of the former `bindings/dict_learning_native.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/dict_learning_native_unpack.mojo`.
 from std.python import Python, PythonObject
-from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -25,7 +24,6 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_typed, classical_address
-from bindings.admitted_input_unpack import admit_x
 from bindings.decomp_public_lifecycle_unpack import decomp_public_begin, decomp_coder_width
 from bindings.decomp_public_lifecycle_pack import decomp_public_finish
 from x_decomp.decomp_public_lifecycle_run import decomp_public_method
@@ -36,7 +34,6 @@ from bindings.decomp_kit_native_door import (
     decomp_kit_out_shape, decomp_door_borrow, decomp_door_input, decomp_door_resident_hit,
     decomp_door_resident_input, decomp_door_resident_derived, decomp_door_resident_keep,
 )
-from bindings.decomp_kit_run import DKit
 from bindings.dict_learning_run import (
     EncodeWords, Gram, DictWords, DictFit, MiniBatchWords, SpcaFit, dl_split_sign, dl_sparse_encode, dl_encode_run,
     dl_inverse_run, dl_dict_learning, dl_minibatch_fit, dl_spca_project, dl_spca_inverse, dl_spca_fit_run,

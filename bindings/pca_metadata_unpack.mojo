@@ -6,7 +6,6 @@ from core.mode_answer import MODE_FAMILY_PCA
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit
-from bindings.sequential_description_unpack import sequential_fields
 from bindings.sequential_admission_door import sequential_admit_value
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.pca_descriptor_boundary_door import pca_route

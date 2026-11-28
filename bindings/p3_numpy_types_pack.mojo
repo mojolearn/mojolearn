@@ -21,7 +21,6 @@ the process, so its address is never recycled while the entry is used).
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem
-from core.shared_slot import SharedSlot
 
 
 def _resolve(module: PythonObject, context: PythonObject) raises -> PythonObject:

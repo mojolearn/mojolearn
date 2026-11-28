@@ -11,7 +11,6 @@ from bindings.classical_archive_door import (
 from bindings.classical_archive_read_door import _archive_read_input
 from bindings.classical_archive_output_door import archive_events_pack, archive_numeric_pack
 from bindings.classical_archive_linear_unpack import archive_print_mode_unpack
-from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.minmax_metadata_unpack import _flag
 from bindings.minmax_metadata_pack import minmax_range_values
 from core.native_archive_write import NativeArchiveMember
