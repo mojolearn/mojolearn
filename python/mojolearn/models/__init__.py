@@ -54,7 +54,14 @@ _LAZY_EXPORTS = {"catalog": ("models._catalog", "catalog"),
 
 def __getattr__(name):
     if name in _LAZY_EXPORTS:
-        from . import _catalog
+        # By name, as the package's first-touch table and the expansion doors load their modules, not by
+        # a static `from . import _catalog`: `_catalog` runs the imported-program provider
+        # (`importers/_program.py`, whose import of `ops` loads `_mojolearn_x_sequence` or refuses), so it
+        # and the importer modules belong to the neural family (bindings/release_families.json
+        # python.rules), while this package init also serves the tokenizer loader. Same module object,
+        # same first-touch moment; tools/lane_select.py still resolves this edge (`__package__ + ".x"`).
+        import importlib
+        _catalog = importlib.import_module(__package__ + "._catalog")
         value = getattr(_catalog, _LAZY_EXPORTS[name][1])
         globals()[name] = value
         return value

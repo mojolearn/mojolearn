@@ -287,6 +287,14 @@ def test_every_python_file_of_this_checkout_has_a_family_and_no_family_file_is_i
     assert RF.python_problems(f) == []
     assert f.python("_expansion_cnn.py") == "neural" and f.python("linalg_fast.py") == "linear"
     assert f.python("_backend.py") == f.python("host_surface.py") == f.python("models/causal_lm.py") == "shared"
+    # per-file families (lane py-glue-1, 2026-11-28): leaf modules have a family by name; what a shared file imports,
+    # a composition, and a new file under a pattern stay shared
+    assert f.python("ops.py") == f.python("importers/_program.py") == f.python("models/_catalog.py") == "neural"
+    assert f.python("_x_sequence_ets.py") == "neural" and f.python("_x_sequence_autoarima.py") == "series"
+    assert f.python("_expansion_ann.py") == "cluster" and f.python("_surface_trees.py") == "trees"
+    assert f.python("_x_sequence_model.py") == f.python("_training_impl.py") == f.python("_expansion_trees.py") == "shared"
+    assert f.python("_x_sequence_new.py") == f.python("importers/new.py") == f.python("models/__init__.py") == "shared"
+    assert f.python("_surface_new.py") is None                # a new lane fragment must be given its family
     # verification tooling, tests and the version string are not product glue
     for rel in ("_verify.py", "_verify_light.py", "_verification_catalog.py", "__main__.py", "tests/test_x.py",
                 "verify_reference/table.json", "_version.py", "ALPHA_API.md"):
