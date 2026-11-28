@@ -4863,6 +4863,12 @@ PUBLIC_PENDING_LANES = {
     "x-decomp-eigh-wide-rotation": "stale reference",
     "x-decomp-manifold": "stale reference",
     "x-decomp-umap-options": "stale reference",
+    # lane sc-prep-1 (2026-11-28): the count-data transformers' new lanes; RECORD OWED (the next release record)
+    "x-prep-total-count-normalizer": "no reference",
+    "x-prep-log1p-transformer": "no reference",
+    "x-prep-clipped-standard-scaler": "no reference",
+    "x-prep-highly-variable-genes": "no reference",
+    "x-prep-regress-out": "no reference",
     "x-prep-da-solvers": "stale reference",
     "x-prep-nb-weights": "stale reference",
     "x-prep-priors": "stale reference",

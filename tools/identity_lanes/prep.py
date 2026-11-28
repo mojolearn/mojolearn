@@ -1187,3 +1187,124 @@ def _prep_batch_resample_utils(ml, e, Xh):
 
 
 _batch_decl(_prep_batch_resample_utils, "resample-utils", revision="expansion-batch-2026-09-28-v1")
+
+
+# ---------------------------------------------------------------- count-data transformers
+# Lane sc-prep-1 (2026-11-28; RECORD OWED: the lanes have no reference yet, the next release records them). Each
+# lane hashes a dense and a CSR run. The CSR input is `_prep_csr_matrix`, a plain object exposing the CSR form
+# (format, shape, indptr, indices, data): the transformers read those buffers, so no SciPy is needed; a CSR
+# result is built back as this class.
+
+
+class _prep_csr_matrix:
+    """The CSR form of a dense float32 block, in row order, zeros dropped (the fixture's own sparse input)."""
+    format = "csr"
+
+    def __init__(self, arg, shape=None):
+        if isinstance(arg, tuple):
+            data, indices, indptr = arg
+            self.data, self.indices, self.indptr = np.asarray(data), np.asarray(indices), np.asarray(indptr)
+            self.shape = tuple(shape)
+            return
+        A = np.ascontiguousarray(arg, dtype=np.float32)
+        nz = A != 0
+        self.indptr = np.concatenate([[0], np.cumsum(nz.sum(axis=1))]).astype(np.int32)
+        self.indices = np.nonzero(nz)[1].astype(np.int32)
+        self.data = A[nz].astype(np.float32)
+        self.shape = A.shape
+
+
+def _prep_counts(X, rows=600, cols=24):
+    """Counts with many zeros from the fixture: floor(|x| * 3) where |x| > 0.6, else 0; column 5 of row 0 made
+    dominant (a row a single column dominates, the highly-expressed rule's case)."""
+    A = np.abs(X[:rows, :cols]).astype(np.float32)
+    C = np.where(A > 0.6, np.floor(A * 3.0), 0.0).astype(np.float32)
+    C[0, 5] = 500.0
+    return C
+
+
+def _prep_csr_h(R):
+    return _h(np.asarray(R.data), np.asarray(R.indices), np.asarray(R.indptr))
+
+
+@lane("x-prep-total-count-normalizer")
+def _(ml, X, yc, yr, Xh=None):
+    C = _prep_counts(X)
+    S = _prep_csr_matrix(C)
+    m = ml.TotalCountNormalizer().fit(C)
+    t = ml.TotalCountNormalizer(target_sum=1e4).fit(C)
+    rule = ml.TotalCountNormalizer(exclude_highly_expressed=True, max_fraction=0.05).fit(C)
+    # the rule's columns given explicitly: the same totals, the same bits
+    keep = np.asarray(rule.excluded_) == 0
+    explicit = ml.TotalCountNormalizer(columns=keep).fit(C)
+    idx = ml.TotalCountNormalizer(columns=np.nonzero(keep)[0]).fit(C)
+    rs = ml.TotalCountNormalizer(exclude_highly_expressed=True).fit(S)
+    parts = dict(median=_h(np.float32(m.target_sum_)), out=_h(m.transform(C[:256])), out_t=_h(t.transform(C[:256])),
+                 excl=_h(rule.excluded_), out_rule=_h(rule.transform(C[:256])),
+                 same_mask=_h(np.float32(np.array_equal(explicit.transform(C), rule.transform(C)))),
+                 same_idx=_h(np.float32(np.array_equal(idx.transform(C), rule.transform(C)))),
+                 csr=_prep_csr_h(rs.transform(S)), csr_excl=_h(rs.excluded_))
+    return _fit(parts, m, lambda e: (e.transform(_prep_counts(Xh)[:256]),))
+
+
+@lane("x-prep-log1p-transformer")
+def _(ml, X, yc, yr, Xh=None):
+    C = _prep_counts(X)
+    S = _prep_csr_matrix(C)
+    m = ml.Log1pTransformer().fit(C)
+    b = ml.Log1pTransformer(base=2).fit(S)
+    parts = dict(out=_h(m.transform(C[:256])), csr2=_prep_csr_h(b.transform(S)))
+    return _fit(parts, m, lambda e: (e.transform(_prep_counts(Xh)[:256]),))
+
+
+@lane("x-prep-clipped-standard-scaler")
+def _(ml, X, yc, yr, Xh=None):
+    C = np.log1p(_prep_counts(X))
+    S = _prep_csr_matrix(C)
+    m = ml.ClippedStandardScaler(max_value=2.5).fit(C)
+    u = ml.ClippedStandardScaler(zero_center=False, max_value=3.0).fit(S)
+    parts = dict(mean=_h(m.mean_), std=_h(m.std_), out=_h(m.transform(C[:256])), csr=_prep_csr_h(u.transform(S)),
+                 csr_std=_h(u.std_))
+    return _fit(parts, m, lambda e: (e.transform(np.log1p(_prep_counts(Xh))[:256]),))
+
+
+@lane("x-prep-highly-variable-genes")
+def _(ml, X, yc, yr, Xh=None):
+    C = _prep_counts(X, rows=600, cols=40)
+    L = np.log1p(C).astype(np.float32)
+    batches = (np.arange(C.shape[0]) % 3).astype(np.int64)
+    parts = {}
+    s = ml.HighlyVariableGenes(flavor="seurat").fit(L)
+    parts["seurat"] = _h(s.highly_variable_, s.means_, s.dispersions_, s.dispersions_norm_)
+    s8 = ml.HighlyVariableGenes(flavor="seurat", n_top_genes=8).fit(_prep_csr_matrix(L), batches)
+    parts["seurat_top_batch"] = _h(s8.highly_variable_, s8.highly_variable_nbatches_, s8.dispersions_norm_)
+    c = ml.HighlyVariableGenes(flavor="cell_ranger", n_top_genes=10).fit(L)
+    parts["cell_ranger"] = _h(c.highly_variable_, c.dispersions_norm_)
+    v = ml.HighlyVariableGenes(flavor="seurat_v3", n_top_genes=12).fit(C)
+    parts["v3"] = _h(v.highly_variable_, v.variances_norm_, v.highly_variable_rank_)
+    vb = ml.HighlyVariableGenes(flavor="seurat_v3", n_top_genes=12, span=0.5).fit(_prep_csr_matrix(C), batches)
+    parts["v3_batch"] = _h(vb.highly_variable_, vb.variances_norm_, vb.highly_variable_nbatches_)
+    parts["transform"] = _h(v.transform(C[:256]))
+    parts["transform_csr"] = _prep_csr_h(s8.transform(_prep_csr_matrix(L[:256])))
+    return _fit(parts, v, lambda e: (e.transform(_prep_counts(Xh, rows=600, cols=40)[:256]),))
+
+
+@lane("x-prep-regress-out")
+def _(ml, X, yc, yr, Xh=None):
+    C = np.log1p(_prep_counts(X))
+    cov = np.column_stack([C.sum(axis=1), X[:C.shape[0], 30]]).astype(np.float32)
+    m = ml.RegressOut()
+    R = m.fit_transform(C, cov)
+    Rs = ml.RegressOut().fit_transform(_prep_csr_matrix(C), cov)
+    parts = dict(res=_h(R), coef=_h(m.coef_), mean=_h(m.mean_), res_csr=_h(Rs), again=_h(m.transform(C[:256], cov[:256])))
+    return _fit(parts, m)
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=lambda Xh: _prep_counts(Xh)),
+            "x-prep-total-count-normalizer", "x-prep-log1p-transformer")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=lambda Xh: np.log1p(_prep_counts(Xh))),
+            "x-prep-clipped-standard-scaler")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=lambda Xh: _prep_counts(Xh, rows=600, cols=40)),
+            "x-prep-highly-variable-genes")
+_batch_decl("n/a:covariate rows (transform takes each row's covariates beside it; the lane hashes the "
+            "fit_transform residuals and a transform of the first 256 rows with theirs)", "x-prep-regress-out")
