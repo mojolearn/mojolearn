@@ -13,16 +13,10 @@ import identity_wheel_record as R  # noqa: E402
 import release_identity_wheels as RIW  # noqa: E402
 
 FAKE = r'''#!/bin/bash
-# a fake record_identity_column.sh: SELECT_ONLY prints the owed lanes from $FAKE_OWED_<label>, a chunk "records"
+# a fake record_identity_column.sh: a chunk "records" (the lane choice is identity_wheel_record.py's own:
+# --record-families, tools/release_families.py)
 label=$1; out=$2
-key=FAKE_OWED_$(echo "$label" | tr -c 'a-z0-9\n' '_')
-owed=${!key:-}
-if [ "${SELECT_ONLY:-0}" = 1 ]; then
-  [ "${REUSE:-0}" = 1 ] || { echo "SELECT_ONLY=1 needs REUSE=1 (the reuse selection)" >&2; exit 2; }
-  if [ -z "$owed" ]; then echo "REUSED 9 / RECORD 0 $label"; echo "NOTHING-CHANGED $label"; exit 0; fi
-  echo "REUSED 7 / RECORD 2 $label"; echo "LANES-SELECTED $owed"; exit 0
-fi
-[ "$RECORD_FROM_INSTALLED" = 1 ] && case "$LANE_SELECTION" in auto-reuse-chunk|full-chunk) true;; *) false;; esac \
+[ "$RECORD_FROM_INSTALLED" = 1 ] && case "$LANE_SELECTION" in family-chunk|full-chunk) true;; *) false;; esac \
   || { echo "bad env"; exit 9; }
 echo "{}" > "$out/$label.lanes-x.identical.json"
 echo "DEVICE ${CUDA_VISIBLE_DEVICES:-${HIP_VISIBLE_DEVICES:-none}} LANES $LANES"
@@ -201,33 +195,51 @@ def test_the_record_prints_its_wall_busy_cores_and_slowest_lanes(tmp_path, fake,
     assert "identity-wheels: timing: record " in capsys.readouterr().out
 
 
+def families_map(fake, lanes):
+    """tools/release_families.py's map with these explicit lanes ({lane: family}) and no catch-all rule."""
+    import release_families as RF
+    real = RF.load()
+    doc = dict(real.doc, lanes=dict(lanes), lane_rules=[])
+    fake.setattr(RF, "load", lambda *a, **k: RF.Families(doc))
+
+
 def test_two_columns_on_two_gpus_record_once_in_parallel(tmp_path, fake, capsys):
-    fake.setenv("FAKE_OWED_nvidia_l40s", "knn,ols")
-    fake.setenv("FAKE_OWED_nvidia_ptx_l40s_sm80", "ridge")
+    # --record-families (tools/release.py's family plan): only the recording families' lanes, on every column
+    fake.setattr(R.Run, "all_lanes", lambda self, py, column, lab: (["knn", "ols", "ridge", "gbdt-rmse"], 0))
+    families_map(fake, {"knn": "cluster", "ols": "linear", "ridge": "linear", "gbdt-rmse": "trees"})
     a = args(tmp_path, "--columns", "nvidia,ptx", "--label-device", "l40s", "--gpus", "2", "--workers-per-gpu", "1",
-             "--reuse-unchanged")
+             "--record-families", "linear,cluster")
     assert R.Run(a).main() == 0
     doc = json.loads((tmp_path / "out" / "identity-wheels.json").read_text())
-    assert doc["ok"] and doc["columns"]["nvidia"]["owed"] == 2 and doc["columns"]["ptx"]["owed"] == 1
+    assert doc["ok"] and doc["columns"]["nvidia"]["owed"] == 3 and doc["columns"]["ptx"]["owed"] == 3
     assert {c["device"] for c in doc["columns"]["nvidia"]["chunks"]} == {0}
     assert {c["device"] for c in doc["columns"]["ptx"]["chunks"]} == {1}
     out = capsys.readouterr().out
-    assert "busy plan: 2 worker(s) of 2" in out and "nvidia-l40s: REUSED 7 / RUN 2" in out
+    assert "busy plan: 2 worker(s) of 2" in out and "nvidia-l40s: REUSED 1 / RUN 3 (families: linear,cluster)" in out
     assert RIW.summary_errors(doc, ["nvidia", "ptx"]) == []
 
 
-def test_nothing_owed_records_nothing_and_is_ok(tmp_path, fake, capsys):
-    a = args(tmp_path, "--columns", "amd", "--label-device", "mi325x", "--gpus", "1", "--reuse-unchanged")
+def test_no_family_recording_records_nothing_and_is_ok(tmp_path, fake, capsys):
+    fake.setattr(R.Run, "all_lanes", lambda self, py, column, lab: (["knn", "ols"], 0))
+    a = args(tmp_path, "--columns", "amd", "--label-device", "mi325x", "--gpus", "1", "--record-families", "none")
     assert R.Run(a).main() == 0
     doc = json.loads((tmp_path / "out" / "identity-wheels.json").read_text())
     assert doc["columns"]["amd"]["owed"] == 0 and doc["columns"]["amd"]["chunks"] == []
-    assert "amd-mi325x: REUSED 9 / RUN 0" in capsys.readouterr().out
+    assert "amd-mi325x: REUSED 2 / RUN 0" in capsys.readouterr().out
     assert RIW.summary_errors(doc, ["amd"]) == []
 
 
+def test_an_unknown_family_is_refused(tmp_path, fake):
+    fake.setattr(R.Run, "all_lanes", lambda self, py, column, lab: (["knn"], 0))
+    a = args(tmp_path, "--columns", "amd", "--label-device", "mi325x", "--gpus", "1", "--record-families", "nope")
+    with pytest.raises(SystemExit, match="unknown famil"):
+        R.Run(a).main()
+
+
 def test_a_cpu_shard_records_its_share(tmp_path, fake):
-    fake.setenv("FAKE_OWED_cpu", "a,b,c,d,e")
-    a = args(tmp_path, "--columns", "cpu", "--shard", "1/2", "--workers-per-gpu", "2", "--reuse-unchanged")
+    fake.setattr(R.Run, "all_lanes", lambda self, py, column, lab: (["a", "b", "c", "d", "e", "f"], 0))
+    families_map(fake, {"a": "linear", "b": "linear", "c": "linear", "d": "linear", "e": "linear", "f": "trees"})
+    a = args(tmp_path, "--columns", "cpu", "--shard", "1/2", "--workers-per-gpu", "2", "--record-families", "linear")
     assert R.Run(a).main() == 0
     doc = json.loads((tmp_path / "out" / "identity-wheels.json").read_text())
     assert doc["columns"]["cpu"]["owed"] == 2 and sum(c["lanes"] for c in doc["columns"]["cpu"]["chunks"]) == 2
@@ -251,8 +263,8 @@ def test_summary_errors_name_what_is_missing():
 
 
 def test_by_default_every_lane_runs_and_no_selector_is_asked(tmp_path, fake, capsys):
-    # Andrew 2026-11-05: run everything once per release; the selection (SELECT_ONLY) is never consulted
-    fake.setattr(R.Run, "select", lambda *a, **k: pytest.fail("the selector must not decide the default run"))
+    # --record-families defaults to all (tools/release.py passes its plan's); no per-lane selector exists any more
+    assert not hasattr(R.Run, "select")
     fake.setattr(R.Run, "all_lanes", lambda self, py, column, lab: (["knn", "ols", "ridge"], 0))
     a = args(tmp_path, "--columns", "amd", "--label-device", "mi325x", "--gpus", "1", "--workers-per-gpu", "3")
     assert R.Run(a).main() == 0

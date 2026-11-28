@@ -252,7 +252,8 @@ class IdentityOnWheels:
             if (src / "bindings" / "release_families.json").is_file() else RF.load()
         plan = self.plan()
         lanes = RF.all_lanes(root=src)
-        if self.rebuild_all():
+        if self.rebuild_all() or not plan.get("families"):
+            # --rebuild-all, or a plan with no family decision (a measurement build's): every lane
             record = list(lanes)
         else:
             record = RF.settle(plan, lanes, fam, source_root=src, cache_dir=self.evidence / "release" / "identities")
@@ -269,7 +270,10 @@ class IdentityOnWheels:
         if self.rebuild_all():
             return "all"
         import release_families as RF
-        return ",".join(RF.recording(self.family_lanes()[2])) or "none"
+        record, lanes, fplan = self.family_lanes()
+        if not fplan:
+            return "all"   # no family decision in the plan: every lane records (family_lanes)
+        return ",".join(RF.recording(fplan)) or "none"
 
     def lanes_owed(self, column):
         """[lanes] COLUMN records at this freeze: the lanes of every family that records (family_lanes), the same on
@@ -289,6 +293,8 @@ class IdentityOnWheels:
     def vendor_lanes(self, vendor):
         """(reused, owed) lane counts of a vendor's columns by the family plan; owed None: undecided (a dry run)."""
         reused, run = 0, 0
+        if not self.reuse():
+            return 0, "all"   # --rebuild-all: every lane, no family plan decides
         for col in self.vendor_columns(vendor):
             owed = self.lanes_owed(col)
             if owed is None:

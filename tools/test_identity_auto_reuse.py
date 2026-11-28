@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
-"""REUSE OF OLD RUNS IS OPT-IN (Andrew 2026-11-05, decided 2026-11-09).
+"""THE RECORDER RECORDS THE FAMILIES THAT CHANGED (AGENTS.md part 4, Andrew 2026-11-28), and
+identity_columns.py changed-lanes (still used by ONLY_CHANGED and tools/reference_refresh.py).
 
-`record_identity_column.sh` with no LANES/SHARD/ONLY_CHANGED/REUSE records every
-lane of the scope. REUSE=1 records only the lanes whose closure changed since
-THIS device class's newest good evidence and reuses the rest; FULL=1 (the old
-opt-out of a reuse default) is refused. Admission accepts older
+`record_identity_column.sh` with no LANES/SHARD/ONLY_CHANGED records the lanes of the release
+families that record (FAMILIES=a,b, else HEAD's family plan); REBUILD_ALL=1 records every lane;
+REUSE=1 and SELECT_ONLY=1 (the per-lane selector) are removed and refused; FULL=1 is refused.
+Admission accepts older
 incoming records whose lanes are superseded or whose closure is unchanged.
 Nothing here imports a binding or runs a fit: the harness, git and the recorder's
 interpreter are stand-ins.
@@ -307,6 +308,11 @@ case "$*" in
       echo "# CHANGED-LANES" >&2
       echo "$FAKE_CHANGED"; exit 0 ;;
   *"identity_columns.py lanes"*) echo "lane-a,lane-b,lane-c"; exit 0 ;;
+  *"release_families.py plan"*)
+      prev=""; for a in "$@"; do [ "$prev" = --json ] && echo '{"rows": [], "families": {}}' > "$a"; prev=$a; done
+      exit 0 ;;
+  *"release_families.py lanes --plan"*) echo "FAMILY == release families: canned" >&2; echo "$FAKE_FAMILY_LANES"; exit 0 ;;
+  *"release_families.py lanes"*) exec python3 "$@" ;;
   *"identity_columns.py check"*) echo "IDCOLUMN x admissible=yes"; exit 0 ;;
   *"retain_run_summary.py"*) exit 0 ;;
   *"identity_break.py"*)
@@ -318,6 +324,7 @@ echo "unexpected: $*" >&2; exit 9
 
 
 def _run_recorder(tmp_path, changed, summary="REUSED 2 RECORD 1 KNOWN-BAD 0", **env):
+    tmp_path.mkdir(parents=True, exist_ok=True)
     fake = tmp_path / "fakepy"
     fake.write_text(FAKE_PY)
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
@@ -326,8 +333,8 @@ def _run_recorder(tmp_path, changed, summary="REUSED 2 RECORD 1 KNOWN-BAD 0", **
     full_env = dict(os.environ, PYTHON=str(fake), FAKE_LOG=str(log), FAKE_CHANGED=changed,
                     FAKE_SUMMARY=summary, ALLOW_DIRTY="1",
                     FAKE_SUMMARY_JSON=json.dumps({"reused": {"lane-a": {"source": "table", "committed": True}}}))
-    for k in ("LANES", "SHARD", "ONLY_CHANGED", "FULL", "REUSE", "MOJOLEARN_IDENTITY_LAUNCH",
-              "MOJOLEARN_IDENTITY_REUSE_RECORDS"):
+    for k in ("LANES", "SHARD", "ONLY_CHANGED", "FULL", "REUSE", "SELECT_ONLY", "FAMILIES", "REBUILD_ALL",
+              "MOJOLEARN_IDENTITY_LAUNCH", "MOJOLEARN_IDENTITY_REUSE_RECORDS"):
         full_env.pop(k, None)
     full_env.update(env)
     res = subprocess.run(["bash", os.path.join(ROOT, "tools", "record_identity_column.sh"), "cpu", str(out)],
@@ -343,35 +350,43 @@ def _lanes_of(call):
     return words[words.index("--lanes") + 1]
 
 
-def test_recorder_default_records_every_lane(tmp_path):
-    res, calls, harness = _run_recorder(tmp_path, "lane-b")
-    assert res.returncode == 0, res.stderr[-800:]
-    assert "FULL cpu: every routine lane is recorded" in res.stdout
-    assert not any("changed-lanes" in c for c in calls)
-    assert len(harness) == 1 and _lanes_of(harness[0]) == "lane-a,lane-b,lane-c"
+# FAMILY REUSE IS THE DEFAULT (AGENTS.md part 4, Andrew 2026-11-28; tools/release_families.py). The committed map
+# sends every lane to `shared` until `release_families.py derive --write` has run (the rule `*`), so the stand-in
+# lanes lane-a..c are shared: FAMILIES=shared records them all, FAMILIES=none or another family records none.
 
-
-def test_recorder_reuse_records_only_changed_lanes(tmp_path):
-    res, calls, harness = _run_recorder(tmp_path, "lane-b", REUSE="1")
+def test_recorder_default_records_the_families_the_plan_records(tmp_path):
+    res, calls, harness = _run_recorder(tmp_path, "", FAKE_FAMILY_LANES="lane-b")
     assert res.returncode == 0, res.stderr[-800:]
-    assert "REUSED 2 / RECORD 1 cpu" in res.stdout
-    assert any("changed-lanes" in c and "--class cpu" in c for c in calls)
+    assert any("release_families.py plan --commit HEAD" in c for c in calls)
+    assert any("release_families.py lanes --plan" in c and "--settle" in c for c in calls)
+    assert not any("changed-lanes" in c for c in calls)     # the per-lane selector decides nothing
     assert len(harness) == 1 and _lanes_of(harness[0]) == "lane-b"
 
 
-def test_recorder_reuse_nothing_owed_runs_nothing(tmp_path):
-    res, calls, harness = _run_recorder(tmp_path, "", summary="REUSED 3 RECORD 0 KNOWN-BAD 0", REUSE="1")
+def test_recorder_default_with_no_family_recording_runs_nothing(tmp_path):
+    res, calls, harness = _run_recorder(tmp_path, "", FAKE_FAMILY_LANES="")
     assert res.returncode == 0, res.stderr[-800:]
-    assert "NOTHING-CHANGED cpu" in res.stdout
+    assert "NOTHING-CHANGED cpu: no release family records" in res.stdout
     assert harness == []
 
 
-def test_recorder_extra_reuse_dirs_reach_the_selection(tmp_path):
-    extra = tmp_path / "old-records"
-    extra.mkdir()
-    res, calls, _ = _run_recorder(tmp_path, "lane-b", REUSE="1", MOJOLEARN_IDENTITY_REUSE_RECORDS=str(extra))
+def test_recorder_families_name_the_lanes_without_a_plan(tmp_path):
+    res, calls, harness = _run_recorder(tmp_path, "", FAMILIES="shared")
     assert res.returncode == 0, res.stderr[-800:]
-    assert any(f"--records {extra}" in c for c in calls if "changed-lanes" in c)
+    assert not any("release_families.py plan" in c for c in calls)
+    assert len(harness) == 1 and _lanes_of(harness[0]) == "lane-a,lane-b,lane-c"
+    res, _, harness = _run_recorder(tmp_path / "none", "", FAMILIES="none")
+    assert res.returncode == 0 and "NOTHING-CHANGED cpu" in res.stdout and harness == []
+    res, _, harness = _run_recorder(tmp_path / "bad", "", FAMILIES="no-such-family")
+    assert res.returncode != 0 and harness == []
+
+
+def test_recorder_rebuild_all_records_every_lane(tmp_path):
+    res, calls, harness = _run_recorder(tmp_path, "lane-b", REBUILD_ALL="1")
+    assert res.returncode == 0, res.stderr[-800:]
+    assert "FULL cpu: every routine lane is recorded (REBUILD_ALL=1)" in res.stdout
+    assert not any("changed-lanes" in c or "release_families.py" in c for c in calls)
+    assert len(harness) == 1 and _lanes_of(harness[0]) == "lane-a,lane-b,lane-c"
 
 
 def test_recorder_full_is_retired(tmp_path):
@@ -379,14 +394,11 @@ def test_recorder_full_is_retired(tmp_path):
     assert res.returncode == 2 and "FULL=1 is retired" in res.stderr and harness == []
 
 
-def test_recorder_reuse_refuses_only_changed(tmp_path):
-    res, _, harness = _run_recorder(tmp_path, "lane-b", REUSE="1", ONLY_CHANGED="table")
-    assert res.returncode == 2 and "REUSE=1 excludes" in res.stderr and harness == []
-
-
-def test_recorder_select_only_needs_reuse(tmp_path):
-    res, _, harness = _run_recorder(tmp_path, "lane-b", SELECT_ONLY="1")
-    assert res.returncode == 2 and "SELECT_ONLY=1 needs REUSE=1" in res.stderr and harness == []
+def test_recorder_reuse_and_select_only_are_removed(tmp_path):
+    res, _, harness = _run_recorder(tmp_path, "lane-b", REUSE="1")
+    assert res.returncode == 2 and "REUSE=1 is removed" in res.stderr and harness == []
+    res, _, harness = _run_recorder(tmp_path / "s", "lane-b", SELECT_ONLY="1")
+    assert res.returncode == 2 and "SELECT_ONLY is removed" in res.stderr and harness == []
 
 
 def test_recorder_only_changed_table_keeps_its_old_meaning(tmp_path):

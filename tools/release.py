@@ -2971,7 +2971,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
                     and doc.get("linux_sets") == scoped_sets()
                     and bool((doc.get("previous") or {}).get("base")) == bool(self.candidate_base())
                     and not (doc.get("previous") or {}).get("pending")
-                    and ("families" in doc) == (self.candidate_base() is None)
+                    and ("families" in doc) == self.family_plan_on()
                     and bool((doc.get("families") or {}).get("rebuild_all")) == self.rebuild_all()):
                 if self.readonly:
                     self._plan = doc
@@ -2989,7 +2989,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
                                                  builders_override=override or None, evidence_root=self.evidence,
                                                  modes=self.release_modes, defines=candidate_defines(self),
                                                  base=self.candidate_base(), timed=candidate_timed(self),
-                                                 rebuild_all=self.rebuild_all())
+                                                 rebuild_all=self.rebuild_all(), families=self.family_plan_on())
             if scoped_sets():
                 self._plan["linux_sets"] = scoped_sets()   # a plan of other targets is not reused (above)
             return self._plan
@@ -2997,6 +2997,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
     def candidate_base(self):
         """The base build a B arm reuses (tools/release_candidate.py, release_reuse.base_build), else None."""
         return getattr(self.args, "candidate_base", None) or None
+
+    def family_plan_on(self):
+        """Whether the reuse plan is made whole per family (tools/release_families.py, AGENTS.md part 4): a release,
+        yes; a measurement build (tools/release.py candidate) or a B arm records no identity and keeps its
+        per-binding rows."""
+        return self.candidate_base() is None and not getattr(self.args, "candidate_version", "")
 
     def step_reuse_plan(self):
         plan = self.plan()

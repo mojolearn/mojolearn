@@ -75,6 +75,8 @@ class Families:
             if fam not in self.families:
                 raise SystemExit("release_families: %s names the unknown family %r" % (lane, fam))
         self.metal1_suffix = metal1_suffix
+        #: bindings/merged_groups.json as loaded with the map (load, load_at); None: apply reads the tooling's
+        self.merged = None
 
     def names(self):
         """The families, shared first, the rest in map order."""
@@ -97,7 +99,29 @@ class Families:
 
 def load(path=None, merged_path=None):
     merged = read_json(merged_path or MERGED) or {}
-    return Families(read_json(path or MAP) or {}, merged.get("darwin_metal1_suffix") or "_m1")
+    fam = Families(read_json(path or MAP) or {}, merged.get("darwin_metal1_suffix") or "_m1")
+    fam.merged = merged
+    return fam
+
+
+def load_at(commit, root=ROOT):
+    """The map and the merged groups AT COMMIT (`git show`, never a working tree), as the plan of that commit reads
+    them; the tooling's own copies when the commit predates the map."""
+    def show(rel):
+        p = subprocess.run(["git", "-C", str(root), "show", "%s:%s" % (commit, rel)], capture_output=True, text=True)
+        if p.returncode != 0:
+            return None
+        try:
+            return json.loads(p.stdout)
+        except ValueError:
+            return None
+    doc, merged = show("bindings/release_families.json"), show("bindings/merged_groups.json")
+    if doc is None:
+        return load()
+    merged = merged if merged is not None else (read_json(MERGED) or {})
+    fam = Families(doc, merged.get("darwin_metal1_suffix") or "_m1")
+    fam.merged = merged
+    return fam
 
 
 def read_json(path):
@@ -226,7 +250,7 @@ def apply(plan, fam=None, merged=None, rebuild_all=False):
         fams[SHARED].update(decision="BUILD", reason="runtime .libs: " + str(rt.get("reason")))
     # A MERGED FILE IS ONE BUILD: when one of its members builds, the leg builds the whole file and its other members'
     # bytes are the leg's (release_reuse.place_merged), so their families' recorded columns no longer hold.
-    files = merged_files(merged)
+    files = merged_files(merged if merged is not None else getattr(fam, "merged", None))
     moved = True
     while moved:
         moved = False

@@ -1,5 +1,5 @@
-"""The release path without the reuse machinery (lane post-ledger-once, 2026-11-07): by default (identity on the
-wheels, no --reuse-unchanged) no dependency analysis, reconstruction or ledger evaluation runs; after
+"""The release path without the ledger machinery (lane post-ledger-once, 2026-11-07): with identity on the wheels
+(family reuse decides what is reused, 2026-11-28) no dependency analysis, reconstruction or ledger evaluation runs; after
 identity-admit no step consults the ledger; gate-boxes refuses to rent with an input missing; the idle-box
 watchdog's accounting on a fake clock. Pure Python: nothing is built, rented or run."""
 import argparse
@@ -164,21 +164,19 @@ def test_identity_admit_is_not_followed_by_a_ledger_prefetch():
 
 
 # ------------------------------------------------------------ the default path runs no reuse machinery
-def test_the_default_path_runs_no_dependency_analysis_and_the_reuse_flag_does(tmp_path, monkeypatch):
+def test_the_identity_on_wheels_path_runs_no_dependency_analysis_with_or_without_rebuild_all(tmp_path, monkeypatch):
+    # family reuse (AGENTS.md part 4, 2026-11-28) decides what a release reuses; the requirements ledger is off
+    # under --identity-on-wheels whatever the flags (the opt-in --reuse-unchanged that turned it on is removed)
     import release_requirement_dependencies as dependencies
     ran = []
     monkeypatch.setattr(dependencies, "prefetch", lambda compute, **kw: ran.append(1) or dict(requirements={}))
-    default = admitted_release(tmp_path / "a", monkeypatch)
-    monkeypatch.setattr(default, "prefetch_ledger_rounds", lambda after: ran.append(after) or dict(summary="ok"))
-    assert not default.ledger_on()
-    assert default.step_readiness() == release.Release.LEDGER_OFF and ran == []
-    assert default.find_requirement_leg("cuda-sm_89", "cuda", "sm_89")[0] is None
-    assert default.record_compile_requirements(None) is None and default.close_stopped_compile_producers(None) == []
-    reuse = admitted_release(tmp_path / "b", monkeypatch, reuse_unchanged=True)
-    monkeypatch.setattr(reuse, "readiness_manifest", lambda: dict(requirements={}))
-    monkeypatch.setattr(reuse, "prefetch_ledger_rounds", lambda after: ran.append(after) or dict(summary="ok"))
-    assert reuse.ledger_on()
-    assert "requirement unit(s)" in reuse.step_readiness()[0] and ran == [1, "readiness"]
+    for name, kw in (("a", {}), ("b", dict(rebuild_all=True))):
+        default = admitted_release(tmp_path / name, monkeypatch, **kw)
+        monkeypatch.setattr(default, "prefetch_ledger_rounds", lambda after: ran.append(after) or dict(summary="ok"))
+        assert not default.ledger_on()
+        assert default.step_readiness() == release.Release.LEDGER_OFF and ran == []
+        assert default.find_requirement_leg("cuda-sm_89", "cuda", "sm_89")[0] is None
+        assert default.record_compile_requirements(None) is None and default.close_stopped_compile_producers(None) == []
     # a release without --identity-on-wheels has no identity-admit: the ledger stays its gate
     legacy = release.Release(args(tmp_path / "c"), runner=lambda *a, **k: 0)
     assert legacy.ledger_on()

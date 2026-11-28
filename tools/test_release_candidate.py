@@ -100,7 +100,8 @@ class Steps(unittest.TestCase):
              "--build-backend", "github", "--identity-on-wheels"])
         self.assertEqual(args.only.split(","), list(RC.STEPS))
         self.assertTrue(args.identity_on_wheels)
-        self.assertFalse(args.reuse_unchanged)       # ledger_on() is False: no ledger read or write
+        self.assertFalse(args.rebuild_all)           # family reuse, the default; ledger_on() is False under the option
+        self.assertFalse(hasattr(args, "reuse_unchanged"))
 
     def test_github_leg_carries_defines_and_ref(self):
         ctx = SimpleNamespace(rel=Path("/w/c"), commit=SHA, args=SimpleNamespace(
