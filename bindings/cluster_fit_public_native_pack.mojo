@@ -25,7 +25,9 @@ from bindings.operation_names_cfa import (
     CFA_OPN_FAMILY_CFA_MBK_FIT, CFA_OPN_FAMILY_CFA_MBK_PARTIAL_FIT, CFA_OPN_FAMILY_CFA_BISECT_FIT,
     CFA_OPN_FAMILY_CFA_FIT_PREDICT, CFA_OPN_FAMILY_CFA_FIT_TRANSFORM, CFA_OPN_FAMILY_CFA_MEANSHIFT_FIT,
     CFA_OPN_FAMILY_CFA_MEANSHIFT_FIT_PREDICT, CFA_OPN_FAMILY_CFA_OPTICS_FIT, CFA_OPN_FAMILY_CFA_OPTICS_FIT_PREDICT,
-    CFA_OPN_FAMILY_CFA_AP_FIT, CFA_OPN_FAMILY_CFA_AP_FIT_PREDICT, CFA_OPN_FAMILY_CFA_HDBSCAN_FIT)
+    CFA_OPN_FAMILY_CFA_AP_FIT, CFA_OPN_FAMILY_CFA_AP_FIT_PREDICT, CFA_OPN_FAMILY_CFA_HDBSCAN_FIT,
+    CFA_OPN_FAMILY_CFA_HARMONY_FIT, CFA_OPN_FAMILY_CFA_HARMONY_FIT_TRANSFORM)
+from bindings.harmony_native_door import harmony_fit
 from core.kmeans_variants_api import VariantsResultSlot
 from bindings.kmeans_variants_boundary_door import VariantsPackedResult, variants_connection
 from core.cluster_centroid_fit_api import CentroidFitResultSlot
@@ -236,5 +238,12 @@ def cluster_fit_a_operation(model: PythonObject, operation: Int, args: PythonObj
     if operation == CFA_OPN_FAMILY_CFA_HDBSCAN_FIT:
         _ = hdbscan_fit(model, binding, args[1], context)
         return model
+    if operation == CFA_OPN_FAMILY_CFA_HARMONY_FIT:
+        # Harmony.fit(X, batch): args[2] is the batch covariates (lane sc-stats-1)
+        harmony_fit(model, binding, args[1], args[2], context)
+        return model
+    if operation == CFA_OPN_FAMILY_CFA_HARMONY_FIT_TRANSFORM:
+        harmony_fit(model, binding, args[1], args[2], context)
+        return _attr(model, "embedding_")
     cluster_fit_unknown_code(operation)
     return PythonObject(None)

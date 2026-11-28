@@ -47,6 +47,7 @@ FAMILIES = (
             "x_cluster/host/host_ops.mojo", "x_cluster/bodies.mojo", "x_cluster/ops.mojo",
             "x_cluster/common.mojo", "x_cluster/entries.mojo", "x_cluster/out.mojo",
             "x_cluster/minibatch.mojo", "x_cluster/bisect.mojo", "x_cluster/meanshift.mojo", "x_cluster/optics.mojo", "x_cluster/affinity.mojo", "x_cluster/bgmm.mojo", "x_cluster/agglo.mojo", "x_cluster/spectral_assign.mojo", "x_cluster/post_bodies.mojo", "x_cluster/tree_cut.mojo",
+            "x_cluster/harmony.mojo", "x_cluster/harmony_bodies.mojo", "x_cluster/harmony_dispatch.mojo", "x_cluster/harmony_host.mojo",
         ),
         exports=(
             # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
@@ -57,6 +58,8 @@ FAMILIES = (
             "hierarchy_cluster_native_api_v1",
             # the typed BGMM transport the mixture door calls (lane thin-unpack-mixture-cluster)
             "bgmm_native_api_v1",
+            # Harmony's typed fit table (lane sc-stats-1, core/harmony_api.mojo)
+            "harmony_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the cluster expansion lane's CPU route (x_cluster/, lane/algos-cluster).",
