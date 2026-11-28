@@ -42,10 +42,10 @@ def umap_fit_config(p: UmapWordPtr, np: Int, f: UmapFloatPtr) raises -> UMAPPara
     return config^
 
 
-def umap_fit_ex_config(a: UmapWordPtr, p: UmapWordPtr, f: UmapFloatPtr) raises -> UMAPParams:
+def umap_fit_ex_config(a: UmapWordPtr, p: UmapWordPtr, np: Int, f: UmapFloatPtr) raises -> UMAPParams:
     """UMAP_OP_FIT_EX: a [x, embedding, initial, target], p [n, d,
     n_neighbors, n_components, n_epochs, seed, negative_sample_rate, metric,
-    target_kind, target_dims, target_n_neighbors], f [min_dist, spread,
+    target_kind, target_dims, target_n_neighbors (, neighbors)], f [min_dist, spread,
     set_op_mix_ratio, local_connectivity, learning_rate, repulsion_strength,
     metric_arg, a, b, target_weight]."""
     var n = p[0]
@@ -68,6 +68,10 @@ def umap_fit_ex_config(a: UmapWordPtr, p: UmapWordPtr, f: UmapFloatPtr) raises -
         curve_a=Float32(f[7]),
         curve_b=Float32(f[8]),
     )
+    if np == 12:
+        # lane sc-ann-1-umap: the neighbor search word (0 exact, 1 ivf); the
+        # IVF plan's lists and probes are its defaults, its seed UMAP's own
+        config.neighbors = p[11]
     config.validate(n)
     var tkind = p[8]
     var tdims = p[9]
@@ -117,4 +121,23 @@ def umap_transform_config(p: UmapWordPtr, np: Int, f: UmapFloatPtr) raises -> UM
     config.validate(n)
     if config.n_components < 1 or config.n_components > 32:
         raise Error("UMAP transform supports 1 to 32 output dimensions")
+    return config^
+
+
+def umap_graph_config(p: UmapWordPtr, f: UmapFloatPtr) raises -> UMAPParams:
+    """UMAP_OP_GRAPH: p [n, d, n_neighbors, method, n_lists, n_probes,
+    random_state], f [set_op_mix_ratio, local_connectivity]. The euclidean
+    graph of `UMAPParams` (the fit's other words at their defaults: they do
+    not reach the graph); random_state -1 (None) is the IVF stride sample."""
+    var n = p[0]
+    var d = p[1]
+    if d < 1:
+        raise Error("ValueError: mojolearn neighbors_graph: X needs at least 1 feature")
+    var config = UMAPParams(
+        n_neighbors=p[2], n_components=2,
+        set_op_mix_ratio=Float32(f[0]), local_connectivity=Float32(f[1]),
+        neighbors=p[3], ivf_lists=p[4], ivf_probes=p[5],
+        ivf_seed=p[6] if p[6] >= 0 else -2,
+    )
+    config.validate(n)
     return config^

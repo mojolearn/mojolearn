@@ -15,12 +15,13 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.neighbors_entry_table_umap import (
-    UMAP_OP_FIT, UMAP_OP_FIT_EX, UMAP_OP_TRANSFORM, UMAP_OP_ROWS_READ, umap_ops_check_layout, umap_ops_check_spans,
+    UMAP_OP_FIT, UMAP_OP_FIT_EX, UMAP_OP_TRANSFORM, UMAP_OP_ROWS_READ, UMAP_OP_GRAPH, umap_ops_check_layout, umap_ops_check_spans,
 )
 from metrics.host.metrics_host_entries_impl import require_finite_f32
-from umap.host.umap_oracle import host_umap_fit_transform, host_umap_transform
+from umap.host.umap_oracle import host_umap_fit_transform, host_umap_transform, host_umap_neighbors_graph
+from umap.graph_out import UmapFitOut
 from umap.ops_entry_words import (
-    UmapWordPtr, UmapFloatPtr, umap_fit_config, umap_fit_ex_config, umap_transform_config,
+    UmapWordPtr, UmapFloatPtr, umap_fit_config, umap_fit_ex_config, umap_transform_config, umap_graph_config,
 )
 
 
@@ -30,25 +31,44 @@ def _store(output: MutPointer[Float32, MutUntrackedOrigin], values: List[Float32
     _ = len(values)
 
 
-def umap_ops_host_run(operation: Int, a: UmapWordPtr, p: UmapWordPtr, np: Int, f: UmapFloatPtr) raises -> Int:
+def _fit_out(a: UmapWordPtr, na: Int, first: Int) -> UmapFitOut:
+    """The fitted outputs' four addresses after the operation's own `first`
+    (core/neighbors_entry_table_umap.mojo), or none."""
+    if na < first + 4:
+        return UmapFitOut.none()
+    return UmapFitOut(a[first], a[first + 1], a[first + 2], a[first + 3])
+
+
+def umap_ops_host_run(operation: Int, a: UmapWordPtr, na: Int, p: UmapWordPtr, np: Int,
+                      f: UmapFloatPtr) raises -> Int:
     # A negative row word names a metrics-store slot (the device column's slot form, lane vdf-scope-cluster7);
     # the CPU column has no store, and a member sends one only to a GPU image that published it.
     if operation == UMAP_OP_ROWS_READ or a[0] < 0 or (operation == UMAP_OP_TRANSFORM and a[2] < 0):
         raise Error("umap ops: the CPU column reads host rows only (a store slot word was sent)")
+    if operation == UMAP_OP_GRAPH:
+        # `mojolearn.neighbors_graph` on the CPU column (lane sc-ann-1-umap)
+        var gconfig = umap_graph_config(p, f)
+        var gn = p[0]
+        var gd = p[1]
+        var gx = read_f32(a[0], gn * gd)
+        return host_umap_neighbors_graph(gx, gn, gd, gconfig, a[1], a[2], a[3], UmapFitOut(a[4], a[5], a[6], 0))
     if operation == UMAP_OP_FIT:
         var config = umap_fit_config(p, np, f)
         var n = p[0]
         var d = p[1]
+        var fo = _fit_out(a, na, 2)
         var x = read_f32(a[0], n * d)
         var output = f32_ptr(a[1])
-        var embedding = host_umap_fit_transform(x, n, d, config)
+        var embedding = host_umap_fit_transform(x, n, d, config, out_indptr=fo.indptr, out_indices=fo.indices,
+                                                out_data=fo.data, out_ab=fo.ab)
         if len(embedding) != n * config.n_components:
             raise Error("UMAP returned an unexpected embedding shape")
         require_finite_f32(embedding, "UMAP returned a non-finite embedding")
         _store(output, embedding)
         return config.n_components
     if operation == UMAP_OP_FIT_EX:
-        var config = umap_fit_ex_config(a, p, f)
+        var config = umap_fit_ex_config(a, p, np, f)
+        var fo = _fit_out(a, na, 4)
         var n = p[0]
         var d = p[1]
         var tkind = p[8]
@@ -66,7 +86,8 @@ def umap_ops_host_run(operation: Int, a: UmapWordPtr, p: UmapWordPtr, np: Int, f
         if tkind != 0:
             target = read_f32(target_addr, n * tdims)
         var output = f32_ptr(a[1])
-        var embedding = host_umap_fit_transform(x, n, d, config, init, target, tkind, tdims, tk, tw)
+        var embedding = host_umap_fit_transform(x, n, d, config, init, target, tkind, tdims, tk, tw,
+                                                fo.indptr, fo.indices, fo.data, fo.ab)
         if len(embedding) != n * config.n_components:
             raise Error("UMAP returned an unexpected embedding shape")
         require_finite_f32(embedding, "UMAP returned a non-finite embedding")
@@ -96,7 +117,7 @@ def umap_ops_host_words(operation: Int, addresses: List[Int], ints: List[Int], f
     var a = UmapWordPtr(unsafe_from_address=Int(addresses.unsafe_ptr()))
     var p = UmapWordPtr(unsafe_from_address=Int(ints.unsafe_ptr()))
     var f = UmapFloatPtr(unsafe_from_address=Int(floats.unsafe_ptr()))
-    var columns = umap_ops_host_run(operation, a, p, len(ints), f)
+    var columns = umap_ops_host_run(operation, a, len(addresses), p, len(ints), f)
     _ = addresses
     _ = ints
     _ = floats
@@ -111,7 +132,7 @@ def umap_ops_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         var p = UmapWordPtr(unsafe_from_address=pp)
         var f = UmapFloatPtr(unsafe_from_address=ff)
         var r = UmapWordPtr(unsafe_from_address=result)
-        r[] = umap_ops_host_run(operation, a, p, np, f)
+        r[] = umap_ops_host_run(operation, a, na, p, np, f)
         return 0
     except problem:
         native_descriptor_report(problem, context, sink)

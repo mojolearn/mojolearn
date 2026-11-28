@@ -36,6 +36,16 @@ rounding the Python exports apply, so the bits are unchanged.
                         repulsion_strength (, metric_arg, a, b))]            -> n_components
                      (the export's 11 / 14 / 18 words: 7 + 4, 8 + 6 or 9 + 9)
   UMAP_OP_ROWS_READ  a [slot word, host dst]  p [count]  f []             -> count
+  UMAP_OP_GRAPH      a [x, dist_indptr, dist_indices, dist_data, conn_indptr, conn_indices, conn_data]
+                     p [n, d, n_neighbors, method (0 exact, 1 ivf), n_lists, n_probes, random_state]
+                     f [set_op_mix_ratio, local_connectivity]           -> the connectivities' edge count
+                     (`mojolearn.neighbors_graph`; -1 is None for n_lists, n_probes and random_state)
+
+THE FITTED OUTPUTS (lane sc-ann-1-umap, 2026-11-28): UMAP_OP_FIT and UMAP_OP_FIT_EX take four more addresses
+after their own (6 and 8 in all): the fitted graph's CSR `indptr` (n + 1 int64), `indices` (int32) and `data`
+(float32), each `umap_graph_capacity` words (umap/graph_out.mojo), and `ab` (2 float32, the curve's a and b
+the optimizer used). UMAP_OP_FIT_EX takes a twelfth Int word, the neighbor search (0 exact, 1 ivf); 11 words
+are the exact search. A caller that sends the shorter forms gets neither and the same bits.
 
 THE SLOT FORM (lane vdf-scope-cluster7, 2026-11-24): on the device column a NEGATIVE row address word (`x` of the
 fits; `training` and / or `queries` of the transform) names a slot of the metrics image's resident store
@@ -58,7 +68,9 @@ comptime UMAP_OP_TRANSFORM = 2
 #: The device column's read of a metrics-store row slot into host words (lane vdf-scope-cluster7: the first export
 #: of a fold-fitted state's training rows); the CPU column refuses it (it has no store).
 comptime UMAP_OP_ROWS_READ = 3
-comptime UMAP_OPERATION_COUNT = 4
+#: `mojolearn.neighbors_graph` (lane sc-ann-1-umap): UMAP's own k-NN and fuzzy simplicial set of the rows.
+comptime UMAP_OP_GRAPH = 4
+comptime UMAP_OPERATION_COUNT = 5
 
 #: The transform's optional tails: the eight legacy words only, plus
 #: learning_rate / repulsion_strength / negative_sample_rate, plus the
@@ -72,10 +84,13 @@ def umap_ops_check_layout(operation: Int, na: Int, np: Int, nf: Int) raises:
     """Refuse a request whose word counts do not match the operation's
     layout before any word is read."""
     if operation == UMAP_OP_FIT:
-        if na == 2 and ((np == 6 and nf == 4) or (np == 7 and nf == 6)):
+        if (na == 2 or na == 6) and ((np == 6 and nf == 4) or (np == 7 and nf == 6)):
             return
     elif operation == UMAP_OP_FIT_EX:
-        if na == 4 and np == 11 and nf == 10:
+        if (na == 4 or na == 8) and (np == 11 or np == 12) and nf == 10:
+            return
+    elif operation == UMAP_OP_GRAPH:
+        if na == 7 and np == 7 and nf == 2:
             return
     elif operation == UMAP_OP_TRANSFORM:
         if na == 4 and ((np == 7 and nf == 4) or (np == 8 and nf == 6) or (np == 9 and nf == 9)):
@@ -205,11 +220,23 @@ def _base_words(mut ints: List[Int], mut floats: List[Float64], cfg: UmapConfigW
     floats.append(cfg.local_connectivity)
 
 
+def _out_words(mut addresses: List[Int], out_indptr: Int, out_indices: Int, out_data: Int, out_ab: Int):
+    """The fitted outputs' four addresses (module docstring), when asked."""
+    if out_indptr != 0:
+        addresses.append(out_indptr)
+        addresses.append(out_indices)
+        addresses.append(out_data)
+        addresses.append(out_ab)
+
+
 def umap_fit_call(entry: NativeDescriptorCall, x: Int, embedding: Int, n: Int, d: Int, cfg: UmapConfigWords,
-                  rates: Bool) raises -> Int:
+                  rates: Bool, out_indptr: Int = 0, out_indices: Int = 0, out_data: Int = 0,
+                  out_ab: Int = 0) raises -> Int:
     """The legacy fit (`umap_fit_transform`): `rates` False sends the eight
-    legacy words only (the export's 10-word form)."""
+    legacy words only (the export's 10-word form). `out_*`: the fitted
+    graph's CSR and the curve's (a, b) (0: not asked)."""
     var addresses: List[Int] = [x, embedding]
+    _out_words(addresses, out_indptr, out_indices, out_data, out_ab)
     var ints: List[Int] = [n, d]
     var floats = List[Float64]()
     _base_words(ints, floats, cfg)
@@ -221,8 +248,12 @@ def umap_fit_call(entry: NativeDescriptorCall, x: Int, embedding: Int, n: Int, d
 
 
 def umap_fit_ex_call(entry: NativeDescriptorCall, x: Int, embedding: Int, initial: Int, n: Int, d: Int,
-                     cfg: UmapConfigWords, target: UmapTargetWords) raises -> Int:
+                     cfg: UmapConfigWords, target: UmapTargetWords, neighbors: Int = 0, out_indptr: Int = 0,
+                     out_indices: Int = 0, out_data: Int = 0, out_ab: Int = 0) raises -> Int:
+    """`neighbors` 0 (exact) sends the 11-word form; 1 (ivf) adds the
+    twelfth word. `out_*` as `umap_fit_call`."""
     var addresses: List[Int] = [x, embedding, initial, target.address]
+    _out_words(addresses, out_indptr, out_indices, out_data, out_ab)
     var ints: List[Int] = [n, d]
     var floats = List[Float64]()
     _base_words(ints, floats, cfg)
@@ -231,6 +262,8 @@ def umap_fit_ex_call(entry: NativeDescriptorCall, x: Int, embedding: Int, initia
     ints.append(target.kind)
     ints.append(target.dims)
     ints.append(target.n_neighbors)
+    if neighbors != 0:
+        ints.append(neighbors)
     floats.append(cfg.learning_rate)
     floats.append(cfg.repulsion_strength)
     floats.append(cfg.metric_arg)
@@ -267,3 +300,16 @@ def umap_rows_read_call(entry: NativeDescriptorCall, slot_word: Int, dst: Int, c
     var ints: List[Int] = [count]
     var floats = List[Float64]()
     return native_descriptor_call(entry, UMAP_OP_ROWS_READ, addresses, ints, floats)
+
+
+def umap_neighbors_graph_call(entry: NativeDescriptorCall, x: Int, dist_indptr: Int, dist_indices: Int,
+                              dist_data: Int, conn_indptr: Int, conn_indices: Int, conn_data: Int, n: Int,
+                              d: Int, n_neighbors: Int, method: Int, n_lists: Int, n_probes: Int,
+                              random_state: Int, set_op_mix_ratio: Float64,
+                              local_connectivity: Float64) raises -> Int:
+    """UMAP_OP_GRAPH (`mojolearn.neighbors_graph`); returns the
+    connectivities' edge count."""
+    var addresses: List[Int] = [x, dist_indptr, dist_indices, dist_data, conn_indptr, conn_indices, conn_data]
+    var ints: List[Int] = [n, d, n_neighbors, method, n_lists, n_probes, random_state]
+    var floats: List[Float64] = [set_op_mix_ratio, local_connectivity]
+    return native_descriptor_call(entry, UMAP_OP_GRAPH, addresses, ints, floats)

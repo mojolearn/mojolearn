@@ -18,7 +18,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.neighbors_entry_table_umap import (
-    UMAP_OP_FIT, UMAP_OP_FIT_EX, UMAP_OP_TRANSFORM, UMAP_OP_ROWS_READ, umap_ops_check_layout, umap_ops_check_spans,
+    UMAP_OP_FIT, UMAP_OP_FIT_EX, UMAP_OP_TRANSFORM, UMAP_OP_ROWS_READ, UMAP_OP_GRAPH, umap_ops_check_layout, umap_ops_check_spans,
 )
 from metrics.metrics_entries_impl import device_finite_f32_list
 from umap.estimator import fit_transform as umap_fit_transform
@@ -28,8 +28,10 @@ from max.gpu.host import DeviceBuffer
 from core.fold_x_word import fold_x_slot
 from core.metrics_store import metrics_store_buffer
 from umap.ops_entry_words import (
-    UmapWordPtr, UmapFloatPtr, umap_fit_config, umap_fit_ex_config, umap_transform_config,
+    UmapWordPtr, UmapFloatPtr, umap_fit_config, umap_fit_ex_config, umap_transform_config, umap_graph_config,
 )
+from umap.graph_out import UmapFitOut
+from umap.sparse_estimator import umap_neighbors_graph_device
 
 #: The metrics image's ONE process-lifetime DeviceContext: the same slot name
 #: metrics/estimator.mojo and the spectral modules use, so UMAP and the other
@@ -102,7 +104,28 @@ def _rows_buffer(ctx: DeviceContext, word: Int, count: Int) raises -> DeviceBuff
     return buf^
 
 
-def umap_ops_device_run(operation: Int, a: UmapWordPtr, p: UmapWordPtr, np: Int, f: UmapFloatPtr) raises -> Int:
+def _fit_out(a: UmapWordPtr, na: Int, first: Int) -> UmapFitOut:
+    """The fitted outputs' four addresses after the operation's own `first`
+    (core/neighbors_entry_table_umap.mojo), or none."""
+    if na < first + 4:
+        return UmapFitOut.none()
+    return UmapFitOut(a[first], a[first + 1], a[first + 2], a[first + 3])
+
+
+def umap_ops_device_run(operation: Int, a: UmapWordPtr, na: Int, p: UmapWordPtr, np: Int,
+                        f: UmapFloatPtr) raises -> Int:
+    if operation == UMAP_OP_GRAPH:
+        # `mojolearn.neighbors_graph` (lane sc-ann-1-umap): the rows go up once (or a store slot), UMAP's own
+        # graph body, the two CSRs into the caller's arrays.
+        var gconfig = umap_graph_config(p, f)
+        var gn = p[0]
+        var gd = p[1]
+        var gctx = process_ctx[UMAP_DEVCTX_SLOT]()
+        var gx = _rows_buffer(gctx, a[0], gn * gd)
+        var edges = umap_neighbors_graph_device(gctx, gx, gn, gd, gconfig, a[1], a[2], a[3],
+                                                UmapFitOut(a[4], a[5], a[6], 0))
+        _ = gx^
+        return edges
     if operation == UMAP_OP_FIT:
         var config = umap_fit_config(p, np, f)
         var n = p[0]
@@ -113,12 +136,16 @@ def umap_ops_device_run(operation: Int, a: UmapWordPtr, p: UmapWordPtr, np: Int,
         if a[0] < 0:
             # THE SLOT FORM (lane vdf-scope-cluster7): X is a metrics-store slot (a fold taken on the device);
             # the same body as the host form after its upload, so the same bits.
+            var fo = _fit_out(a, na, 2)
             var d_x = metrics_store_buffer(fold_x_slot(a[0]), n * d)
-            embedding = sparse_fit_transform_device(ctx, d_x, n, d, config)
+            embedding = sparse_fit_transform_device(ctx, d_x, n, d, config, out_indptr=fo.indptr,
+                                                    out_indices=fo.indices, out_data=fo.data, out_ab=fo.ab)
             _ = d_x^
         else:
+            var fo = _fit_out(a, na, 2)
             var x = _load(a[0], n * d)
-            embedding = umap_fit_transform(ctx, x, n, d, config)
+            embedding = umap_fit_transform(ctx, x, n, d, config, out_indptr=fo.indptr, out_indices=fo.indices,
+                                           out_data=fo.data, out_ab=fo.ab)
         ctx.synchronize()
         if len(embedding) != n * config.n_components:
             raise Error("UMAP returned an unexpected embedding shape")
@@ -127,7 +154,8 @@ def umap_ops_device_run(operation: Int, a: UmapWordPtr, p: UmapWordPtr, np: Int,
         _store(output, embedding)
         return config.n_components
     if operation == UMAP_OP_FIT_EX:
-        var config = umap_fit_ex_config(a, p, f)
+        var config = umap_fit_ex_config(a, p, np, f)
+        var fo = _fit_out(a, na, 4)
         var n = p[0]
         var d = p[1]
         var tkind = p[8]
@@ -150,12 +178,14 @@ def umap_ops_device_run(operation: Int, a: UmapWordPtr, p: UmapWordPtr, np: Int,
             # THE SLOT FORM (lane vdf-scope-cluster7): X is a metrics-store slot.
             var d_x = metrics_store_buffer(fold_x_slot(a[0]), n * d)
             with process_ctx[UMAP_DEVCTX_SLOT]() as ctx:
-                embedding = sparse_fit_transform_device(ctx, d_x, n, d, config, init, target, tkind, tdims, tk, tw)
+                embedding = sparse_fit_transform_device(ctx, d_x, n, d, config, init, target, tkind, tdims, tk, tw,
+                                                        fo.indptr, fo.indices, fo.data, fo.ab)
             _ = d_x^
         else:
             var x = _load(a[0], n * d)
             with process_ctx[UMAP_DEVCTX_SLOT]() as ctx:
-                embedding = sparse_fit_transform(ctx, x, n, d, config, init, target, tkind, tdims, tk, tw)
+                embedding = sparse_fit_transform(ctx, x, n, d, config, init, target, tkind, tdims, tk, tw,
+                                                 fo.indptr, fo.indices, fo.data, fo.ab)
         if len(embedding) != n * config.n_components:
             raise Error("UMAP returned an unexpected embedding shape")
         if not _device_finite(embedding):
@@ -218,7 +248,7 @@ def umap_ops_device_words(operation: Int, addresses: List[Int], ints: List[Int],
     var a = UmapWordPtr(unsafe_from_address=Int(addresses.unsafe_ptr()))
     var p = UmapWordPtr(unsafe_from_address=Int(ints.unsafe_ptr()))
     var f = UmapFloatPtr(unsafe_from_address=Int(floats.unsafe_ptr()))
-    var columns = umap_ops_device_run(operation, a, p, len(ints), f)
+    var columns = umap_ops_device_run(operation, a, len(addresses), p, len(ints), f)
     _ = addresses
     _ = ints
     _ = floats
@@ -233,7 +263,7 @@ def umap_ops_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         var p = UmapWordPtr(unsafe_from_address=pp)
         var f = UmapFloatPtr(unsafe_from_address=ff)
         var r = UmapWordPtr(unsafe_from_address=result)
-        r[] = umap_ops_device_run(operation, a, p, np, f)
+        r[] = umap_ops_device_run(operation, a, na, p, np, f)
         return 0
     except problem:
         native_descriptor_report(problem, context, sink)
