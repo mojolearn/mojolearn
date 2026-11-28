@@ -11,19 +11,17 @@
                "source": "PyPI defaults: 100 MiB per file, 10 GiB per project"},
   "projects": {
     "mojolearn": {
-      "file_bytes": 104857600,
-      "project_bytes": 10737418240,
+      "file_bytes": 262144000,
+      "project_bytes": 26843545600,
       "covers": ["macOS wheel", "Linux meta wheel"],
-      "pending": [
-        {"issue": "pypi/support#12773", "asks": "file_bytes 262144000 (250 MiB)", "opened": "2026-11-04"},
-        {"issue": "pypi/support#12774", "asks": "project_bytes increase", "opened": "2026-11-04"},
-        {"issue": "pypi/support#12775", "asks": "project_bytes increase", "opened": "2026-11-04"}
-      ]
+      "granted": "2026-11-05",
+      "issues": ["pypi/support#12773 (file, 250 MiB)", "pypi/support#12774 (project, 25 GiB)"]
     },
     "mojolearn-nvidia": {
       "file_bytes": 262144000,
-      "granted": "2026-11-04",
-      "issues": ["pypi/support#12539", "pypi/support#12675"]
+      "project_bytes": 26843545600,
+      "granted": "2026-11-04 (file), 2026-11-05 (project, 25 GiB)",
+      "issues": ["pypi/support#12539", "pypi/support#12675", "pypi/support#12775"]
     },
     "mojolearn-amd": {
       "file_bytes": 262144000,
