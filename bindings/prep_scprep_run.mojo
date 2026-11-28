@@ -21,15 +21,21 @@ from x_prep.sc_prep import (
     SP_BIN_CR, SP_BIN_STATS, SP_RANK, SP_GROUP_START, SP_SCATTER, SP_SEG_MEDIAN, SP_ABSDEV, SP_NORM_DISP,
     SP_HV_CUT, SP_COMBINE, SP_HV_BATCH, SP_V3_KEY, SP_LOESS, SP_COUNT, SP_V3_CLIPVAL, SP_V3_NORMVAR,
     SP_V3_SELECT, SP_V3_HV, SP_SCAN_PART, SP_SCAN_TOP, SP_SCAN_FILL, SP_COMPACT, SP_COL_SELECT, SP_CSR_SELECT,
-    SP_SCALE_APPLY, SP_SCALE_CSR, SP_COL_MEANSTD, SP_STANDARDIZE, SP_PINV, SP_DENSIFY, SP_CENTER, SP_RESID,
+    SP_SCALE_APPLY, SP_SCALE_CSR, SP_PINV, SP_DENSIFY, SP_RESID,
     SP_DENSE, SP_CSR, SP_PRE_NONE, SP_PRE_EXPM1, SP_SEURAT, SP_CELL_RANGER, SP_SEURAT_V3, SP_SCAN_BLOCK,
     SP_CR_EDGES,
 )
 
 #: x_prep ops reused from x_prep/units.mojo.
 comptime OP_SORT_COLS = 0
+#: col_stats: OUT rows of d = count, mean, population variance, min, max, maxabs (x_prep/prims.mojo)
+comptime OP_COL_STATS = 1
+#: affine: OUT = (X - C[c]) / S[c], C or S < 0 skipped (StandardScaler's transform)
+comptime OP_AFFINE = 3
 comptime OP_MATMUL = 13
 comptime OP_EIGH = 18
+#: std_scale: a variance row -> its scale, exactly zero -> one (StandardScaler's rule)
+comptime OP_STD_SCALE = 102
 
 #: The gene-major block's words (2^27 float32 words, 512 MiB of device scratch per program).
 comptime SP_SCRATCH_WORDS = 134217728
@@ -200,21 +206,41 @@ struct ColBlockPlan(Copyable, Movable):
     var segments: Int
 
 
+@fieldwise_init
+struct GeneBlock(Copyable, Movable):
+    """The gene-major block of one program: START (groups + 1 int host words), PERM (n int words) and G (dc x n
+    words, G[c*n + pos] = pre(X[PERM[pos], c0 + c]))."""
+    var start: Int
+    var perm: Int
+    var g: Int
+
+
+def gene_block_stage(mut prog: EncProgram, x: SpInput, codes_owner: Int, groups: Int, c0: Int, dc: Int,
+                     pre: Int) -> GeneBlock:
+    """The rows ordered by group code (`codes_owner` < 0: one group, the rows in order) and the genes
+    [c0, c0 + dc) gathered in that order, dense or CSR. One builder for the column statistics here and for
+    rank_genes_groups (bindings/prep_markers_run.mojo)."""
+    var n = x.n
+    var codes = enc_input(prog, n, codes_owner) if codes_owner >= 0 else -1
+    var start = prog.alloc(groups + 1)
+    var perm = prog.work(n)
+    prep_program_stage(prog.program, SP_ORDER, groups if codes_owner >= 0 else 1, codes, n, groups, start, perm)
+    var g = prog.work(n * dc)
+    var at = sp_input(prog, x)
+    if x.csr:
+        prep_program_stage(prog.program, SP_GATHER_CSR, n, at.indptr, at.indices, at.values, n, c0, dc, perm, g, pre)
+    else:
+        prep_program_stage(prog.program, SP_GATHER_DENSE, n * dc, at.values, n, x.d, c0, perm, g, pre)
+    return GeneBlock(start, perm, g)
+
+
 def col_block_stage(mut prog: EncProgram, r: ColBlock) -> ColBlockPlan:
     var x = r.x.copy()
     var n = x.n
     var dc = r.dc
-    var codes = enc_input(prog, n, r.codes) if r.codes >= 0 else -1
-    var start = prog.alloc(r.batches + 1)
-    var perm = prog.work(n)
-    prep_program_stage(prog.program, SP_ORDER, r.batches if r.codes >= 0 else 1, codes, n, r.batches, start, perm)
-    var g = prog.work(n * dc)
-    var at = sp_input(prog, x)
-    if x.csr:
-        prep_program_stage(prog.program, SP_GATHER_CSR, n, at.indptr, at.indices, at.values, n, r.c0, dc, perm, g,
-                           r.pre)
-    else:
-        prep_program_stage(prog.program, SP_GATHER_DENSE, n * dc, at.values, n, x.d, r.c0, perm, g, r.pre)
+    var block = gene_block_stage(prog, x, r.codes, r.batches, r.c0, dc, r.pre)
+    var start = block.start
+    var g = block.g
     var segments = r.batches + (1 if r.all_rows and r.clip < 0 else 0)
     var o = prog.alloc(2 * segments * dc)
     if r.clip >= 0:
@@ -537,7 +563,7 @@ struct RegressFitPlan(Copyable, Movable):
 
 def _standardized(mut prog: EncProgram, cov: Int, n: Int, k: Int, cmean: Int, cstd: Int) -> Int:
     var z = prog.work(n * k)
-    prep_program_stage(prog.program, SP_STANDARDIZE, n * k, cov, k, cmean, cstd, z)
+    prep_program_stage(prog.program, OP_AFFINE, n * k, cov, n * k, k, cmean, cstd, z)
     return z
 
 
@@ -547,9 +573,12 @@ def regress_fit_stage(mut prog: EncProgram, r: RegressFit) raises -> RegressFitP
     var d = x.d
     var k = r.k
     var cov = enc_input(prog, n * k, r.cov)
-    var cmean = prog.alloc(k)
+    # the covariates' column means and population deviations (a constant column's deviation is one)
+    var cstats = prog.alloc(6 * k)
+    prep_program_stage(prog.program, OP_COL_STATS, k, cov, n, k, cstats)
+    var cmean = cstats + k
     var cstd = prog.alloc(k)
-    prep_program_stage(prog.program, SP_COL_MEANSTD, k, cov, n, k, cmean, cstd)
+    prep_program_stage(prog.program, OP_STD_SCALE, k, cstats + 2 * k, cstd)
     var z = _standardized(prog, cov, n, k, cmean, cstd)
     # the normal equations of the standardized covariates, one solve for every gene: G = Z'Z, its pseudo-inverse
     var gram = prog.work(k * k)
@@ -566,13 +595,13 @@ def regress_fit_stage(mut prog: EncProgram, r: RegressFit) raises -> RegressFitP
     var at = sp_input(prog, x)
     var o = prog.output(n * d, r.region) if r.residuals else prog.work(n * d)
     if x.csr:
-        prep_program_stage(prog.program, SP_DENSIFY, n, at.mode, at.values, at.indptr, at.indices, d, o)
+        prep_program_stage(prog.program, SP_DENSIFY, n, at.indptr, at.indices, at.values, d, o)
     else:
-        prep_program_stage(prog.program, SP_DENSIFY, n * d, at.mode, at.values, at.indptr, at.indices, d, o)
-    var xmean = prog.alloc(d)
-    var xsd = prog.work(d)
-    prep_program_stage(prog.program, SP_COL_MEANSTD, d, o, n, d, xmean, xsd)
-    prep_program_stage(prog.program, SP_CENTER, n * d, o, d, xmean)
+        prep_program_stage(prog.program, OP_AFFINE, n * d, at.values, n * d, d, -1, -1, o)
+    var xstats = prog.alloc(6 * d)
+    prep_program_stage(prog.program, OP_COL_STATS, d, o, n, d, xstats)
+    var xmean = xstats + d
+    prep_program_stage(prog.program, OP_AFFINE, n * d, o, n * d, d, xmean, -1, o)
     # every gene's coefficients at once: COEF = B Xc (k x d)
     var coef = prog.alloc(k * d)
     prep_program_stage(prog.program, OP_MATMUL, k * d, bm, n, 1, o, d, 1, coef, d, n, -1, -1)
@@ -609,9 +638,9 @@ def regress_apply_stage(mut prog: EncProgram, r: RegressApply) raises -> Int:
     var at = sp_input(prog, x)
     var o = prog.output(n * d, r.region)
     if x.csr:
-        prep_program_stage(prog.program, SP_DENSIFY, n, at.mode, at.values, at.indptr, at.indices, d, o)
+        prep_program_stage(prog.program, SP_DENSIFY, n, at.indptr, at.indices, at.values, d, o)
     else:
-        prep_program_stage(prog.program, SP_DENSIFY, n * d, at.mode, at.values, at.indptr, at.indices, d, o)
-    prep_program_stage(prog.program, SP_CENTER, n * d, o, d, xmean)
+        prep_program_stage(prog.program, OP_AFFINE, n * d, at.values, n * d, d, -1, -1, o)
+    prep_program_stage(prog.program, OP_AFFINE, n * d, o, n * d, d, xmean, -1, o)
     prep_program_stage(prog.program, SP_RESID, n * d, o, d, z, k, coef)
     return o

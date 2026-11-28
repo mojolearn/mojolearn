@@ -25,9 +25,12 @@ from core.preprocessing_program import prep_program_stage
 from x_prep.common import FP, IP
 from x_prep.host.program import run_program_host_ptr
 from x_prep.markers import (
-    SC_ORDER, SC_GATHER_DENSE, SC_SEG_SORT, SC_STATS, SC_RANKSUM, SC_SCORE, SC_TRANSPOSE, SC_BH_SORT, SC_BH_SCAN,
+    SC_SEG_SORT, SC_STATS, SC_RANKSUM, SC_SCORE, SC_BH_SORT, SC_BH_SCAN,
     SC_ADJUST, SC_RANK_KEYS, SC_RANK_SORT, SC_RANK_GATHER, RG_WILCOXON, RG_TIE_CORRECT, RG_ADJ_BH, RG_ADJ_BONFERRONI,
 )
+# the block (group order, gather) and the transpose are the shared units (lane sc-consolidate-1)
+from x_prep.sc_prep import SP_ORDER, SP_GATHER_DENSE, SP_PRE_CANON
+from x_prep.py2mojo import P2M_BASE
 
 
 def _close(got: Float32, want: Float64, tol: Float64, what: String) raises:
@@ -63,8 +66,8 @@ struct _Case(Movable):
             for c in range(d):
                 arena[x + i * d + c] = values[i * d + c]
         var program = List[Int32]()
-        prep_program_stage(program, SC_ORDER, k, codes, n, k, start, perm)
-        prep_program_stage(program, SC_GATHER_DENSE, n * d, x, n, d, 0, perm, g)
+        prep_program_stage(program, SP_ORDER, k, codes, n, k, start, perm)
+        prep_program_stage(program, SP_GATHER_DENSE, n * d, x, n, d, 0, perm, g, SP_PRE_CANON)
         prep_program_stage(program, SC_SEG_SORT, k * d, g, n, d, start)
         prep_program_stage(program, SC_STATS, ko * d, g, n, k, d, start, reference, stats)
         if reference < 0:
@@ -129,7 +132,7 @@ def _adjust(method: Int) raises -> List[Float32]:
     for i in range(d):  # small-loop: the four p-values (one group, gene-major = row-major)
         arena[pv_g + i] = p[i]
     var program = List[Int32]()
-    prep_program_stage(program, SC_TRANSPOSE, d, pv_g, 1, d, pv)
+    prep_program_stage(program, P2M_BASE + 9, d, pv_g, d, 1, pv)
     prep_program_stage(program, SC_BH_SORT, 1, pv, d, srt)
     prep_program_stage(program, SC_BH_SCAN, 1, srt, d, q)
     prep_program_stage(program, SC_ADJUST, d, pv, srt, q, d, method, adj)

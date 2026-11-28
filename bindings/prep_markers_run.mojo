@@ -8,29 +8,26 @@ No builder reads a field, a mode or an entry table; no Python import (tools/pyth
 
 Each program's stages are the parallel units of x_prep/markers.mojo; staging is a handful of words per program.
 The gene blocks exist for one reason, a memory bound: the group-ordered copy of a block is n x dc device words,
-and dc is the most genes whose copy stays within MARKER_SCRATCH_WORDS (`marker_chunk_width`). It is never a shape
+and dc is the most genes whose copy stays within the count-data lane's bound (`sp_chunk_width`,
+bindings/prep_scprep_run.mojo, which also builds the block: `gene_block_stage`). It is never a shape
 rule: every n and d take the same formula, and the blocks change no bit (each gene's units read only its column).
 """
 from core.preprocessing_program import prep_program_stage
 from bindings.prep_encode_prog_run import EncProgram, enc_input
+from bindings.prep_scprep_run import SpInput, gene_block_stage
+from x_prep.py2mojo import P2M_BASE
+from x_prep.sc_prep import SP_PRE_CANON
 from x_prep.markers import (
-    SC_ORDER, SC_GATHER_DENSE, SC_GATHER_CSR, SC_SEG_SORT, SC_STATS, SC_RANKSUM, SC_SCORE, SC_TRANSPOSE,
-    SC_BH_SORT, SC_BH_SCAN, SC_ADJUST, SC_RANK_KEYS, SC_RANK_SORT, SC_RANK_GATHER, RG_WILCOXON, RG_TIE_CORRECT, RG_ADJ_BH, RG_ADJ_BONFERRONI,
+    SC_SEG_SORT, SC_STATS, SC_RANKSUM, SC_SCORE,
+    SC_BH_SORT, SC_BH_SCAN, SC_ADJUST, SC_RANK_KEYS, SC_RANK_SORT, SC_RANK_GATHER, RG_WILCOXON, RG_TIE_CORRECT,
+    RG_ADJ_BH, RG_ADJ_BONFERRONI,
 )
 
-#: The group-ordered block's words (2^27 float32 words, 512 MiB of device scratch per program).
-comptime MARKER_SCRATCH_WORDS = 134217728
+#: x_prep/py2mojo.mojo `p2m_transpose_unit`: q = [SRC, n, w, DST], DST[j*n + i] = SRC[i*w + j], the word as it is.
+comptime OP_TRANSPOSE = P2M_BASE + 9
 
 comptime MARKER_WILCOXON = 0
 comptime MARKER_T_TEST = 1
-
-
-def marker_chunk_width(n: Int, d: Int) -> Int:
-    """Genes per chunk program: all of them when n x d fits MARKER_SCRATCH_WORDS, else the most that fit (at
-    least one)."""
-    if n <= 0 or d <= 0:
-        return max(d, 1)
-    return max(1, min(d, MARKER_SCRATCH_WORDS // n))
 
 
 def marker_rows_out(groups: Int, reference: Int) -> Int:
@@ -39,22 +36,14 @@ def marker_rows_out(groups: Int, reference: Int) -> Int:
 
 @fieldwise_init
 struct MarkerChunk(Copyable, Movable):
-    """One chunk program: genes [c0, c0 + dc) of the n x d input. `csr`: the input is the owners `indptr`
-    (n + 1 int32 words), `indices` and `data` (`nnz` words each); else `x` is the dense owner (n * d float32
-    words). `codes`: the owner of the n int32 group codes in [0, groups). `reference` < 0: each group against
+    """One chunk program: genes [c0, c0 + dc) of the input `x` (dense or CSR owners, bindings/prep_scprep_run.mojo
+    `SpInput`). `codes`: the owner of the n int32 group codes in [0, groups). `reference` < 0: each group against
     the rest. `method`: MARKER_WILCOXON or MARKER_T_TEST."""
-    var n: Int
-    var d: Int
+    var x: SpInput
     var groups: Int
     var reference: Int
     var c0: Int
     var dc: Int
-    var csr: Bool
-    var x: Int
-    var indptr: Int
-    var indices: Int
-    var data: Int
-    var nnz: Int
     var codes: Int
     var method: Int
     var tie_correct: Bool
@@ -69,23 +58,14 @@ struct MarkerChunkPlan(Copyable, Movable):
 
 
 def marker_chunk_stage(mut prog: EncProgram, r: MarkerChunk) -> MarkerChunkPlan:
-    var n = r.n
+    var x = r.x.copy()
+    var n = x.n
     var k = r.groups
     var dc = r.dc
     var ko = marker_rows_out(k, r.reference)
-    var codes = enc_input(prog, n, r.codes)
-    var start = prog.alloc(k + 1)
-    var perm = prog.work(n)
-    var g = prog.work(n * dc)
-    prep_program_stage(prog.program, SC_ORDER, k, codes, n, k, start, perm)
-    if r.csr:
-        var ip = enc_input(prog, n + 1, r.indptr)
-        var ix = enc_input(prog, r.nnz, r.indices)
-        var dv = enc_input(prog, r.nnz, r.data)
-        prep_program_stage(prog.program, SC_GATHER_CSR, n, ip, ix, dv, n, r.c0, dc, perm, g)
-    else:
-        var xo = enc_input(prog, n * r.d, r.x)
-        prep_program_stage(prog.program, SC_GATHER_DENSE, n * dc, xo, n, r.d, r.c0, perm, g)
+    var block = gene_block_stage(prog, x, r.codes, k, r.c0, dc, SP_PRE_CANON)
+    var start = block.start
+    var g = block.g
     var stats = prog.work(4 * ko * dc)
     var r2t = prog.work(4 * ko * dc)
     var wilcoxon = r.method == MARKER_WILCOXON
@@ -137,9 +117,9 @@ def marker_final_stage(mut prog: EncProgram, r: MarkerFinal) -> MarkerFinalPlan:
     var pv = prog.work(total)
     var lf = prog.work(total)
     var adj = prog.work(total)
-    prep_program_stage(prog.program, SC_TRANSPOSE, total, sg, ko, d, sc)
-    prep_program_stage(prog.program, SC_TRANSPOSE, total, pg, ko, d, pv)
-    prep_program_stage(prog.program, SC_TRANSPOSE, total, lg, ko, d, lf)
+    prep_program_stage(prog.program, OP_TRANSPOSE, total, sg, d, ko, sc)
+    prep_program_stage(prog.program, OP_TRANSPOSE, total, pg, d, ko, pv)
+    prep_program_stage(prog.program, OP_TRANSPOSE, total, lg, d, ko, lf)
     var srt = prog.work(total)
     var q = prog.work(total)
     if not r.bonferroni:

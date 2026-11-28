@@ -13,11 +13,10 @@ unit's loops run in ascending order and that order is the fold order on every co
 
 A chunk program (bindings/prep_markers_run.mojo) covers the genes [c0, c0 + dc):
 
-  rg_order      t = g        the group starts START (K + 1 int words) and the row order PERM (n int words): rows
-                             by group code, ascending row inside a group (a stable counting order).
-  rg_gather_*   the chunk's values in group order, gene-major: G[c * n + pos] = X[PERM[pos], c0 + c]
-                (dense: one thread per value; CSR: one thread per row writes its row's dc values). Every
-                value goes through `canon` (-0.0 -> +0.0), so equal values have equal sort keys.
+  the block     the group starts START (K + 1 int words), the row order PERM and the chunk's values in group
+                order, gene-major, G[c * n + pos] = canon(X[PERM[pos], c0 + c]): the count-data lane's block
+                (bindings/prep_scprep_run.mojo `gene_block_stage`, x_prep/sc_prep.mojo SP_ORDER, SP_GATHER_*
+                with SP_PRE_CANON, so equal values have equal sort keys).
   rg_seg_sort   t = g*dc + c each group's segment of gene c sorted (`heap_sort`, the lane's one sort order).
   rg_stats      t = j*dc + c two-pass mean and variance (ddof 1) of the group and of its rest (the other
                 groups, or the reference group).
@@ -29,7 +28,7 @@ A chunk program (bindings/prep_markers_run.mojo) covers the genes [c0, c0 + dc):
                 thread per (group, gene) merges the two segments.
   rg_score      t = j*dc + c the score, the two-sided p-value and the log fold change.
 
-then one program over the whole n_out x n_genes result: rg_transpose (gene-major chunks -> row-major), the
+then one program over the whole n_out x n_genes result: the transpose (x_prep/py2mojo.mojo, gene-major chunks -> row-major), the
 Benjamini-Hochberg adjustment per group (rg_bh_sort, rg_bh_scan, rg_adjust), and Scanpy's sorted layout: each
 group's genes by score descending, a tie by the lower gene index (rg_rank_keys, rg_rank_sort, rg_rank_gather),
 with the gene indices beside the four sorted value rows.
@@ -40,28 +39,25 @@ tails are the univariate scores' `gammaincc` and `betainc` (x_prep/stats.mojo): 
 two-sided p-value erfc(|z| / sqrt 2), and I_{dof / (dof + t^2)}(dof / 2, 1/2) the Student two-sided one.
 """
 from std.memory import bitcast
-from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, canon, key, heap_sort
+from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, key, heap_sort
+from x_prep.sc_prep import seg_sum, seg_ss, expm1f
 from x_prep.prims import add, sub, mul, div, logf, expf, sqrtf
 from x_prep.stats import betainc, gammaincc
 
 #: The op range of these units (after F2_BASE + F2_N = 272, x_prep/fam2.mojo).
 comptime SC_BASE = 280
-comptime SC_N = 14
+comptime SC_N = 10
 
-comptime SC_ORDER = SC_BASE + 0
-comptime SC_GATHER_DENSE = SC_BASE + 1
-comptime SC_GATHER_CSR = SC_BASE + 2
-comptime SC_SEG_SORT = SC_BASE + 3
-comptime SC_STATS = SC_BASE + 4
-comptime SC_RANKSUM = SC_BASE + 5
-comptime SC_SCORE = SC_BASE + 6
-comptime SC_TRANSPOSE = SC_BASE + 7
-comptime SC_BH_SORT = SC_BASE + 8
-comptime SC_BH_SCAN = SC_BASE + 9
-comptime SC_ADJUST = SC_BASE + 10
-comptime SC_RANK_KEYS = SC_BASE + 11
-comptime SC_RANK_SORT = SC_BASE + 12
-comptime SC_RANK_GATHER = SC_BASE + 13
+comptime SC_SEG_SORT = SC_BASE + 0
+comptime SC_STATS = SC_BASE + 1
+comptime SC_RANKSUM = SC_BASE + 2
+comptime SC_SCORE = SC_BASE + 3
+comptime SC_BH_SORT = SC_BASE + 4
+comptime SC_BH_SCAN = SC_BASE + 5
+comptime SC_ADJUST = SC_BASE + 6
+comptime SC_RANK_KEYS = SC_BASE + 7
+comptime SC_RANK_SORT = SC_BASE + 8
+comptime SC_RANK_GATHER = SC_BASE + 9
 
 #: rg_score FLAGS bits.
 comptime RG_WILCOXON = 1
@@ -108,65 +104,6 @@ def _rows_out(k: Int, ref_group: Int) -> Int:
     return k if ref_group < 0 else k - 1
 
 
-# ---------------------------------------------------------------- the group order
-
-
-def rg_order_unit(t: Int, f: FP, q: IP):
-    """q = [CODES, n, K, START, PERM]; t = group g. START[g] = the rows whose code is below g; PERM[START[g] ..] =
-    the rows of group g, ascending. Thread K - 1 also writes START[K] = n (every code is in [0, K), the door's
-    label encoding)."""
-    var codes = p(q, 0)
-    var n = p(q, 1)
-    var k = p(q, 2)
-    var start = p(q, 3)
-    var perm = p(q, 4)
-    var g = t
-    var lo = 0
-    for i in range(n):
-        if ldi(f, codes + i) < g:
-            lo += 1
-    sti(f, start + g, lo)
-    if g == k - 1:
-        sti(f, start + k, n)
-    var w = lo
-    for i in range(n):
-        if ldi(f, codes + i) == g:
-            sti(f, perm + w, i)
-            w += 1
-
-
-def rg_gather_dense_unit(t: Int, f: FP, q: IP):
-    """q = [X, n, d, c0, PERM, G]; t = c*n + pos. G[t] = canon(X[PERM[pos], c0 + c])."""
-    var n = p(q, 1)
-    var d = p(q, 2)
-    var c = t // n
-    var pos = t - c * n
-    var row = ldi(f, p(q, 4) + pos)
-    f.unsafe_store(p(q, 5) + t, canon(ld(f, p(q, 0) + row * d + p(q, 3) + c)))
-
-
-def rg_gather_csr_unit(t: Int, f: FP, q: IP):
-    """q = [INDPTR, INDICES, DATA, n, c0, dc, PERM, G]; t = pos. Row PERM[pos]'s values of the columns
-    [c0, c0 + dc) into G[c*n + pos]: zeros, then each stored entry added in stored order (a repeated column sums), then `canon`. INDPTR and INDICES are int32 words, DATA float32."""
-    var n = p(q, 3)
-    var c0 = p(q, 4)
-    var dc = p(q, 5)
-    var g = p(q, 7)
-    var row = ldi(f, p(q, 6) + t)
-    for c in range(dc):
-        f.unsafe_store(g + c * n + t, Float32(0))
-    var lo = ldi(f, p(q, 0) + row)
-    var hi = ldi(f, p(q, 0) + row + 1)
-    for e in range(lo, hi):
-        var c = ldi(f, p(q, 1) + e) - c0
-        if c >= 0 and c < dc:
-            var at = g + c * n + t
-            f.unsafe_store(at, add(raw(f, at), ld(f, p(q, 2) + e)))
-    for c in range(dc):
-        var at = g + c * n + t
-        f.unsafe_store(at, canon(raw(f, at)))
-
-
 def rg_seg_sort_unit(t: Int, f: FP, q: IP):
     """q = [G, n, dc, START]; t = g*dc + c. Group g's segment of gene c sorted ascending (`heap_sort`)."""
     var n = p(q, 1)
@@ -180,23 +117,6 @@ def rg_seg_sort_unit(t: Int, f: FP, q: IP):
 
 
 # ---------------------------------------------------------------- group and rest statistics
-
-
-@always_inline
-def _range_sum(f: FP, base: Int, lo: Int, hi: Int, s_in: Float32) -> Float32:
-    var s = s_in
-    for i in range(lo, hi):
-        s = add(s, raw(f, base + i))
-    return s
-
-
-@always_inline
-def _range_ss(f: FP, base: Int, lo: Int, hi: Int, mean: Float32, s_in: Float32) -> Float32:
-    var s = s_in
-    for i in range(lo, hi):
-        var e = sub(raw(f, base + i), mean)
-        s = add(s, mul(e, e))
-    return s
 
 
 def rg_stats_unit(t: Int, f: FP, q: IP):
@@ -223,9 +143,9 @@ def rg_stats_unit(t: Int, f: FP, q: IP):
     var mean = Float32(0)
     var var_ = Float32(0)
     if m > 0:
-        mean = div(_range_sum(f, col, lo, hi, Float32(0)), Float32(m))
+        mean = div(seg_sum(f, col, lo, hi, Float32(0)), Float32(m))
     if m > 1:
-        var_ = div(_range_ss(f, col, lo, hi, mean, Float32(0)), Float32(m - 1))
+        var_ = div(seg_ss(f, col, lo, hi, mean, Float32(0)), Float32(m - 1))
     var rmean = Float32(0)
     var rvar = Float32(0)
     var rm: Int
@@ -234,18 +154,18 @@ def rg_stats_unit(t: Int, f: FP, q: IP):
         var rhi = ldi(f, start + ref_group + 1)
         rm = rhi - rlo
         if rm > 0:
-            rmean = div(_range_sum(f, col, rlo, rhi, Float32(0)), Float32(rm))
+            rmean = div(seg_sum(f, col, rlo, rhi, Float32(0)), Float32(rm))
         if rm > 1:
-            rvar = div(_range_ss(f, col, rlo, rhi, rmean, Float32(0)), Float32(rm - 1))
+            rvar = div(seg_ss(f, col, rlo, rhi, rmean, Float32(0)), Float32(rm - 1))
     else:
         rm = n - m
         if rm > 0:
-            var s = _range_sum(f, col, 0, lo, Float32(0))
-            s = _range_sum(f, col, hi, n, s)
+            var s = seg_sum(f, col, 0, lo, Float32(0))
+            s = seg_sum(f, col, hi, n, s)
             rmean = div(s, Float32(rm))
         if rm > 1:
-            var ss = _range_ss(f, col, 0, lo, rmean, Float32(0))
-            ss = _range_ss(f, col, hi, n, rmean, ss)
+            var ss = seg_ss(f, col, 0, lo, rmean, Float32(0))
+            ss = seg_ss(f, col, hi, n, rmean, ss)
             rvar = div(ss, Float32(rm - 1))
     var block = ko * dc
     st(f, stats + t, mean)
@@ -359,9 +279,9 @@ def rg_ranksum_unit(t: Int, f: FP, q: IP):
 
 @always_inline
 def _log2_fold(mg: Float32, mr: Float32) -> Float32:
-    """Scanpy's log2((expm1(mean_g) + 1e-9) / (expm1(mean_rest) + 1e-9)); expm1 as exp(x) - 1."""
-    var a = add(sub(expf(mg), Float32(1)), _FC_EPS)
-    var b = add(sub(expf(mr), Float32(1)), _FC_EPS)
+    """Scanpy's log2((expm1(mean_g) + 1e-9) / (expm1(mean_rest) + 1e-9)); expm1 is the count-data lane's `expm1f`."""
+    var a = add(expm1f(mg), _FC_EPS)
+    var b = add(expm1f(mr), _FC_EPS)
     return div(logf(div(a, b)), _LN2)
 
 
@@ -430,15 +350,6 @@ def rg_score_unit(t: Int, f: FP, q: IP):
 
 
 # ---------------------------------------------------------------- the whole result
-
-
-def rg_transpose_unit(t: Int, f: FP, q: IP):
-    """q = [IN, KO, d, OUT]; t = j*d + c. OUT[j, c] = IN[c, j], bit for bit (gene-major chunks to rows)."""
-    var ko = p(q, 1)
-    var d = p(q, 2)
-    var j = t // d
-    var c = t - j * d
-    f.unsafe_store(p(q, 3) + t, raw(f, p(q, 0) + c * ko + j))
 
 
 def rg_bh_sort_unit(t: Int, f: FP, q: IP):
@@ -578,12 +489,6 @@ def rg_rank_gather_unit(t: Int, f: FP, q: IP):
 
 @always_inline
 def run_sc_unit[OP: Int](t: Int, f: FP, q: IP):
-    comptime if OP == SC_ORDER:
-        rg_order_unit(t, f, q)
-    comptime if OP == SC_GATHER_DENSE:
-        rg_gather_dense_unit(t, f, q)
-    comptime if OP == SC_GATHER_CSR:
-        rg_gather_csr_unit(t, f, q)
     comptime if OP == SC_SEG_SORT:
         rg_seg_sort_unit(t, f, q)
     comptime if OP == SC_STATS:
@@ -592,8 +497,6 @@ def run_sc_unit[OP: Int](t: Int, f: FP, q: IP):
         rg_ranksum_unit(t, f, q)
     comptime if OP == SC_SCORE:
         rg_score_unit(t, f, q)
-    comptime if OP == SC_TRANSPOSE:
-        rg_transpose_unit(t, f, q)
     comptime if OP == SC_BH_SORT:
         rg_bh_sort_unit(t, f, q)
     comptime if OP == SC_BH_SCAN:

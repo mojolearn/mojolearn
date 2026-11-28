@@ -114,6 +114,9 @@ def scprep_csr_like(source: PythonObject) raises -> Bool:
         return False
     var fmt = py_call(b.getattr, source, PythonObject("format"))
     if py_type(fmt) is not b.str or String(fmt) != "csr":
+        # another sparse layout with index buffers (a CSC-form object) is refused here, never read as dense
+        if Bool(py=py_call(b.hasattr, source, PythonObject("indptr"))):
+            raise Error("ValueError: a sparse X must be in CSR form; convert it with .tocsr() first")
         return False
     return (Bool(py=py_call(b.hasattr, source, PythonObject("indptr")))
             and Bool(py=py_call(b.hasattr, source, PythonObject("indices")))

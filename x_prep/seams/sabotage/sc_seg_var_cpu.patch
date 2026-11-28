@@ -1,10 +1,10 @@
 diff --git a/x_prep/sc_prep.mojo b/x_prep/sc_prep.mojo
 --- a/x_prep/sc_prep.mojo
 +++ b/x_prep/sc_prep.mojo
-@@ -380,6 +380,9 @@ def sp_seg_stats_unit(t: Int, f: FP, q: IP):
-     for i in range(lo, hi):
-         var e = sub(ld(f, base + i), mean)
-         ss = add(ss, mul(e, e))
+@@ -396,6 +396,9 @@ def sp_seg_stats_unit(t: Int, f: FP, q: IP):
+         f.unsafe_store(o + ns * dc + s * dc + c, _nan())
+         return
+     var ss = seg_ss(f, base, lo, hi, mean, Float32(0))
 +    from std.sys import is_defined
 +    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sc_seg_var-cpu (lane sc-prep-1): every column variance is 1% high, the CPU bindings only
 +        ss = mul(ss, Float32(1.01))

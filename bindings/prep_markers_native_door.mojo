@@ -19,15 +19,14 @@ from bindings.py_balanced import py_call, py_type, py_contains, py_setitem
 from bindings.classical_arrays_door import classical_typed
 from bindings.scaler_native_door import _ptr
 from bindings.scaler_lifecycle_native_door import _entries
-from bindings.x_prep_native_owner_door import xprep_values
 from bindings.classical_labels_door import classical_encode_labels
-from bindings.prep_classify_common_door import _i32_vector
-from bindings.admitted_input_unpack import admit_x
+from bindings.prep_scprep_native_door import _SpX
+from bindings.prep_scprep_run import sp_chunk_width
 from bindings.prep_encode_native_door import EncProg, _take2, _default_mode
 from bindings.cluster_public_native_pack import _xc_array
 from providers.python.x_cluster_out_pyapi_pack import _py_array
 from bindings.prep_markers_run import (
-    MarkerChunk, MarkerFinal, marker_chunk_stage, marker_final_stage, marker_chunk_width, marker_rows_out,
+    MarkerChunk, MarkerFinal, marker_chunk_stage, marker_final_stage, marker_rows_out,
     MARKER_WILCOXON, MARKER_T_TEST,
 )
 
@@ -40,19 +39,6 @@ def _text(value: PythonObject, name: String, choices: String) raises -> String:
     if py_type(value) is not b.str:
         raise Error("ValueError: rank_genes_groups: " + name + " must be one of " + choices)
     return String(value)
-
-
-def _csr_like(value: PythonObject) raises -> Bool:
-    """A sparse input in CSR form: an object with `indptr`, `indices`, `data` and `shape` (and, when it names its
-    `format`, "csr"). Another sparse format is refused: convert it to CSR first."""
-    var b = native_loaded_module("builtins")
-    if not Bool(py=py_call(b.hasattr, value, "indptr")):
-        return False
-    if Bool(py=py_call(b.hasattr, value, "format")):
-        var fmt = py_call(b.getattr, value, "format")
-        if not (py_type(fmt) is b.str and String(fmt) == "csr"):
-            raise Error("ValueError: rank_genes_groups: a sparse X must be in CSR form")
-    return True
 
 
 def _arena(ran: PythonObject) raises -> Int:
@@ -92,31 +78,9 @@ def prep_rank_genes_call(args: PythonObject, context: PythonObject) raises -> Py
         raise Error("ValueError: rank_genes_groups: groups must hold at least two different labels")
     var mode = _default_mode(context)
     var entries = _entries(mode, context)
-    var sparse = _csr_like(args[0])
-    var n: Int
-    var d: Int
-    var values = PythonObject(None)
-    var indptr = PythonObject(None)
-    var indices = PythonObject(None)
-    var data = PythonObject(None)
-    var nnz = 0
-    if sparse:
-        var source = args[0]
-        var shape = source.shape
-        n = Int(py=py_call(b.int, shape[0]))
-        d = Int(py=py_call(b.int, shape[1]))
-        indptr = _i32_vector(source.indptr, "indptr", context)
-        indices = _i32_vector(source.indices, "indices", context)
-        nnz = Int(py=py_call(b.len, indices))
-        if Int(py=py_call(b.len, indptr)) != n + 1:
-            raise Error("ValueError: rank_genes_groups: a CSR input's indptr must hold n_cells + 1 offsets")
-        data = admit_x(source.data, 1, "data", context)
-        if Int(py=py_call(b.len, data)) != nnz:
-            raise Error("ValueError: rank_genes_groups: a CSR input's data and indices differ in length")
-    else:
-        values = xprep_values(args[0], entries, context)
-        n = Int(py=values[3])
-        d = Int(py=values[4])
+    var x = _SpX(args[0], entries, context)
+    var n = x.n
+    var d = x.d
     if labels.n != n:
         raise Error("ValueError: rank_genes_groups: X has " + String(n) + " rows but groups has "
                     + String(labels.n) + " labels")
@@ -130,25 +94,15 @@ def prep_rank_genes_call(args: PythonObject, context: PythonObject) raises -> Py
     var sp = _ptr(scores_g)
     var pp = _ptr(pvalues_g)
     var lp = _ptr(lfc_g)
-    # RUN: the chunk programs (a memory bound, bindings/prep_markers_run.mojo `marker_chunk_width`)
-    var width = marker_chunk_width(n, d)
+    # RUN: the chunk programs (a memory bound, bindings/prep_scprep_run.mojo `sp_chunk_width`)
+    var width = sp_chunk_width(n, d)
     var c0 = 0
     while c0 < d:  # driver-loop: over the gene blocks of the group-ordered copy's memory bound
         var dc = min(width, d - c0)
         var p = EncProg()
-        var x_owner = -1
-        var ip_owner = -1
-        var ix_owner = -1
-        var dv_owner = -1
-        if sparse:
-            ip_owner = p.own(indptr, n + 1)
-            ix_owner = p.own(indices, nnz)
-            dv_owner = p.own(data, nnz)
-        else:
-            x_owner = p.own_x(values)
+        var xin = x.own(p)
         var codes_owner = p.own(labels.codes, n)
-        var request = MarkerChunk(n, d, k, reference, c0, dc, sparse, x_owner, ip_owner, ix_owner, dv_owner, nnz,
-                                  codes_owner, method, tie_correct)
+        var request = MarkerChunk(xin^, k, reference, c0, dc, codes_owner, method, tie_correct)
         var plan = marker_chunk_stage(p.prog, request)
         var ran = p.run(entries, context)
         var arena = _arena(ran)
@@ -190,10 +144,7 @@ def prep_rank_genes_call(args: PythonObject, context: PythonObject) raises -> Py
     py_setitem(result, "pvals_adj", _take2(ran_final, final_plan.values + 2 * total, ko, d, context))
     py_setitem(result, "logfoldchanges", _take2(ran_final, final_plan.values + 3 * total, ko, d, context))
     _ = ran_final
-    _ = values^
-    _ = indptr^
-    _ = indices^
-    _ = data^
+    _ = x^
     _ = scores_g^
     _ = pvalues_g^
     _ = lfc_g^
