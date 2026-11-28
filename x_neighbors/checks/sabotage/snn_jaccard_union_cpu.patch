@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/graph_par.mojo b/x_neighbors/graph_par.mojo
+--- a/x_neighbors/graph_par.mojo
++++ b/x_neighbors/graph_par.mojo
+@@ -1729,6 +1729,9 @@ def sn_row_item(t: Int, g: GA):
+         prev = best
+         var dj = Int(ip.unsafe_load(best + 1)) - Int(ip.unsafe_load(best))
+         var jac = ftz(identical_div(Float32(s), Float32(deg + dj - s)))
++        from std.sys import is_defined
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE snn-cpu (lane sc-graph-1): the Jaccard denominator drops the shared count (|N(i)| + |N(j)| instead of the union), the CPU bindings only
++            jac = ftz(identical_div(Float32(s), Float32(deg + dj)))
+         if jac >= g.x0:
+             if g.n5 != 0:
+                 _is(g, SN_COL).unsafe_store(base + kept, Int32(best))

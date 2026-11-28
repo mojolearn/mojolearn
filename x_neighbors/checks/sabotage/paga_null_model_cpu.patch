@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/graph_par.mojo b/x_neighbors/graph_par.mojo
+--- a/x_neighbors/graph_par.mojo
++++ b/x_neighbors/graph_par.mojo
+@@ -1848,6 +1848,9 @@ def pg_stat_item(t: Int, g: GA):
+     if num != 0:
+         var expected = ftz(identical_div(_lv_q2f(num, g), _lv_q2f(Int64(g.n0 - 1), g)))
+         r = ftz(identical_div(_lv_q2f(v, g), expected))
++        from std.sys import is_defined
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE paga-cpu (lane sc-graph-1): the connectivity divides by twice the expectation, the CPU bindings only
++            r = ftz(identical_div(r, Float32(2)))
+         if r > Float32(1):
+             r = Float32(1)
+     con.unsafe_store(t, r)

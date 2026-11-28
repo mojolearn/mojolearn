@@ -5209,6 +5209,9 @@ PUBLIC_PENDING_LANES = {
     # lane leiden-umap-1 (2026-11-28): new Leiden lanes; RECORD OWED (the next release record)
     "x-neighbors-leiden": "no reference",
     "x-neighbors-leiden-fit-predict": "no reference",
+    # lane sc-graph-1 (2026-11-28): the single-cell graph lanes; RECORD OWED (the next release record)
+    "x-neighbors-snn": "no reference",
+    "x-neighbors-paga": "no reference",
     "x-neighbors-nearest-centroid-score": "no reference",
     "x-neighbors-ocsvm-fit-predict": "no reference",
     "x-neighbors-ocsvm-score-samples": "no reference",
