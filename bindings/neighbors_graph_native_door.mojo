@@ -632,7 +632,7 @@ def _snn(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var keywords = Python.dict()
     py_setitem(keywords, "shape", Python.tuple(n, n))
     return family_call_kw(family_call(_b().getattr, _scipy_sparse(), PythonObject("csr_matrix")), keywords,
-                          Python.tuple(Python.tuple(data, indices, indptr)))
+                          Python.tuple(data, indices, indptr))
 
 
 # ---------------------------------------------------------------- PAGA
