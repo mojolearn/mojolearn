@@ -12,7 +12,7 @@ from bindings.sequence_array_warnings_unpack import sequence_array_exception, se
 from core.sequence_array_format import sequence_float_text
 from core.sequence_array_cast import sequence_signaling, SEQ_CAST_INVALID
 from bindings.py_cpython_table import cpython_table
-from sequence.sequence_string_storage_run import (
+from core.sequence_string_storage_run import (
     StringStoragePointer, SEQUENCE_STRING_TABLE, sequence_storage_image, sequence_string_nan_word, sequence_string_nan_raw,
 )
 from bindings.sequence_keys_unpack import sequence_keys

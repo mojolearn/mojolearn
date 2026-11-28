@@ -10,7 +10,7 @@ from bindings.sequence_array_warnings_unpack import sequence_array_warn
 from bindings.sequence_array_warnings_pack import sequence_array_category
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_optional import py_or_none, py_present
-from sequence.sequence_dtype_run import sequence_dtype_syntax_offset
+from core.sequence_dtype_run import sequence_dtype_syntax_offset
 from bindings.sequence_keys_unpack import sequence_keys
 from bindings.py_balanced import py_item
 

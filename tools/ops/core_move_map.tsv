@@ -595,3 +595,5 @@ core/bounded_loop.mojo	stay	-	cluster,decomp,linear,neural,prep,shared,tokenizer
 core/bounded_loop_device.mojo	stay	-	cluster,decomp,linear,prep,shared,trees	-	shared; was autograd/program_loop_device.mojo (lane thin-edges-1, 2026-11-28)
 core/epoch_schedule.mojo	stay	-	cluster,decomp,kernel,linear,neural,prep,shared,tokenizer,trees	-	shared; was sequence/schedule.mojo (lane thin-edges-1, 2026-11-28)
 core/f32_pointer.mojo	stay	-	cluster,decomp,kernel,linear,neural,prep,shared,tokenizer,trees	-	shared; FP split out of sequence/ops.mojo by lane thin-edges-1 (2026-11-28)
+core/sequence_dtype_run.mojo	stay	-	decomp,linear,neural,prep,shared,trees	-	shared; was sequence/sequence_dtype_run.mojo (lane thin-edges-1, 2026-11-28)
+core/sequence_string_storage_run.mojo	stay	-	decomp,kernel,linear,neural,prep,shared,trees	-	shared; was sequence/sequence_string_storage_run.mojo (lane thin-edges-1, 2026-11-28)
