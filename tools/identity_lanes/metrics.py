@@ -278,14 +278,24 @@ def _(ml, X, yc, yr, Xh=None):
     n = 600
     Xs = np.ascontiguousarray(X[:n, :6]).astype(np.float32)
     ys = np.ascontiguousarray(yr[:n]).astype(np.float32)
-    est = _gbdt(ml.GradientBoostingRegressor, n_estimators=6, max_depth=3)
+    # lane verify-light-1, 2026-11-28: about twenty fold fits a cell (15 s a cell on the 0.9.0 Apple record), so 2
+    # trees for the searched estimator (was 6) and a grid over 2 and 3 trees (was 4 and 8): the lane is the
+    # splitter, the scorers, the fold bookkeeping and the refit, not the ensemble size. The grid search is the
+    # anchor on every cell; cross_validate, the named cross_val_score and cross_val_predict are dealt (`_Dealer`).
+    deal = _Dealer()
+    est = _gbdt(ml.GradientBoostingRegressor, n_estimators=2, max_depth=3)
     cv = ms.KFold(3, shuffle=True, random_state=17)
-    r = ms.cross_validate(est, Xs, ys, cv=cv, scoring=["r2", "neg_mean_absolute_error", "explained_variance"],
-                          return_train_score=True)
-    parts = {k: _h(np.asarray(v)) for k, v in sorted(r.items()) if k.startswith(("test_", "train_"))}
-    parts["cvs_named"] = _h(np.asarray(ms.cross_val_score(est, Xs, ys, cv=cv, scoring="neg_root_mean_squared_error")))
-    parts["predict"] = _h(np.asarray(ms.cross_val_predict(est, Xs, ys, cv=cv)))
-    gs = ms.GridSearchCV(est, {"max_depth": [2, 4], "n_estimators": [4, 8]}, cv=cv, scoring="r2").fit(Xs, ys)
+    gs = ms.GridSearchCV(est, {"max_depth": [2, 4], "n_estimators": [2, 3]}, cv=cv, scoring="r2").fit(Xs, ys)
+    deal.take()
+    parts = {}
+    if deal.take():
+        r = ms.cross_validate(est, Xs, ys, cv=cv, scoring=["r2", "neg_mean_absolute_error", "explained_variance"],
+                              return_train_score=True)
+        parts.update({k: _h(np.asarray(v)) for k, v in sorted(r.items()) if k.startswith(("test_", "train_"))})
+    if deal.take():
+        parts["cvs_named"] = _h(np.asarray(ms.cross_val_score(est, Xs, ys, cv=cv, scoring="neg_root_mean_squared_error")))
+    if deal.take():
+        parts["predict"] = _h(np.asarray(ms.cross_val_predict(est, Xs, ys, cv=cv)))
     parts["grid_mean"] = _h(np.asarray(gs.cv_results_["mean_test_score"]), np.asarray(gs.cv_results_["rank_test_score"]))
     parts["grid_best"] = _h(np.asarray([gs.best_index_], dtype=np.int64), np.float64(gs.best_score_),
                             np.asarray(gs.predict(Xs[:64])))

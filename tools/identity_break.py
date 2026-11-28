@@ -9145,7 +9145,9 @@ def _(ml, X, yc, yr, Xh=None):
     sklearn-style boosting regressor (cross-validation clones through
     get_params, which the classical estimators do not implement), scored
     by the adapter's own score."""
-    scores = ml.model_selection.cross_val_score(_gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4), X, yr, cv=3)
+    # lane verify-light-1, 2026-11-28: 2 trees a fold (was 8; the batch part refits every fold alone, about 15 fold
+    # fits a cell, 20 s on the worst 0.9.0 Apple cell): the lane is the clone, the folds and the score, not the size
+    scores = ml.model_selection.cross_val_score(_gbdt(ml.GradientBoostingRegressor, n_estimators=2, max_depth=4), X, yr, cv=3)
     return _fit(dict(scores=_h(np.asarray(scores, dtype=np.float64))))
 
 
@@ -11464,7 +11466,7 @@ def _batch_cross_val(ml, e, Xh):
               np.ascontiguousarray(rows[256 * k:256 * (k + 1)])) for k in range(3)]
     idx = np.arange(3, dtype=np.int64).reshape(3, 1)
     return [_BatchRows("cross_val_score (folds)", idx, lambda r: (np.asarray(ml.model_selection.cross_val_score(
-        _gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4), Xf, y,
+        _gbdt(ml.GradientBoostingRegressor, n_estimators=2, max_depth=4), Xf, y,
         cv=[folds[int(k)] for k in r[:, 0]]), dtype=np.float64),))]
 
 
