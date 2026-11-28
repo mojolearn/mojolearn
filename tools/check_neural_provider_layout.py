@@ -5,6 +5,7 @@ Source architecture guard only: it does not establish runtime callback freedom
 for Python-facing orchestration that remains in bindings/providers.
 """
 from pathlib import Path
+from check_admitted_call import moved_core_files
 from check_generation_native_boundary import audit
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,8 +16,12 @@ NATIVE_TREES = ('autograd', 'sequence', 'training', 'transformer', 'mamba', 'cor
 
 
 def native_roots(root=ROOT):
-    return tuple(path.relative_to(root).with_suffix('').as_posix().replace('/', '.')
-                 for tree in NATIVE_TREES for path in sorted((root / tree).rglob('*.mojo')))
+    # The files that left core/ for their family (tools/ops/core_move_map.tsv, 2026-11-28) stay roots: the move
+    # changed where they live, not what they may import. Those inside a listed tree are already walked.
+    paths = [path for tree in NATIVE_TREES for path in sorted((root / tree).rglob('*.mojo'))]
+    walked = set(paths)
+    paths.extend(path for path in moved_core_files(root) if path not in walked)
+    return tuple(path.relative_to(root).with_suffix('').as_posix().replace('/', '.') for path in paths)
 
 
 def check(root=ROOT, *, require_native_only=False):

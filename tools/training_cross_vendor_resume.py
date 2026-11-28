@@ -306,7 +306,8 @@ def source_inventory(root):
         directory = root / name
         require(directory.is_dir(), f'missing source directory {directory}')
         paths.update(directory.rglob('*.mojo'))
-    for name in ('pixi.toml', 'pixi.lock', 'tools/training_cross_vendor_resume.py'):
+    # sequence/decode_slab.mojo: in the training binding's closure; it was core/decode_slab.mojo (core move, 2026-11-28).
+    for name in ('sequence/decode_slab.mojo', 'pixi.toml', 'pixi.lock', 'tools/training_cross_vendor_resume.py'):
         path = root / name
         require(path.is_file(), f'missing source file {path}')
         paths.add(path)
