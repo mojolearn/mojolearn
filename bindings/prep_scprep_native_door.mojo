@@ -113,17 +113,19 @@ def scprep_csr_like(source: PythonObject) raises -> Bool:
 
 def scprep_csr_like(source: PythonObject, b: PythonObject) raises -> Bool:
     """A sparse X in CSR form: a scipy.sparse container (by its defining module), or any object exposing a
-    CSR form (`format == "csr"` and `shape`, `indptr`, `indices`, `data`), read as buffers only."""
+    CSR form (`shape`, `indptr`, `indices`, `data`, and `format == "csr"` when it names a format), read as
+    buffers only. An object without `format` is CSR by its four buffers: rank_genes_groups' documented input
+    ("any object with indptr, indices, data and shape") and the form its identity lane passes, which the door's
+    own admission took before it shared this one."""
     if is_sparse(source):
         return True
-    if not Bool(py=py_call(b.hasattr, source, PythonObject("format"))):
-        return False
-    var fmt = py_call(b.getattr, source, PythonObject("format"))
-    if py_type(fmt) is not b.str or String(fmt) != "csr":
-        # another sparse layout with index buffers (a CSC-form object) is refused here, never read as dense
-        if Bool(py=py_call(b.hasattr, source, PythonObject("indptr"))):
-            raise Error("ValueError: a sparse X must be in CSR form; convert it with .tocsr() first")
-        return False
+    if Bool(py=py_call(b.hasattr, source, PythonObject("format"))):
+        var fmt = py_call(b.getattr, source, PythonObject("format"))
+        if py_type(fmt) is not b.str or String(fmt) != "csr":
+            # another sparse layout with index buffers (a CSC-form object) is refused here, never read as dense
+            if Bool(py=py_call(b.hasattr, source, PythonObject("indptr"))):
+                raise Error("ValueError: a sparse X must be in CSR form; convert it with .tocsr() first")
+            return False
     return (Bool(py=py_call(b.hasattr, source, PythonObject("indptr")))
             and Bool(py=py_call(b.hasattr, source, PythonObject("indices")))
             and Bool(py=py_call(b.hasattr, source, PythonObject("data")))
@@ -154,7 +156,8 @@ struct _SpX(Movable):
         self.nnz = 0
         if self.csr:
             # UNPACK of the caller's CSR buffers only (no SciPy call): a sparse X must already be in CSR form
-            if String(py_call(b.str, py_call(b.getattr, source, PythonObject("format")))) != "csr":
+            if (Bool(py=py_call(b.hasattr, source, PythonObject("format")))
+                    and String(py_call(b.str, py_call(b.getattr, source, PythonObject("format")))) != "csr"):
                 raise Error("TypeError: " + String(self.cls.__name__) + " input must be in CSR form (csr_matrix or "
                             "csr_array); convert it with .tocsr() first")
             var shape = py_call(b.getattr, source, PythonObject("shape"))
@@ -168,6 +171,10 @@ struct _SpX(Movable):
             var data = py_call(b.getattr, source, PythonObject("data"))
             self.data = (admit_x(data, 1, "data", context) if self.nnz > 0
                          else classical_typed(Python.tuple(1), "<f4", context["output_context"]))
+            # the kernels read DATA at every index position: a shorter data buffer is refused here (the check
+            # rank_genes_groups' own admission made before it shared this one)
+            if self.nnz > 0 and Int(py=py_call(b.len, self.data)) != self.nnz:
+                raise Error("ValueError: a CSR input's data and indices differ in length")
         else:
             self.values = xprep_values(source, entries, context)
             self.n = Int(py=self.values[3])
