@@ -515,6 +515,24 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   (2026-10-25). Do not promote a source check or a compile to runtime success, or extend a partial result to
   untested paths or devices. NVIDIA PTX verification records the actual GPU, driver and the selected PTX route.
 
+### Verification has light fixtures (Andrew, 2026-11-28)
+
+- Verification fixtures are LIGHT and DEDICATED. They exist only to show that the same bits come out on every
+  device and that a sabotage arm is caught. They live with the verify lanes (`tools/identity_lanes/`), are written
+  for that purpose, and are never a benchmark recipe, a board dataset, a product-size case or a case sized to show
+  speed.
+- A lane reaches each code path it exists for ONCE, at the smallest size, iteration count and member count that
+  reaches it: one wide matrix where the wide branch is the point, a few steps where the loop is the point. No
+  cross-product of options that other lanes already cover one by one. When the product fixes an iteration count
+  the fixture cannot set, choose data on which it stops early; do not pay the full count.
+- The budget is the slowest device, which is the Apple laptop: a cell that takes more than 10 seconds there is a
+  defect in the FIXTURE, fixed in the fixture the same round. It is never fixed by tuning a product path for
+  Apple, and never left because "the product sets the cost". The whole record of every lane fits in under an hour
+  on the laptop with one worker.
+- Light never means blind: every lane keeps a fixture, both sides and its fault arms, each arm must still move its
+  lane, and the fixture floors (`tools/fixture_floors.py`) hold. Bits of a changed fixture change on every column
+  together and are recorded at the release.
+
 ### A release rebuilds and re-records only the families that changed (Andrew, 2026-11-28)
 
 - The product is split by family (neural, the classical families, sequence, and so on, plus one shared core); the
