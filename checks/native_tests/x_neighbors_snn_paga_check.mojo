@@ -161,6 +161,10 @@ def test_snn_against_brute_force() raises:
         1.0e-7))
     for i in range(n):  # small-loop: every node labelled
         require(Int(labels[i]) >= 0 and Int(labels[i]) < n, "Louvain on the SNN graph: label " + String(i))
+    _ = got^  # read by the Louvain call above through its pointers
+    _ = indptr^
+    _ = labels^
+    _ = idx^
     _ = member^
     _ = want^
 
@@ -221,7 +225,12 @@ def test_paga_hand_checked() raises:
     except error:
         refused = String(error).find("numbered from 0") >= 0
     require(refused, "PAGA: a label above n - 1 was not refused by name")
-    _ = a^
+    _ = a^  # every list below was read through its pointer by a call above
+    _ = ip^
+    _ = ix^
+    _ = groups^
+    _ = negative^
+    _ = large^
 
 
 def test_labels_by_size() raises:

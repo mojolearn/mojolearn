@@ -1677,6 +1677,7 @@ def _dm_csr_record(source: PythonObject, context: PythonObject) raises -> _Coo:
         raise Error("ValueError: mojolearn DiffusionMap: indptr must hold n + 1 entries and data one per index")
     var rows = family_array(Python.tuple(nnz), "<i4", context)
     spectral_csr_rows(Int(py=classical_address(indptr)), n, nnz, Int(py=classical_address(rows)))
+    _ = indptr  # keep the admitted indptr alive through the native fill above
     return _Coo(rows, cols, vals, n)
 
 
