@@ -18,7 +18,7 @@ from bindings.host_sparse_native_door import host_sparse_format, host_sparse_den
 from bindings.host_inference_features_unpack import host_inference_feature_names
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.host_kernel_inference_native_unpack import _kernel_entry, _kernel_buffer
-from bindings.scaler_lifecycle_native_door import _outside
+from bindings.public_result_door import _outside
 from core.host_archive_impl import host_archive_support_bound
 from core.host_sparse_impl import host_sparse_uint64_bound
 from core.host_svr_impl import host_svr_bias, host_svr_indices

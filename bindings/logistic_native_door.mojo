@@ -70,7 +70,7 @@ from bindings.logistic_admission_unpack import logistic_storage, logistic_fields
 from bindings.logistic_admission_pack import logistic_initialize, logistic_get_params, logistic_set_params
 from bindings.prep_lda_admission_door import lda_native_context, lda_native_labels
 from bindings.classifier_public_lifecycle_door import classifier_after_fit, classifier_label_list
-from bindings.scaler_lifecycle_native_door import _public_result, _predict_result
+from bindings.public_result_door import _public_result, _predict_result
 from bindings.classical_labels_door import _flatten_labels
 from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.classical_arrays_door import classical_address

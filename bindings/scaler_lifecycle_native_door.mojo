@@ -55,6 +55,7 @@ from bindings.scaler_route_unpack import (
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
+from bindings.public_result_door import _outside, _public_result, _predict_result
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -544,54 +545,6 @@ def scaler_archive_save(model: PythonObject, path: PythonObject, context: Python
         statistics.append(value)
     return standard_archive_write(path, context, estimator, saved, mode, seen,
                                   count_kind, scalar_count, statistics)
-
-
-def _outside(context: PythonObject, depth: Int) raises -> Bool:
-    var outside = True
-    try:
-        var globals = native_caller_globals(depth)
-        if globals is None:
-            return True
-        var nk = scaler_keys()
-        var name = py_get(globals,nk[].k___name__)
-        if py_type(name) is py_type(PythonObject("")):
-            var module = String(name)
-            outside = module != "mojolearn" and not module.startswith("mojolearn.") and not module.startswith("mojolearn_verify_all_")
-        if py_get(globals,nk[].k___mojolearn_user_boundary__) is PythonObject(True):
-            outside = True
-        elif py_get(globals,nk[].k___mojolearn_internal__) is PythonObject(True):
-            outside = False
-    except:
-        outside = True
-    return outside
-
-
-def _public_result(result: PythonObject, context: PythonObject) raises -> PythonObject:
-    return _public_result(result, context, PythonObject(None))
-
-
-def _predict_result(result: PythonObject, context: PythonObject) raises -> PythonObject:
-    """A public `predict`'s result: one type for every caller (Andrew,
-    2026-11-22, lane predict-dtype), a NumPy view of the kernel's Array when
-    NumPy is loaded, with no caller-frame test."""
-    var nk = scaler_keys()
-    if classical_is_array(result, context) and py_get(context, nk[].k_ndarray) is not None:
-        return sequential_input(result, context)
-    return result
-
-
-def _public_result(result: PythonObject, context: PythonObject,
-                   input_cache: PythonObject) raises -> PythonObject:
-    var nk = scaler_keys()
-    if classical_is_array(result,context) and py_get(context,nk[].k_ndarray) is not None and _outside(context,1):
-        if input_cache is not None and len(input_cache) > 0:
-            var captured = input_cache[0].downcast_value_ptr[ScalerInputSnapshot]()
-            if result is captured[].original:
-                # Publish the captured shape and owner after copy-back; the
-                # caller's mutable Array metadata is not read again.
-                return sequential_input(captured[].values,context)
-        return sequential_input(result,context)
-    return result
 
 
 def scaler_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:

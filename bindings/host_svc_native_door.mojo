@@ -20,7 +20,7 @@ from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.host_kernel_inference_native_unpack import _kernel_entry, _kernel_buffer
 from bindings.host_logistic_native_door import host_logistic_classes, _host_logistic_decode
 from bindings.host_svr_native_door import _svr_matrix, _svr_support, _svr_bias
-from bindings.scaler_lifecycle_native_door import _outside
+from bindings.public_result_door import _outside
 from core.host_sparse_impl import host_sparse_uint64_bound
 from core.host_helpers_impl import argmax_rows_f64
 from core.host_archive_impl import host_archive_copy_f32

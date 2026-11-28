@@ -36,7 +36,7 @@ from providers.python.linear_metadata_boundary_door import classical_is_fitted
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.msel_fixed_owner_unpack import fixed_owner_context, fixed_owner_fields
 from bindings.msel_fixed_owner_pack import fixed_owner_set_params
-from bindings.scaler_lifecycle_native_door import _public_result, _predict_result
+from bindings.public_result_door import _public_result, _predict_result
 from bindings.scaler_route_unpack import scaler_route_context, scaler_route_clear
 from bindings.classical_labels_door import classical_encode_labels, classical_decode_labels, classical_score_from_codes
 from bindings.admitted_input_unpack import admit_weight_words
