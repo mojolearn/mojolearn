@@ -19,7 +19,9 @@ EXTRA = [('ocsvm_alpha_init',(2,1,1)),('unit_ff',(3,1,0)),('ocsvm_resident',(5,5
          # IDENTICAL counter-based draw; the other three are the FAST + Apple kfeat entries (refused elsewhere).
          ('schi2_fit',(2,3,0)),('achi2_first_negative',(1,1,0)),('schi2_weights',(2,1,0)),('schi2_lazy_transform',(5,4,1)),
          # lane leiden-umap-1 (2026-11-28): Leiden on the graph stages (x_neighbors/graph_par.mojo ld_drive*).
-         ('leiden',(3,4,1)),('leiden_csr',(5,6,1))]
+         ('leiden',(3,4,1)),('leiden_csr',(5,6,1)),
+         # lane sc-graph-1 (2026-11-28): the shared-nearest-neighbor graph and PAGA (graph_par.sn_drive / pg_drive).
+         ('snn',(6,4,1)),('paga',(6,2,0)),('paga_csr',(7,3,0))]
 # The packed and auxiliary operations whose LAST int is optional: nan_cells'
 # GPU flag, and the finite status address (lane a8b-device-x-neighbors-rest:
 # the host address of the int32 word that receives X's finite status, tested
