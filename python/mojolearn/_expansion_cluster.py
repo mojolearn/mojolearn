@@ -1169,6 +1169,10 @@ class Harmony(_XCluster):
     by a ridge regression. The two steps repeat until the objective stops decreasing. The
     corrected embedding is in `embedding_`; build the neighbor graph, clusters and UMAP from it.
 
+    Several batch keys (harmonypy's ``vars_use``, such as the sample and the technology) are
+    passed as a list of label arrays, one per key, in ``fit(X, [sample, tech])``; `theta` and
+    `lamb` then take one value per key, in the same order.
+
     The clustering starts from k-means centroids (k-means++, ten initializations, seeded by
     `random_state`). The update blocks of each clustering pass visit the cells in an order
     drawn from `random_state`. Computation is float32.
