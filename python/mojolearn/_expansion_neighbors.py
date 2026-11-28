@@ -2288,9 +2288,7 @@ def shared_neighbors_graph(knn, prune_snn=1 / 15, numeric_mode=None, *, device=N
         The symmetric shared-nearest-neighbor graph as a record with the
         CSR arrays ``indptr`` and ``indices`` (int32) and ``data`` (float32),
         ``shape`` and ``format == "csr"``, columns sorted within each row.
-        Every graph function of this package takes it as it is;
-        ``scipy.sparse.csr_matrix((g.data, g.indices, g.indptr),
-        shape=g.shape)`` wraps the same arrays.
+        Every graph function of this package takes it as it is.
 
     Raises
     ------
