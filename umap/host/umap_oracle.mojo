@@ -792,6 +792,37 @@ def host_supervise_graph(
     return host_general_intersection(graph, tgraph, target_weight)
 
 
+def _host_fitted_graph(
+    var graph: SparseFuzzySimplicialGraph, n_samples: Int, params: UMAPParams, target: List[Float32],
+    target_kind: Int, target_dims: Int, target_n_neighbors: Int, target_weight: Float32, fit_out: UmapFitOut,
+) raises -> SparseFuzzySimplicialGraph:
+    """`_fitted_graph`, `sparse_estimator.mojo`, on the host: the one body
+    of the fit and of `host_umap_fit_graph`."""
+    var tk = target_n_neighbors if target_n_neighbors > 0 else params.n_neighbors
+    if target_kind != 0:
+        graph = host_supervise_graph(
+            graph, target, n_samples, target_kind, target_dims, tk, target_weight, params.random_seed,
+        )
+    umap_publish_graph(graph, umap_graph_capacity(n_samples, params.n_neighbors, target_kind, tk), fit_out)
+    return graph^
+
+
+def host_umap_fit_graph(
+    x_rowmajor: List[Float32], n_samples: Int, n_features: Int, params: UMAPParams, target: List[Float32],
+    target_kind: Int, target_dims: Int, target_n_neighbors: Int, target_weight: Float32, dst: UmapFitOut,
+) raises -> Int:
+    """`umap_fit_graph`, `sparse_estimator.mojo`, on the host (UMAP_OP_FIT_GRAPH,
+    `UMAP.graph_` read after a fit): the fit's graph body and supervised
+    intersection, no start and no layout. Returns the edge count."""
+    params.validate(n_samples)
+    if n_features < 1 or len(x_rowmajor) != n_samples * n_features:
+        raise Error("UMAP input does not match its declared shape")
+    var graph = host_umap_fuzzy_graph(x_rowmajor, n_samples, n_features, params)
+    graph = _host_fitted_graph(graph^, n_samples, params, target, target_kind, target_dims, target_n_neighbors,
+                               target_weight, dst)
+    return len(graph.indices)
+
+
 def host_umap_fit_transform(
     x_rowmajor: List[Float32], n_samples: Int, n_features: Int, params: UMAPParams,
     initial_given: List[Float32] = List[Float32](),
@@ -820,12 +851,8 @@ def host_umap_fit_transform(
         raise Error("UMAP fit_transform has too few samples for spectral init")
     var fit_out = UmapFitOut(out_indptr, out_indices, out_data, out_ab)
     var graph = host_umap_fuzzy_graph(x_rowmajor, n_samples, n_features, params)
-    var tk = target_n_neighbors if target_n_neighbors > 0 else params.n_neighbors
-    if target_kind != 0:
-        graph = host_supervise_graph(
-            graph, target, n_samples, target_kind, target_dims, tk, target_weight, params.random_seed,
-        )
-    umap_publish_graph(graph, umap_graph_capacity(n_samples, params.n_neighbors, target_kind, tk), fit_out)
+    graph = _host_fitted_graph(graph^, n_samples, params, target, target_kind, target_dims, target_n_neighbors,
+                               target_weight, fit_out)
     var initial: List[Float32]
     if given:
         initial = initial_given.copy()

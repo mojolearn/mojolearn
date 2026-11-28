@@ -40,12 +40,19 @@ rounding the Python exports apply, so the bits are unchanged.
                      p [n, d, n_neighbors, method (0 exact, 1 ivf), n_lists, n_probes, random_state]
                      f [set_op_mix_ratio, local_connectivity]           -> the connectivities' edge count
                      (`mojolearn.neighbors_graph`; -1 is None for n_lists, n_probes and random_state)
+  UMAP_OP_FIT_GRAPH  a [x, target (0: none), indptr, indices, data]
+                     p and f: UMAP_OP_FIT_EX's 11 / 12 Int words and 10 float words
+                                                                        -> the fitted graph's edge count
+                     (`UMAP.graph_`, read after the fit: the same graph body and supervised intersection as the
+                     fit, published into the caller's `umap_graph_capacity` arrays, no layout)
 
 THE FITTED OUTPUTS (lane sc-ann-1-umap, 2026-11-28): UMAP_OP_FIT and UMAP_OP_FIT_EX take four more addresses
 after their own (6 and 8 in all): the fitted graph's CSR `indptr` (n + 1 int64), `indices` (int32) and `data`
 (float32), each `umap_graph_capacity` words (umap/graph_out.mojo), and `ab` (2 float32, the curve's a and b
 the optimizer used). UMAP_OP_FIT_EX takes a twelfth Int word, the neighbor search (0 exact, 1 ivf); 11 words
-are the exact search. A caller that sends the shorter forms gets neither and the same bits.
+are the exact search. A caller that sends the shorter forms gets neither and the same bits. An `indptr` of 0
+with a nonzero `ab` asks for the curve only: the public fit sends that form (lane sc-leftovers-1, 2026-11-28),
+so a fit makes no graph arrays and copies no edges; `UMAP.graph_` is UMAP_OP_FIT_GRAPH, run when it is read.
 
 THE SLOT FORM (lane vdf-scope-cluster7, 2026-11-24): on the device column a NEGATIVE row address word (`x` of the
 fits; `training` and / or `queries` of the transform) names a slot of the metrics image's resident store
@@ -70,7 +77,9 @@ comptime UMAP_OP_TRANSFORM = 2
 comptime UMAP_OP_ROWS_READ = 3
 #: `mojolearn.neighbors_graph` (lane sc-ann-1-umap): UMAP's own k-NN and fuzzy simplicial set of the rows.
 comptime UMAP_OP_GRAPH = 4
-comptime UMAP_OPERATION_COUNT = 5
+#: `UMAP.graph_` (lane sc-leftovers-1): the fit's graph rebuilt when the attribute is read, not on every fit.
+comptime UMAP_OP_FIT_GRAPH = 5
+comptime UMAP_OPERATION_COUNT = 6
 
 #: The transform's optional tails: the eight legacy words only, plus
 #: learning_rate / repulsion_strength / negative_sample_rate, plus the
@@ -91,6 +100,9 @@ def umap_ops_check_layout(operation: Int, na: Int, np: Int, nf: Int) raises:
             return
     elif operation == UMAP_OP_GRAPH:
         if na == 7 and np == 7 and nf == 2:
+            return
+    elif operation == UMAP_OP_FIT_GRAPH:
+        if na == 5 and (np == 11 or np == 12) and nf == 10:
             return
     elif operation == UMAP_OP_TRANSFORM:
         if na == 4 and ((np == 7 and nf == 4) or (np == 8 and nf == 6) or (np == 9 and nf == 9)):
@@ -221,8 +233,9 @@ def _base_words(mut ints: List[Int], mut floats: List[Float64], cfg: UmapConfigW
 
 
 def _out_words(mut addresses: List[Int], out_indptr: Int, out_indices: Int, out_data: Int, out_ab: Int):
-    """The fitted outputs' four addresses (module docstring), when asked."""
-    if out_indptr != 0:
+    """The fitted outputs' four addresses (module docstring), when asked:
+    the graph's three and the curve's, or the curve's alone (indptr 0)."""
+    if out_indptr != 0 or out_ab != 0:
         addresses.append(out_indptr)
         addresses.append(out_indices)
         addresses.append(out_data)
@@ -256,6 +269,28 @@ def umap_fit_ex_call(entry: NativeDescriptorCall, x: Int, embedding: Int, initia
     _out_words(addresses, out_indptr, out_indices, out_data, out_ab)
     var ints: List[Int] = [n, d]
     var floats = List[Float64]()
+    _fit_ex_words(ints, floats, cfg, target, neighbors)
+    return native_descriptor_call(entry, UMAP_OP_FIT_EX, addresses, ints, floats)
+
+
+def umap_fit_graph_call(entry: NativeDescriptorCall, x: Int, n: Int, d: Int, cfg: UmapConfigWords,
+                        target: UmapTargetWords, neighbors: Int, out_indptr: Int, out_indices: Int,
+                        out_data: Int) raises -> Int:
+    """UMAP_OP_FIT_GRAPH (`UMAP.graph_`): the fit's graph from the fit's
+    own words (`umap_fit_ex_call`'s, whichever form the fit sent: the graph
+    reads only its k-NN, metric, mix, connectivity, seed and target words)
+    into the caller's arrays; returns the edge count."""
+    var addresses: List[Int] = [x, target.address, out_indptr, out_indices, out_data]
+    var ints: List[Int] = [n, d]
+    var floats = List[Float64]()
+    _fit_ex_words(ints, floats, cfg, target, neighbors)
+    return native_descriptor_call(entry, UMAP_OP_FIT_GRAPH, addresses, ints, floats)
+
+
+def _fit_ex_words(mut ints: List[Int], mut floats: List[Float64], cfg: UmapConfigWords, target: UmapTargetWords,
+                  neighbors: Int):
+    """UMAP_OP_FIT_EX's words after [n, d] (module docstring), the one
+    builder of the fit and of `UMAP.graph_`."""
     _base_words(ints, floats, cfg)
     ints.append(cfg.negative_sample_rate)
     ints.append(cfg.metric)
@@ -270,7 +305,6 @@ def umap_fit_ex_call(entry: NativeDescriptorCall, x: Int, embedding: Int, initia
     floats.append(cfg.curve_a)
     floats.append(cfg.curve_b)
     floats.append(target.weight)
-    return native_descriptor_call(entry, UMAP_OP_FIT_EX, addresses, ints, floats)
 
 
 def umap_transform_call(entry: NativeDescriptorCall, training: Int, fitted: Int, queries: Int, dst: Int,

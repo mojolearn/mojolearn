@@ -18,7 +18,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.neighbors_entry_table_umap import (
-    UMAP_OP_FIT, UMAP_OP_FIT_EX, UMAP_OP_TRANSFORM, UMAP_OP_ROWS_READ, UMAP_OP_GRAPH, umap_ops_check_layout, umap_ops_check_spans,
+    UMAP_OP_FIT, UMAP_OP_FIT_EX, UMAP_OP_TRANSFORM, UMAP_OP_ROWS_READ, UMAP_OP_GRAPH, UMAP_OP_FIT_GRAPH, umap_ops_check_layout, umap_ops_check_spans,
 )
 from metrics.metrics_entries_impl import device_finite_f32_list
 from umap.estimator import fit_transform as umap_fit_transform
@@ -28,10 +28,10 @@ from max.gpu.host import DeviceBuffer
 from core.fold_x_word import fold_x_slot
 from core.metrics_store import metrics_store_buffer
 from umap.ops_entry_words import (
-    UmapWordPtr, UmapFloatPtr, umap_fit_config, umap_fit_ex_config, umap_transform_config, umap_graph_config,
+    UmapWordPtr, UmapFloatPtr, umap_fit_config, umap_fit_ex_config, umap_transform_config, umap_graph_config, umap_fit_graph_config,
 )
 from umap.graph_out import UmapFitOut
-from umap.sparse_estimator import umap_neighbors_graph_device
+from umap.sparse_estimator import umap_neighbors_graph_device, umap_fit_graph
 
 #: The metrics image's ONE process-lifetime DeviceContext: the same slot name
 #: metrics/estimator.mojo and the spectral modules use, so UMAP and the other
@@ -126,6 +126,24 @@ def umap_ops_device_run(operation: Int, a: UmapWordPtr, na: Int, p: UmapWordPtr,
                                                 UmapFitOut(a[4], a[5], a[6], 0))
         _ = gx^
         return edges
+    if operation == UMAP_OP_FIT_GRAPH:
+        # `UMAP.graph_` read after a fit (lane sc-leftovers-1): the fit's graph body over the fit's words.
+        if a[0] < 0:
+            raise Error("umap ops: the fitted graph reads host rows only (a store slot word was sent)")
+        var fgconfig = umap_fit_graph_config(a, p, np, f)
+        var fgn = p[0]
+        var fgd = p[1]
+        var fgkind = p[8]
+        var fgdims = p[9]
+        var fgx = _load(a[0], fgn * fgd)
+        var fgtarget = List[Float32]()
+        if fgkind != 0:
+            fgtarget = _load(a[1], fgn * fgdims)
+        var fgedges = 0
+        with process_ctx[UMAP_DEVCTX_SLOT]() as fgctx:
+            fgedges = umap_fit_graph(fgctx, fgx, fgn, fgd, fgconfig, fgtarget, fgkind, fgdims, p[10], Float32(f[9]),
+                                     UmapFitOut(a[2], a[3], a[4], 0))
+        return fgedges
     if operation == UMAP_OP_FIT:
         var config = umap_fit_config(p, np, f)
         var n = p[0]
