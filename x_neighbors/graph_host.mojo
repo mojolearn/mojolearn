@@ -20,6 +20,29 @@ over 25 tasks; a launch below one grain (the scalar stages, small graphs)
 runs inline. A cost rule over item counts, not a dataset shape."""
 
 
+def gp_host_run[S: Int](count: Int, g: GA):
+    """Stage S's items 0 .. count - 1 on the host. Lane sc-graph-1
+    (2026-11-28): the items of one launch run across the host's cores in
+    GP_HOST_GRAIN chunks. graph_par's contract (no item reads what another
+    item of the same launch writes; shared counters are integer atomics) is
+    what lets the device run them at once, so the bits are the ascending
+    loop's. A launch of one chunk stays on the calling thread (no pool hop
+    for a scalar stage)."""
+    var tasks = (count + GP_HOST_GRAIN - 1) // GP_HOST_GRAIN
+    if tasks <= 1:
+        for t in range(count):  # one chunk: the items in ascending order on this thread
+            gp_item[S](t, g)
+        return
+
+    def chunk(k: Int) {imm g, imm count}:
+        var lo = k * GP_HOST_GRAIN
+        var hi = min(lo + GP_HOST_GRAIN, count)
+        for t in range(lo, hi):  # the chunk's items in ascending order
+            gp_item[S](t, g)
+
+    host_parallelize(chunk, tasks)
+
+
 struct GraphCpu(GExec):
     """The arenas as host lists; `a` is the caller's array."""
     var lf: List[Float32]
@@ -50,25 +73,9 @@ struct GraphCpu(GExec):
         )
 
     def run(mut self, stage: Int, count: Int, g: GA) raises:
-        # Lane sc-graph-1 (2026-11-28): the items of one launch run across the
-        # host's cores in GP_HOST_GRAIN chunks. graph_par's contract (no item
-        # reads what another item of the same launch writes; shared counters
-        # are integer atomics) is what lets the device run them at once, so
-        # the bits are the ascending loop's. A launch of one chunk stays on
-        # the calling thread (no pool hop for a scalar stage).
         comptime for s in range(GP_NST):
             if stage == s:
-                var tasks = (count + GP_HOST_GRAIN - 1) // GP_HOST_GRAIN
-                if tasks <= 1:
-                    for t in range(count):
-                        gp_item[s](t, g)
-                else:
-                    def chunk(k: Int) {imm g, imm count}:
-                        var lo = k * GP_HOST_GRAIN
-                        var hi = min(lo + GP_HOST_GRAIN, count)
-                        for t in range(lo, hi):
-                            gp_item[s](t, g)
-                    host_parallelize(chunk, tasks)
+                gp_host_run[s](count, g)
 
     def get_i(mut self, slot: Int, idx: Int) raises -> Int:
         return Int(self.li[Int(self.llay[slot]) + idx])
