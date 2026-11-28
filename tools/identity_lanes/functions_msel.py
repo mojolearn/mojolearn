@@ -92,12 +92,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("fn-msel-permutation-test-score")
 def _(ml, X, yc, yr, Xh=None):
+    # lane verify-light-1, 2026-11-28: 2 permutations (was 4) and the groups call dealt to one fixture (`_cell_takes`):
+    # (1 + permutations) x 3 folds Ridge fits a call, three calls a GPU cell (host, then two resident), 12 s a cell on
+    # the 0.9.0 Apple record; two permutations still shuffle twice and score each
     f = _functions_msel_fx(X)
+    groups = _cell_takes(0)
     return _functions_resident(ml, "model_selection.permutation_test_score", lambda p: dict(
         plain=_functions_d(ml.model_selection.permutation_test_score(
-            ml.Ridge(alpha=1.0), p(f["X"]), p(f["y"]), cv=3, n_permutations=4, random_state=3)),
-        groups=_functions_d(ml.model_selection.permutation_test_score(
-            ml.Ridge(alpha=1.0), p(f["X"]), p(f["y"]), groups=p(f["g"]), cv=3, n_permutations=4, random_state=3))))
+            ml.Ridge(alpha=1.0), p(f["X"]), p(f["y"]), cv=3, n_permutations=2, random_state=3)),
+        **({} if not groups else dict(groups=_functions_d(ml.model_selection.permutation_test_score(
+            ml.Ridge(alpha=1.0), p(f["X"]), p(f["y"]), groups=p(f["g"]), cv=3, n_permutations=2, random_state=3))))))
 
 
 @lane("fn-msel-train-test-split")

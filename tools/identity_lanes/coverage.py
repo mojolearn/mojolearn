@@ -903,8 +903,10 @@ def _(ml, X, yc, yr, Xh=None):
     tables."""
     d = _coverage_digester(ml)
     xh = (X if Xh is None else Xh)[:256]
-    b = ml.LogisticRegressionCV(Cs=4, cv=3, max_iter=15).fit(X[:1200], yc[:1200])
-    m = ml.LogisticRegressionCV(Cs=4, cv=3, max_iter=15).fit(X[:1200], _linear_y3(X[:1200]))
+    # lane verify-light-1, 2026-11-28: Cs 2 (was 4; 9 s a cell, 17 s at worst, on the 0.9.0 Apple record): the lane
+    # is the two predict_proba branches; two Cs still choose between candidates on the folds
+    b = ml.LogisticRegressionCV(Cs=2, cv=3, max_iter=15).fit(X[:1200], yc[:1200])
+    m = ml.LogisticRegressionCV(Cs=2, cv=3, max_iter=15).fit(X[:1200], _linear_y3(X[:1200]))
     return _fit(dict(binary=d(np.asarray(b.predict_proba(X[:256]), dtype=np.float32)),
                      binary_held=d(np.asarray(b.predict_proba(xh), dtype=np.float32)),
                      multi=d(np.asarray(m.predict_proba(X[:256]), dtype=np.float32)),
