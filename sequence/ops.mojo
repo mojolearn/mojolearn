@@ -42,7 +42,7 @@ from core.row_cells import softmax_row_from_max_f32
 # Restore: git apply experiments/removed/MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch
 # (Sweep 2026-11-15: NN42_INPUT_BIAS_FUSED = False removed; autograd/rules_recurrent.mojo keeps the bias in GX.)
 
-comptime FP = MutPointer[Float32, MutUntrackedOrigin]
+from core.f32_pointer import FP
 
 #: lane/apple-fast-tier (2026-10-02). Under FAST `identical_mul_add` is the
 #: unfused `a * b + c` (two roundings, two instructions); the board's theta
