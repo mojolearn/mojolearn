@@ -33,6 +33,7 @@ from x_cluster.bodies import SplitMix64
 from x_cluster.post_bodies import FM_VAL
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS
 from checks.numerics import portable_exp64
+from core.harmony_api import HarmonyFitResult
 
 comptime HM_WINDOW = 3
 comptime HM_KMEANS_INIT_ITER = 25
@@ -59,23 +60,6 @@ struct HarmonyParams(Copyable, Movable):
     var epsilon_harmony: Float64
     var theta: List[Float64]
     var lamb: List[Float64]
-
-
-struct HarmonyResult(Movable):
-    var z_corr: List[Float32]
-    var r: List[Float32]
-    var y: List[Float32]
-    var objective: List[Float64]
-    var n_iter: Int
-    var converged: Bool
-
-    def __init__(out self):
-        self.z_corr = List[Float32]()
-        self.r = List[Float32]()
-        self.y = List[Float32]()
-        self.objective = List[Float64]()
-        self.n_iter = 0
-        self.converged = False
 
 
 def _gcd(a_in: Int, b_in: Int) -> Int:
@@ -118,7 +102,7 @@ def _objective[O: ClusterOps](
 
 def harmony_fit[O: ClusterOps](
     mut ops: O, z: List[Float32], codes: List[Int32], offsets: List[Int32], p: HarmonyParams
-) raises -> HarmonyResult:
+) raises -> HarmonyFitResult:
     """`codes`: c x n per-covariate level codes, `offsets`: each covariate's first global level."""
     var n = p.n
     var d = p.d
@@ -167,7 +151,7 @@ def harmony_fit[O: ClusterOps](
     var osl = ops.zeros(k * nb)
     ops.hm_eo(rs, cs, prs, n, k, c, nb, es, osl)
     var cells = ops.zeros(n)
-    var res = HarmonyResult()
+    var res = HarmonyFitResult()
     var obj_kmeans = List[Float64]()
     obj_kmeans.append(_objective(ops, rs, dist, es, osl, cs, ths, n, k, c, nb, sigma, cells))
     res.objective.append(obj_kmeans[0])
