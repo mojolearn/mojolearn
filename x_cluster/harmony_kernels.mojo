@@ -4,7 +4,7 @@ Only the GPU binding imports this file (x_cluster/device_ops.mojo `DeviceOps.hm_
 from max.gpu import block_dim, block_idx, thread_idx
 from x_cluster.bodies import FPtr, IPtr
 from x_cluster.harmony_bodies import (
-    hm_rownorm_row, hm_count_cell, hm_scale_row, hm_eo_cell, hm_block_eo_cell, hm_block_r_cell,
+    hm_codes_cell, hm_rownorm_row, hm_count_cell, hm_scale_row, hm_eo_cell, hm_block_eo_cell, hm_block_r_cell,
     hm_objective_row, hm_centroid_cell, hm_ridge_a_cell, hm_ridge_rhs_cell, hm_chol_block, hm_solve_cell,
     hm_correct_cell,
 )
@@ -13,6 +13,12 @@ from x_cluster.harmony_bodies import (
 @always_inline
 def _hm_tid() -> Int:
     return Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+
+
+def hm_codes_kernel(raw: IPtr, off: IPtr, n: Int32, c: Int32, dst: IPtr):
+    var t = _hm_tid()
+    if t < Int(n):
+        hm_codes_cell(raw, off, Int(n), Int(c), dst, t)
 
 
 def hm_rownorm_kernel(src: FPtr, dst: FPtr, n: Int32, d: Int32):

@@ -57,7 +57,7 @@ from cluster.host.kmeans_oracle import host_kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from x_cluster.ops import ClusterOps
 from x_cluster.harmony_bodies import (
-    hm_rownorm_row, hm_count_cell, hm_scale_row, hm_eo_cell, hm_block_eo_cell, hm_block_r_cell,
+    hm_codes_cell, hm_rownorm_row, hm_count_cell, hm_scale_row, hm_eo_cell, hm_block_eo_cell, hm_block_r_cell,
     hm_objective_row, hm_centroid_cell, hm_ridge_a_cell, hm_ridge_rhs_cell, hm_chol_block, hm_solve_cell,
     hm_correct_cell,
 )
@@ -548,6 +548,16 @@ struct HostOps(ClusterOps):
 
     # ---------------------------------------------------------------- Harmony (lane sc-stats-1, 2026-11-28)
     # The bodies of x_cluster/harmony_bodies.mojo over `host_cells`, one call per cell as the device's threads.
+
+    def hm_codes(mut self, raw: Int, offsets: Int, n: Int, c: Int, dst: Int) raises:
+        var pr_ = self._ip(raw)
+        var po = self._ip(offsets)
+        var pd = self._ip(dst)
+
+        def body(t: Int) {imm pr_, imm po, imm pd, imm n, imm c}:
+            hm_codes_cell(pr_, po, n, c, pd, t)
+
+        host_cells(body, n, 3 * c)
 
     def hm_rownorm(mut self, src: Int, n: Int, d: Int, dst: Int) raises:
         var ps = self._fp(src)

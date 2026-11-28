@@ -58,6 +58,14 @@ def hm_phi(codes: IPtr, i: Int, c: Int, u: Int) -> Bool:
 
 
 @always_inline
+def hm_codes_cell(raw: IPtr, off: IPtr, n: Int, c: Int, dst: IPtr, i: Int):
+    """Cell i's c global level codes: dst[i, cc] = raw[cc, i] + off[cc] (the door hands each covariate's own codes,
+    covariate by covariate)."""
+    for cc in range(c):
+        dst[i * c + cc] = Int32(Int(raw[cc * n + i]) + Int(off[cc]))
+
+
+@always_inline
 def hm_rownorm_row(src: FPtr, dst: FPtr, d: Int, i: Int):
     """dst row i = src row i / its L2 norm (the squares folded ascending); a zero row stays zero. In place is
     allowed (each word is read before it is written)."""

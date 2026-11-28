@@ -165,6 +165,10 @@ trait ClusterOps(Movable):
     # ---------------------------------------------------------------- Harmony (lane sc-stats-1, 2026-11-28)
     # One body each in x_cluster/harmony_bodies.mojo; the driver is x_cluster/harmony.mojo.
 
+    def hm_codes(mut self, raw: Int, offsets: Int, n: Int, c: Int, dst: Int) raises:
+        """Int slot dst (n x c) = the global level codes of the covariate-major int slot raw (`hm_codes_cell`)."""
+        ...
+
     def hm_rownorm(mut self, src: Int, n: Int, d: Int, dst: Int) raises:
         """dst rows = src rows over their L2 norms (`hm_rownorm_row`); in place allowed."""
         ...

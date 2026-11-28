@@ -59,7 +59,7 @@ from x_cluster.bodies import (
 )
 from cluster.estimator import kmeans_fit, kmeans_fit_rows, kmeans_fit_rows_resident, kmeans_fit_device
 from x_cluster.harmony_kernels import (
-    hm_rownorm_kernel, hm_count_kernel, hm_scale_kernel, hm_eo_kernel, hm_block_eo_kernel, hm_block_r_kernel,
+    hm_codes_kernel, hm_rownorm_kernel, hm_count_kernel, hm_scale_kernel, hm_eo_kernel, hm_block_eo_kernel, hm_block_r_kernel,
     hm_objective_kernel, hm_centroid_kernel, hm_ridge_a_kernel, hm_ridge_rhs_kernel, hm_chol_kernel,
     hm_solve_kernel, hm_correct_kernel,
 )
@@ -2217,6 +2217,13 @@ struct DeviceOps(ClusterOps):
 
     # ---------------------------------------------------------------- Harmony (lane sc-stats-1, 2026-11-28)
     # Each primitive is one kernel of x_cluster/harmony_kernels.mojo over its cells (hm_solve: two).
+
+    def hm_codes(mut self, raw: Int, offsets: Int, n: Int, c: Int, dst: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[hm_codes_kernel](
+            self._ip(raw), self._ip(offsets), Int32(n), Int32(c), self._ip(dst), grid_dim=_grid(n), block_dim=TPB,
+        )
+        self._ph1("hm_codes")
 
     def hm_rownorm(mut self, src: Int, n: Int, d: Int, dst: Int) raises:
         self._ph0()

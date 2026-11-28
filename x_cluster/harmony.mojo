@@ -116,7 +116,10 @@ def _objective[O: ClusterOps](
     return ops.sum_ff(cells, -1, -1, n, FM_VAL)
 
 
-def harmony_fit[O: ClusterOps](mut ops: O, z: List[Float32], codes: List[Int32], p: HarmonyParams) raises -> HarmonyResult:
+def harmony_fit[O: ClusterOps](
+    mut ops: O, z: List[Float32], codes: List[Int32], offsets: List[Int32], p: HarmonyParams
+) raises -> HarmonyResult:
+    """`codes`: c x n per-covariate level codes, `offsets`: each covariate's first global level."""
     var n = p.n
     var d = p.d
     var k = p.k
@@ -125,7 +128,10 @@ def harmony_fit[O: ClusterOps](mut ops: O, z: List[Float32], codes: List[Int32],
     var b1 = nb + 1
     var sigma = Float32(p.sigma)
     var zs = ops.put(z)
-    var cs = ops.put_i(codes)
+    var raw = ops.put_i(codes)
+    var offs = ops.put_i(offsets)
+    var cs = ops.zeros_i(n * c)
+    ops.hm_codes(raw, offs, n, c, cs)
     # the level sizes N_b: pr = N_b / n; theta decays with tau (harmonypy: theta (1 - exp(-(N_b / (k tau))^2)))
     var cnt_s = ops.zeros(nb)
     ops.hm_counts(cs, n, c, nb, cnt_s)
