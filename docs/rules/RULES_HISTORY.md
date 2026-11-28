@@ -1161,3 +1161,16 @@ jobs running beside the release's Apple record and every session was killed. Pre
 >   compile-fix lane per integration branch that the orchestrator names in its brief. No other lane compiles, on
 >   the laptop or through `lq`. The orchestrator merges finished lanes into one integration branch, compiles it once
 >   (every switch on and off, NVIDIA and AMD targets), fixes what breaks, then merges to main. Lanes never touch main.
+
+## 2026-11-28: "Reuse of old runs is opt-in" replaced by the family rule
+
+Replaced in AGENTS.md part 4 on Andrew's order of 2026-11-28 ("change it so we rebuild only if the split by family
+changed"). The first bullet of "Verify once" was narrowed to changed families in the same commit. Previous text,
+verbatim:
+
+> ### Reuse of old runs is opt-in (was: Reuse good old runs, automatically)
+> 
+> - Reuse of old identity records is opt-in everywhere (Andrew, 2026-11-05, decided 2026-11-09): every release
+>   records every lane on every device once, and a reused older record is accepted only when the operator passes the
+>   explicit reuse flag (`tools/release.py --reuse-unchanged`). `tools/record_identity_column.sh` must default to a
+>   full record with reuse behind a flag.

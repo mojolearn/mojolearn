@@ -499,8 +499,9 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 
 ### Verify once, before the release, at the very end (Andrew, 2026-11-05)
 
-- Verification happens once, before the release: freeze the source, run one global verify of every lane on every
-  device from the built wheels, see the columns match, publish. Nothing is verified after a release.
+- Verification happens once, before the release: freeze the source, run one verify of every lane of every changed
+  family on every device from the built wheels (unchanged families keep their recorded columns: see the next
+  rule), see the columns match, publish. Nothing is verified after a release.
 - No same-bits checks during development: see the hard rule "RELEASE-ONLY WORK" in part 1, which lists what a
   round runs and what only the release runs. A plan that would run identity twice for one release is wrong: say so
   up front and fix the order or the tool.
@@ -514,14 +515,21 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   (2026-10-25). Do not promote a source check or a compile to runtime success, or extend a partial result to
   untested paths or devices. NVIDIA PTX verification records the actual GPU, driver and the selected PTX route.
 
-### Reuse of old runs is opt-in (was: Reuse good old runs, automatically)
+### A release rebuilds and re-records only the families that changed (Andrew, 2026-11-28)
 
-- Reuse of old identity records is opt-in everywhere (Andrew, 2026-11-05, decided 2026-11-09): every release
-  records every lane on every device once, and a reused older record is accepted only when the operator passes the
-  explicit reuse flag (`tools/release.py --reuse-unchanged`). `tools/record_identity_column.sh` must default to a
-  full record with reuse behind a flag.
-- Cross-vendor agreement is always checked in full. A lane whose newest result is bad is fixed in code, then
-  recorded.
+- The product is split by family (neural, the classical families, sequence, and so on, plus one shared core); the
+  split is one checked-in map from every binding and every verify lane to its family. A release rebuilds a
+  family's binaries, and records that family's lanes on each device, only when the family changed: its source
+  closure, the shared core it compiles in, the compiler, the flags or the build scripts. An unchanged family ships
+  the previous release's bytes and keeps its recorded columns. This is the default of `tools/release.py` and of
+  `tools/record_identity_column.sh`; a full rebuild and record is the flag (`--rebuild-all`).
+- "Changed" is decided by code from the binding's identity (`tools/release_reuse.py`), never by an agent's reading
+  of a diff. A change to the shared core changes every family that compiles it in, so the shared core is kept
+  small: code used by one family lives in that family.
+- A family is reused only whole and only from bytes that were recorded: same binaries, same columns, on every
+  vendor. A family with any changed binding is rebuilt and recorded whole, on every device.
+- Cross-vendor agreement is always checked in full, over the new records and the kept ones together. A lane
+  whose newest result is bad is fixed in code, then recorded.
 - Andrew says when it is time to release (2026-11-09). No agent starts, schedules or proposes a release
   date. 0.9.0 is not rushed: the fixes matter most. The Python-at-the-boundary rollout
   (`docs/plans/PYTHON_AT_THE_BOUNDARY.md`: Python objects only in the unpack and pack files of each
