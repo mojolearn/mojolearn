@@ -29,7 +29,7 @@ from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, 
 from bindings.classical_validate_unpack import classical_view
 from bindings.umap_parameters_native_door import umap_parameters_fields, umap_neighbors_code, umap_scalar as _umap_scalar, umap_integer as _umap_integer
 from bindings.native_array_storage_door import native_array_unfilled
-from bindings.classical_arrays_door import classical_wrap_array
+from bindings.umap_graph_pack import umap_graph_stores, umap_store_address, umap_graph_pack
 from core.native_array_layout import native_array_code
 from umap.graph_out import umap_graph_capacity
 from x_ann.mani_umap_run import (
@@ -415,14 +415,12 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var target_kind = 0 if target is None else Int(py=target[0])
     var target_k = k if target is None else Int(py=target[3])
     var cap = umap_graph_capacity(n, k, target_kind, target_k)
-    var g_ptr = native_array_unfilled(native_array_code("<i8"), n + 1)
-    var g_idx = native_array_unfilled(native_array_code("<i4"), cap)
-    var g_val = native_array_unfilled(native_array_code("<f4"), cap)
+    var g_stores = umap_graph_stores(n, cap)
     var g_ab = native_array_unfilled(native_array_code("<f4"), 2)
-    var ptr_address = Int(py=py_call(g_ptr.buffer_info)[0])
-    var idx_address = Int(py=py_call(g_idx.buffer_info)[0])
-    var val_address = Int(py=py_call(g_val.buffer_info)[0])
-    var ab_address = Int(py=py_call(g_ab.buffer_info)[0])
+    var ptr_address = umap_store_address(g_stores[0])
+    var idx_address = umap_store_address(g_stores[1])
+    var val_address = umap_store_address(g_stores[2])
+    var ab_address = umap_store_address(g_ab)
     var entry = umap_ops_entry(key)
     var x_address = x.source.addr
     var columns = 0
@@ -453,7 +451,7 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     _ = initial_pin^  # the door's pin held the start embedding through RUN
     _ = target^
     umap_check_embedding(columns == nc, embedding_address, n * nc)
-    var graph = _umap_graph_pack(g_ptr, g_idx, g_val, ptr_address, n, cap, context)
+    var graph = umap_graph_pack(g_stores, n, cap, context)
     var abp = FAMILY_F32P(unsafe_from_address=ab_address)
     var curve_a = Float64(abp[0])
     var curve_b = Float64(abp[1])
@@ -475,26 +473,6 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     py_setitem(settings.fields, PythonObject("a_"), PythonObject(curve_a))
     py_setitem(settings.fields, PythonObject("b_"), PythonObject(curve_b))
     return embedding
-
-
-def _umap_graph_pack(indptr_store: PythonObject, indices_store: PythonObject, data_store: PythonObject,
-                     indptr_address: Int, n: Int, cap: Int, context: PythonObject) raises -> PythonObject:
-    """PACK of `graph_`: `(indptr, indices, data)` Arrays (int64, int32,
-    float32) of the fitted CSR. The edge arrays were sized by the bound and
-    are trimmed in place to the `indptr[n]` edges the fit wrote (an
-    array.array slice delete, no copy of the kept words by this code)."""
-    var nnz = Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=indptr_address)[n])
-    if nnz < 0 or nnz > cap:
-        raise Error("RuntimeError: UMAP fitted graph exceeds its output capacity")
-    var b = native_loaded_module("builtins")
-    if nnz < cap:
-        var tail = py_call(b.slice, PythonObject(nnz), PythonObject(None))
-        _ = py_call(py_attr(indices_store, "__delitem__"), tail)
-        _ = py_call(py_attr(data_store, "__delitem__"), tail)
-    var indptr = classical_wrap_array(indptr_store, Python.tuple(n + 1), "<i8", "C", context)
-    var indices = classical_wrap_array(indices_store, Python.tuple(nnz), "<i4", "C", context)
-    var data = classical_wrap_array(data_store, Python.tuple(nnz), "<f4", "C", context)
-    return Python.tuple(indptr, indices, data)
 
 
 def _umap_concat_tuple(config: PythonObject, extras: PythonObject) raises -> PythonObject:
