@@ -21,7 +21,7 @@ from x_prep.sc_prep import (
     SP_BIN_CR, SP_BIN_STATS, SP_RANK, SP_GROUP_START, SP_SCATTER, SP_SEG_MEDIAN, SP_ABSDEV, SP_NORM_DISP,
     SP_HV_CUT, SP_COMBINE, SP_HV_BATCH, SP_V3_KEY, SP_LOESS, SP_COUNT, SP_V3_CLIPVAL, SP_V3_NORMVAR,
     SP_V3_SELECT, SP_V3_HV, SP_SCAN_PART, SP_SCAN_TOP, SP_SCAN_FILL, SP_COMPACT, SP_COL_SELECT, SP_CSR_SELECT,
-    SP_SCALE_APPLY, SP_SCALE_CSR, SP_PINV, SP_DENSIFY, SP_RESID,
+    SP_SCALE_APPLY, SP_SCALE_CSR, SP_PINV, SP_DENSIFY, SP_RESID, SP_RANK_KEYS, SP_RANK_SORT, sp_rank_chunks,
     SP_DENSE, SP_CSR, SP_PRE_NONE, SP_PRE_EXPM1, SP_SEURAT, SP_CELL_RANGER, SP_SEURAT_V3, SP_SCAN_BLOCK,
     SP_CR_EDGES,
 )
@@ -281,6 +281,17 @@ struct HvgDispersionPlan(Copyable, Movable):
     var nbatches: Int
 
 
+def sp_rank_stages(mut prog: EncProgram, key: Int, group: Int, d: Int, nb: Int, desc: Int, rank: Int):
+    """RANK (nb x d int words) of the keys at `key` within their `group` words (-1: one group), ascending or
+    descending (`desc` 1), ties by gene: the three stages of x_prep/sc_prep.mojo THE RANK over one work block of
+    2 nb d pair words (lane sc-leftovers-1; before, one SP_RANK stage counted d^2 per batch)."""
+    var total = nb * d
+    var pairs = prog.work(2 * total)
+    prep_program_stage(prog.program, SP_RANK_KEYS, total, key, d, desc, pairs)
+    prep_program_stage(prog.program, SP_RANK_SORT, nb * sp_rank_chunks(d), key, group, d, pairs)
+    prep_program_stage(prog.program, SP_RANK, total, key, group, d, desc, rank, pairs)
+
+
 def hvg_dispersion_stage(mut prog: EncProgram, r: HvgDispersion) -> HvgDispersionPlan:
     var d = r.d
     var nb = r.batches
@@ -315,7 +326,7 @@ def hvg_dispersion_stage(mut prog: EncProgram, r: HvgDispersion) -> HvgDispersio
         var rank = prog.work(total)
         var start = prog.work(nb * (ng + 1))
         var seg = prog.work(total)
-        prep_program_stage(prog.program, SP_RANK, total, disp, bins, d, 0, rank)
+        sp_rank_stages(prog, disp, bins, d, nb, 0, rank)
         prep_program_stage(prog.program, SP_GROUP_START, nb * (ng + 1), disp, bins, d, ng, start)
         prep_program_stage(prog.program, SP_SCATTER, total, disp, bins, rank, d, ng, start, seg)
         prep_program_stage(prog.program, SP_SEG_MEDIAN, nb * ng, seg, d, ng, start, avg)
@@ -324,7 +335,7 @@ def hvg_dispersion_stage(mut prog: EncProgram, r: HvgDispersion) -> HvgDispersio
         var rank2 = prog.work(total)
         var start2 = prog.work(nb * (ng + 1))
         var seg2 = prog.work(total)
-        prep_program_stage(prog.program, SP_RANK, total, dabs, bins, d, 0, rank2)
+        sp_rank_stages(prog, dabs, bins, d, nb, 0, rank2)
         prep_program_stage(prog.program, SP_GROUP_START, nb * (ng + 1), dabs, bins, d, ng, start2)
         prep_program_stage(prog.program, SP_SCATTER, total, dabs, bins, rank2, d, ng, start2, seg2)
         prep_program_stage(prog.program, SP_SEG_MEDIAN, nb * ng, seg2, d, ng, start2, dev)
@@ -430,7 +441,7 @@ def hvg_v3_select_stage(mut prog: EncProgram, r: HvgV3Select) -> HvgV3SelectPlan
     var nv = prog.work(total)
     prep_program_stage(prog.program, SP_V3_NORMVAR, total, mean, reg, sm, sq, ncnt, d, nv)
     var rank = prog.work(total)
-    prep_program_stage(prog.program, SP_RANK, total, nv, -1, d, 1, rank)
+    sp_rank_stages(prog, nv, -1, d, nb, 1, rank)
     var orank = prog.alloc(d)
     var onb = prog.alloc(d)
     var ovn = prog.alloc(d)
