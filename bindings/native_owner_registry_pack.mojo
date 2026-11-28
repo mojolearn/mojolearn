@@ -10,6 +10,7 @@ here is exported to Python. Registration and admission hold the GIL.
 from std.python import PythonObject
 from std.python.bindings import lookup_py_type_object
 from std.python._cpython import PyObjectPtr
+from core.shared_slot import SharedSlot
 
 
 def borrowed_native_owner(address: Int) raises -> PythonObject:
