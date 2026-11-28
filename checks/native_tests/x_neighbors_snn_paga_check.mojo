@@ -12,6 +12,8 @@ x_neighbors image.
     PAGA, hand-checked: six nodes, three groups, the counts, the v1.2 connectivities 1/4.2, 1/1.8, min(1, 2/1) and
     the spanning tree with its tie between two pairs of one edge each (the pair of lower indices kept); the dense
     entry returns the CSR entry's words bit for bit
+    labels by community size (Louvain / Leiden label_order="size"): the largest community 0, ties to the community
+    whose first node comes first
 
 Nothing is read from a fixture pack: every graph is written here. The brute force's rows run across the host cores.
 """
@@ -19,6 +21,7 @@ from core.host_parallel import host_parallelize
 from core.neighbors_native_driver import XnDriver
 from neighbors.graph_fit_run import (
     SnnRequest, SnnOutcome, snn_run, PagaRequest, PagaOutcome, paga_run, LouvainRequest, louvain_fit_run,
+    size_relabel_run,
 )
 from x_neighbors.native_descriptor_host import xn_native_v1
 from std.testing import TestSuite
@@ -219,6 +222,21 @@ def test_paga_hand_checked() raises:
         refused = String(error).find("numbered from 0") >= 0
     require(refused, "PAGA: a label above n - 1 was not refused by name")
     _ = a^
+
+
+def test_labels_by_size() raises:
+    # sizes [2, 3, 1]: community 1 becomes 0, 0 becomes 1, 2 stays 2
+    var labels: List[Int32] = [0, 0, 1, 1, 1, 2]
+    size_relabel_run(XnDriver(xn_native_v1), Int(labels.unsafe_ptr()), 6, 3)
+    var want: List[Int32] = [1, 1, 0, 0, 0, 2]
+    for i in range(6):  # small-loop: the expected labels
+        require(labels[i] == want[i], "by size: node " + String(i) + " has " + String(labels[i]))
+    # a tie (sizes [2, 2, 1]): the community whose first node comes first keeps the lower label
+    var tie: List[Int32] = [0, 1, 1, 0, 2]
+    size_relabel_run(XnDriver(xn_native_v1), Int(tie.unsafe_ptr()), 5, 3)
+    var want_tie: List[Int32] = [0, 1, 1, 0, 2]
+    for i in range(5):  # small-loop: unchanged
+        require(tie[i] == want_tie[i], "by size, tie: node " + String(i) + " has " + String(tie[i]))
 
 
 def main() raises:
