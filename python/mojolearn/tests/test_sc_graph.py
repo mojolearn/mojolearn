@@ -1,14 +1,29 @@
 # SPDX-License-Identifier: Apache-2.0
 """The single-cell graph functions at the Python API boundary (lane sc-graph-1, 2026-11-28):
 mojolearn.shared_neighbors_graph, mojolearn.PAGA and mojolearn.manifold.DiffusionMap. The input forms they admit,
-their refusals, their parameters and what they return; SciPy and NumPy serve as independent external oracles. The
-kernels' numerical checks are native (checks/native_tests/x_neighbors_snn_paga_check.mojo)."""
+their refusals, their parameters and what they return; NumPy serves as the independent external oracle (no SciPy,
+Andrew 2026-11-28). The kernels' numerical checks are native (checks/native_tests/x_neighbors_snn_paga_check.mojo)."""
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
 import mojolearn
 
-sp = pytest.importorskip("scipy.sparse")
+
+def _dense(g):
+    """The dense matrix of a CSR record (NumPy)."""
+    out = np.zeros(g.shape, np.float64)
+    indptr, indices, data = (np.asarray(g.indptr), np.asarray(g.indices), np.asarray(g.data))
+    rows = np.repeat(np.arange(g.shape[0]), np.diff(indptr))
+    out[rows, indices] = data
+    return out
+
+
+def _knn_record(knn):
+    n, k = knn.shape
+    return SimpleNamespace(indptr=np.arange(0, n * k + 1, k, dtype=np.int32), indices=knn.ravel().astype(np.int32),
+                           data=np.ones(n * k, np.float32), shape=(n, n), format="csr")
 
 
 def _knn(n=60, k=8, seed=0):
@@ -34,12 +49,13 @@ def _jaccard(knn, prune):
 def test_snn_matches_seurat_formula():
     knn = _knn()
     g = mojolearn.shared_neighbors_graph(knn)
-    assert sp.issparse(g) and g.format == "csr" and g.dtype == np.float32
+    assert g.format == "csr" and np.asarray(g.data).dtype == np.float32
     assert g.shape == (60, 60)
     want = _jaccard(knn, 1 / 15)
-    np.testing.assert_allclose(g.toarray(), want, rtol=1e-6, atol=0)
-    assert (g != g.T).nnz == 0
-    assert np.all(g.diagonal() == 1.0)
+    d = _dense(g)
+    np.testing.assert_allclose(d, want, rtol=1e-6, atol=0)
+    assert np.array_equal(d, d.T)
+    assert np.all(np.diag(d) == 1.0)
     for i in range(g.shape[0]):
         row = g.indices[g.indptr[i]:g.indptr[i + 1]]
         assert np.all(np.diff(row) > 0)
@@ -48,17 +64,14 @@ def test_snn_matches_seurat_formula():
 def test_snn_prune_and_input_forms():
     knn = _knn(seed=1)
     full = mojolearn.shared_neighbors_graph(knn, prune_snn=0.0)
-    np.testing.assert_allclose(full.toarray(), _jaccard(knn, 0.0), rtol=1e-6, atol=0)
+    np.testing.assert_allclose(_dense(full), _jaccard(knn, 0.0), rtol=1e-6, atol=0)
     strict = mojolearn.shared_neighbors_graph(knn, prune_snn=0.5)
-    assert strict.nnz < full.nnz
+    assert len(strict.indices) < len(full.indices)
     n, k = knn.shape
     tup = (np.arange(0, n * k + 1, k, dtype=np.int32), knn.ravel().astype(np.int32), n)
-    np.testing.assert_array_equal(mojolearn.shared_neighbors_graph(tup).toarray(),
-                                  mojolearn.shared_neighbors_graph(knn).toarray())
-    m = sp.csr_matrix((np.ones(n * k, np.float32), knn.ravel(), np.arange(0, n * k + 1, k)), shape=(n, n))
-    m.sort_indices()
-    np.testing.assert_array_equal(mojolearn.shared_neighbors_graph(m).toarray(),
-                                  mojolearn.shared_neighbors_graph(knn).toarray())
+    base = _dense(mojolearn.shared_neighbors_graph(knn))
+    np.testing.assert_array_equal(_dense(mojolearn.shared_neighbors_graph(tup)), base)
+    np.testing.assert_array_equal(_dense(mojolearn.shared_neighbors_graph(_knn_record(knn))), base)
 
 
 def test_snn_feeds_louvain_and_leiden():
@@ -84,23 +97,36 @@ def test_snn_refusals():
         mojolearn.shared_neighbors_graph(knn.astype(np.float32))
 
 
+def test_label_order_size():
+    g = mojolearn.shared_neighbors_graph(_knn(n=120, k=10, seed=7))
+    for cls in (mojolearn.Louvain, mojolearn.Leiden):
+        first = cls().fit_predict(g)
+        size = cls(label_order="size").fit_predict(g)
+        counts = np.bincount(size)
+        assert np.all(np.diff(counts) <= 0)
+        # the same partition, renumbered
+        pairs = set(zip(np.asarray(first).tolist(), np.asarray(size).tolist()))
+        assert len(pairs) == len(set(np.asarray(first).tolist()))
+        with pytest.raises(ValueError, match="label_order"):
+            cls(label_order="largest").fit(g)
+
+
 # ---------------------------------------------------------------- PAGA
 
 
-def _paga_oracle(adjacency, groups):
-    """Scanpy's PAGA v1.2 statistic and tree in NumPy / SciPy (every stored entry one directed edge)."""
-    a = sp.csr_matrix(adjacency)
-    a.data[:] = 1
+def _paga_oracle(graph, groups):
+    """Scanpy's PAGA v1.2 statistic in NumPy (every stored entry one directed edge)."""
     c = groups.max() + 1
     ns = np.bincount(groups, minlength=c)
-    coo = a.tocoo()
+    indptr, indices = np.asarray(graph.indptr), np.asarray(graph.indices)
+    rows = np.repeat(np.arange(graph.shape[0]), np.diff(indptr))
     counts = np.zeros((c, c))
-    np.add.at(counts, (groups[coo.row], groups[coo.col]), 1)
+    np.add.at(counts, (groups[rows], groups[indices]), 1)
     es = counts.sum(axis=1)
     inter = counts.copy()
     np.fill_diagonal(inter, 0)
     v = inter + inter.T
-    n = a.shape[0]
+    n = graph.shape[0]
     expected = (es[:, None] * ns[None, :] + es[None, :] * ns[:, None]) / (n - 1)
     con = np.where(v > 0, np.minimum(1.0, np.divide(v, expected, out=np.ones_like(v), where=expected != 0)), 0.0)
     return con, v, ns
@@ -109,33 +135,42 @@ def _paga_oracle(adjacency, groups):
 def test_paga_statistic_and_tree():
     knn = _knn(n=90, k=6, seed=3)
     n, k = knn.shape
-    graph = sp.csr_matrix((np.ones(n * k, np.float32), knn.ravel(), np.arange(0, n * k + 1, k)), shape=(n, n))
-    graph.sort_indices()
+    graph = _knn_record(knn)
     groups = (np.arange(n) * 5 // n).astype(np.int32)
     p = mojolearn.PAGA().fit(graph, groups)
     con, v, ns = _paga_oracle(graph, groups)
     assert p.n_groups_ == 5
     np.testing.assert_array_equal(np.asarray(p.group_sizes_), ns)
-    np.testing.assert_allclose(np.asarray(p.connectivities_), con, rtol=2e-6, atol=0)
-    tree = np.asarray(p.connectivities_tree_)
+    assert p.connectivities_.format == "csr" and p.connectivities_tree_.format == "csr"
+    np.testing.assert_allclose(_dense(p.connectivities_), con, rtol=2e-6, atol=0)
+    tree = _dense(p.connectivities_tree_)
     assert np.array_equal(tree, tree.T)
     edges = np.argwhere(np.triu(tree) > 0)
     assert len(edges) <= 4
-    # a maximum spanning forest of the edge counts: its weight equals SciPy's
-    mst = sp.csgraph.minimum_spanning_tree(sp.csr_matrix(np.where(v > 0, v.max() + 1 - v, 0)))
-    want = ((v.max() + 1) * mst.nnz - mst.sum())
+    # a maximum spanning forest of the edge counts: its weight equals Kruskal's (NumPy, union-find)
+    parent = list(range(v.shape[0]))
+
+    def root(a):
+        while parent[a] != a:
+            a = parent[a]
+        return a
+    want = 0
+    for a, b in sorted(zip(*np.nonzero(np.triu(v, 1))), key=lambda e: -v[e]):
+        ra, rb = root(a), root(b)
+        if ra != rb:
+            parent[ra] = rb
+            want += v[a, b]
     assert v[edges[:, 0], edges[:, 1]].sum() == want
 
 
 def test_paga_dense_equals_sparse_and_refusals():
     knn = _knn(n=40, k=5, seed=4)
     n, k = knn.shape
-    graph = sp.csr_matrix((np.ones(n * k, np.float32), knn.ravel(), np.arange(0, n * k + 1, k)), shape=(n, n))
-    graph.sort_indices()
+    graph = _knn_record(knn)
     groups = (np.arange(n) % 3).astype(np.int32)
     a = mojolearn.PAGA().fit(graph, groups)
-    b = mojolearn.PAGA().fit(graph.toarray(), groups)
-    np.testing.assert_array_equal(np.asarray(a.connectivities_), np.asarray(b.connectivities_))
+    b = mojolearn.PAGA().fit(_dense(graph).astype(np.float32), groups)
+    np.testing.assert_array_equal(_dense(a.connectivities_), _dense(b.connectivities_))
     with pytest.raises(ValueError, match="v1.2"):
         mojolearn.PAGA(model="v1.0").fit(graph, groups)
     with pytest.raises(ValueError, match="negative"):
@@ -158,7 +193,7 @@ def _transitions_sym(w):
 
 
 def test_diffmap_matches_scanpy_eigenpairs():
-    w = mojolearn.shared_neighbors_graph(_knn(n=100, k=10, seed=5)).toarray()
+    w = _dense(mojolearn.shared_neighbors_graph(_knn(n=100, k=10, seed=5))).astype(np.float32)
     dm = mojolearn.manifold.DiffusionMap(n_comps=6).fit(w)
     emb = np.asarray(dm.embedding_)
     evals = np.asarray(dm.eigenvalues_)
@@ -178,12 +213,12 @@ def test_diffmap_sparse_input_fit_transform_and_refusals():
     y = dm.fit_transform(g)
     np.testing.assert_array_equal(np.asarray(y), np.asarray(dm.embedding_))
     np.testing.assert_array_equal(np.asarray(mojolearn.manifold.DiffusionMap(n_comps=4, random_state=3)
-                                             .fit(g.toarray()).embedding_), np.asarray(y))
+                                             .fit(_dense(g).astype(np.float32)).embedding_), np.asarray(y))
     params = mojolearn.manifold.DiffusionMap().get_params()
     assert params["n_comps"] == 15 and params["random_state"] == 0
     with pytest.raises(ValueError, match="n_comps"):
         mojolearn.manifold.DiffusionMap(n_comps=50).fit(g)
     with pytest.raises(ValueError, match="negative"):
-        mojolearn.manifold.DiffusionMap(n_comps=2).fit(-g.toarray())
+        mojolearn.manifold.DiffusionMap(n_comps=2).fit(-_dense(g).astype(np.float32))
     with pytest.raises(ValueError, match="n_comps"):
         mojolearn.manifold.DiffusionMap(n_comps=0).fit(g)

@@ -485,3 +485,33 @@ def size_relabel_run(driver: XnDriver, labels: Int, n: Int, communities: Int) ra
     0, ties to the community whose first node comes first (Scanpy's order)."""
     if n > 0 and communities > 1:
         _ = xn_request_run(driver, xn_size_relabel_request(labels, n, communities))
+
+
+struct GroupCsr(Movable):
+    """A c x c PAGA result as CSR (Scanpy keeps `uns['paga']['connectivities']`
+    and `connectivities_tree` sparse): the nonzero cells row by row, columns
+    ascending."""
+    var indptr: List[Int32]
+    var indices: List[Int32]
+    var data: List[Float32]
+
+    def __init__(out self):
+        self.indptr = List[Int32]()
+        self.indices = List[Int32]()
+        self.data = List[Float32]()
+
+
+def paga_group_csr(dense: List[Float32], c: Int) -> GroupCsr:
+    """The nonzero cells of the c x c row-major `dense` (a published result of
+    c^2 words, c the group count: a copy into the CSR layout, no
+    arithmetic)."""
+    var out = GroupCsr()
+    out.indptr = List[Int32](length=c + 1, fill=0)
+    for a in range(c):  # small-loop(the c groups of the published c x c result)
+        for b in range(c):
+            var v = dense[a * c + b]
+            if v != Float32(0):
+                out.indices.append(Int32(b))
+                out.data.append(v)
+        out.indptr[a + 1] = Int32(len(out.indices))
+    return out^

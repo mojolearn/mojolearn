@@ -2266,12 +2266,13 @@ def shared_neighbors_graph(knn, prune_snn=1 / 15, numeric_mode=None, *, device=N
 
     Parameters
     ----------
-    knn : array-like of shape (n, k), scipy.sparse matrix, or tuple
+    knn : array-like of shape (n, k), sparse matrix, or tuple
         The neighbors of every node: an integer array whose row i lists the
         k neighbors of node i (the indices ``kneighbors`` returns), or a
-        sparse kNN graph (a scipy.sparse matrix or an ``(indptr, indices,
-        n)`` CSR tuple) whose stored columns in row i are the neighbors of
-        node i; rows may then have different lengths.
+        sparse kNN graph (any object with CSR ``indptr``, ``indices`` and
+        ``shape``, such as a scipy.sparse matrix, or an ``(indptr, indices,
+        n)`` tuple) whose stored columns in row i are the neighbors of node
+        i; rows may then have different lengths.
     prune_snn : float, default 1/15
         Smallest Jaccard index kept, between 0 and 1 (Seurat's
         ``prune.SNN``). 0 keeps every pair that shares a neighbor.
@@ -2283,9 +2284,13 @@ def shared_neighbors_graph(knn, prune_snn=1 / 15, numeric_mode=None, *, device=N
 
     Returns
     -------
-    graph : scipy.sparse.csr_matrix of shape (n, n), float32
-        The symmetric shared-nearest-neighbor graph, columns sorted within
-        each row.
+    graph : CSR graph of shape (n, n)
+        The symmetric shared-nearest-neighbor graph as a record with the
+        CSR arrays ``indptr`` and ``indices`` (int32) and ``data`` (float32),
+        ``shape`` and ``format == "csr"``, columns sorted within each row.
+        Every graph function of this package takes it as it is;
+        ``scipy.sparse.csr_matrix((g.data, g.indices, g.indptr),
+        shape=g.shape)`` wraps the same arrays.
 
     Raises
     ------
@@ -2332,12 +2337,14 @@ class PAGA(_XNeighbors):
 
     Attributes
     ----------
-    connectivities_ : Array of shape (n_groups, n_groups), float32
-        Symmetric connectivity of every two groups, zero on the diagonal
-        and between groups without an edge.
-    connectivities_tree_ : Array of shape (n_groups, n_groups), float32
-        The connectivities on the edges of the spanning tree (both
-        directions), zero elsewhere.
+    connectivities_ : CSR graph of shape (n_groups, n_groups), float32
+        Symmetric connectivity of every two groups joined by an edge
+        (Scanpy's ``uns['paga']['connectivities']``), as a record with the
+        CSR arrays ``indptr``, ``indices`` and ``data`` and ``shape``; the
+        diagonal is empty.
+    connectivities_tree_ : CSR graph of shape (n_groups, n_groups), float32
+        The connectivities on the edges of the spanning tree, stored in
+        both directions (Scanpy's ``connectivities_tree`` stores one).
     group_sizes_ : Array of shape (n_groups,), int32
         Number of nodes in each group.
     n_groups_ : int
@@ -2367,9 +2374,10 @@ class PAGA(_XNeighbors):
 
         Parameters
         ----------
-        A : array-like of shape (n, n), scipy.sparse matrix, or tuple
+        A : array-like of shape (n, n), sparse matrix, or tuple
             The neighbor graph: a dense square array (a nonzero cell is an
-            edge), a scipy.sparse matrix or an ``(indptr, indices, n)`` CSR
+            edge), a sparse matrix (any object with CSR ``indptr``,
+            ``indices`` and ``shape``) or an ``(indptr, indices, n)`` CSR
             tuple (every stored entry is an edge).
         y : array-like of shape (n,)
             Group of every node, integers numbered from 0.

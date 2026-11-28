@@ -98,7 +98,7 @@ neighbor lists overlap, weighted by the Jaccard index of the two lists, and drop
 `Louvain`, Seurat's default algorithm, or with `Leiden`:
 
 ```python
-snn = mojolearn.shared_neighbors_graph(knn, prune_snn=1 / 15)   # scipy.sparse CSR
+snn = mojolearn.shared_neighbors_graph(knn, prune_snn=1 / 15)   # CSR: snn.indptr, snn.indices, snn.data
 clusters = mojolearn.Louvain(resolution=0.8).fit_predict(snn)
 ```
 
@@ -119,8 +119,9 @@ paga = mojolearn.PAGA().fit(graph, groups)
 print(paga.connectivities_.shape, paga.connectivities_tree_.shape)
 ```
 
-Scanpy counts PAGA's edges on the directed neighbor lists; pass those (each row's neighbors as a sparse
-matrix or an `(indptr, indices, n)` tuple) to count them the same way.
+`paga.connectivities_` and `paga.connectivities_tree_` are sparse like Scanpy's, in the same CSR form as
+`snn`. Scanpy counts PAGA's edges on the directed neighbor lists; pass those (each row's neighbors as an
+`(indptr, indices, n)` tuple) to count them the same way.
 
 The clusters are usually drawn on a UMAP map. Scanpy's `tl.umap` uses `min_dist=0.5`, while the `UMAP`
 default is 0.1, so pass it to get the same spacing:

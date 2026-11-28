@@ -58,7 +58,8 @@ from neighbors.svgp_run import (
 from neighbors.graph_fit_run import (
     XN_CAPABILITY_UNIT, PageRankRequest, ComponentsRequest, LouvainRequest, LouvainOutcome, xn_capabilities_run,
     pagerank_fit_run, components_run, louvain_fit_run, LeidenRequest, LeidenOutcome, leiden_fit_run,
-    SnnRequest, SnnOutcome, snn_run, PagaRequest, PagaOutcome, paga_run, size_relabel_run,
+    SnnRequest, SnnOutcome, snn_run, PagaRequest, PagaOutcome, paga_run, size_relabel_run, GroupCsr,
+    paga_group_csr,
 )
 from neighbors.neighbors_graph_run import (
     xn_leiden_quality, xn_leiden_iterations_check, xn_snn_prune_check, xn_snn_shape_check, xn_paga_size_check,
@@ -575,14 +576,24 @@ def _leiden_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
 # ---------------------------------------------------------------- shared-nearest-neighbor graph
 
 
-def _scipy_sparse() raises -> PythonObject:
-    """The loaded `scipy.sparse` module, imported once when no caller has
-    loaded it yet (the result is a SciPy CSR matrix)."""
-    var sp = py_get(native_loaded_module("sys").modules, "scipy.sparse")
-    if sp is None:
-        _ = family_call(_b().__import__, PythonObject("scipy.sparse"))
-        sp = native_loaded_module("sys").modules["scipy.sparse"]
-    return sp
+def csr_graph_record(data: PythonObject, indices: PythonObject, indptr: PythonObject,
+                     n_rows: Int, n_cols: Int) raises -> PythonObject:
+    """PACK of a CSR result (lane sc-graph-1; Andrew 2026-11-28: no SciPy):
+    a `types.SimpleNamespace` (a C type: no Python code runs) holding the
+    three finished arrays, `shape` and `format = "csr"`. Every graph entry
+    of this package reads it back (the CSR duck form of `_csr_lists`,
+    DiffusionMap's door), and SciPy users can wrap the same three arrays."""
+    var types = py_get(native_loaded_module("sys").modules, "types")
+    if types is None:
+        _ = family_call(_b().__import__, PythonObject("types"))
+        types = native_loaded_module("sys").modules["types"]
+    var keywords = Python.dict()
+    py_setitem(keywords, "indptr", indptr)
+    py_setitem(keywords, "indices", indices)
+    py_setitem(keywords, "data", data)
+    py_setitem(keywords, "shape", Python.tuple(n_rows, n_cols))
+    py_setitem(keywords, "format", PythonObject("csr"))
+    return family_call_kw(family_call(_b().getattr, types, PythonObject("SimpleNamespace")), keywords)
 
 
 def _snn(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -591,7 +602,7 @@ def _snn(args: PythonObject, context: PythonObject) raises -> PythonObject:
     (an (n, k) integer index array, a SciPy sparse kNN graph or an
     (indptr, indices, n) tuple: each row's stored columns are its
     neighbors), RUN is neighbors/graph_fit_run.mojo `snn_run` under one GIL
-    release, PACK hands SciPy the three finished buffers."""
+    release, PACK publishes the three finished buffers as a CSR record."""
     # UNPACK
     classical_connect_numpy(context)
     var binding = args[0]
@@ -636,13 +647,27 @@ def _snn(args: PythonObject, context: PythonObject) raises -> PythonObject:
         unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_addr(indices)),
                       src=outcome.indices.unsafe_ptr(), count=m)
     _ = outcome^
-    var keywords = Python.dict()
-    py_setitem(keywords, "shape", Python.tuple(n, n))
-    return family_call_kw(family_call(_b().getattr, _scipy_sparse(), PythonObject("csr_matrix")), keywords,
-                          Python.tuple(data, indices, indptr))
+    return csr_graph_record(data, indices, indptr, n, n)
 
 
 # ---------------------------------------------------------------- PAGA
+
+
+def _group_csr_matrix(csr: GroupCsr, c: Int, context: PythonObject) raises -> PythonObject:
+    """PACK of a c x c PAGA result: a CSR record (`csr_graph_record`) over
+    three new float32 / int32 arrays copied from the native lists."""
+    var m = len(csr.indices)
+    var data = family_array(Python.tuple(m), "<f4", context)
+    var indices = family_array(Python.tuple(m), "<i4", context)
+    var indptr = family_array(Python.tuple(c + 1), "<i4", context)
+    unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_addr(indptr)),
+                  src=csr.indptr.unsafe_ptr(), count=c + 1)
+    if m > 0:
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_addr(data)),
+                      src=csr.data.unsafe_ptr(), count=m)
+        unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_addr(indices)),
+                      src=csr.indices.unsafe_ptr(), count=m)
+    return csr_graph_record(data, indices, indptr, c, c)
 
 
 def _paga_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
@@ -683,19 +708,13 @@ def _paga_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     _ = labels  # keep the Python object alive through the native call above
     # PACK
     var c = outcome.groups
-    var conn = family_array(Python.tuple(c, c), "<f4", context)
-    var tree = family_array(Python.tuple(c, c), "<f4", context)
     var sizes = family_array(Python.tuple(c), "<i4", context)
     if c > 0:
-        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_addr(conn)),
-                      src=outcome.connectivities.unsafe_ptr(), count=c * c)
-        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_addr(tree)),
-                      src=outcome.tree.unsafe_ptr(), count=c * c)
         unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_addr(sizes)),
                       src=outcome.sizes.unsafe_ptr(), count=c)
+    py_setitem(fields, "connectivities_", _group_csr_matrix(paga_group_csr(outcome.connectivities, c), c, context))
+    py_setitem(fields, "connectivities_tree_", _group_csr_matrix(paga_group_csr(outcome.tree, c), c, context))
     _ = outcome^
-    py_setitem(fields, "connectivities_", conn)
-    py_setitem(fields, "connectivities_tree_", tree)
     py_setitem(fields, "group_sizes_", sizes)
     py_setitem(fields, "n_groups_", PythonObject(c))
 

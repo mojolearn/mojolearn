@@ -225,7 +225,11 @@ def _(ml, X, yc, yr, Xh=None):
     indptr = np.concatenate([[0], np.cumsum(nz.sum(axis=1))]).astype(np.int32)
     indices = np.nonzero(nz)[1].astype(np.int32)
     u = ml.Leiden(resolution=0.2, objective_function="CPM", n_iterations=1).fit((indptr, indices, A.shape[0]))
-    return _fit(dict(lab=_h(m.labels_), q=_h(np.float32(m.quality_)), it=_h(np.int64(m.n_iterations_)),
+    # lane sc-graph-1: Scanpy's numbering (label_order="size") for Leiden and Louvain
+    ls = ml.Leiden(resolution=1.0, label_order="size").fit_predict(A)
+    lvs = ml.Louvain(resolution=1.0, label_order="size").fit_predict(A)
+    return _fit(dict(lab_s=_h(ls), lab_lvs=_h(lvs),
+                     lab=_h(m.labels_), q=_h(np.float32(m.quality_)), it=_h(np.int64(m.n_iterations_)),
                      lab_r=_h(r.labels_), q_r=_h(np.float32(r.quality_)),
                      lab_c=_h(c.labels_), q_c=_h(np.float32(c.quality_)),
                      lab_u=_h(u.labels_), q_u=_h(np.float32(u.quality_))))
@@ -279,9 +283,11 @@ def _(ml, X, yc, yr, Xh=None):
     kp = np.arange(0, knn.size + 1, knn.shape[1], dtype=np.int32)
     lab = ml.Leiden(resolution=1.0).fit_predict(ml.shared_neighbors_graph(knn))
     k = ml.PAGA().fit((kp, knn.ravel(), knn.shape[0]), lab)
-    return _fit(dict(con=_h(d.connectivities_), tree=_h(d.connectivities_tree_), ns=_h(d.group_sizes_),
-                     con_c=_h(c.connectivities_), tree_c=_h(c.connectivities_tree_),
-                     con_k=_h(k.connectivities_), tree_k=_h(k.connectivities_tree_), ns_k=_h(k.group_sizes_)))
+    def csr(m):
+        return _h(m.indptr, m.indices, m.data)
+    return _fit(dict(con=csr(d.connectivities_), tree=csr(d.connectivities_tree_), ns=_h(d.group_sizes_),
+                     con_c=csr(c.connectivities_), tree_c=csr(c.connectivities_tree_),
+                     con_k=csr(k.connectivities_), tree_k=csr(k.connectivities_tree_), ns_k=_h(k.group_sizes_)))
 
 
 @lane("x-neighbors-svgp")

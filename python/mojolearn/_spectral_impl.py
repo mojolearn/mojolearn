@@ -832,9 +832,11 @@ class DiffusionMap(ParamsMixin):
 
         Parameters
         ----------
-        X : array-like of shape (n_nodes, n_nodes) or scipy.sparse matrix
-            Symmetric weighted adjacency (connectivities) of the graph,
-            dense or any scipy.sparse format.
+        X : array-like of shape (n_nodes, n_nodes) or sparse matrix
+            Symmetric weighted adjacency (connectivities) of the graph:
+            dense, a CSR graph such as ``shared_neighbors_graph`` returns
+            (any object with ``indptr``, ``indices``, ``data`` and
+            ``shape``), or a scipy.sparse matrix.
         y : ignored
 
         Returns
@@ -855,7 +857,7 @@ class DiffusionMap(ParamsMixin):
 
         Parameters
         ----------
-        X : array-like or scipy.sparse matrix
+        X : array-like or sparse matrix
             As in ``fit``.
         y : ignored
 
