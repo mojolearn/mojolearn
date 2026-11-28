@@ -44,7 +44,7 @@ it must not: `compute_graph_laplacian` sorts it itself through
 name (DEVIATIONS 775/777), which is the behavior a caller has to see.
 
 DEVIATIONS 890-899 are this surface's, shared with `metrics/estimator.mojo`.
-Two are spent, both on the SURFACE and neither on arithmetic:
+Three are spent, the first two on the SURFACE and neither on arithmetic:
 
   * **890**, on `_config` below: a non-positive `eigen_tol` is refused by
     name instead of mirroring cuML's `'auto' -> 0.0`, which overwrites
@@ -55,6 +55,11 @@ Two are spent, both on the SURFACE and neither on arithmetic:
     Python draws a fresh random seed and scikit-learn's None means an
     entropy draw. The no-seed arm of the Lanczos start vector is refused
     outright by DEVIATION 772, so None cannot mean "no seed" here.
+  * **892**, on `spectral_diffmap_graph_host` (lane sc-graph-1): the
+    diffusion map takes the LARGEST ALGEBRAIC eigenpairs of the symmetric
+    transitions (the LA Lanczos on the negated normalized Laplacian of the
+    density-normalized kernel, float32) where Scanpy's `eigsh` takes the
+    largest magnitude in double (spectral/NOT_IMPLEMENTED.tsv).
 
 Nothing else in this file computes.
 """
