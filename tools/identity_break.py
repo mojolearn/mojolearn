@@ -2525,6 +2525,15 @@ def _synthetic_bpe(ml):
 #: constructor arguments), where they read the private `_W_NAMES`/`_w`,
 #: `_parameters`, `_threaded` and `_threads`. The object is held so its id
 #: is never reused while the entry exists.
+#: ONE CELL'S MODELS ONLY (lane verify-speed-2, 2026-11-28): every lookup is
+#: made by the cell that built the object (its lane body and that cell's
+#: probe, batch and protocol parts), so the cell loop empties this at the end
+#: of every cell (`_end_cell`). It was never emptied: each block, session and
+#: LanguageModelInference a neural cell built, with its device weights,
+#: caches and session buffers, stayed alive to the end of the process, so a
+#: record worker grew with every neural cell it ran (one Apple record worker
+#: of 2026-11-27 reached 10.06 GB on the 16 GB laptop while the other two held
+#: 1.9 and 2.2 GB, and the window server hung).
 _BUILT = {}
 
 
@@ -2540,6 +2549,21 @@ def _built_args(obj):
         raise RuntimeError(f"identity_break: {type(obj).__name__} was not built through _built, so its "
                            "constructor arguments are unknown (no private weight read)")
     return entry[1]
+
+
+def _end_cell():
+    """Release what one cell kept alive past its own frame: the models `_built` recorded for it. Called by the cell
+    loop after every computed cell, so a worker's memory does not grow with the number of cells it has run."""
+    _BUILT.clear()
+
+
+def _end_lane():
+    """After a lane's last fixture: collect the reference cycles its fits left (an estimator and its native owner
+    can hold each other), so their device buffers are freed now and not at a collection the Python heap's own
+    allocation counts would trigger much later. Once a lane, not once a cell: a full collection costs tens of
+    milliseconds, and the cycles of nine cells of one lane are bounded."""
+    import gc
+    gc.collect()
 
 
 def _labels_and_proba(m, X):
@@ -13896,10 +13920,15 @@ def _run_reference(args):
                     row_rl.append("REFUSED")
             cell["timing"] = timer.result()
             cells[f"{name}/{f}"] = cell
+            # the cell's fit (and the model it holds) is done with: drop the last reference this frame keeps and
+            # what `_built` recorded, outside the cell's clock (lane verify-speed-2, 2026-11-28)
+            p = None
+            _end_cell()
             if args.json:
                 dump(False)
             print(f"# CELL {name}/{f} {cell['verdict']} {cell['timing']['total_seconds']:.3f}s", flush=True)
             row.append(f"{shown:<16}")
+        _end_lane()
         print(f"| {name:<{W}} | " + " | ".join(row) + " |", flush=True)
         for label, r in (("infer", row_infer), ("model", row_model), ("batch", row_batch), ("rlpair", row_rl)) + tuple(row_extra.items()):
             if any(not s.startswith("n/a") for s in r):

@@ -84,28 +84,36 @@ def test_workers_use_every_core_bounded_by_memory():
     assert R.auto_workers(0, 4, None) == 1 and R.auto_workers(0, 16, None) == 5
     assert R.auto_workers(1, 32, 80.0) == 26         # cores: 32 // 1 = 32, GPU memory: 80 // 3 = 26
     assert R.auto_workers(1, 13, 44.0) == 13         # the L40S of nvc-ab-20261126T214026Z-7116a8 (was 3 workers)
-    assert R.auto_workers(1, 13, 44.0, host_gib=20.0) == 5   # host memory: 20 // 4
+    assert R.auto_workers(1, 13, 44.0, host_gib=20.0) == 4   # host memory: (20 - 4 kept free) // 4
     assert R.auto_workers(2, 16, None) == 1
-    assert R.auto_workers(0, 16, None, host_gib=8.0) == 2
+    assert R.auto_workers(0, 16, None, host_gib=8.0) == 1    # (8 - 4) // 4
+    assert R.auto_workers(0, 16, None, host_gib=3.0) == 1    # less than the reserve still plans one worker
 
 
-def test_the_apple_plan_on_a_ten_core_mac_is_bounded_by_memory_not_by_a_3_thread_pool():
+def test_the_apple_plan_on_a_ten_core_mac_is_bounded_by_memory_not_by_a_3_thread_pool(monkeypatch):
     """lane/verify-speed-1 (2026-11-28): the 0.9.0 Apple record planned 10 // 3 = 3 workers. A GPU column's worker runs
-    one host thread, so the cores allow 10; 10 GiB available at the unmeasured 1.5 GiB a worker allow 6; the Metal
-    working set of a 16 GiB Mac (2/3, 10.7 GiB) at 1 GiB a worker allows 10."""
+    one host thread, so the cores allow 10; the Metal working set of a 16 GiB Mac (2/3, 10.7 GiB) at 1 GiB a worker
+    allows 10; host memory decides. lane/verify-speed-2 (2026-11-28): at the measured 10.06 GiB worker of the 0.9.0
+    record and 4 GiB kept free, 10 GiB available plans ONE worker; at the steady workers' 2.2 GiB it plans two."""
     metal = 16.0 * R.METAL_WORKING_SET_SHARE
-    assert R.auto_workers(0, 10, None, host_gib=10.0, column="apple", threads=1, metal_gib=metal) == 6
-    assert R.auto_workers(0, 10, None, column="apple", threads=1, metal_gib=metal) == 10
-    assert R.auto_workers(0, 10, None, column="apple", threads=1, metal_gib=4.0) == 4
-    assert R.auto_workers(0, 10, None, column="apple", threads=3) == 3      # the 0.9.0 plan, pinned threads
+    assert R.auto_workers(0, 10, None, host_gib=10.0, column="apple", threads=1, metal_gib=metal) == 1
+    assert R.auto_workers(0, 10, None, column="apple", threads=1, metal_gib=metal) == 1   # unreadable memory: one
+    monkeypatch.setitem(R.PEAKS, "apple", 2.2)
+    assert R.auto_workers(0, 10, None, host_gib=10.0, column="apple", threads=1, metal_gib=metal) == 2  # 6 // 2.75
+    assert R.auto_workers(0, 10, None, host_gib=40.0, column="apple", threads=1, metal_gib=metal) == 10
+    assert R.auto_workers(0, 10, None, host_gib=40.0, column="apple", threads=1, metal_gib=4.0) == 4
+    assert R.auto_workers(0, 10, None, host_gib=40.0, column="apple", threads=3) == 3   # the 0.9.0 plan, pinned threads
     assert R.auto_workers(0, 4, None, column="cpu") == 1                    # the CPU column keeps its 3-thread pool
 
 
 def test_a_measured_peak_replaces_the_estimate(monkeypatch):
-    assert R.worker_gib("apple") == R.ESTIMATES["apple"] and R.worker_gib("cpu") == R.HOST_GIB_PER_WORKER
+    assert R.worker_gib("apple") == R.PEAKS["apple"] * R.PEAK_HEADROOM and R.worker_gib("cpu") == R.HOST_GIB_PER_WORKER
     monkeypatch.setitem(R.PEAKS, "apple", 0.8)
     assert R.worker_gib("apple") == 0.8 * R.PEAK_HEADROOM
-    assert R.auto_workers(0, 10, None, host_gib=10.0, column="apple", threads=1) == 10   # 10 // 1.0
+    assert R.auto_workers(0, 10, None, host_gib=10.0, column="apple", threads=1) == 6   # (10 - 4) // 1.0
+    monkeypatch.delitem(R.PEAKS, "apple")
+    monkeypatch.setitem(R.ESTIMATES, "apple", 1.5)
+    assert R.worker_gib("apple") == 1.5
 
 
 def test_threads_per_worker_one_on_a_small_cell_gpu_column(monkeypatch):
@@ -153,12 +161,13 @@ def test_an_apple_record_plans_from_memory_and_runs_one_thread_a_worker(tmp_path
     fake.setattr(R, "host_available_gib", lambda *a, **k: 10.0)
     fake.setattr(R, "darwin_memsize_gib", lambda *a, **k: 16.0)
     fake.setattr(R, "alloc_cores", lambda: 10)
+    fake.setitem(R.PEAKS, "apple", 2.2)   # the steady workers' figure: (10 - 4) // (2.2 x 1.25) = 2 workers
     a = args(tmp_path, "--columns", "apple", "--label-device", "m4")
     assert R.Run(a).main() == 0
     out = capsys.readouterr().out
-    assert "busy plan: 6 worker(s) of 6" in out and "1 CPU thread(s) per worker" in out
+    assert "busy plan: 2 worker(s) of 2" in out and "1 CPU thread(s) per worker" in out
     doc = json.loads((tmp_path / "out" / "identity-wheels.json").read_text())
-    assert doc["threads_per_worker"] == {"apple": 1} and len(doc["columns"]["apple"]["chunks"]) == 6
+    assert doc["threads_per_worker"] == {"apple": 1} and len(doc["columns"]["apple"]["chunks"]) == 2
     log = (tmp_path / "out" / "apple-m4" / "w0" / "record.log").read_text()
     assert "CPU_THREADS 1" in log
 
