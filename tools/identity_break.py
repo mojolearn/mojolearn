@@ -2968,7 +2968,7 @@ def _(ml, X, yc, yr, Xh=None):
     # 1024 (split_points.mojo:829) and both flag values on every fixture (the
     # refusal below still checks); the tree count is not what this lane checks.
     rows = 6000                                  # FLOORED, see @floor above
-    trees = 8
+    trees = 4                                    # lane verify-light-1, 2026-11-28: was 8 (11 s a cell on Apple)
     X, yc, yr = X[:rows], yc[:rows], yr[:rows]
     X = _gbdt_binary_columns(X)
     Xh = None if Xh is None else _gbdt_binary_columns(Xh)
@@ -5077,13 +5077,16 @@ def _(ml, X, yc, yr, Xh=None):
         "Lq": dict(loss_q=3.0), "Expectile": dict(loss_alpha=0.3),
         "Tweedie": dict(loss_variance_power=1.5), "Huber": dict(loss_delta=1.0),
     }
-    parts, first = {}, None
-    for loss, kw in fits.items():
+    # lane verify-light-1, 2026-11-28 (`_Dealer`): Quantile is the anchor on every cell, the other nine losses are
+    # dealt one a fixture
+    parts, first, deal = {}, None, _Dealer()
+    for loss, kw in deal.units(list(fits.items())):
         m = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss=loss, **kw).fit(X, y)
         parts[loss] = _h(m.predict(X))
         first = first or m
-    ce = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss="CrossEntropy").fit(X, yc.astype(np.float32))
-    parts["CrossEntropy"] = _h(ce.predict(X))
+    if deal.take():
+        ce = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss="CrossEntropy").fit(X, yc.astype(np.float32))
+        parts["CrossEntropy"] = _h(ce.predict(X))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -5098,7 +5101,9 @@ def _(ml, X, yc, yr, Xh=None):
     gradient leaves with three iterations: one Lossguide fit."""
     rows = 1500                                  # FLOORED, see @floor above
     X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # rows are a fixture size, not a claim (2026-09-16)
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_leaves=32, grow_policy="Lossguide", loss="Logloss",
+    # lane verify-light-1, 2026-11-28: 6 trees (was 20; 16 s a cell on the 0.9.0 Apple record): every tree runs the
+    # Lossguide budget, the thresholds, the column sample, the noise, the bootstrap and three gradient steps
+    m = _gbdt(ml.GradientBoosting, n_estimators=6, max_leaves=32, grow_policy="Lossguide", loss="Logloss",
                             score_function="NewtonCosine", min_child_hessian=1.0, min_split_gain=0.01,
                             min_data_in_leaf=8, feature_fraction=0.5, random_strength=1.0,
                             bootstrap_type="Bernoulli", subsample=0.7,
@@ -5283,7 +5288,8 @@ def _ctr_saved_or_fit(ml, fit):
 # need the room); depth, rows, rate and every option are unchanged. LANE_REVISIONS: trees-half-20261128-1.
 _GBDT_GAPS_TREES = 4         # was 8: `_gbdt_gaps_kw`, gbdt-weighted-rest's categorical fits and its OrderedRMSE
 _GBDT_CAT_TREES = 6          # was 12: `_gbdt_cat_fits`, gbdt-cat-rest, gbdt-cat-nonsym
-_GBDT_CTR_TABLES_TREES = 10  # was 20: gbdt-categorical-ctr-tables' one fit (every CTR table is built at tree one)
+_GBDT_CTR_TABLES_TREES = 3   # was 20, then 10: gbdt-categorical-ctr-tables' one fit (every CTR table is built at
+                             # tree one; lane verify-light-1, 2026-11-28: 3 keeps a first, middle and last tree)
 
 
 @lane("gbdt-categorical-ctr-tables")
@@ -7210,8 +7216,10 @@ def _(ml, X, yc, yr, Xh=None):
     learn's weighted accuracy and R2 on the pinned-sum path. A lane of its
     own so the adapter lanes' committed hashes do not move; 2000 training
     rows."""
-    clf = _gbdt(ml.GradientBoostingClassifier, n_estimators=20, max_depth=6).fit(X[:2000], yc[:2000])
-    reg = _gbdt(ml.GradientBoostingRegressor, n_estimators=20, max_depth=6).fit(X[:2000], yr[:2000])
+    # lane verify-light-1, 2026-11-28: 3 trees a model (was 20; 22 s a cell on the 0.9.0 Apple record): the lane is
+    # the weighted score on the pinned-sum path, which reads predictions, not the ensemble size
+    clf = _gbdt(ml.GradientBoostingClassifier, n_estimators=3, max_depth=6).fit(X[:2000], yc[:2000])
+    reg = _gbdt(ml.GradientBoostingRegressor, n_estimators=3, max_depth=6).fit(X[:2000], yr[:2000])
     return _fit(_weighted_score_parts(clf, reg, X, yc, yr, "gbdt-adapter-score-weighted"))
 
 
