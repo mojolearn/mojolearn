@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""PageRank, Louvain, Leiden and connected_components RUN: typed requests in, typed
+"""PageRank, Louvain, Leiden, connected_components, the shared-nearest-neighbor graph and PAGA RUN: typed requests in, typed
 results out.
 
 The boundary (bindings/neighbors_graph_native_door.mojo) admits the public
@@ -20,7 +20,8 @@ from neighbors.neighbors_graph_run import (
     xn_cc_csr_components, xn_cc_relabel_check, xn_louvain_csr_request, xn_louvain_request,
     xn_graph_symmetry_request, xn_louvain_symmetry_check, xn_louvain_device_message, xn_louvain_relabel_check,
     xn_louvain_decode, xn_leiden_csr_request, xn_leiden_request, xn_leiden_symmetry_check,
-    xn_leiden_device_message, xn_leiden_relabel_check,
+    xn_leiden_device_message, xn_leiden_relabel_check, xn_i32_word, xn_snn_request, xn_snn_room,
+    xn_graph_device_message, xn_paga_request, xn_paga_csr_request,
 )
 
 comptime _GRAPH_I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -328,3 +329,147 @@ def leiden_fit_run(driver: XnDriver, request: LeidenRequest) raises -> LeidenOut
     _ = info^
     _ = rinfo^
     return outcome^
+
+
+# ---------------------------------------------------------------- shared-nearest-neighbor graph
+
+
+@fieldwise_init
+struct SnnRequest(Copyable, Movable):
+    # The neighbor lists: int32 `indptr` (n + 1) and `indices` (nnz), or,
+    # when `k_uniform` > 0, `indices` an (n, k_uniform) int32 array and
+    # `indptr` unused. `out_indptr` (n + 1 int32) is the published row
+    # offsets; `prune` Seurat's prune.SNN.
+    var indptr: Int
+    var indices: Int
+    var nnz: Int
+    var k_uniform: Int
+    var out_indptr: Int
+    var n: Int
+    var prune: Float64
+
+
+struct SnnOutcome(Movable):
+    """The result's columns and weights (native scratch, `nnz` of them
+    filled) for PACK to publish."""
+    var indices: List[Int32]
+    var data: List[Float32]
+    var nnz: Int
+
+    def __init__(out self):
+        self.indices = List[Int32]()
+        self.data = List[Float32]()
+        self.nnz = 0
+
+
+def snn_run(driver: XnDriver, request: SnnRequest) raises -> SnnOutcome:
+    """The `snn` operation with a first room of `xn_snn_room` entries; when
+    the result is larger the image has counted it (info[0]) and wrote
+    nothing, and the second run has exactly that room. The image's own
+    checks keep their words, as ValueErrors from "shared_neighbors_graph:"
+    on."""
+    var out = SnnOutcome()
+    var info = xn_scratch_i32(2)
+    var spare = xn_scratch_i32(1)
+    var indptr = request.indptr if request.k_uniform == 0 else _i32_at(spare)
+    var cap = xn_snn_room(request.n, request.nnz)
+    var done = False
+    for _ in range(2):  # driver-loop: the first room, then the room the image counted
+        out.indices = List[Int32](unsafe_uninit_length=max(cap, 1))
+        out.data = List[Float32](unsafe_uninit_length=max(cap, 1))
+        try:
+            _ = xn_request_run(driver, xn_snn_request(indptr, request.indices, request.out_indptr,
+                                                      _i32_at(out.indices), _f32_at(out.data), _i32_at(info),
+                                                      request.n, request.nnz, request.k_uniform, cap,
+                                                      request.prune))
+        except error:
+            var refusal = xn_graph_device_message(String(error), "shared_neighbors_graph:")
+            if refusal.byte_length() == 0:
+                raise error^
+            raise Error(refusal)
+        var total = xn_i32_word(_i32_at(info), 0)
+        if xn_i32_word(_i32_at(info), 1) == 0:
+            out.nnz = total
+            done = True
+            break
+        cap = total
+    _ = spare^
+    _ = info^
+    if not done:
+        raise Error("RuntimeError: shared_neighbors_graph: the image refused the room it counted")
+    return out^
+
+
+# ---------------------------------------------------------------- PAGA
+
+
+@fieldwise_init
+struct PagaRequest(Copyable, Movable):
+    # The graph as for LouvainRequest (no weights: every stored edge counts
+    # once); `labels` the int32 group of each of the n nodes.
+    var csr: Bool
+    var indptr: Int
+    var indices: Int
+    var nnz: Int
+    var adjacency: Int
+    var labels: Int
+    var n: Int
+
+
+struct PagaOutcome(Movable):
+    """c groups; the c x c connectivities and tree (row-major float32) and
+    the group sizes, native scratch for PACK to publish."""
+    var groups: Int
+    var connectivities: List[Float32]
+    var tree: List[Float32]
+    var sizes: List[Int32]
+
+    def __init__(out self):
+        self.groups = 0
+        self.connectivities = List[Float32]()
+        self.tree = List[Float32]()
+        self.sizes = List[Int32]()
+
+
+def _paga_call(driver: XnDriver, request: PagaRequest, csr: Bool, indptr: Int, indices: Int, nnz: Int, cap: Int,
+               conn: Int, tree: Int, sizes: Int, info: Int) raises:
+    """One `paga` / `paga_csr` operation; the image's checks as ValueErrors
+    from "PAGA:" on."""
+    try:
+        if csr:
+            _ = xn_request_run(driver, xn_paga_csr_request(indptr, indices, request.labels, conn, tree, sizes, info,
+                                                           request.n, nnz, cap))
+        else:
+            _ = xn_request_run(driver, xn_paga_request(request.adjacency, request.labels, conn, tree, sizes, info,
+                                                       request.n, cap))
+    except error:
+        var refusal = xn_graph_device_message(String(error), "PAGA:")
+        if refusal.byte_length() == 0:
+            raise error^
+        raise Error(refusal)
+
+
+def paga_run(driver: XnDriver, request: PagaRequest) raises -> PagaOutcome:
+    """Two operations: the sizing one (the CSR entry with no room and no
+    edges: the labels go up, the group count comes back, no graph is
+    touched), then the whole PAGA with c x c room on the caller's form."""
+    var out = PagaOutcome()
+    var info = xn_scratch_i32(2)
+    var spare = xn_scratch_i32(1)
+    var spare_f = xn_scratch_f32(1)
+    _paga_call(driver, request, True, _i32_at(spare), _i32_at(spare), 0, 0, _f32_at(spare_f), _f32_at(spare_f),
+               _i32_at(spare), _i32_at(info))
+    var c = xn_i32_word(_i32_at(info), 0)
+    out.groups = c
+    out.connectivities = List[Float32](unsafe_uninit_length=max(c * c, 1))
+    out.tree = List[Float32](unsafe_uninit_length=max(c * c, 1))
+    out.sizes = List[Int32](unsafe_uninit_length=max(c, 1))
+    var indices = request.indices if request.nnz > 0 else _i32_at(spare)
+    _paga_call(driver, request, request.csr, request.indptr, indices, request.nnz, c * c, _f32_at(out.connectivities),
+               _f32_at(out.tree), _i32_at(out.sizes), _i32_at(info))
+    if xn_i32_word(_i32_at(info), 1) != 0 or xn_i32_word(_i32_at(info), 0) != c:
+        raise Error("RuntimeError: PAGA: the group count changed between the two operations")
+    _ = spare^
+    _ = spare_f^
+    _ = info^
+    return out^
