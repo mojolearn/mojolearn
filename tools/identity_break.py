@@ -1635,11 +1635,11 @@ LANE_REVISIONS = {
 
     "tokenizer": "synthetic-vocab-1",
     # rows: these lanes fitted the full 20,000 x 16 fixture
-    "gbdt-parametric-losses": "rows-1500-1",
+    "gbdt-parametric-losses": "rows-1500-verify-light-20261128-1",
     # NaN moved onto the columns the fitted trees split on; until 2026-09-16
     # (lane/dead-arms) the two nan_mode arms hashed the SAME bytes at every size
     "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
-    "gbdt-lossguide-newtoncosine": "rows-1500-1",
+    "gbdt-lossguide-newtoncosine": "rows-1500-verify-light-20261128-1",
     "gbdt-pair-logit": "rows-1500-1",
     # rows: O(n^2) neighbourhood work
     "hdbscan": "rows-4000-1",
@@ -1667,15 +1667,15 @@ LANE_REVISIONS = {
     # match the GPU trainer; this lane runs the default, so every cell
     # recorded before it hashes a step the library no longer takes by default.
     "byte-lm-host-train": "weight-decay-default-0.01-1",
-    "byte-lm-resident": "shape-l1-d16-ff32-1",
-    "samba": "steps-1-1",
-    "samba-untied-dropout-accum": "steps-3-1",
+    "byte-lm-resident": "verify-light-20261128-1",
+    "samba": "steps-1-verify-light-20261128-1",
+    "samba-untied-dropout-accum": "steps-3-verify-light-20261128-1",
     # sequence length: the (2, 16, 32) slab -> (2, 8, 32)
     # dt_limit (0.01, 0.1) -> (0.5, 0.9): every dt this lane makes was ABOVE
     # the old upper bound, so S9 returned `hi` for every value, the lower
     # bound was inert and a clamp pinned to a constant read IDENTICAL
     # (2026-09-16, lane/dead-arms). The LENGTH did not move; 8 is still 8.
-    "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+    "mamba2-dtlimit": "seqlen-8-verify-light-20261128-1",
     # THE NORMS THAT WERE BITWISE EQUAL (2026-09-16, lane/dead-arms). Two
     # same-shape RMSNorm weights initialised to ones are the same tensor, so
     # exchanging them was the identity function, and these lanes never train,
@@ -1685,7 +1685,7 @@ LANE_REVISIONS = {
     # 2026-11-23, lane sab-host-missed-nrl): its older cells carry no such part.
     "mamba3": "norms-near-one-two-chunk-backward-2",
     "transformer": "norms-near-one-1",
-    "transformer-window": "norms-near-one-1",
+    "transformer-window": "verify-light-20261128-1",
     # arithmetic, not input: UMAP.transform is row separable now
     "tsvd": "explained-variance-train-contract-1",
     "umap": "save-option-extras-contract-2",
@@ -1710,13 +1710,13 @@ LANE_REVISIONS = {
     "sequence-ets": "obs-48-1",
     "x-metrics-permutation-test-score": "perms-4-20261105-1",
     "x-decomp-eigh-wide-linalg": "light-fixture-20261105-1",
-    "x-decomp-eigh-wide-fastica": "light-fixture-20261105-1",
-    "x-decomp-eigh-wide-rotation": "light-fixture-20261105-1",
-    "x-decomp-eigh-wide-factor-analysis": "light-fixture-20261128-1",
-    "x-decomp-eigh-wide-mincovdet": "light-fixture-20261105-1",
-    "x-decomp-umap-options": "light-fixture-20261105-1",
-    "x-decomp-manifold": "light-fixture-20261128-1",
-    "x-decomp-factor-analysis": "light-fixture-20261128-1",
+    "x-decomp-eigh-wide-fastica": "verify-light-20261128-1",
+    "x-decomp-eigh-wide-rotation": "verify-light-20261128-1",
+    "x-decomp-eigh-wide-factor-analysis": "verify-light-20261128-1",
+    "x-decomp-eigh-wide-mincovdet": "verify-light-20261128-1",
+    "x-decomp-umap-options": "verify-light-20261128-1",
+    "x-decomp-manifold": "verify-light-20261128-1",
+    "x-decomp-factor-analysis": "verify-light-20261128-1",
     "trees-calibrated": "light-fixture-20261105-1",
     "trees-stacking-clf": "lacking-fold-20261124-1",
     "trees-voting-clf": "light-fixture-20261105-1",
@@ -1726,7 +1726,7 @@ LANE_REVISIONS = {
     "gbdt-multiclass-offgrid": "light-fixture-20261105-1",
     "gbdt-ordered": "light-fixture-20261105-1",
     "gbdt-ordered-bayesian-noise": "light-fixture-20261105-1",
-    "gbdt-binary-columns": "light-fixture-20261105-1",
+    "gbdt-binary-columns": "verify-light-20261128-1",
     "gbdt-catboost-defaults": "light-fixture-20261105-1",
     "gbdt-stochastic-arms": "light-fixture-20261105-1",
     "gbdt-multiclass": "light-fixture-20261105-1",
@@ -1748,47 +1748,88 @@ LANE_REVISIONS = {
     # 2026-11-28, lane/verify-speed-2: 3 members (was 8), and the linear, decomp and neighbors groups' fitting lanes
     # bound an int max_iter / n_iter above 8 to 8 and an int n_init above 2 to 2 (generic.py `_generic_BOUNDS`,
     # checks_generic.py `_checks_generic_BOUNDS`)
-    "generic-attrs-trees": "ensemble-bound-3-20261128-1",
-    "generic-pickle-trees": "ensemble-bound-3-20261128-1",
-    "generic-digest-trees": "ensemble-bound-3-20261128-1",
-    "check-generic-trees": "ensemble-bound-3-20261128-1",
-    "generic-attrs-linear": "iter-bound-8-20261128-1",
-    "generic-pickle-linear": "iter-bound-8-20261128-1",
-    "generic-digest-linear": "iter-bound-8-20261128-1",
-    "check-generic-linear": "iter-bound-8-20261128-1",
-    "generic-attrs-decomp": "iter-bound-8-20261128-1",
-    "generic-pickle-decomp": "iter-bound-8-20261128-1",
-    "generic-digest-decomp": "iter-bound-8-20261128-1",
-    "check-generic-decomp": "iter-bound-8-20261128-1",
-    "generic-attrs-neighbors": "iter-bound-8-20261128-1",
-    "generic-pickle-neighbors": "iter-bound-8-20261128-1",
-    "generic-digest-neighbors": "iter-bound-8-20261128-1",
-    "check-generic-neighbors": "iter-bound-8-20261128-1",
+    "generic-attrs-trees": "verify-light-20261128-1",
+    "generic-pickle-trees": "verify-light-20261128-1",
+    "generic-digest-trees": "verify-light-20261128-1",
+    "check-generic-trees": "verify-light-20261128-1",
+    "generic-attrs-linear": "verify-light-20261128-1",
+    "generic-pickle-linear": "verify-light-20261128-1",
+    "generic-digest-linear": "verify-light-20261128-1",
+    "check-generic-linear": "verify-light-20261128-1",
+    "generic-attrs-decomp": "verify-light-20261128-1",
+    "generic-pickle-decomp": "verify-light-20261128-1",
+    "generic-digest-decomp": "verify-light-20261128-1",
+    "check-generic-decomp": "verify-light-20261128-1",
+    "generic-attrs-neighbors": "verify-light-20261128-1",
+    "generic-pickle-neighbors": "verify-light-20261128-1",
+    "generic-digest-neighbors": "verify-light-20261128-1",
+    "check-generic-neighbors": "verify-light-20261128-1",
     # 2026-11-28, lane/verify-speed-1: the GBDT gap and categorical lanes fit half the trees (`_GBDT_GAPS_TREES`,
     # `_GBDT_CAT_TREES`, `_GBDT_CTR_TABLES_TREES`); rows, depth, rate and options unchanged
-    "gbdt-categorical-ctr-tables": "trees-half-20261128-1",
-    "gbdt-cat-rmse": "trees-half-20261128-1",
-    "gbdt-cat-bootstrap": "trees-half-20261128-1",
-    "gbdt-cat-noise": "trees-half-20261128-1",
-    "gbdt-cat-ordered": "trees-half-20261128-1",
-    "gbdt-cat-rest": "trees-half-20261128-1",
-    "gbdt-cat-nonsym": "trees-half-20261128-1",
-    "gbdt-weighted-symmetric": "trees-half-20261128-1",
-    "gbdt-weighted-nonsym": "trees-half-20261128-1",
+    "gbdt-categorical-ctr-tables": "verify-light-20261128-1",
+    "gbdt-cat-rmse": "verify-light-20261128-1",
+    "gbdt-cat-bootstrap": "verify-light-20261128-1",
+    "gbdt-cat-noise": "verify-light-20261128-1",
+    "gbdt-cat-ordered": "verify-light-20261128-1",
+    "gbdt-cat-rest": "verify-light-20261128-1",
+    "gbdt-cat-nonsym": "verify-light-20261128-1",
+    "gbdt-weighted-symmetric": "verify-light-20261128-1",
+    "gbdt-weighted-nonsym": "verify-light-20261128-1",
     "gbdt-weighted-rank": "trees-half-20261128-1",
-    "gbdt-eval-gaps": "trees-half-20261128-1",
-    "gbdt-weighted-rest": "trees-half-20261128-1",
-    "gbdt-weighted-special": "trees-half-20261128-1",
-    "gbdt-shape-gaps": "trees-half-20261128-1",
-    "gbdt-rest-gaps": "trees-half-20261128-1",
-    "gbdt-pointwise-arms": "trees-half-20261128-1",
-    "gbdt-pointwise-rest": "trees-half-20261128-1",
-    "gbdt-ordered-weights": "trees-half-20261128-1",
-    "gbdt-nonsym-rest": "trees-half-20261128-1",
-    "gbdt-symmetric-rest": "trees-half-20261128-1",
-    "gbdt-multi-walk": "trees-half-20261128-1",
-    "gbdt-pointwise-multiclass": "trees-half-20261128-1",
-    "gbdt-simple-leaves": "trees-half-20261128-1",
+    "gbdt-eval-gaps": "verify-light-20261128-1",
+    "gbdt-weighted-rest": "verify-light-20261128-1",
+    "gbdt-weighted-special": "verify-light-20261128-1",
+    "gbdt-shape-gaps": "verify-light-20261128-1",
+    "gbdt-rest-gaps": "verify-light-20261128-1",
+    "gbdt-pointwise-arms": "verify-light-20261128-1",
+    "gbdt-pointwise-rest": "verify-light-20261128-1",
+    "gbdt-ordered-weights": "verify-light-20261128-1",
+    "gbdt-nonsym-rest": "verify-light-20261128-1",
+    "gbdt-symmetric-rest": "verify-light-20261128-1",
+    "gbdt-multi-walk": "verify-light-20261128-1",
+    "gbdt-pointwise-multiclass": "verify-light-20261128-1",
+    "gbdt-simple-leaves": "verify-light-20261128-1",
+    # 2026-11-28, lane/verify-light-1 (AGENTS.md "Verification has light fixtures"): option units dealt over the
+    # nine fixtures (`_spread`), serving parts dealt (`_DEALT_PARTS`), lighter fixtures; NON_SIZE_REVISIONS says what each changed
+    "x-decomp-robust-cov": "verify-light-20261128-1",
+    "x-decomp-pls": "verify-light-20261128-1",
+    "x-decomp-fastica": "verify-light-20261128-1",
+    "x-decomp-dict-learning": "verify-light-20261128-1",
+    "x-decomp-pca-randomized": "verify-light-20261128-1",
+    "generic-attrs-prep": "verify-light-20261128-1",
+    "generic-pickle-prep": "verify-light-20261128-1",
+    "generic-digest-prep": "verify-light-20261128-1",
+    "check-generic-prep": "verify-light-20261128-1",
+    "generic-attrs-cluster": "verify-light-20261128-1",
+    "generic-pickle-cluster": "verify-light-20261128-1",
+    "generic-digest-cluster": "verify-light-20261128-1",
+    "check-generic-cluster": "verify-light-20261128-1",
+    "generic-attrs-sequence": "verify-light-20261128-1",
+    "generic-pickle-sequence": "verify-light-20261128-1",
+    "generic-digest-sequence": "verify-light-20261128-1",
+    "check-generic-sequence": "verify-light-20261128-1",
+    "generic-attrs-other": "verify-light-20261128-1",
+    "generic-pickle-other": "verify-light-20261128-1",
+    "generic-digest-other": "verify-light-20261128-1",
+    "check-generic-other": "verify-light-20261128-1",
+    "gbdt-yeti-rank-pointwise": "verify-light-20261128-1",
+    "gbdt-rank-bootstrap": "verify-light-20261128-1",
+    "gbdt-rank-leaves": "verify-light-20261128-1",
+    "gbdt-rank-pointwise-arms": "verify-light-20261128-1",
+    "gbdt-rank-pairs": "verify-light-20261128-1",
+    "gbdt-adapter-score-weighted": "verify-light-20261128-1",
+    "mamba1-int8w": "verify-light-20261128-1",
+    "mamba2-bf16w": "verify-light-20261128-1",
+    "transformer-bf16w": "verify-light-20261128-1",
+    "x-ann-tsne-pca": "verify-light-20261128-1",
+    "cross-val": "verify-light-20261128-1",
+    "numeric-profile-parts": "verify-light-20261128-1",
+    "x-metrics-search": "verify-light-20261128-1",
+    "x-cluster-gmm-options": "verify-light-20261128-1",
+    "x-cluster-bgmm-covtypes": "verify-light-20261128-1",
+    "x-cluster-agglo-connectivity": "verify-light-20261128-1",
+    "fn-msel-permutation-test-score": "verify-light-20261128-1",
+    "x-logistic-cv-proba": "verify-light-20261128-1",
     # The neural sequence lanes' 2026-11-05 change is to the batchscale and
     # rlpair PROTOCOLS (SEQ_SCALE_WHOLE, SCALE_LONG_L, SCALE_PREFIXES,
     # RLPAIR_DECODE, RLPAIR_LEAVE_AFTER), not to their train input; those parts
@@ -1901,6 +1942,7 @@ NON_SIZE_REVISIONS = {
         "4088 single-byte tokens and 4 two-byte tokens over the 4096 fixture bytes, so the BPE merge "
         "loop runs four times and the endoftext branch never matches"),
     "byte-lm-resident": (
+        "2026-11-28, lane/verify-light-1: the serving parts batchgrad, batchscale, ragged, stepfull and rlpair run on one fixture each (`_DEALT_PARTS`, FIXTURES[1..5]) and read n/a:dealt on the other eight; the train input and the batch part unchanged; before that: "
         "what changed is the model SHAPE, one block at d_model 16 instead of two at 32 (2026-09-16, "
         "lane/neural-shape-shrink), which is a property of the trainer rather than a count in the "
         "fixture. The lane's claim survives it by construction: it asserts the resident export equals "
@@ -1930,6 +1972,7 @@ NON_SIZE_REVISIONS = {
         "identity function and the cell read 295d4e62d4c78b14 either way. Not a size, and this lane does "
         "not train"),
     "transformer-window": (
+        "2026-11-28, lane/verify-light-1: the serving parts batchgrad, batchscale, ragged, stepfull and rlpair run on one fixture each (`_DEALT_PARTS`, FIXTURES[1..5]) and read n/a:dealt on the other eight; the train input and the batch part unchanged; before that: "
         "the same pair as `transformer`, through the same helper (2026-09-16, lane/dead-arms); the cell "
         "read 49ffb2316f238e6d with and without the swap. The shrink audit did not name this lane, which "
         "is why the lane/dead-arms census was run over every sequence "
@@ -1947,26 +1990,33 @@ NON_SIZE_REVISIONS = {
         "2026-11-05 lane/slow-verification-lanes: the second eigh width moves from 128 to 65, which is the "
         "exact-multiple panel arm and the odd-n Jacobi pad arm; 72 is kept."),
     "x-decomp-eigh-wide-fastica": (
+        "2026-11-28, lane/verify-light-1: d 72 only (was 72 and 65): one wide matrix reaches the whitening and decorrelation eighs; 65's arms are x-decomp-eigh-wide-linalg's; before that: "
         "2026-11-05 lane/slow-verification-lanes: the widths move from 72/128 to 72/65 and FastICA max_iter "
         "from 8 to 4; every iteration still runs the decorrelation eigh."),
     "x-decomp-eigh-wide-rotation": (
+        "2026-11-28, lane/verify-light-1: ONE varimax fit at n_components 64 (was varimax 72 and quartimax 65; 283.7 s a cell on the 0.9.0 Apple record) on simple-structure input (`_decomp_rotation_simple`: disjoint column supports in exact +x/-x pairs, so the unrotated loadings are the axes and the rotation stops after its second eigh), 16d rows, EM 2 (was 3); quartimax is x-decomp-factor-analysis's, 65's exact panel x-decomp-eigh-wide-linalg's; before that: "
         "2026-11-05 lane/slow-verification-lanes: quartimax n_components moves from 128 to 65, rows from 4d "
         "to 2d and EM max_iter from 5 to 3; varimax stays at 72."),
     "x-decomp-eigh-wide-factor-analysis": (
+        "2026-11-28, lane/verify-light-1: d 72 only (was 72 and 65): one wide matrix reaches the n < d EM eigh; 65's arms are x-decomp-eigh-wide-linalg's; before that: "
         "2026-11-05 lane/slow-verification-lanes: the widths move from 72/128 to 72/65 with rows still "
         "width - 1, and EM max_iter from 10 to 4; 2026-11-28 lane/verify-speed-2: EM max_iter from 4 to 2 "
         "(each step the same d x d eigh, about 0.7 s on Metal)."),
     "x-decomp-eigh-wide-mincovdet": (
+        "2026-11-28, lane/verify-light-1: ONE fit at d 64 (was 72 and 65; 267.5 s a cell on the 0.9.0 Apple record) whose last column repeats the first (`_decomp_mcd_singular`), so every candidate's log determinant is -inf, no C-step loop runs and the wide pinvh runs about a dozen times; the held-out probe at 64; before that: "
         "2026-11-05 lane/slow-verification-lanes: the MinCovDet widths move from 72/128 to 72/65; rows stay "
         "at 3d and every hashed part is kept."),
     "x-decomp-umap-options": (
+        "2026-11-28, lane/verify-light-1: the n_components 5 fit runs on every cell, the eleven other option fits are dealt over the nine fixtures (`_spread`); every option, size and epoch count unchanged; before that: "
         "2026-11-05 lane/slow-verification-lanes: the rows move from 384 to 192 and the epochs from 8 to 4 "
         "(the array-init pre-fit from 4 to 2); every option arm is kept."),
     "x-decomp-manifold": (
+        "2026-11-28, lane/verify-light-1: the first Isomap runs on every cell, the fourteen other manifold fits are dealt over the nine fixtures (`_spread`); every size, option and iteration count unchanged; before that: "
         "2026-11-05 lane/slow-verification-lanes: the MDS max_iter values are halved (40/30/25 to 20/15/12) "
         "and the shift-invert LLE moves from 300 to 240 rows, still above 200; 2026-11-28 lane/verify-speed-2: "
         "MDS max_iter again 20/15/12 to 8/6/6, n_init 2 and every Isomap and LLE fit unchanged."),
     "x-decomp-factor-analysis": (
+        "2026-11-28, lane/verify-light-1: the main fit runs on every cell, the varimax, quartimax and fit_transform fits are dealt one fixture each (`_Dealer`); sizes and iteration counts unchanged; before that: "
         "2026-11-28 lane/verify-speed-2: EM max_iter 60 to 16 (the main fit), 40 to 12 (varimax, quartimax) "
         "and 20 to 8 (fit_transform); rows, n_components, rotations and every hashed part unchanged."),
     "trees-calibrated": (
@@ -2005,6 +2055,7 @@ NON_SIZE_REVISIONS = {
         "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 6000 (floored at 5000, the min_fold_size "
         "arm) and trees 20 -> 8; Bayesian bootstrap, noise and NewtonCosine twin kept"),
     "gbdt-binary-columns": (
+        "2026-11-28, lane/verify-light-1: trees 8 -> 4 for the six fits; rows (floored at 5000) unchanged; before that: "
         "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 6000 (floored at 5000) and trees 20 -> 8 "
         "for all six fits; batch part on the first 2048 held-out rows"),
     "gbdt-catboost-defaults": (
@@ -2036,78 +2087,103 @@ NON_SIZE_REVISIONS = {
         "1024 replicates for every arm, in the lane body and its batch part, on 2026-11-05 "
         "(lane/slow-verification-lanes)."),
     "generic-attrs-trees": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the trees group whose n_estimators is unset or above 3 fits at 3 (was 8 since 2026-11-26, lane/slow-lanes-1; GradientBoosting's unset 1000 and the forests' 100 -> 3): 3 members still fold a first, a middle and a last member through the same build, predict, vote and sum kernels; the 0.9.0 Apple record had check-generic-trees at 59.6 s and generic-attrs-trees at 19.9 s a cell (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-pickle-trees": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the trees group whose n_estimators is unset or above 3 fits at 3 (was 8 since 2026-11-26, lane/slow-lanes-1; GradientBoosting's unset 1000 and the forests' 100 -> 3): 3 members still fold a first, a middle and a last member through the same build, predict, vote and sum kernels; the 0.9.0 Apple record had check-generic-trees at 59.6 s and generic-attrs-trees at 19.9 s a cell (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-digest-trees": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the trees group whose n_estimators is unset or above 3 fits at 3 (was 8 since 2026-11-26, lane/slow-lanes-1; GradientBoosting's unset 1000 and the forests' 100 -> 3): 3 members still fold a first, a middle and a last member through the same build, predict, vote and sum kernels; the 0.9.0 Apple record had check-generic-trees at 59.6 s and generic-attrs-trees at 19.9 s a cell (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "check-generic-trees": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the trees group whose n_estimators is unset or above 3 fits at 3 (was 8 since 2026-11-26, lane/slow-lanes-1; GradientBoosting's unset 1000 and the forests' 100 -> 3): 3 members still fold a first, a middle and a last member through the same build, predict, vote and sum kernels; the 0.9.0 Apple record had check-generic-trees at 59.6 s and generic-attrs-trees at 19.9 s a cell (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-attrs-linear": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-pickle-linear": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-digest-linear": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "check-generic-linear": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-attrs-decomp": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-pickle-decomp": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-digest-decomp": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "check-generic-decomp": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-attrs-neighbors": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-pickle-neighbors": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-digest-neighbors": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "check-generic-neighbors": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "gbdt-categorical-ctr-tables": (
+        "2026-11-28, lane/verify-light-1: 3 trees (was 10): every CTR table is built at tree one; rows, depth and columns unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-cat-rmse": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-cat-bootstrap": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-cat-noise": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-cat-ordered": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-cat-rest": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-cat-nonsym": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-weighted-symmetric": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-weighted-nonsym": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
@@ -2118,70 +2194,161 @@ NON_SIZE_REVISIONS = {
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-eval-gaps": (
+        "2026-11-28, lane/verify-light-1: each shape's plain fit and its detector-and-shrink pair are dealt over the nine fixtures (`_Dealer`, the first plain fit on every cell), and the stop fits take 12 trees (was 30); the detector and shrink checks are unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-weighted-rest": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-weighted-special": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-shape-gaps": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-rest-gaps": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-pointwise-arms": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-pointwise-rest": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-ordered-weights": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-nonsym-rest": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-symmetric-rest": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-multi-walk": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-pointwise-multiclass": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-simple-leaves": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
+    "x-decomp-robust-cov": (
+        "2026-11-28, lane/verify-light-1: one multivariate search (was two): the MinCovDet parts are read from the EllipticEnvelope fit, a MinCovDet subclass, on the same 400 x 6 rows (49.3 s a cell on the 0.9.0 Apple record); the d = 1 MinCovDet and every option unchanged"),
+    "x-decomp-pls": (
+        "2026-11-28, lane/verify-light-1: PLSRegression runs on every cell, the canonical, CCA, svd-canonical and two-target fits are dealt one fixture each (`_Dealer`), each with its own score part; sizes unchanged"),
+    "x-decomp-fastica": (
+        "2026-11-28, lane/verify-light-1: the parallel logcosh fit runs on every cell, the deflation exp and cube fits are dealt one fixture each (`_Dealer`); sizes and iteration counts unchanged"),
+    "x-decomp-dict-learning": (
+        "2026-11-28, lane/verify-light-1: the first DictionaryLearning and its three SparseCoders run on every cell, the cd, threshold and mini-batch fits are dealt one fixture each (`_Dealer`); sizes unchanged"),
+    "x-decomp-pca-randomized": (
+        "2026-11-28, lane/verify-light-1: the randomized PCA runs on every cell, the six other fits are dealt one fixture each (`_Dealer`); sizes unchanged"),
+    "generic-attrs-prep": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-pickle-prep": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-digest-prep": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "check-generic-prep": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-attrs-cluster": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-pickle-cluster": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-digest-cluster": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "check-generic-cluster": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-attrs-sequence": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-pickle-sequence": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-digest-sequence": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "check-generic-sequence": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-attrs-other": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-pickle-other": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-digest-other": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "check-generic-other": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "gbdt-yeti-rank-pointwise": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged"),
+    "gbdt-rank-bootstrap": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged"),
+    "gbdt-rank-leaves": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged"),
+    "gbdt-rank-pointwise-arms": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged"),
+    "gbdt-rank-pairs": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged"),
+    "gbdt-adapter-score-weighted": (
+        "2026-11-28, lane/verify-light-1: 3 trees a model (was 20; 22 s a cell on the 0.9.0 Apple record): the lane is the weighted score on the pinned-sum path; rows and depth unchanged"),
+    "mamba1-int8w": (
+        "2026-11-28, lane/verify-light-1: the serving parts batchgrad, batchscale, ragged, stepfull and rlpair run on one fixture each (`_DEALT_PARTS`, FIXTURES[1..5]) and read n/a:dealt on the other eight; the train input and the batch part unchanged"),
+    "mamba2-bf16w": (
+        "2026-11-28, lane/verify-light-1: the serving parts batchgrad, batchscale, ragged, stepfull and rlpair run on one fixture each (`_DEALT_PARTS`, FIXTURES[1..5]) and read n/a:dealt on the other eight; the train input and the batch part unchanged"),
+    "transformer-bf16w": (
+        "2026-11-28, lane/verify-light-1: the serving parts batchgrad, batchscale, ragged, stepfull and rlpair run on one fixture each (`_DEALT_PARTS`, FIXTURES[1..5]) and read n/a:dealt on the other eight; the train input and the batch part unchanged"),
+    "x-ann-tsne-pca": (
+        "2026-11-28, lane/verify-light-1: 252 steps (was 300) in the fit and the held-out refit: the 250 exaggerated steps the binding requires and two after; rows and perplexity unchanged"),
+    "cross-val": (
+        "2026-11-28, lane/verify-light-1: 2 trees a fold (was 8) in the lane and its batch part; folds, rows and depth unchanged"),
+    "numeric-profile-parts": (
+        "2026-11-28, lane/verify-light-1: the per-part cases are dealt over the nine fixtures (`_spread`, anchor 0); presets, generate, save-reload and the block on every cell"),
+    "x-metrics-search": (
+        "2026-11-28, lane/verify-light-1: 2 trees for the searched estimator (was 6), a grid over 2 and 3 trees (was 4 and 8); the grid search on every cell, cross_validate, the named cross_val_score and cross_val_predict dealt (`_Dealer`)"),
+    "x-cluster-gmm-options": (
+        "2026-11-28, lane/verify-light-1: the spherical fit runs on every cell, tied, diag, k-means++, the three inits and warm_start are dealt one fixture each (`_Dealer`); options and iteration counts unchanged"),
+    "x-cluster-bgmm-covtypes": (
+        "2026-11-28, lane/verify-light-1: the spherical fit runs on every cell, tied and diag are dealt one fixture each (`_spread`); options and iteration counts unchanged"),
+    "x-cluster-agglo-connectivity": (
+        "2026-11-28, lane/verify-light-1: single linkage and the threshold fit run on every cell, ward, complete and average are dealt one fixture each (`_spread`); the graph and rows unchanged"),
+    "fn-msel-permutation-test-score": (
+        "2026-11-28, lane/verify-light-1: 2 permutations (was 4) and the groups call on one fixture (`_cell_takes`); folds and rows unchanged"),
+    "x-logistic-cv-proba": (
+        "2026-11-28, lane/verify-light-1: Cs 2 (was 4) for both fits; folds, iterations and rows unchanged"),
 }
 
 
@@ -2956,7 +3123,7 @@ def _(ml, X, yc, yr, Xh=None):
 
     The fits are the configurations the small-pool host route took before
     lane hr-gbdt-small deleted it: Plain and Ordered, Logloss and
-    RMSE, at `_gbdt`'s recorded options, 8 depth-6 trees each; the Ordered
+    RMSE, at `_gbdt`'s recorded options, `trees` depth-6 trees each; the Ordered
     RMSE fit again at CatBoost's GPU defaults for the bootstrap and the
     noise (Bayesian, random_strength 1), which is what an unset
     `GradientBoosting()` of 500 trees or more trains below 50,000 rows; and
@@ -2968,7 +3135,7 @@ def _(ml, X, yc, yr, Xh=None):
     # 1024 (split_points.mojo:829) and both flag values on every fixture (the
     # refusal below still checks); the tree count is not what this lane checks.
     rows = 6000                                  # FLOORED, see @floor above
-    trees = 8
+    trees = 4                                    # lane verify-light-1, 2026-11-28: was 8 (11 s a cell on Apple)
     X, yc, yr = X[:rows], yc[:rows], yr[:rows]
     X = _gbdt_binary_columns(X)
     Xh = None if Xh is None else _gbdt_binary_columns(Xh)
@@ -3635,6 +3802,52 @@ def _block_weights(lane, shapes, ones=(), near_one=()):
 #: harness fit against a probe run or against the same fit on another box
 #: element by element. Off (unset), nothing here runs.
 _DUMP_TAG = ""
+
+
+# THE NINE VARIANTS SHARE A LANE'S OPTION UNITS (lane verify-light-1, 2026-11-28; AGENTS.md "Verification has light
+# fixtures": a lane reaches each code path ONCE, and a cell over 10 s on the Apple laptop is a fixture defect). A lane
+# whose body is a list of independent units (a cross-product of options over one estimator, or the public classes of
+# a mechanism lane) fitted every unit on every one of the nine fixtures, so the protocol paid each option nine times
+# though the option is a code path and the fixture is a data pathology. A lane that opts in with `_spread(units)`
+# keeps its ANCHOR units (the first `anchor`: the fit that answers the infer, model and batch columns) on all nine
+# cells, and deals the rest round robin over the nine fixtures in FIXTURES order: option unit i runs on the cell of
+# FIXTURES[i % 9] only, so every unit still runs once per side, every cell still hashes its anchor on its own
+# pathology, and a cell pays its anchor plus about a ninth of the options. A fault arm that reaches one option still
+# moves the lane (tools/coverage_sabotage.py counts a lane caught when ANY of its fixtures moved). The fixture is read
+# from `_DUMP_TAG` ("<lane>/<fixture>/<repeat>"), which the record loop below and `python -m mojolearn verify`
+# (python/mojolearn/_verify_all.py: the record, the smoke, the cross-check and the model emit) set before every lane
+# call; with no tag (a caller outside the protocol) every unit runs.
+def _cell_fixture():
+    """The fixture of the cell being run, from `_DUMP_TAG`; "" when no caller set one."""
+    fields = _DUMP_TAG.split("/")
+    return fields[1] if len(fields) >= 3 and fields[1] in FIXTURES else ""
+
+
+def _cell_takes(slot):
+    """True when option unit `slot` (0-based, after the anchors) belongs to this cell (`_spread`)."""
+    fx = _cell_fixture()
+    return not fx or slot % len(FIXTURES) == FIXTURES.index(fx)
+
+
+class _Dealer:
+    """Deals one lane's units over the nine fixtures in the order the lane meets them: the first `anchor` units run
+    on every cell, each later unit takes the next option slot (`_cell_takes`). A lane with several loops and single
+    fits uses one dealer: `deal.units([...])` for a loop's list, `if deal.take():` for one fit."""
+
+    def __init__(self, anchor=1):
+        self.anchor, self.seen = anchor, 0
+
+    def take(self):
+        i, self.seen = self.seen, self.seen + 1
+        return i < self.anchor or _cell_takes(i - self.anchor)
+
+    def units(self, units):
+        return [u for u in units if self.take()]
+
+
+def _spread(units, anchor=1):
+    """`units` as this cell runs them: the first `anchor` always, then the option units `_cell_takes` deals here."""
+    return _Dealer(anchor).units(units)
 
 
 def _dump(arrays):
@@ -5031,13 +5244,16 @@ def _(ml, X, yc, yr, Xh=None):
         "Lq": dict(loss_q=3.0), "Expectile": dict(loss_alpha=0.3),
         "Tweedie": dict(loss_variance_power=1.5), "Huber": dict(loss_delta=1.0),
     }
-    parts, first = {}, None
-    for loss, kw in fits.items():
+    # lane verify-light-1, 2026-11-28 (`_Dealer`): Quantile is the anchor on every cell, the other nine losses are
+    # dealt one a fixture
+    parts, first, deal = {}, None, _Dealer()
+    for loss, kw in deal.units(list(fits.items())):
         m = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss=loss, **kw).fit(X, y)
         parts[loss] = _h(m.predict(X))
         first = first or m
-    ce = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss="CrossEntropy").fit(X, yc.astype(np.float32))
-    parts["CrossEntropy"] = _h(ce.predict(X))
+    if deal.take():
+        ce = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss="CrossEntropy").fit(X, yc.astype(np.float32))
+        parts["CrossEntropy"] = _h(ce.predict(X))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -5052,7 +5268,9 @@ def _(ml, X, yc, yr, Xh=None):
     gradient leaves with three iterations: one Lossguide fit."""
     rows = 1500                                  # FLOORED, see @floor above
     X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # rows are a fixture size, not a claim (2026-09-16)
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_leaves=32, grow_policy="Lossguide", loss="Logloss",
+    # lane verify-light-1, 2026-11-28: 6 trees (was 20; 16 s a cell on the 0.9.0 Apple record): every tree runs the
+    # Lossguide budget, the thresholds, the column sample, the noise, the bootstrap and three gradient steps
+    m = _gbdt(ml.GradientBoosting, n_estimators=6, max_leaves=32, grow_policy="Lossguide", loss="Logloss",
                             score_function="NewtonCosine", min_child_hessian=1.0, min_split_gain=0.01,
                             min_data_in_leaf=8, feature_fraction=0.5, random_strength=1.0,
                             bootstrap_type="Bernoulli", subsample=0.7,
@@ -5237,7 +5455,8 @@ def _ctr_saved_or_fit(ml, fit):
 # need the room); depth, rows, rate and every option are unchanged. LANE_REVISIONS: trees-half-20261128-1.
 _GBDT_GAPS_TREES = 4         # was 8: `_gbdt_gaps_kw`, gbdt-weighted-rest's categorical fits and its OrderedRMSE
 _GBDT_CAT_TREES = 6          # was 12: `_gbdt_cat_fits`, gbdt-cat-rest, gbdt-cat-nonsym
-_GBDT_CTR_TABLES_TREES = 10  # was 20: gbdt-categorical-ctr-tables' one fit (every CTR table is built at tree one)
+_GBDT_CTR_TABLES_TREES = 3   # was 20, then 10: gbdt-categorical-ctr-tables' one fit (every CTR table is built at
+                             # tree one; lane verify-light-1, 2026-11-28: 3 keeps a first, middle and last tree)
 
 
 @lane("gbdt-categorical-ctr-tables")
@@ -5355,7 +5574,7 @@ def _gbdt_cat_fits(ml, X, yc, yr, Xh, configs):
     if configs[0][2][0] != _GBDT_CAT_ALL[0]:
         raise RuntimeError("a categorical lane's first fit must use every column (it answers infer and batch)")
     parts, first = {}, None
-    for name, loss, (cols, cats), options in configs:
+    for name, loss, (cols, cats), options in _spread(configs):
         kw = dict(n_estimators=_GBDT_CAT_TREES, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
                   border_count=128, leaf_estimation_iterations=1, boosting_type="Plain",
                   random_state=7, loss=loss, cat_features=list(cats))
@@ -5488,7 +5707,7 @@ def _(ml, X, yc, yr, Xh=None):
                 max_ctr_complexity=1)
     quantile = dict(loss="Quantile", leaf_estimation_method="Gradient", leaf_estimation_iterations=1)
     parts, first = {}, None
-    for name, (cols, cats), yf, wf, proba, options in [
+    for name, (cols, cats), yf, wf, proba, options in _spread([
         ("quantile_all_defaults", _GBDT_CAT_ALL, yq, None, False, dict(quantile, **_GBDT_CAT_DEFAULTS)),
         ("quantile_mcc2", _GBDT_CAT_MCC2, yq, None, False,
          dict(quantile, max_ctr_complexity=2, **_GBDT_CAT_PLAIN)),
@@ -5503,7 +5722,7 @@ def _(ml, X, yc, yr, Xh=None):
         ("ova_all_weighted_bernoulli", _GBDT_CAT_ALL, y3, w, True,
          dict(loss="MultiClassOneVsAll", leaf_estimation_iterations=1, bootstrap_type="Bernoulli",
               subsample=0.7, random_strength=0.0)),
-    ]:
+    ]):
         kw = dict(base, cat_features=list(cats))
         kw.update(options)
         Xs = np.ascontiguousarray(Xc[:, cols])
@@ -5517,25 +5736,29 @@ def _(ml, X, yc, yr, Xh=None):
     # CTR target binarization reads one target per row), so the
     # one_hot_features fit this lane carried was refused on every fixture;
     # the native one-hot arm stays covered by gbdt_host_device_cat rest4cat
-    cols, _ = _GBDT_CAT_ONEHOT
-    Xs = np.ascontiguousarray(Xc[:, cols])
-    mr = ml.GradientBoosting(**dict(base, loss="MultiRMSE", boost_from_average=False,
-                                    leaf_estimation_iterations=1, **_GBDT_CAT_PLAIN)).fit(Xs, ymr)
-    parts["multirmse_coded_columns"] = _h(mr.predict(Xs))
-    parts["multirmse_coded_columns:digest"] = _h(np.frombuffer(str(mr.digest_).encode(), dtype=np.uint8))
+    # lane verify-light-1, 2026-11-28 (`_spread`): the loop above deals its seven option fits over the nine
+    # fixtures (slots 0-6); these two fits take slots 7 and 8
+    if _cell_takes(7):
+        cols, _ = _GBDT_CAT_ONEHOT
+        Xs = np.ascontiguousarray(Xc[:, cols])
+        mr = ml.GradientBoosting(**dict(base, loss="MultiRMSE", boost_from_average=False,
+                                        leaf_estimation_iterations=1, **_GBDT_CAT_PLAIN)).fit(Xs, ymr)
+        parts["multirmse_coded_columns"] = _h(mr.predict(Xs))
+        parts["multirmse_coded_columns:digest"] = _h(np.frombuffer(str(mr.digest_).encode(), dtype=np.uint8))
     # the held-out fit: the curve, the detector's stop and the shrink
-    Xe = np.ascontiguousarray(_gbdt_cat_xh(Xh[:rows])[:, _GBDT_CAT_CTR[0]])
-    ye3 = _rank_codes(labels_for(Xh, HELDOUT_SEED)[1][:rows], [1.0 / 3.0, 2.0 / 3.0]).astype(np.float32)
-    cols, cats = _GBDT_CAT_CTR
-    Xs = np.ascontiguousarray(Xc[:, cols])
-    ev = ml.GradientBoosting(**dict(base, loss="MultiClassOneVsAll", cat_features=list(cats),
-                                    leaf_estimation_iterations=1, n_estimators=30, learning_rate=1.0,
-                                    od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3,
-                                    **_GBDT_CAT_PLAIN)).fit(Xs, y3, eval_set=(Xe, ye3))
-    parts["ova_ctr_eval"] = _h(ev.predict_proba(Xs))
-    parts["ova_ctr_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["ova_ctr_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                ev.best_iteration_], dtype=np.int64))
+    if _cell_takes(8):
+        Xe = np.ascontiguousarray(_gbdt_cat_xh(Xh[:rows])[:, _GBDT_CAT_CTR[0]])
+        ye3 = _rank_codes(labels_for(Xh, HELDOUT_SEED)[1][:rows], [1.0 / 3.0, 2.0 / 3.0]).astype(np.float32)
+        cols, cats = _GBDT_CAT_CTR
+        Xs = np.ascontiguousarray(Xc[:, cols])
+        ev = ml.GradientBoosting(**dict(base, loss="MultiClassOneVsAll", cat_features=list(cats),
+                                        leaf_estimation_iterations=1, n_estimators=30, learning_rate=1.0,
+                                        od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3,
+                                        **_GBDT_CAT_PLAIN)).fit(Xs, y3, eval_set=(Xe, ye3))
+        parts["ova_ctr_eval"] = _h(ev.predict_proba(Xs))
+        parts["ova_ctr_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["ova_ctr_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                    ev.best_iteration_], dtype=np.int64))
     return _fit(parts, first, lambda e: (e.predict(_gbdt_cat_xh(Xh)),))
 
 
@@ -5595,7 +5818,7 @@ def _(ml, X, yc, yr, Xh=None):
     if configs[0][2][0] != _GBDT_CAT_ALL[0]:
         raise RuntimeError("gbdt-cat-nonsym's first fit must use every column (it answers infer and batch)")
     parts, first = {}, None
-    for name, loss, (cols, cats), options, weighted, held in configs:
+    for name, loss, (cols, cats), options, weighted, held in _spread(configs):
         kw = dict(n_estimators=_GBDT_CAT_TREES, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
                   border_count=128, leaf_estimation_iterations=1, boosting_type="Plain",
                   random_state=7, loss=loss, cat_features=list(cats))
@@ -5889,7 +6112,7 @@ def _gbdt_rank_fits(ml, X, yr, Xh, configs, max_rows=_GBDT_RANK_ROWS):
         pairs = _rank_pairs(groups, rel)
         pair_w = _hw((len(pairs),), "gbdt-rank:pairs_weight", 0.5, 2.0)
     parts, first = {}, None
-    for name, loss, options, with_pairs in configs:
+    for name, loss, options, with_pairs in _spread(configs):
         kw = dict(n_estimators=10, max_depth=4, learning_rate=_GBDT_RANK_RATE, l2_leaf_reg=3.0,
                   border_count=128, boosting_type="Plain", random_state=7, loss=loss,
                   bootstrap_type="No", random_strength=0.0, leaf_estimation_method="Newton",
@@ -6147,7 +6370,7 @@ def _gbdt_gaps_weighted(ml, X, Xh, fits, tag):
     fit answers the infer, model and batch columns."""
     w = _hw((X.shape[0],), "gbdt-gaps:" + tag + ":sample_weight", 0.25, 4.0)
     parts, first = {}, None
-    for name, y, options in fits:
+    for name, y, options in _spread(fits):
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**options)).fit(X, y, sample_weight=w)
         _gbdt_gaps_parts(parts, name, m, X)
         first = first if first is not None else m
@@ -6276,12 +6499,20 @@ def _(ml, X, yc, yr, Xh=None):
         ("lossguide_logloss", yc, ycn, dict(lg, loss="Logloss", score_function="NewtonL2")),
         ("lossguide_rmse", yr, yrn, dict(lg, loss="RMSE", score_function="NewtonL2", boost_from_average=False)),
     ]
-    parts, first = {}, None
+    # lane verify-light-1, 2026-11-28 (`_Dealer`): each shape's plain fit and its detector-and-shrink pair are two
+    # units dealt over the nine fixtures (the first plain fit is the anchor); the stop fits take 12 trees (was 30):
+    # at rate 1.0 and depth 6 on the noisy held-out labels the detector fires and the shrink cuts within the first
+    # few trees, and the checks below still refuse a fit on which either goes inert.
+    parts, first, deal = {}, None, _Dealer()
     for name, y, ye, options in fits:
-        plain = ml.GradientBoosting(**_gbdt_gaps_kw(use_best_model=False, **options)).fit(X, y, eval_set=(Xe, ye))
-        _gbdt_gaps_parts(parts, name + "_plain", plain, X)
-        parts[name + "_plain:test_loss_curve"] = _h(np.asarray(plain.test_loss_curve_, dtype=np.float64))
-        stop = dict(options, n_estimators=30, learning_rate=1.0, max_depth=6)
+        if deal.take():
+            plain = ml.GradientBoosting(**_gbdt_gaps_kw(use_best_model=False, **options)).fit(X, y, eval_set=(Xe, ye))
+            _gbdt_gaps_parts(parts, name + "_plain", plain, X)
+            parts[name + "_plain:test_loss_curve"] = _h(np.asarray(plain.test_loss_curve_, dtype=np.float64))
+            first = first if first is not None else plain
+        if not deal.take():
+            continue
+        stop = dict(options, n_estimators=12, learning_rate=1.0, max_depth=6)
         od = ml.GradientBoosting(**_gbdt_gaps_kw(od_type="Iter", od_wait=2, use_best_model=False, **stop)
                                  ).fit(X, y, eval_set=(Xe, ye))
         sh = ml.GradientBoosting(**_gbdt_gaps_kw(use_best_model=True, best_model_min_trees=3, **stop)
@@ -6303,7 +6534,6 @@ def _(ml, X, yc, yr, Xh=None):
                                                   od.best_iteration_, sh.best_iteration_], dtype=np.int64))
         _gbdt_gaps_parts(parts, name + "_shrunk", sh, X)
         parts[name + "_shrunk:test_loss_curve"] = _h(sh_curve)
-        first = first if first is not None else plain
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -6345,12 +6575,13 @@ def _(ml, X, yc, yr, Xh=None):
     Xc = _gbdt_cat_x(X[:crows])
     w = _hw((crows,), "gbdt-gaps:rest-cat:sample_weight", 0.25, 4.0)
     cat_parts = {}
-    for name, loss, ys, (cols, cats), options in [
+    # lane verify-light-1, 2026-11-28 (`_spread`): option slots 4-6, after the four of the numeric fits above
+    for name, loss, ys, (cols, cats), options in [u for i, u in enumerate([
         ("logloss_all", "Logloss", yc[:crows], _GBDT_CAT_ALL, _GBDT_CAT_PLAIN),
         ("rmse_ctr_defaults", "RMSE", yr[:crows], _GBDT_CAT_CTR, _GBDT_CAT_DEFAULTS),
         ("logloss_onehot_bernoulli", "Logloss", yc[:crows], _GBDT_CAT_ONEHOT,
          dict(bootstrap_type="Bernoulli", subsample=0.7, random_strength=0.0)),
-    ]:
+    ]) if _cell_takes(4 + i)]:
         kw = dict(n_estimators=_GBDT_GAPS_TREES, max_depth=4, learning_rate=_GBDT_GAPS_RATE, l2_leaf_reg=3.0,
                   border_count=128, leaf_estimation_iterations=1, boosting_type="Plain",
                   random_state=7, loss=loss, cat_features=list(cats))
@@ -6374,8 +6605,8 @@ def _(ml, X, yc, yr, Xh=None):
     groups, rel = _rank_groups(rows), _relevance(yr[:rows])
     w = _hw((rows,), "gbdt-gaps:special:sample_weight", 0.25, 4.0)
     pw = dict(use_pointwise_searcher=True)
-    parts, first = {}, None
-    for name, loss, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, loss, options in deal.units([
         ("QueryRMSE", "QueryRMSE", {}),
         ("QueryRMSE_bayesian_noise", "QueryRMSE", dict(bootstrap_type="Bayesian", bagging_temperature=1.0,
                                                        random_strength=1.0)),
@@ -6383,7 +6614,7 @@ def _(ml, X, yc, yr, Xh=None):
         ("YetiRank_pointwise_cosine", "YetiRank", dict(pw, score_function="Cosine")),
         ("PairLogit_pointwise_bernoulli", "PairLogit", dict(pw, score_function="Cosine",
                                                             bootstrap_type="Bernoulli", subsample=0.7)),
-    ]:
+    ]):
         kw = dict(loss=loss, max_depth=4, n_estimators=10, leaf_estimation_method="Newton",
                   leaf_estimation_iterations=1)
         kw.update(options)
@@ -6393,10 +6624,12 @@ def _(ml, X, yc, yr, Xh=None):
         first = first if first is not None else m
     wo = _hw((X.shape[0],), "gbdt-gaps:special:ordered_weight", 0.25, 4.0)
     perm = np.argsort(_hashed_uniform(X.shape[0], 1, "ordered-permutation").reshape(-1), kind="stable")
-    om = ml.OrderedRMSE(n_estimators=_GBDT_GAPS_TREES, max_depth=4).fit(X, yr, permutation=perm, sample_weight=wo)
-    parts["OrderedRMSE_weighted"] = _h(om.predict(X))
-    fm = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(_coded(X), yr, sample_weight=wo)
-    parts["FeatureFreq_weighted"] = _h(fm.predict(_coded(X)))
+    if deal.take():
+        om = ml.OrderedRMSE(n_estimators=_GBDT_GAPS_TREES, max_depth=4).fit(X, yr, permutation=perm, sample_weight=wo)
+        parts["OrderedRMSE_weighted"] = _h(om.predict(X))
+    if deal.take():
+        fm = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(_coded(X), yr, sample_weight=wo)
+        parts["FeatureFreq_weighted"] = _h(fm.predict(_coded(X)))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -6416,8 +6649,8 @@ def _(ml, X, yc, yr, Xh=None):
     dw = dict(grow_policy="Depthwise", score_function="Cosine")
     lg = dict(grow_policy="Lossguide", max_leaves=16, min_data_in_leaf=4)
     newton = dict(leaf_estimation_method="Newton", leaf_estimation_iterations=1)
-    parts, first = {}, None
-    for name, Xf, yf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, Xf, yf, options in deal.units([
         ("symmetric_rmse_ff", X, yr, dict(loss="RMSE", boost_from_average=False, feature_fraction=0.5, **newton)),
         ("symmetric_rmse_nan_min", Xn, yr, dict(loss="RMSE", boost_from_average=True, nan_mode="Min", **newton)),
         ("depthwise_rmse_nan_max", Xn, yr, dict(dw, loss="RMSE", boost_from_average=True, nan_mode="Max",
@@ -6439,24 +6672,25 @@ def _(ml, X, yc, yr, Xh=None):
         ("pointwise_unweighted", X, yc, dict(loss="Logloss", score_function="L2", use_pointwise_searcher=True,
                                              bootstrap_type="Bayesian", bagging_temperature=0.5,
                                              boost_from_average=True)),
-    ]:
+    ]):
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**options)).fit(Xf, yf)
         _gbdt_gaps_parts(parts, name, m, Xf)
         first = first if first is not None else m
     # the pointwise losses on a non-symmetric tree with an eval set: the
     # held-out curve, the detector's stop and the shrink, hashed
-    Xe = np.ascontiguousarray(Xh[:rows])
-    yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows]
-    yen = (_pos(yeh) + _hw((rows,), "gbdt-gaps:shape:eval_noise", 0.0, 3.0)).astype(np.float32)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(lg, loss="MAE", score_function="NewtonL2",
-                                                    leaf_estimation_method="Exact", n_estimators=30,
-                                                    learning_rate=1.0, max_depth=6, od_type="Iter", od_wait=2,
-                                                    use_best_model=True, best_model_min_trees=3))
-                             ).fit(X, y, eval_set=(Xe, yen))
-    _gbdt_gaps_parts(parts, "lossguide_mae_exact_eval", ev, X)
-    parts["lossguide_mae_exact_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["lossguide_mae_exact_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                            ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows]
+        yen = (_pos(yeh) + _hw((rows,), "gbdt-gaps:shape:eval_noise", 0.0, 3.0)).astype(np.float32)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(lg, loss="MAE", score_function="NewtonL2",
+                                                        leaf_estimation_method="Exact", n_estimators=30,
+                                                        learning_rate=1.0, max_depth=6, od_type="Iter", od_wait=2,
+                                                        use_best_model=True, best_model_min_trees=3))
+                                 ).fit(X, y, eval_set=(Xe, yen))
+        _gbdt_gaps_parts(parts, "lossguide_mae_exact_eval", ev, X)
+        parts["lossguide_mae_exact_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["lossguide_mae_exact_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                                ev.best_iteration_], dtype=np.int64))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -6484,8 +6718,8 @@ def _(ml, X, yc, yr, Xh=None):
     pw_rmse = dict(loss="RMSE", score_function="L2", use_pointwise_searcher=True, bootstrap_type="Bayesian",
                    bagging_temperature=0.5, boost_from_average=True, leaf_estimation_method="Newton",
                    leaf_estimation_iterations=1)
-    parts, first = {}, None
-    for name, Xf, yf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, Xf, yf, options in deal.units([
         ("symmetric_mae_exact_ff", X, y, dict(loss="MAE", leaf_estimation_method="Exact", feature_fraction=0.5)),
         ("onevsall_ff", X, t3, dict(loss="MultiClassOneVsAll", feature_fraction=0.5,
                                     leaf_estimation_method="Newton", leaf_estimation_iterations=1)),
@@ -6493,12 +6727,12 @@ def _(ml, X, yc, yr, Xh=None):
                                                bootstrap_type="Bayesian", bagging_temperature=1.0,
                                                leaf_estimation_method="Newton", leaf_estimation_iterations=1)),
         ("pointwise_rmse", X, yr, pw_rmse),
-    ]:
+    ]):
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**options)).fit(Xf, yf)
         _gbdt_gaps_parts(parts, name, m, Xf)
         first = first if first is not None else m
     # the held-out fits: the curve, the detector's stop and the shrink, hashed
-    for name, yf, ye, options in [
+    for name, yf, ye, options in deal.units([
         ("symmetric_quantile_eval", y, yen, dict(stop, loss="Quantile", loss_alpha=0.3,
                                                  leaf_estimation_method="Gradient",
                                                  leaf_estimation_iterations=1)),
@@ -6508,7 +6742,7 @@ def _(ml, X, yc, yr, Xh=None):
                                                                   od_type="Iter", od_wait=2,
                                                                   use_best_model=True,
                                                                   best_model_min_trees=3)),
-    ]:
+    ]):
         ev = ml.GradientBoosting(**_gbdt_gaps_kw(**options)).fit(X, yf, eval_set=(Xe, ye))
         _gbdt_gaps_parts(parts, name, ev, X)
         parts[name + ":test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
@@ -6518,7 +6752,7 @@ def _(ml, X, yc, yr, Xh=None):
     # beside a CTR column (column 0) and a one-hot column (column 2)
     Xc = _gbdt_cat_x(X)
     Xc[::8, 3] = np.float32(np.nan)
-    for name, (cols, cats) in [("cat_ctr_nan", _GBDT_CAT_CTR), ("cat_onehot_nan", _GBDT_CAT_ONEHOT)]:
+    for name, (cols, cats) in deal.units([("cat_ctr_nan", _GBDT_CAT_CTR), ("cat_onehot_nan", _GBDT_CAT_ONEHOT)]):
         Xs = np.ascontiguousarray(Xc[:, cols])
         m = ml.GradientBoosting(**_gbdt_gaps_kw(loss="RMSE", cat_features=list(cats), nan_mode="Min",
                                                 boost_from_average=False, leaf_estimation_iterations=1)
@@ -6541,8 +6775,8 @@ def _(ml, X, yc, yr, Xh=None):
     rows = min(_GBDT_GAPS_ROWS, X.shape[0])
     X, yc, yr = np.ascontiguousarray(X[:rows]), yc[:rows], yr[:rows]
     pw = dict(use_pointwise_searcher=True, boost_from_average=True)
-    parts, first = {}, None
-    for name, loss, yf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, loss, yf, options in deal.units([
         ("logloss_newtonl2_bernoulli", "Logloss", yc, dict(pw, score_function="NewtonL2",
                                                           bootstrap_type="Bernoulli", subsample=0.7,
                                                           leaf_estimation_method="Newton",
@@ -6566,47 +6800,51 @@ def _(ml, X, yc, yr, Xh=None):
                                                   random_strength=1.0, feature_fraction=0.5,
                                                   leaf_estimation_method="Newton",
                                                   leaf_estimation_iterations=1)),
-    ]:
+    ]):
         m = ml.GradientBoosting(**_gbdt_gaps_kw(loss=loss, **options)).fit(X, yf)
         _gbdt_gaps_parts(parts, name, m, X)
         first = first if first is not None else m
     # sample weights on the NewtonCosine arm
     w = _hw((rows,), "gbdt-pointwise-arms:sample_weight", 0.25, 4.0)
-    mw = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **dict(
-        pw, score_function="NewtonCosine", bootstrap_type="Bernoulli", subsample=0.7, random_strength=1.0,
-        leaf_estimation_method="Newton", leaf_estimation_iterations=3))).fit(X, yc, sample_weight=w)
-    _gbdt_gaps_parts(parts, "logloss_newtoncosine_weighted", mw, X)
+    if deal.take():
+        mw = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **dict(
+            pw, score_function="NewtonCosine", bootstrap_type="Bernoulli", subsample=0.7, random_strength=1.0,
+            leaf_estimation_method="Newton", leaf_estimation_iterations=3))).fit(X, yc, sample_weight=w)
+        _gbdt_gaps_parts(parts, "logloss_newtoncosine_weighted", mw, X)
     # class weights (lane gbdt-one-body, 2026-11-23): alone, and times the
     # sample weights (the device's one weight column)
     cw = dict(pw, score_function="Cosine", bootstrap_type="Bernoulli", subsample=0.7, class_weights=[1.0, 2.5],
               leaf_estimation_method="Newton", leaf_estimation_iterations=3)
-    mc = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **cw)).fit(X, yc)
-    _gbdt_gaps_parts(parts, "logloss_cosine_class_weights", mc, X)
-    mcs = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **dict(
-        pw, score_function="L2", bootstrap_type="Bayesian", bagging_temperature=1.0, class_weights=[1.0, 2.5],
-        leaf_estimation_method="Newton", leaf_estimation_iterations=3))).fit(X, yc, sample_weight=w)
-    _gbdt_gaps_parts(parts, "logloss_l2_class_and_sample_weights", mcs, X)
+    if deal.take():
+        mc = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **cw)).fit(X, yc)
+        _gbdt_gaps_parts(parts, "logloss_cosine_class_weights", mc, X)
+    if deal.take():
+        mcs = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **dict(
+            pw, score_function="L2", bootstrap_type="Bayesian", bagging_temperature=1.0, class_weights=[1.0, 2.5],
+            leaf_estimation_method="Newton", leaf_estimation_iterations=3))).fit(X, yc, sample_weight=w)
+        _gbdt_gaps_parts(parts, "logloss_l2_class_and_sample_weights", mcs, X)
     # the held-out fit: the curve, the detector's stop and the shrink, hashed
-    Xe = np.ascontiguousarray(Xh[:rows])
-    yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(
-        pw, loss="RMSE", score_function="Cosine", bootstrap_type="Poisson", subsample=0.66, random_strength=1.0,
-        leaf_estimation_method="Newton", leaf_estimation_iterations=1, n_estimators=30, learning_rate=1.0,
-        max_depth=6, od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3))
-    ).fit(X, yr, eval_set=(Xe, yeh))
-    _gbdt_gaps_parts(parts, "rmse_cosine_poisson_eval", ev, X)
-    parts["rmse_cosine_poisson_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["rmse_cosine_poisson_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                            ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(
+            pw, loss="RMSE", score_function="Cosine", bootstrap_type="Poisson", subsample=0.66, random_strength=1.0,
+            leaf_estimation_method="Newton", leaf_estimation_iterations=1, n_estimators=30, learning_rate=1.0,
+            max_depth=6, od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3))
+        ).fit(X, yr, eval_set=(Xe, yeh))
+        _gbdt_gaps_parts(parts, "rmse_cosine_poisson_eval", ev, X)
+        parts["rmse_cosine_poisson_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["rmse_cosine_poisson_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                                ev.best_iteration_], dtype=np.int64))
     # feature_fraction on the grouped pointwise searcher
     rr = min(_GBDT_RANK_ROWS, rows)
     Xr = np.ascontiguousarray(X[:rr])
     groups, rel = _rank_groups(rr), _relevance(yr[:rr])
-    for name, loss, options in [
+    for name, loss, options in deal.units([
         ("QueryRMSE_pw_ff", "QueryRMSE", dict(score_function="Cosine", random_strength=1.0)),
         ("YetiRank_pw_ff", "YetiRank", dict(score_function="NewtonL2", bootstrap_type="Bernoulli",
                                             subsample=0.7)),
-    ]:
+    ]):
         kw = dict(loss=loss, use_pointwise_searcher=True, feature_fraction=0.5, leaf_estimation_method="Newton",
                   leaf_estimation_iterations=1)
         kw.update(options)
@@ -6634,8 +6872,8 @@ def _(ml, X, yc, yr, Xh=None):
     yp = _pos(yr)
     pw = dict(use_pointwise_searcher=True, score_function="Cosine", boost_from_average=False,
               leaf_estimation_method="Newton", leaf_estimation_iterations=1)
-    parts, first = {}, None
-    for name, loss, yf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, loss, yf, options in deal.units([
         ("rmse_median_borders", "RMSE", yr, dict(pw, boost_from_average=True, feature_border_type="Median")),
         ("crossentropy_bayesian_bfa", "CrossEntropy", yc, dict(pw, boost_from_average=True,
                                                                bootstrap_type="Bayesian", bagging_temperature=1.0,
@@ -6660,33 +6898,35 @@ def _(ml, X, yc, yr, Xh=None):
         ("logloss_class_weights_unset_start", "Logloss", yc, dict(pw, boost_from_average=None,
                                                                   class_weights=[1.0, 2.5],
                                                                   leaf_estimation_iterations=3)),
-    ]:
+    ]):
         m = ml.GradientBoosting(**_gbdt_gaps_kw(loss=loss, **options)).fit(X, yf)
         _gbdt_gaps_parts(parts, name, m, X)
         parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
         first = first if first is not None else m
     # sample weights on MAE at its Exact default, the start unset (True)
     w = _hw((rows,), "gbdt-pointwise-rest:sample_weight", 0.25, 4.0)
-    mw = ml.GradientBoosting(**_gbdt_gaps_kw(loss="MAE", **dict(
-        pw, boost_from_average=None, score_function="L2", leaf_estimation_method=None,
-        leaf_estimation_iterations=None))).fit(X, yr, sample_weight=w)
-    _gbdt_gaps_parts(parts, "mae_weighted_unset_start", mw, X)
+    if deal.take():
+        mw = ml.GradientBoosting(**_gbdt_gaps_kw(loss="MAE", **dict(
+            pw, boost_from_average=None, score_function="L2", leaf_estimation_method=None,
+            leaf_estimation_iterations=None))).fit(X, yr, sample_weight=w)
+        _gbdt_gaps_parts(parts, "mae_weighted_unset_start", mw, X)
     # the held-out fit under IncToDec: the curve, the detector's stop and the
     # shrink, hashed
-    Xe = np.ascontiguousarray(Xh[:rows])
-    yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(
-        pw, loss="Huber", loss_delta=1.0, n_estimators=30, learning_rate=1.0, max_depth=6,
-        od_type="IncToDec", od_pvalue=0.01, od_wait=2, use_best_model=True, best_model_min_trees=3))
-    ).fit(X, yr, eval_set=(Xe, yeh))
-    _gbdt_gaps_parts(parts, "huber_inctodec_eval", ev, X)
-    parts["huber_inctodec_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["huber_inctodec_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                       ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(
+            pw, loss="Huber", loss_delta=1.0, n_estimators=30, learning_rate=1.0, max_depth=6,
+            od_type="IncToDec", od_pvalue=0.01, od_wait=2, use_best_model=True, best_model_min_trees=3))
+        ).fit(X, yr, eval_set=(Xe, yeh))
+        _gbdt_gaps_parts(parts, "huber_inctodec_eval", ev, X)
+        parts["huber_inctodec_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["huber_inctodec_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                           ev.best_iteration_], dtype=np.int64))
     # a CTR column (every permutation) and a one-hot column on this searcher
     Xc = _gbdt_cat_x(X)
-    for name, loss, yf, (cols, cats) in [("ctr_logloss", "Logloss", yc, _GBDT_CAT_CTR),
-                                         ("onehot_rmse", "RMSE", yr, _GBDT_CAT_ONEHOT)]:
+    for name, loss, yf, (cols, cats) in deal.units([("ctr_logloss", "Logloss", yc, _GBDT_CAT_CTR),
+                                         ("onehot_rmse", "RMSE", yr, _GBDT_CAT_ONEHOT)]):
         Xs = np.ascontiguousarray(Xc[:, cols])
         m = ml.GradientBoosting(**_gbdt_gaps_kw(loss=loss, cat_features=list(cats), **dict(
             pw, bootstrap_type="Bayesian", bagging_temperature=1.0))).fit(Xs, yf)
@@ -6715,8 +6955,8 @@ def _(ml, X, yc, yr, Xh=None):
     wz[::7] = np.float32(0.0)
     ordered = dict(boosting_type="Ordered", score_function="Cosine", leaf_estimation_iterations=1,
                    boost_from_average=False)
-    parts, first = {}, None
-    for name, Xf, yf, wf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, Xf, yf, wf, options in deal.units([
         ("logloss_weighted", X, yc, w, dict(loss="Logloss")),
         ("logloss_class_weights_bayesian_noise", X, yc, None,
          dict(loss="Logloss", class_weights=[1.0, 2.5], bootstrap_type="Bayesian", bagging_temperature=1.0,
@@ -6729,7 +6969,7 @@ def _(ml, X, yc, yr, Xh=None):
                                              bagging_temperature=1.0)),
         ("mae_weighted_bfa", X, yr, w, dict(loss="MAE", boost_from_average=True,
                                             leaf_estimation_method="Gradient")),
-    ]:
+    ]):
         kw = dict(ordered)
         kw.update(options)
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xf, yf, sample_weight=wf)
@@ -6737,22 +6977,24 @@ def _(ml, X, yc, yr, Xh=None):
         parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
         first = first if first is not None else m
     # the held-out fit: zero weights in the learn pool, the curve, the stop
-    Xe = np.ascontiguousarray(Xh[:rows])
-    ye = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
-    kw = dict(ordered, loss="RMSE", n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2,
-              use_best_model=True, best_model_min_trees=3)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yr, sample_weight=wz, eval_set=(Xe, ye))
-    _gbdt_gaps_parts(parts, "rmse_zero_weights_eval", ev, X)
-    parts["rmse_zero_weights_eval:loss_curve"] = _h(np.asarray(ev.loss_curve_, dtype=np.float64))
-    parts["rmse_zero_weights_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["rmse_zero_weights_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                          ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        ye = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
+        kw = dict(ordered, loss="RMSE", n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2,
+                  use_best_model=True, best_model_min_trees=3)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yr, sample_weight=wz, eval_set=(Xe, ye))
+        _gbdt_gaps_parts(parts, "rmse_zero_weights_eval", ev, X)
+        parts["rmse_zero_weights_eval:loss_curve"] = _h(np.asarray(ev.loss_curve_, dtype=np.float64))
+        parts["rmse_zero_weights_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["rmse_zero_weights_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                              ev.best_iteration_], dtype=np.int64))
     # weighted Logloss over one CTR column (40 categories), Poisson
-    cols, cats = _GBDT_CAT_CTR
-    Xc = np.ascontiguousarray(_gbdt_cat_x(X)[:, cols])
-    kw = dict(ordered, loss="Logloss", cat_features=list(cats), bootstrap_type="Poisson", subsample=0.66)
-    mc = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xc, yc, sample_weight=w)
-    _gbdt_gaps_parts(parts, "logloss_weighted_ctr", mc, Xc)
+    if deal.take():
+        cols, cats = _GBDT_CAT_CTR
+        Xc = np.ascontiguousarray(_gbdt_cat_x(X)[:, cols])
+        kw = dict(ordered, loss="Logloss", cat_features=list(cats), bootstrap_type="Poisson", subsample=0.66)
+        mc = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xc, yc, sample_weight=w)
+        _gbdt_gaps_parts(parts, "logloss_weighted_ctr", mc, Xc)
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -6777,8 +7019,8 @@ def _(ml, X, yc, yr, Xh=None):
     w = _hw((rows,), "gbdt-nonsym-rest:sample_weight", 0.25, 4.0)
     dw = dict(grow_policy="Depthwise", leaf_estimation_method="Newton", boost_from_average=False)
     lg = dict(grow_policy="Lossguide", max_leaves=16, leaf_estimation_method="Newton", boost_from_average=False)
-    parts, first = {}, None
-    for name, yf, wf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, yf, wf, options in deal.units([
         ("depthwise_logloss_l2", yc, None, dict(dw, loss="Logloss", score_function="L2")),
         ("depthwise_logloss_newtonl2", yc, None, dict(dw, loss="Logloss", score_function="NewtonL2")),
         ("depthwise_logloss_newtoncosine", yc, None, dict(dw, loss="Logloss", score_function="NewtonCosine")),
@@ -6796,22 +7038,23 @@ def _(ml, X, yc, yr, Xh=None):
          dict(lg, loss="CrossEntropy", score_function="NewtonL2", boost_from_average=True)),
         ("depthwise_crossentropy_class_weights_weighted", yc, w,
          dict(dw, loss="CrossEntropy", score_function="Cosine", class_weights=[1.0, 3.0])),
-    ]:
+    ]):
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**options)).fit(X, yf, sample_weight=wf)
         _gbdt_gaps_parts(parts, name, m, X)
         parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
         first = first if first is not None else m
     # the held-out fit: boost_from_average on Logloss, the curve, the stop
-    Xe = np.ascontiguousarray(Xh[:rows])
-    yce = labels_for(Xh, HELDOUT_SEED)[0][:rows].astype(np.float32)
-    kw = dict(dw, loss="Logloss", score_function="Cosine", boost_from_average=True, n_estimators=30,
-              learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yc, eval_set=(Xe, yce))
-    _gbdt_gaps_parts(parts, "depthwise_logloss_bfa_eval", ev, X)
-    parts["depthwise_logloss_bfa_eval:loss_curve"] = _h(np.asarray(ev.loss_curve_, dtype=np.float64))
-    parts["depthwise_logloss_bfa_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["depthwise_logloss_bfa_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                              ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        yce = labels_for(Xh, HELDOUT_SEED)[0][:rows].astype(np.float32)
+        kw = dict(dw, loss="Logloss", score_function="Cosine", boost_from_average=True, n_estimators=30,
+                  learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yc, eval_set=(Xe, yce))
+        _gbdt_gaps_parts(parts, "depthwise_logloss_bfa_eval", ev, X)
+        parts["depthwise_logloss_bfa_eval:loss_curve"] = _h(np.asarray(ev.loss_curve_, dtype=np.float64))
+        parts["depthwise_logloss_bfa_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["depthwise_logloss_bfa_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                                  ev.best_iteration_], dtype=np.int64))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -6834,8 +7077,8 @@ def _(ml, X, yc, yr, Xh=None):
     w = _hw((rows,), "gbdt-symmetric-rest:sample_weight", 0.25, 4.0)
     y3 = np.digitize(yr, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
     sym = dict(score_function="Cosine", leaf_estimation_iterations=1, boost_from_average=False)
-    parts, first = {}, None
-    for name, yf, wf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, yf, wf, options in deal.units([
         # lane gbdt-units-7: no score noise under L2 -- the public API has
         # refused random_strength > 0 with L2 / NewtonL2 since 2026-08-21 on
         # both columns (catboost_options.check, gbdt_validate_search_options:
@@ -6862,7 +7105,7 @@ def _(ml, X, yc, yr, Xh=None):
         ("ordered_crossentropy_newtoncosine_bfa", yc, None, dict(loss="CrossEntropy", boosting_type="Ordered",
                                                                  score_function="NewtonCosine",
                                                                  boost_from_average=True)),
-    ]:
+    ]):
         kw = dict(sym)
         kw.update(options)
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yf, sample_weight=wf)
@@ -6870,22 +7113,24 @@ def _(ml, X, yc, yr, Xh=None):
         parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
         first = first if first is not None else m
     # the held-out fit: NewtonCosine with Gradient leaves, the curve, the stop
-    Xe = np.ascontiguousarray(Xh[:rows])
-    ye = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
-    kw = dict(sym, loss="RMSE", score_function="NewtonCosine", leaf_estimation_method="Gradient",
-              n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True,
-              best_model_min_trees=3)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yr, eval_set=(Xe, ye))
-    _gbdt_gaps_parts(parts, "rmse_newtoncosine_gradient_eval", ev, X)
-    parts["rmse_newtoncosine_gradient_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["rmse_newtoncosine_gradient_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                                   ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        ye = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
+        kw = dict(sym, loss="RMSE", score_function="NewtonCosine", leaf_estimation_method="Gradient",
+                  n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True,
+                  best_model_min_trees=3)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yr, eval_set=(Xe, ye))
+        _gbdt_gaps_parts(parts, "rmse_newtoncosine_gradient_eval", ev, X)
+        parts["rmse_newtoncosine_gradient_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["rmse_newtoncosine_gradient_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                                       ev.best_iteration_], dtype=np.int64))
     # Logloss L2 with boost_from_average over one CTR column (40 categories)
-    cols, cats = _GBDT_CAT_CTR
-    Xc = np.ascontiguousarray(_gbdt_cat_x(X)[:, cols])
-    kw = dict(sym, loss="Logloss", score_function="L2", cat_features=list(cats), boost_from_average=True)
-    mc = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xc, yc)
-    _gbdt_gaps_parts(parts, "logloss_l2_ctr_bfa", mc, Xc)
+    if deal.take():
+        cols, cats = _GBDT_CAT_CTR
+        Xc = np.ascontiguousarray(_gbdt_cat_x(X)[:, cols])
+        kw = dict(sym, loss="Logloss", score_function="L2", cat_features=list(cats), boost_from_average=True)
+        mc = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xc, yc)
+        _gbdt_gaps_parts(parts, "logloss_l2_ctr_bfa", mc, Xc)
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -6907,8 +7152,8 @@ def _(ml, X, yc, yr, Xh=None):
     y3 = np.digitize(yr, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
     y2 = np.ascontiguousarray(np.stack([yr, (yc - np.float32(0.5)) * yr], axis=1).astype(np.float32))
     sym = dict(score_function="Cosine", boost_from_average=False)
-    parts, first = {}, None
-    for name, yf, wf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, yf, wf, options in deal.units([
         ("multiclass_newton3", y3, None, dict(loss="MultiClass", leaf_estimation_method="Newton",
                                               leaf_estimation_iterations=3)),
         ("multiclass_gradient_default", y3, None, dict(loss="MultiClass", leaf_estimation_method="Gradient")),
@@ -6926,7 +7171,7 @@ def _(ml, X, yc, yr, Xh=None):
         ("multirmse_newton2", y2, None, dict(loss="MultiRMSE", leaf_estimation_method="Newton",
                                              leaf_estimation_iterations=2)),
         ("logloss_border255", yc, None, dict(loss="Logloss", leaf_estimation_iterations=1, border_count=255)),
-    ]:
+    ]):
         kw = dict(sym)
         kw.update(options)
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yf, sample_weight=wf)
@@ -6934,17 +7179,18 @@ def _(ml, X, yc, yr, Xh=None):
         parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
         first = first if first is not None else m
     # the held-out fit: MultiClass Gradient, the curve, the stop
-    Xe = np.ascontiguousarray(Xh[:rows])
-    ye = labels_for(Xh, HELDOUT_SEED)[1][:rows]
-    y3e = np.digitize(ye, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
-    kw = dict(sym, loss="MultiClass", leaf_estimation_method="Gradient", leaf_estimation_iterations=2,
-              n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True,
-              best_model_min_trees=3)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, y3, eval_set=(Xe, y3e))
-    _gbdt_gaps_parts(parts, "multiclass_gradient_eval", ev, X)
-    parts["multiclass_gradient_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["multiclass_gradient_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                            ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        ye = labels_for(Xh, HELDOUT_SEED)[1][:rows]
+        y3e = np.digitize(ye, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
+        kw = dict(sym, loss="MultiClass", leaf_estimation_method="Gradient", leaf_estimation_iterations=2,
+                  n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True,
+                  best_model_min_trees=3)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, y3, eval_set=(Xe, y3e))
+        _gbdt_gaps_parts(parts, "multiclass_gradient_eval", ev, X)
+        parts["multiclass_gradient_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["multiclass_gradient_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                                ev.best_iteration_], dtype=np.int64))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -6973,8 +7219,8 @@ def _(ml, X, yc, yr, Xh=None):
     y2 = np.ascontiguousarray(np.stack([yr, (yc - np.float32(0.5)) * yr], axis=1).astype(np.float32))
     pw = dict(score_function="Cosine", boost_from_average=False, use_pointwise_searcher=True,
               leaf_estimation_method="Newton", leaf_estimation_iterations=1)
-    parts, first = {}, None
-    for name, yf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, yf, options in deal.units([
         ("multiclass_cosine", y3, dict(loss="MultiClass")),
         ("multiclass_l2_bayesian", y3, dict(loss="MultiClass", score_function="L2", bootstrap_type="Bayesian",
                                             bagging_temperature=1.0)),
@@ -6991,7 +7237,7 @@ def _(ml, X, yc, yr, Xh=None):
                                                      leaf_estimation_method="Gradient",
                                                      leaf_estimation_iterations=2,
                                                      bootstrap_type="Bayesian", bagging_temperature=1.0)),
-    ]:
+    ]):
         kw = dict(pw)
         kw.update(options)
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yf)
@@ -6999,22 +7245,24 @@ def _(ml, X, yc, yr, Xh=None):
         parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
         first = first if first is not None else m
     # over one CTR column (40 categories): predictions on the expanded rows
-    cols, cats = _GBDT_CAT_CTR
-    Xc = np.ascontiguousarray(_gbdt_cat_x(X)[:, cols])
-    mc = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(pw, loss="MultiClass", cat_features=list(cats)))).fit(Xc, y3)
-    _gbdt_gaps_parts(parts, "multiclass_ctr", mc, Xc)
-    parts["multiclass_ctr:loss_curve"] = _h(np.asarray(mc.loss_curve_, dtype=np.float64))
+    if deal.take():
+        cols, cats = _GBDT_CAT_CTR
+        Xc = np.ascontiguousarray(_gbdt_cat_x(X)[:, cols])
+        mc = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(pw, loss="MultiClass", cat_features=list(cats)))).fit(Xc, y3)
+        _gbdt_gaps_parts(parts, "multiclass_ctr", mc, Xc)
+        parts["multiclass_ctr:loss_curve"] = _h(np.asarray(mc.loss_curve_, dtype=np.float64))
     # the held-out fit: the curve and the stop
-    Xe = np.ascontiguousarray(Xh[:rows])
-    ye = labels_for(Xh, HELDOUT_SEED)[1][:rows]
-    y3e = np.digitize(ye, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
-    kw = dict(pw, loss="MultiClass", n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2,
-              use_best_model=True, best_model_min_trees=3)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, y3, eval_set=(Xe, y3e))
-    _gbdt_gaps_parts(parts, "multiclass_eval", ev, X)
-    parts["multiclass_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["multiclass_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                   ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        ye = labels_for(Xh, HELDOUT_SEED)[1][:rows]
+        y3e = np.digitize(ye, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
+        kw = dict(pw, loss="MultiClass", n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2,
+                  use_best_model=True, best_model_min_trees=3)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, y3, eval_set=(Xe, y3e))
+        _gbdt_gaps_parts(parts, "multiclass_eval", ev, X)
+        parts["multiclass_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["multiclass_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                       ev.best_iteration_], dtype=np.int64))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -7041,8 +7289,8 @@ def _(ml, X, yc, yr, Xh=None):
     yce = (np.float32(0.25) + np.float32(0.5) * ycn).astype(np.float32)
     simple = dict(score_function="Cosine", boost_from_average=False, leaf_estimation_method="Simple",
                   leaf_estimation_iterations=1)
-    parts, first = {}, None
-    for name, yf, wf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, yf, wf, options in deal.units([
         ("logloss_cosine", ycn, None, dict(loss="Logloss")),
         ("logloss_l2_weighted_bernoulli", ycn, w,
          dict(loss="Logloss", score_function="L2", bootstrap_type="Bernoulli", subsample=0.7,
@@ -7058,7 +7306,7 @@ def _(ml, X, yc, yr, Xh=None):
         ("quantile_cosine", yrn, None, dict(loss="Quantile")),
         ("crossentropy_newtoncosine", yce, None, dict(loss="CrossEntropy", score_function="NewtonCosine")),
         ("mae_weighted", yrn, w, dict(loss="MAE")),
-    ]:
+    ]):
         kw = dict(simple)
         kw.update(options)
         if kw.get("leaf_estimation_iterations", 1) is None:
@@ -7070,19 +7318,19 @@ def _(ml, X, yc, yr, Xh=None):
     # the greedy ranking losses (YetiRank refuses Simple on both columns:
     # "changing the leaf_estimation_method parameter is prohibited")
     g, rel = _rank_groups(rows), _relevance(yrn)
-    for loss in ("QueryRMSE", "PairLogit"):
+    for loss in deal.units(("QueryRMSE", "PairLogit")):
         m = ml.GradientBoosting(**_gbdt_gaps_kw(loss=loss, **simple)).fit(Xn, rel, group_id=g)
         _gbdt_gaps_parts(parts, loss.lower() + "_greedy", m, Xn)
         parts[loss.lower() + "_greedy:loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
     # categorical columns: several permutations, feature combinations
     crows = min(_GBDT_CAT_ROWS, X.shape[0])
     Xc = _gbdt_cat_x(X[:crows])
-    for name, (cols, cats), yf, options in [
+    for name, (cols, cats), yf, options in deal.units([
         ("logloss_ctr_onehot", _GBDT_CAT_ALL, yc[:crows], dict(loss="Logloss", cat_features=None)),
         ("rmse_mcc2", _GBDT_CAT_MCC2, yr[:crows], dict(loss="RMSE", max_ctr_complexity=2, cat_features=None)),
         ("quantile_ctr", _GBDT_CAT_CTR, yr[:crows], dict(loss="Quantile", cat_features=None)),
         ("logloss_one_hot_features", _GBDT_CAT_ONEHOT, yc[:crows], dict(loss="Logloss", one_hot_features=[0])),
-    ]:
+    ]):
         kw = dict(simple)
         kw.update(options)
         if "cat_features" in kw:
@@ -7093,15 +7341,16 @@ def _(ml, X, yc, yr, Xh=None):
         parts[name + ":digest"] = _h(np.frombuffer(str(m.digest_).encode(), dtype=np.uint8))
         parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
     # the held-out fit: RMSE, the curve, the stop
-    Xe = np.ascontiguousarray(Xh[:rows])
-    ye = labels_for(Xh, HELDOUT_SEED)[1][:rows]
-    kw = dict(simple, loss="RMSE", n_estimators=30, od_type="Iter", od_wait=2, use_best_model=True,
-              best_model_min_trees=3)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xn, yrn, eval_set=(Xe, ye))
-    _gbdt_gaps_parts(parts, "rmse_eval", ev, Xn)
-    parts["rmse_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["rmse_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                             ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        ye = labels_for(Xh, HELDOUT_SEED)[1][:rows]
+        kw = dict(simple, loss="RMSE", n_estimators=30, od_type="Iter", od_wait=2, use_best_model=True,
+                  best_model_min_trees=3)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xn, yrn, eval_set=(Xe, ye))
+        _gbdt_gaps_parts(parts, "rmse_eval", ev, Xn)
+        parts["rmse_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["rmse_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                 ev.best_iteration_], dtype=np.int64))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -7134,8 +7383,10 @@ def _(ml, X, yc, yr, Xh=None):
     learn's weighted accuracy and R2 on the pinned-sum path. A lane of its
     own so the adapter lanes' committed hashes do not move; 2000 training
     rows."""
-    clf = _gbdt(ml.GradientBoostingClassifier, n_estimators=20, max_depth=6).fit(X[:2000], yc[:2000])
-    reg = _gbdt(ml.GradientBoostingRegressor, n_estimators=20, max_depth=6).fit(X[:2000], yr[:2000])
+    # lane verify-light-1, 2026-11-28: 3 trees a model (was 20; 22 s a cell on the 0.9.0 Apple record): the lane is
+    # the weighted score on the pinned-sum path, which reads predictions, not the ensemble size
+    clf = _gbdt(ml.GradientBoostingClassifier, n_estimators=3, max_depth=6).fit(X[:2000], yc[:2000])
+    reg = _gbdt(ml.GradientBoostingRegressor, n_estimators=3, max_depth=6).fit(X[:2000], yr[:2000])
     return _fit(_weighted_score_parts(clf, reg, X, yc, yr, "gbdt-adapter-score-weighted"))
 
 
@@ -9061,7 +9312,9 @@ def _(ml, X, yc, yr, Xh=None):
     sklearn-style boosting regressor (cross-validation clones through
     get_params, which the classical estimators do not implement), scored
     by the adapter's own score."""
-    scores = ml.model_selection.cross_val_score(_gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4), X, yr, cv=3)
+    # lane verify-light-1, 2026-11-28: 2 trees a fold (was 8; the batch part refits every fold alone, about 15 fold
+    # fits a cell, 20 s on the worst 0.9.0 Apple cell): the lane is the clone, the folds and the score, not the size
+    scores = ml.model_selection.cross_val_score(_gbdt(ml.GradientBoostingRegressor, n_estimators=2, max_depth=4), X, yr, cv=3)
     return _fit(dict(scores=_h(np.asarray(scores, dtype=np.float64))))
 
 
@@ -11380,7 +11633,7 @@ def _batch_cross_val(ml, e, Xh):
               np.ascontiguousarray(rows[256 * k:256 * (k + 1)])) for k in range(3)]
     idx = np.arange(3, dtype=np.int64).reshape(3, 1)
     return [_BatchRows("cross_val_score (folds)", idx, lambda r: (np.asarray(ml.model_selection.cross_val_score(
-        _gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4), Xf, y,
+        _gbdt(ml.GradientBoostingRegressor, n_estimators=2, max_depth=4), Xf, y,
         cv=[folds[int(k)] for k in r[:, 0]]), dtype=np.float64),))]
 
 
@@ -12557,6 +12810,30 @@ _stepfull_decl(_stepfull_session_spec("kv"), "transformer-decode-session")
 STEPFULL_DEFAULT = "n/a:no-decode-state"
 
 
+# THE SERVING PARTS OF THE SLOWEST SEQUENCE LANES ARE DEALT OVER THE FIXTURES (lane verify-light-1, 2026-11-28;
+# AGENTS.md "Verification has light fixtures"; `_spread`). On the 0.9.0 Apple record these lanes spent most of a cell
+# in the serving parts, not the fit: byte-lm-resident 30.9 s rlpair, 22.4 s batchscale and 8.8 s ragged against a
+# 4.6 s train on `base`; transformer-window 5.7 s rlpair against a 0.4 s train. Each part probes the fitted model's
+# serving property (decode against the trainer, the batch scale, ragged lengths, the gradient over a batch, the
+# stepped against the full pass), not the fixture's pathology, so for these lanes each part runs on ONE fixture,
+# part i of _DEALT_PARTS on FIXTURES[i + 1] (`base` keeps the train, infer, model and batch columns only), and reads
+# `n/a:dealt to <fixture>` on the other eight. Every part still runs once per side and every arm that faults it still
+# moves its lane on that fixture. Record and verify both reach the parts through `_probe_part` and `_probe_rlpair`.
+_DEALT_PARTS = ("batchgrad", "batchscale", "ragged", "stepfull", "rlpair")
+_DEALT_PART_LANES = frozenset({"byte-lm-resident", "transformer-window", "samba", "samba-untied-dropout-accum",
+                               "mamba1-int8w", "mamba2-bf16w", "mamba2-dtlimit", "transformer-bf16w"})
+
+
+def _dealt_part(name, part):
+    """`n/a:dealt to <fixture>` when lane `name` deals `part` to another fixture than this cell's, else None."""
+    if name not in _DEALT_PART_LANES or part not in _DEALT_PARTS or not _cell_fixture():
+        return None
+    slot = _DEALT_PARTS.index(part) + 1
+    if _cell_takes(slot):
+        return None
+    return "n/a:dealt to " + FIXTURES[slot % len(FIXTURES)]
+
+
 # ---------------------------------------------------------------- the opt-in parts, one runner
 
 #: part name -> (declarations, default, CLI flag, sabotage env)
@@ -12623,6 +12900,9 @@ def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
     table, default = EXTRA_PARTS[part][0], EXTRA_PARTS[part][1]
     spec = table.get(name, default)
     notes = []
+    dealt = _dealt_part(name, part)
+    if dealt and not isinstance(spec, str):
+        return dealt, None, notes
     if isinstance(spec, str):
         return spec, None, notes
     flip = sabotage not in ("", "0", "serial")
@@ -12883,6 +13163,9 @@ def _probe_rlpair(fit, name, ml, Xh, sabotage):
     <where>:<values>` at the first that does not, or an `n/a:<reason>`
     string. A raise leaves the value None (REFUSED) with the error."""
     spec = RLPAIR[name]
+    dealt = _dealt_part(name, "rlpair")
+    if dealt and not isinstance(spec, str):
+        return dealt, None, []
     if isinstance(spec, str):
         return spec, None, []
     sides = []

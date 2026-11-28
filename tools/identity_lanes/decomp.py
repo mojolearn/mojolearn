@@ -79,16 +79,24 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("x-decomp-fastica")
 def _(ml, X, yc, yr, Xh=None):
+    # lane verify-light-1, 2026-11-28 (`_Dealer`): the parallel logcosh fit is the anchor on every cell; the
+    # deflation exp and the cube fits are dealt over the nine fixtures, each once per side (12 s on the worst 0.9.0
+    # Apple cell). Every size, option and iteration count is unchanged.
+    deal = _Dealer()
     S = X[:3000]
     m = ml.FastICA(n_components=5, random_state=2, max_iter=60)
     src = m.fit_transform(S)
-    e = ml.FastICA(n_components=3, fun="exp", algorithm="deflation", whiten="arbitrary-variance",
-                   random_state=4, max_iter=40).fit(S)
-    c = ml.FastICA(fun="cube", random_state=6, max_iter=30).fit(S[:1000])
-    return _fit(dict(src=_h(src), comp=_h(m.components_), mix=_h(m.mixing_), white=_h(m.whitening_),
-                     it=_h(np.int32(m.n_iter_)), ecomp=_h(e.components_), et=_h(e.transform(S[:64])),
-                     ccomp=_h(c.components_), inv=_h(m.inverse_transform(src[:64]))),
-                m, lambda e: (e.transform(Xh[:256]),))
+    deal.take()
+    parts = dict(src=_h(src), comp=_h(m.components_), mix=_h(m.mixing_), white=_h(m.whitening_),
+                 it=_h(np.int32(m.n_iter_)), inv=_h(m.inverse_transform(src[:64])))
+    if deal.take():
+        e = ml.FastICA(n_components=3, fun="exp", algorithm="deflation", whiten="arbitrary-variance",
+                       random_state=4, max_iter=40).fit(S)
+        parts.update(ecomp=_h(e.components_), et=_h(e.transform(S[:64])))
+    if deal.take():
+        c = ml.FastICA(fun="cube", random_state=6, max_iter=30).fit(S[:1000])
+        parts["ccomp"] = _h(c.components_)
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-decomp-fastica")
@@ -100,15 +108,22 @@ def _(ml, X, yc, yr, Xh=None):
     # on the 0.9.0 Apple record against 0.08 s on the CPU column: the Metal cost is per EM step). Each EM step is the
     # same SVD / Gram update and the same tolerance test, so 16, 12 and 8 still repeat it and still read the test;
     # the rows (the n >= d QR, one pass) and every rotation are unchanged.
+    # lane verify-light-1, 2026-11-28 (`_Dealer`): the main fit is the anchor on every cell; the varimax, the
+    # quartimax and the fit_transform fits are dealt one fixture each (62 s on the worst 0.9.0 Apple cell)
+    deal = _Dealer()
     m = ml.FactorAnalysis(n_components=4, max_iter=16).fit(X[:5000])
-    v = ml.FactorAnalysis(n_components=3, rotation="varimax", max_iter=12).fit(X[:2000])
-    q = ml.FactorAnalysis(n_components=3, rotation="quartimax", max_iter=12).fit(X[:2000])
-    return _fit(dict(comp=_h(m.components_), psi=_h(m.noise_variance_), ll=_h(np.float64(m.loglike_)),
-                     T=_h(m.transform(X[:256])), cov=_h(m.get_covariance()), prec=_h(m.get_precision()),
-                     ss=_h(m.score_samples(X[:256])), vcomp=_h(v.components_), qcomp=_h(q.components_),
-                     # fit_transform: fit, then transform, in one call
-                     ft=_h(ml.FactorAnalysis(n_components=3, max_iter=8).fit_transform(X[:2000]))),
-                m, lambda e: (e.transform(Xh[:256]), e.score_samples(Xh[:256])))
+    parts = dict(comp=_h(m.components_), psi=_h(m.noise_variance_), ll=_h(np.float64(m.loglike_)),
+                 T=_h(m.transform(X[:256])), cov=_h(m.get_covariance()), prec=_h(m.get_precision()),
+                 ss=_h(m.score_samples(X[:256])))
+    deal.take()
+    if deal.take():
+        parts["vcomp"] = _h(ml.FactorAnalysis(n_components=3, rotation="varimax", max_iter=12).fit(X[:2000]).components_)
+    if deal.take():
+        parts["qcomp"] = _h(ml.FactorAnalysis(n_components=3, rotation="quartimax", max_iter=12).fit(X[:2000]).components_)
+    if deal.take():
+        # fit_transform: fit, then transform, in one call
+        parts["ft"] = _h(ml.FactorAnalysis(n_components=3, max_iter=8).fit_transform(X[:2000]))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]), e.score_samples(Xh[:256])))
 
 
 _batch_decl(_rows_calls("transform", "score_samples", sl=slice(0, 256)), "x-decomp-factor-analysis")
@@ -184,21 +199,32 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("x-decomp-pls")
 def _(ml, X, yc, yr, Xh=None):
+    # lane verify-light-1, 2026-11-28 (`_Dealer`): the PLSRegression is the anchor on every cell; the canonical, CCA,
+    # svd-canonical and two-target fits are dealt over the nine fixtures, each once per side with its own score
+    # (13 s on the worst 0.9.0 Apple cell). Every size and option is unchanged.
+    deal = _Dealer()
     m = ml.PLSRegression(n_components=3).fit(X[:2000], yr[:2000])
-    Y2 = np.ascontiguousarray(np.stack([yr[:2000], X[:2000, 3]], axis=1))
-    c = ml.PLSCanonical(n_components=2).fit(X[:2000, :10], np.ascontiguousarray(X[:2000, 10:14]))
-    a = ml.CCA(n_components=2, max_iter=100).fit(X[:1000, :8], np.ascontiguousarray(X[:1000, 8:12]))
-    cs = ml.PLSCanonical(n_components=2, algorithm="svd").fit(X[:2000, :10], np.ascontiguousarray(X[:2000, 10:14]))
-    m2 = ml.PLSRegression(n_components=2, scale=False).fit(X[:2000], Y2)
-    return _fit(dict(coef=_h(m.coef_), xw=_h(m.x_weights_), xr=_h(m.x_rotations_), pred=_h(m.predict(X[:256])),
-                     T=_h(m.transform(X[:256])), it=_h(np.int32(m.n_iter_)), c_xr=_h(c.x_rotations_),
-                     c_yr=_h(c.y_rotations_), c_T=_h(*c.transform(X[:256, :10], np.ascontiguousarray(X[:256, 10:14]))),
-                     a_xr=_h(a.x_rotations_), a_yr=_h(a.y_rotations_), a_it=_h(np.int32(a.n_iter_)),
-                     m2=_h(m2.coef_, m2.predict(X[:256])), cs_xr=_h(cs.x_rotations_, cs.y_rotations_),
-                     # score: y as float32, predict, R^2, in one call
-                     score=_h(np.float64(m.score(X[:256], yr[:256])), np.float64(m2.score(X[:256], Y2[:256])),
-                              np.float64(c.score(X[:256, :10], np.ascontiguousarray(X[:256, 10:14]))))),
-                m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
+    deal.take()
+    parts = dict(coef=_h(m.coef_), xw=_h(m.x_weights_), xr=_h(m.x_rotations_), pred=_h(m.predict(X[:256])),
+                 T=_h(m.transform(X[:256])), it=_h(np.int32(m.n_iter_)),
+                 # score: y as float32, predict, R^2, in one call
+                 score=_h(np.float64(m.score(X[:256], yr[:256]))))
+    if deal.take():
+        c = ml.PLSCanonical(n_components=2).fit(X[:2000, :10], np.ascontiguousarray(X[:2000, 10:14]))
+        parts.update(c_xr=_h(c.x_rotations_), c_yr=_h(c.y_rotations_),
+                     c_T=_h(*c.transform(X[:256, :10], np.ascontiguousarray(X[:256, 10:14]))),
+                     c_score=_h(np.float64(c.score(X[:256, :10], np.ascontiguousarray(X[:256, 10:14])))))
+    if deal.take():
+        a = ml.CCA(n_components=2, max_iter=100).fit(X[:1000, :8], np.ascontiguousarray(X[:1000, 8:12]))
+        parts.update(a_xr=_h(a.x_rotations_), a_yr=_h(a.y_rotations_), a_it=_h(np.int32(a.n_iter_)))
+    if deal.take():
+        cs = ml.PLSCanonical(n_components=2, algorithm="svd").fit(X[:2000, :10], np.ascontiguousarray(X[:2000, 10:14]))
+        parts["cs_xr"] = _h(cs.x_rotations_, cs.y_rotations_)
+    if deal.take():
+        Y2 = np.ascontiguousarray(np.stack([yr[:2000], X[:2000, 3]], axis=1))
+        m2 = ml.PLSRegression(n_components=2, scale=False).fit(X[:2000], Y2)
+        parts.update(m2=_h(m2.coef_, m2.predict(X[:256])), m2_score=_h(np.float64(m2.score(X[:256], Y2[:256]))))
+    return _fit(parts, m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
 
 
 _batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-decomp-pls")
@@ -206,22 +232,32 @@ _batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-decomp-pls
 
 @lane("x-decomp-dict-learning")
 def _(ml, X, yc, yr, Xh=None):
+    # lane verify-light-1, 2026-11-28 (`_Dealer`): the first DictionaryLearning and the three SparseCoders over its
+    # dictionary are the anchor on every cell; the cd, threshold and mini-batch fits are dealt over the nine
+    # fixtures, each once per side (11 s on the worst 0.9.0 Apple cell). Every size and option is unchanged.
+    deal = _Dealer()
     S = X[:300]
     m = ml.DictionaryLearning(n_components=6, alpha=0.5, max_iter=8, random_state=0)
     code = m.fit_transform(S)
-    c = ml.DictionaryLearning(n_components=5, alpha=0.3, max_iter=6, fit_algorithm="cd",
-                              transform_algorithm="lasso_cd", split_sign=True, random_state=1).fit(S)
-    t = ml.DictionaryLearning(n_components=4, alpha=0.2, max_iter=5, transform_algorithm="threshold",
-                              transform_alpha=0.1, positive_dict=True, positive_code=True).fit(S[:200])
-    mb = ml.MiniBatchDictionaryLearning(n_components=5, alpha=0.4, batch_size=64, max_iter=3, random_state=2,
-                                        transform_algorithm="lasso_lars").fit(X[:600])
+    deal.take()
     sc = ml.SparseCoder(m.components_, transform_algorithm="lasso_cd", transform_alpha=0.2)
     sct = ml.SparseCoder(m.components_, transform_algorithm="threshold", transform_alpha=0.1, split_sign=True)
     scl = ml.SparseCoder(m.components_, transform_algorithm="lars", transform_n_nonzero_coefs=3)
-    return _fit(dict(sc=_h(sc.transform(S[:128]), sct.transform(S[:128])), scl=_h(scl.transform(S[:32])), code=_h(code), D=_h(m.components_), err=_h(np.float64(m.error_)), T=_h(m.transform(S[:128])),
-                     cD=_h(c.components_), cT=_h(c.transform(S[:128])), tT=_h(t.transform(S[:128]), t.components_),
-                     mbD=_h(mb.components_), mbT=_h(mb.transform(S[:128])), mbn=_h(np.int32(mb.n_steps_))),
-                m, lambda e: (e.transform(Xh[:256]),))
+    parts = dict(sc=_h(sc.transform(S[:128]), sct.transform(S[:128])), scl=_h(scl.transform(S[:32])), code=_h(code),
+                 D=_h(m.components_), err=_h(np.float64(m.error_)), T=_h(m.transform(S[:128])))
+    if deal.take():
+        c = ml.DictionaryLearning(n_components=5, alpha=0.3, max_iter=6, fit_algorithm="cd",
+                                  transform_algorithm="lasso_cd", split_sign=True, random_state=1).fit(S)
+        parts.update(cD=_h(c.components_), cT=_h(c.transform(S[:128])))
+    if deal.take():
+        t = ml.DictionaryLearning(n_components=4, alpha=0.2, max_iter=5, transform_algorithm="threshold",
+                                  transform_alpha=0.1, positive_dict=True, positive_code=True).fit(S[:200])
+        parts["tT"] = _h(t.transform(S[:128]), t.components_)
+    if deal.take():
+        mb = ml.MiniBatchDictionaryLearning(n_components=5, alpha=0.4, batch_size=64, max_iter=3, random_state=2,
+                                            transform_algorithm="lasso_lars").fit(X[:600])
+        parts.update(mbD=_h(mb.components_), mbT=_h(mb.transform(S[:128])), mbn=_h(np.int32(mb.n_steps_)))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
 
 
 @lane("x-decomp-sparse-pca")
@@ -260,7 +296,6 @@ _batch_decl(_rows_calls("transform", sl=slice(0, 256),
 def _(ml, X, yc, yr, Xh=None):
     S = X[:160]
     iso = ml.Isomap(n_neighbors=8, n_components=3).fit(S)
-    cm = ml.ClassicalMDS(n_components=2).fit(S)
     # 2026-11-05 lane/slow-verification-lanes: SMACOF iterations halved
     # (40 -> 20, 30 -> 15, nonmetric 25 -> 12; each iteration is the same
     # Guttman step) and the shift-invert LLE at 240 rows (was 300; the
@@ -270,34 +305,67 @@ def _(ml, X, yc, yr, Xh=None):
     # 2026-11-28 lane/verify-speed-2: SMACOF iterations again (20 -> 8, 15 -> 6, nonmetric 12 -> 6; 29.8 s a cell
     # on the 0.9.0 Apple record against 1.3 s on the CPU column): each iteration is the same Guttman step and
     # stress test, n_init stays 2 (the best-of-inits choice). Every Isomap and LLE fit is unchanged.
-    md = ml.MDS(n_components=2, init="random", n_init=2, max_iter=8, random_state=0)
-    emb = md.fit_transform(S[:100])
-    mc = ml.MDS(n_components=2, init="classical_mds", max_iter=6).fit(S[:100])
-    lle = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit(S)
-    # past 200 rows: the shift-invert subspace iteration (eigen_solver='auto')
-    li = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, random_state=0).fit(X[:240])
-    lt = ml.LocallyLinearEmbedding(n_neighbors=8, n_components=2, method="ltsa").fit(S[:80])
-    he = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="hessian").fit(S[:80])
-    mo = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="modified").fit(S[:80])
-    # the radius is a quarter of the largest kNN geodesic (this lane's own
-    # identical output, one exact float64 product)
+    # lane verify-light-1, 2026-11-28 (`_Dealer`): the first Isomap fit is the anchor on every cell (it answers the
+    # infer and batch columns and sets the radius below); the other fourteen fits are dealt over the nine fixtures,
+    # each once per side (38 s on the worst 0.9.0 Apple cell). Every size, option and iteration count is unchanged.
     rad = float(np.asarray(iso.dist_matrix_).max()) * 0.25
-    ir = ml.Isomap(n_neighbors=None, radius=rad, n_components=2, path_method="FW").fit(S[:100])
-    nm = ml.MDS(n_components=2, metric_mds=False, init="random", max_iter=6, random_state=1)
-    nemb = nm.fit_transform(S[:60])
-    im = ml.Isomap(n_neighbors=8, n_components=2, metric="manhattan").fit(S[:100])
-    ic = ml.Isomap(n_neighbors=8, n_components=2, metric="cosine").fit(S[:100])
-    ip = ml.Isomap(n_neighbors=8, n_components=2, metric="minkowski", p=3).fit(S[:100])
-    cc = ml.ClassicalMDS(n_components=2, metric="chebyshev").fit(S[:80])
-    return _fit(dict(iso=_h(iso.embedding_), isod=_h(iso.dist_matrix_), isoT=_h(iso.transform(Xh[:64])),
-                     cm=_h(cm.embedding_), md=_h(emb), mds=_h(np.float64(md.stress_)), mc=_h(mc.embedding_),
-                     lle=_h(lle.embedding_), lleT=_h(lle.transform(Xh[:64])), li=_h(li.embedding_, np.float64(li.reconstruction_error_)), lt=_h(lt.embedding_),
-                     he=_h(he.embedding_), mo=_h(mo.embedding_, np.float64(mo.reconstruction_error_)),
-                     ir=_h(ir.embedding_, ir.dist_matrix_, ir.transform(S[:32])),
-                     nm=_h(nemb, np.float64(nm.stress_), np.int32(nm.n_iter_)),
-                     im=_h(im.embedding_, im.transform(S[:16])), ic=_h(ic.embedding_, ic.transform(S[:16])),
-                     ip=_h(ip.embedding_, ip.dist_matrix_), cc=_h(cc.embedding_, cc.dissimilarity_matrix_)),
-                iso, lambda e: (e.transform(Xh[:128]),))
+
+    def md_part():
+        md = ml.MDS(n_components=2, init="random", n_init=2, max_iter=8, random_state=0)
+        emb = md.fit_transform(S[:100])
+        return dict(md=_h(emb), mds=_h(np.float64(md.stress_)))
+
+    def ir_part():
+        # the radius is a quarter of the largest kNN geodesic (this lane's own identical output, one exact float64
+        # product)
+        ir = ml.Isomap(n_neighbors=None, radius=rad, n_components=2, path_method="FW").fit(S[:100])
+        return dict(ir=_h(ir.embedding_, ir.dist_matrix_, ir.transform(S[:32])))
+
+    def nm_part():
+        nm = ml.MDS(n_components=2, metric_mds=False, init="random", max_iter=6, random_state=1)
+        nemb = nm.fit_transform(S[:60])
+        return dict(nm=_h(nemb, np.float64(nm.stress_), np.int32(nm.n_iter_)))
+
+    def lle_part():
+        lle = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit(S)
+        return dict(lle=_h(lle.embedding_), lleT=_h(lle.transform(Xh[:64])))
+
+    def li_part():
+        # past 200 rows: the shift-invert subspace iteration (eigen_solver='auto')
+        li = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, random_state=0).fit(X[:240])
+        return dict(li=_h(li.embedding_, np.float64(li.reconstruction_error_)))
+
+    def mo_part():
+        mo = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="modified").fit(S[:80])
+        return dict(mo=_h(mo.embedding_, np.float64(mo.reconstruction_error_)))
+
+    def iso_metric_part(key, **kw):
+        def part():
+            m = ml.Isomap(n_neighbors=8, n_components=2, **kw).fit(S[:100])
+            return {key: _h(m.embedding_, m.transform(S[:16]) if key != "ip" else m.dist_matrix_)}
+        return part
+
+    units = [
+        lambda: dict(cm=_h(ml.ClassicalMDS(n_components=2).fit(S).embedding_)),
+        md_part,
+        lambda: dict(mc=_h(ml.MDS(n_components=2, init="classical_mds", max_iter=6).fit(S[:100]).embedding_)),
+        lle_part,
+        li_part,
+        lambda: dict(lt=_h(ml.LocallyLinearEmbedding(n_neighbors=8, n_components=2, method="ltsa").fit(S[:80]).embedding_)),
+        lambda: dict(he=_h(ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="hessian").fit(S[:80]).embedding_)),
+        mo_part,
+        ir_part,
+        nm_part,
+        iso_metric_part("im", metric="manhattan"),
+        iso_metric_part("ic", metric="cosine"),
+        iso_metric_part("ip", metric="minkowski", p=3),
+        lambda: (lambda cc: dict(cc=_h(cc.embedding_, cc.dissimilarity_matrix_)))(
+            ml.ClassicalMDS(n_components=2, metric="chebyshev").fit(S[:80])),
+    ]
+    parts = dict(iso=_h(iso.embedding_), isod=_h(iso.dist_matrix_), isoT=_h(iso.transform(Xh[:64])))
+    for unit in _spread(units, anchor=0):  # driver-loop: over this cell's dealt manifold fits
+        parts.update(unit())
+    return _fit(parts, iso, lambda e: (e.transform(Xh[:128]),))
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 128)), "x-decomp-manifold")
@@ -305,9 +373,15 @@ _batch_decl(_rows_calls("transform", sl=slice(0, 128)), "x-decomp-manifold")
 
 @lane("x-decomp-robust-cov")
 def _(ml, X, yc, yr, Xh=None):
+    # lane verify-light-1, 2026-11-28 (AGENTS.md "Verification has light fixtures"): 49.3 s a cell on the 0.9.0
+    # Apple record, every C-step of three searches paying its launches and one wait on Metal. ONE multivariate
+    # search now: the EllipticEnvelope fit IS a MinCovDet fit (its subclass), so its raw and reweighted state,
+    # support, distances and mahalanobis are the MinCovDet parts (was a second MinCovDet(random_state=0) search
+    # on the same rows at the default support; the default-support MinCovDet is generic-attrs-decomp's and
+    # check-generic-decomp's, the d = 1 default here). Rows 400 (the n <= 500 plan) and every option unchanged.
     S = np.ascontiguousarray(X[:400, :6])
-    m = ml.MinCovDet(random_state=0).fit(S)
     e = ml.EllipticEnvelope(contamination=0.05, random_state=1, support_fraction=0.7).fit(S)
+    m = e
     one = ml.MinCovDet().fit(np.ascontiguousarray(X[:300, 5:6]))
     lab = np.where(X[:128, 0] > 0, 1, -1).astype(np.int32)
     esc = np.float64([e.score(S[:128], lab), e.score(S[:128], lab, sample_weight=np.abs(X[:128, 1]) + np.float32(1))])
@@ -341,23 +415,36 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("x-decomp-pca-randomized")
 def _(ml, X, yc, yr, Xh=None):
+    # lane verify-light-1, 2026-11-28 (`_Dealer`): the randomized PCA is the anchor on every cell (it answers the
+    # infer and batch columns); the six other fits are dealt over the nine fixtures, each once per side (17 s on the
+    # worst 0.9.0 Apple cell). Every size and option is unchanged.
+    deal = _Dealer()
     p = ml.PCA(n_components=4, svd_solver="randomized", random_state=3).fit(X[:4000])
-    w = ml.PCA(n_components=3, svd_solver="randomized", whiten=True, iterated_power=2).fit(X[:2000])
-    t = ml.TruncatedSVD(n_components=5, algorithm="randomized", random_state=1).fit(X[:4000])
-    f = ml.PCA(n_components=0.8, svd_solver="full").fit(X[:3000])
-    # svd_solver='arpack' is refused by name (merge review, 2026-09-27); this
-    # part is the 'full' arm at the same n_components it ran, the same bits
-    a = ml.PCA(n_components=3, svd_solver="full").fit(X[:3000])
-    mle = ml.PCA(n_components="mle", svd_solver="full").fit(X[:3000])
-    ta = ml.TruncatedSVD(n_components=4).fit(X[:4000])   # was 'arpack' (refused now): the same arm
-    return _fit(dict(pc=_h(p.components_), pev=_h(p.explained_variance_, p.explained_variance_ratio_, p.singular_values_),
-                     pnv=_h(np.float64(p.noise_variance_)), pT=_h(p.transform(X[:256])), wT=_h(w.transform(X[:256])),
-                     tc=_h(t.components_, t.singular_values_, t.explained_variance_ratio_), tT=_h(t.transform(X[:256])),
-                     fc=_h(f.components_, f.explained_variance_), fnv=_h(np.float64(f.noise_variance_)),
-                     fT=_h(f.transform(X[:256])), ac=_h(a.components_, a.explained_variance_, a.transform(X[:256])),
-                     mle=_h(np.int32(mle.n_components_), mle.components_, np.float64(mle.noise_variance_)),
-                     ta=_h(ta.components_, ta.singular_values_, ta.explained_variance_, ta.explained_variance_ratio_)),
-                p, lambda e: (e.transform(Xh[:256]),))
+    deal.take()
+    parts = dict(pc=_h(p.components_), pev=_h(p.explained_variance_, p.explained_variance_ratio_, p.singular_values_),
+                 pnv=_h(np.float64(p.noise_variance_)), pT=_h(p.transform(X[:256])))
+    if deal.take():
+        w = ml.PCA(n_components=3, svd_solver="randomized", whiten=True, iterated_power=2).fit(X[:2000])
+        parts["wT"] = _h(w.transform(X[:256]))
+    if deal.take():
+        t = ml.TruncatedSVD(n_components=5, algorithm="randomized", random_state=1).fit(X[:4000])
+        parts.update(tc=_h(t.components_, t.singular_values_, t.explained_variance_ratio_), tT=_h(t.transform(X[:256])))
+    if deal.take():
+        f = ml.PCA(n_components=0.8, svd_solver="full").fit(X[:3000])
+        parts.update(fc=_h(f.components_, f.explained_variance_), fnv=_h(np.float64(f.noise_variance_)),
+                     fT=_h(f.transform(X[:256])))
+    if deal.take():
+        # svd_solver='arpack' is refused by name (merge review, 2026-09-27); this
+        # part is the 'full' arm at the same n_components it ran, the same bits
+        a = ml.PCA(n_components=3, svd_solver="full").fit(X[:3000])
+        parts["ac"] = _h(a.components_, a.explained_variance_, a.transform(X[:256]))
+    if deal.take():
+        mle = ml.PCA(n_components="mle", svd_solver="full").fit(X[:3000])
+        parts["mle"] = _h(np.int32(mle.n_components_), mle.components_, np.float64(mle.noise_variance_))
+    if deal.take():
+        ta = ml.TruncatedSVD(n_components=4).fit(X[:4000])   # was 'arpack' (refused now): the same arm
+        parts["ta"] = _h(ta.components_, ta.singular_values_, ta.explained_variance_, ta.explained_variance_ratio_)
+    return _fit(parts, p, lambda e: (e.transform(Xh[:256]),))
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-decomp-pca-randomized")
@@ -378,25 +465,29 @@ def _(ml, X, yc, yr, Xh=None):
     # 4 epochs still run each epoch's edge and negative-sample steps.
     Z = X[:192, :8]
     lab = (yc[:192] % 3).astype(np.int64)
-    arr = np.asarray(ml.UMAP(n_neighbors=6, n_epochs=2, init="random", random_state=1).fit(Z).embedding_)
-    runs = dict(
-        rnd=ml.UMAP(n_neighbors=8, n_epochs=4, init="random", random_state=3).fit(Z),
-        pca=ml.UMAP(n_neighbors=8, n_epochs=4, init="pca", random_state=3).fit(Z),
-        arr=ml.UMAP(n_neighbors=8, n_epochs=4, init=arr, random_state=3).fit(Z),
-        man=ml.UMAP(n_neighbors=8, n_epochs=4, metric="manhattan", random_state=3).fit(Z),
-        cos=ml.UMAP(n_neighbors=8, n_epochs=4, metric="cosine", random_state=3).fit(Z),
-        mink=ml.UMAP(n_neighbors=8, n_epochs=4, metric="minkowski", metric_kwds={"p": 3.0},
-                     random_state=3).fit(Z),
-        lc=ml.UMAP(n_neighbors=8, n_epochs=4, local_connectivity=1.5, random_state=3).fit(Z),
-        c1=ml.UMAP(n_neighbors=8, n_components=1, n_epochs=4, random_state=3).fit(Z),
-        c5=ml.UMAP(n_neighbors=8, n_components=5, n_epochs=4, random_state=3).fit(Z),
-        ab=ml.UMAP(n_neighbors=8, n_epochs=4, a=1.2, b=0.9, random_state=3).fit(Z),
-        cat=ml.UMAP(n_neighbors=8, n_epochs=4, random_state=3).fit(Z, lab),
-        cont=ml.UMAP(n_neighbors=8, n_epochs=4, target_metric="l2", target_weight=0.3,
-                     random_state=3).fit(Z, yr[:192].astype(np.float32)),
+    # lane verify-light-1, 2026-11-28 (`_spread`): the n_components 5 fit is the anchor on every cell (it answers the
+    # infer and batch columns); the eleven other option fits are dealt over the nine fixtures, each once per side
+    # (30 s on the worst 0.9.0 Apple cell). Every option, size and epoch count is unchanged.
+    u = dict(n_neighbors=8, n_epochs=4, random_state=3)
+    fits = dict(
+        c5=lambda: ml.UMAP(n_components=5, **u).fit(Z),
+        rnd=lambda: ml.UMAP(init="random", **u).fit(Z),
+        pca=lambda: ml.UMAP(init="pca", **u).fit(Z),
+        arr=lambda: ml.UMAP(init=np.asarray(ml.UMAP(n_neighbors=6, n_epochs=2, init="random", random_state=1)
+                                            .fit(Z).embedding_), **u).fit(Z),
+        man=lambda: ml.UMAP(metric="manhattan", **u).fit(Z),
+        cos=lambda: ml.UMAP(metric="cosine", **u).fit(Z),
+        mink=lambda: ml.UMAP(metric="minkowski", metric_kwds={"p": 3.0}, **u).fit(Z),
+        lc=lambda: ml.UMAP(local_connectivity=1.5, **u).fit(Z),
+        c1=lambda: ml.UMAP(n_components=1, **u).fit(Z),
+        ab=lambda: ml.UMAP(a=1.2, b=0.9, **u).fit(Z),
+        cat=lambda: ml.UMAP(**u).fit(Z, lab),
+        cont=lambda: ml.UMAP(target_metric="l2", target_weight=0.3, **u).fit(Z, yr[:192].astype(np.float32)),
     )
+    runs = {k: fits[k]() for k in _spread(list(fits))}
     parts = {k: _h(v.embedding_) for k, v in runs.items()}
-    parts["t_man"] = _h(runs["man"].transform(X[192:256, :8]))
+    if "man" in runs:
+        parts["t_man"] = _h(runs["man"].transform(X[192:256, :8]))
     parts["t_c5"] = _h(runs["c5"].transform(X[192:256, :8]))
     return _fit(parts, runs["c5"], lambda e: (e.transform(Xh[:64, :8]),))
 
@@ -509,11 +600,13 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("x-decomp-eigh-wide-fastica")
 def _(ml, X, yc, yr, Xh=None):
-    """FastICA at d = 72 and 65 with n_components = d: the whitening eigh of
+    """FastICA at d = 72 with n_components = d: the whitening eigh of
     the d x d Gram and, every iteration, the parallel decorrelation's eigh of
     W W^T (n_components x n_components), both from n = 64. 4d rows."""
     out, first = {}, None
-    for w in _decomp_eigh_widths_lean:
+    # lane verify-light-1, 2026-11-28: d = 72 only (was 72 and 65; 13 s on the worst 0.9.0 Apple cell): one wide
+    # matrix reaches both eighs; 65's exact-panel and odd-pad arms are x-decomp-eigh-wide-linalg's
+    for w in _decomp_eigh_widths_lean[:1]:
         S = _decomp_eigh_wide(X, 4 * w, w)
         # 4 iterations (was 8, 2026-11-05 lane/slow-verification-lanes): every
         # iteration takes the same decorrelation eigh, so 4 still repeats it
@@ -525,35 +618,68 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(out, first, lambda e: (e.transform(_decomp_eigh_wide(Xh, 256, 72)),))
 
 
+#: x-decomp-eigh-wide-rotation's width: the smallest n_components whose rotation eigh (n_components square)
+#: takes the tridiagonal solve, TD_MIN_N = 2 TD_NB = 64 (x_decomp/eigh_tridiag_cells.mojo).
+_decomp_rotation_nc = 64
+
+
+def _decomp_rotation_simple(A, rows, d):
+    """Test input only (lane verify-light-1, 2026-11-28): a (rows, d) matrix whose columns have DISJOINT row
+    supports and come in exact +x / -x row pairs, so every sample covariance off the diagonal is a sum of exact
+    zeros minus a column-mean product that the pairs hold at rounding level. The principal axes, so the
+    unrotated FactorAnalysis loadings, are then the coordinate axes (simple structure), varimax's optimum is the
+    start, and the rotation's stopping test (x_decomp/rotation_dev.mojo: the singular-value sum stops growing by
+    a relative 1e-6) ends it after its second step instead of running toward _ROT_MAX_ITER = 100
+    (x_decomp/fa_owner.mojo:36). Row r holds column (r // 2) % d; its magnitude is 16 (1 + j / 64)(1 + fmod(|v|,
+    1)) for the fixture's own value v at flat offset r // 2, so each fixture kind hands different bytes, the
+    column variances are distinct (the 1 + j / 64 ladder: no exactly repeated eigenvalue even on `ties`, whose
+    fmod is 0) and above the unit noise start, and the spread of A^T A stays well inside float32 (column scales
+    within 4.4x, so its eigenvalues within about 1.4e5). Every step is one IEEE float32 operation (fmod and the power-of-two and j / 64 factors are exact), so
+    every box builds the same bytes."""
+    flat = np.ascontiguousarray(A, dtype=np.float32).reshape(-1)
+    pairs = (rows + 1) // 2
+    if pairs > flat.size:
+        raise ValueError(f"rotation fixture: {rows} rows need {pairs} values, the fixture has {flat.size}")
+    v = flat[:pairs]
+    mag = (np.float32(1.0) + np.fmod(np.abs(v), np.float32(1.0))).astype(np.float32)
+    col = np.arange(pairs) % d
+    ladder = (np.float32(1.0) + col.astype(np.float32) / np.float32(64.0)).astype(np.float32)
+    x = (mag * ladder * np.float32(16.0)).astype(np.float32)
+    S = np.zeros((rows, d), dtype=np.float32)
+    r = np.arange(rows)
+    S[r, col[r // 2]] = np.where(r % 2 == 0, x[r // 2], -x[r // 2]).astype(np.float32)
+    return np.ascontiguousarray(S)
+
+
 @lane("x-decomp-eigh-wide-rotation")
 def _(ml, X, yc, yr, Xh=None):
-    """FactorAnalysis rotations with n_components = 72 (varimax) and 65
-    (quartimax): `_polar`'s eigh of A^T A is n_components x n_components,
-    every rotation step. d = n_components + 8 (so the fit has spare
-    features), 2d rows (the n >= d EM branch), a short EM."""
-    out, first = {}, None
-    # 2026-11-05 lane/slow-verification-lanes: quartimax at 65 (was 128, see
-    # `_decomp_eigh_widths_lean`); 2d rows (was 4d; n >= d still holds, rows
-    # only feed the one QR); 3 EM steps (was 5). The rotation's own up to
-    # _ROT_MAX_ITER = 100 eigh steps (x_decomp/fa_owner.mojo:37) are fixed by
-    # the product, so they, not the EM, carry this lane's cost.
-    for nc, method in ((72, "varimax"), (65, "quartimax")):
-        d = nc + 8
-        S = _decomp_eigh_wide(X, 2 * d, d)
-        m = ml.FactorAnalysis(n_components=nc, rotation=method, max_iter=3).fit(S)
-        out[f"{method}{nc}"] = _h(m.components_, m.noise_variance_, m.transform(S[:64]))
-        first = m if first is None else first
-    return _fit(out, first, lambda e: (e.transform(_decomp_eigh_wide(Xh, 256, 80)),))
+    """A FactorAnalysis varimax rotation at n_components = 64: `_polar`'s eigh of A^T A is n_components x
+    n_components, every rotation step, the smallest width that takes the wide (tridiagonal) solve. d =
+    n_components + 8 (spare features), 16d rows (the n >= d EM branch), a short EM, on loadings that already
+    have simple structure (`_decomp_rotation_simple`), so the rotation stops after two eighs."""
+    # lane verify-light-1, 2026-11-28 (AGENTS.md "Verification has light fixtures"): 2,553 s, 21% of the 0.9.0
+    # Apple record (283.7 s a cell: two fits x up to 100 rotation steps x one ~0.7 s Metal eigh). Now ONE fit:
+    # varimax at 64 (was 72 varimax and 65 quartimax). Quartimax and varimax at a narrow width stay covered by
+    # x-decomp-factor-analysis (n_components 3, both methods); 65's exact-panel arm by x-decomp-eigh-wide-linalg.
+    # The rotation stops on its own test after its second step on this input (was the full 100); EM 2 (was 3).
+    nc = _decomp_rotation_nc
+    d = nc + 8
+    S = _decomp_rotation_simple(X, 16 * d, d)
+    m = ml.FactorAnalysis(n_components=nc, rotation="varimax", max_iter=2).fit(S)
+    out = {f"varimax{nc}": _h(m.components_, m.noise_variance_, m.transform(S[:64]))}
+    return _fit(out, m, lambda e: (e.transform(_decomp_rotation_simple(Xh, 256, d)),))
 
 
 @lane("x-decomp-eigh-wide-factor-analysis")
 def _(ml, X, yc, yr, Xh=None):
     """FactorAnalysis with fewer rows than features (the n < d EM branch,
-    every iteration an eigh of the d x d scaled Gram) at d = 72 and 65.
+    every iteration an eigh of the d x d scaled Gram) at d = 72.
     n = d - 1: one null direction, a single isolated zero eigenvalue rather
     than a cluster, so the tridiagonal solve is taken."""
     out, first = {}, None
-    for w in _decomp_eigh_widths_lean:
+    # lane verify-light-1, 2026-11-28: d = 72 only (was 72 and 65; 31 s on the worst 0.9.0 Apple cell): one wide
+    # matrix reaches the n < d EM eigh; 65's exact-panel and odd-pad arms are x-decomp-eigh-wide-linalg's
+    for w in _decomp_eigh_widths_lean[:1]:
         S = _decomp_eigh_wide(X, w - 1, w)
         # 2 EM steps (was 10, then 4 from 2026-11-05 lane/slow-verification-lanes; 2 from 2026-11-28
         # lane/verify-speed-2: 19.9 s a cell on the 0.9.0 Apple record, each step one d x d eigh at about
@@ -570,18 +696,37 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("x-decomp-eigh-wide-mincovdet")
 def _(ml, X, yc, yr, Xh=None):
-    """MinCovDet at d = 72 and 65, 3d rows: precision_ is the pseudo-inverse
-    of the reweighted d x d covariance through eigh (and a C-step whose
-    Cholesky stops falls back to the same pinvh)."""
-    out, first = {}, None
-    for w in _decomp_eigh_widths_lean:
-        S = _decomp_eigh_wide(X, 3 * w, w)
-        m = ml.MinCovDet(random_state=0).fit(S)
-        out[f"fit{w}"] = _h(m.location_, m.covariance_, m.precision_, np.asarray(m.support_, dtype=np.int8),
-                            m.dist_, m.raw_location_, m.raw_covariance_)
-        out[f"maha{w}"] = _h(m.mahalanobis(S[:64]))
-        first = m if first is None else first
-    return _fit(out, first, lambda e: (e.mahalanobis(_decomp_eigh_wide(Xh, 256, 72)),))
+    """MinCovDet at d = 64, 3d rows: precision_ is the pseudo-inverse of the
+    reweighted d x d covariance through eigh, and so is every C-step
+    candidate's precision (DKit.pinvh, x_decomp/kit_device.mojo). The last
+    column repeats the first byte for byte (`_decomp_mcd_singular`), so every
+    covariance carries one exact null direction: the pseudo-inverse's cut is
+    live, and each candidate's log determinant is -inf, so no candidate runs
+    a C-step iteration (the search's loop is x-decomp-robust-cov's)."""
+    # lane verify-light-1, 2026-11-28 (AGENTS.md "Verification has light fixtures"): 267.5 s a cell on the 0.9.0
+    # Apple record: two fits (72, 65) x the 30-trial and 10-candidate search, every C-step a ~0.7 s Metal wide
+    # eigh. Now ONE fit at 64 (the smallest width TD_MIN_N = 2 TD_NB takes; 65's exact-panel arm is
+    # x-decomp-eigh-wide-linalg's) on input whose -inf log determinants stop each candidate before its loop,
+    # so the wide pinvh runs about a dozen times (the 10 initial precisions, the kept candidate, the
+    # reweighting and precision_) instead of a hundred or more.
+    w = 64
+    S = _decomp_mcd_singular(X, 3 * w, w)
+    m = ml.MinCovDet(random_state=0).fit(S)
+    out = {f"fit{w}": _h(m.location_, m.covariance_, m.precision_, np.asarray(m.support_, dtype=np.int8),
+                         m.dist_, m.raw_location_, m.raw_covariance_),
+           f"maha{w}": _h(m.mahalanobis(S[:64]))}
+    return _fit(out, m, lambda e: (e.mahalanobis(_decomp_mcd_singular(Xh, 256, 64)),))
+
+
+def _decomp_mcd_singular(A, rows, width):
+    """Test input only (lane verify-light-1, 2026-11-28): `_decomp_eigh_wide`'s re-cut with the last column a
+    byte copy of the first. Two identical rows and columns stay identical under every elimination step (the
+    same operations on the same operands), so the LU meets an exactly zero pivot and the log determinant is
+    -inf on every box; the eigh sees one isolated null direction, (e_0 - e_last) / sqrt(2), not a cluster, so
+    the tridiagonal solve is taken (as x-decomp-eigh-wide-factor-analysis's n = d - 1)."""
+    S = _decomp_eigh_wide(A, rows, width).copy()
+    S[:, width - 1] = S[:, 0]
+    return np.ascontiguousarray(S)
 
 
 @lane("x-decomp-eigh-wide-kpca")
@@ -604,8 +749,9 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl("n/a:matrix factorization (each eigh consumes a complete square matrix; there is no row "
             "axis whose elements are independent queries)", "x-decomp-eigh-wide-linalg")
 _batch_decl(_rows_calls("transform", prep=lambda Xh: _decomp_eigh_wide(Xh, 256, 72)), "x-decomp-eigh-wide-fastica")
-_batch_decl(_rows_calls("transform", prep=lambda Xh: _decomp_eigh_wide(Xh, 256, 80)), "x-decomp-eigh-wide-rotation")
+_batch_decl(_rows_calls("transform", prep=lambda Xh: _decomp_rotation_simple(Xh, 256, _decomp_rotation_nc + 8)),
+            "x-decomp-eigh-wide-rotation")
 _batch_decl(_rows_calls("transform", "score_samples", prep=lambda Xh: _decomp_eigh_wide(Xh, 256, 72)),
             "x-decomp-eigh-wide-factor-analysis")
-_batch_decl(_rows_calls("mahalanobis", prep=lambda Xh: _decomp_eigh_wide(Xh, 256, 72)), "x-decomp-eigh-wide-mincovdet")
+_batch_decl(_rows_calls("mahalanobis", prep=lambda Xh: _decomp_mcd_singular(Xh, 256, 64)), "x-decomp-eigh-wide-mincovdet")
 _batch_decl(_rows_calls("transform", sl=slice(0, 128)), "x-decomp-eigh-wide-kpca")

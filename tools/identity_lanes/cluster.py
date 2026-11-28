@@ -234,14 +234,16 @@ _batch_decl(_rows_calls("predict_proba", sl=np.s_[:256, 1:5]), "x-cluster-bgmm-i
 def _(ml, X, yc, yr, Xh=None):
     """BayesianGaussianMixture covariance_type 'tied', 'diag' and 'spherical'
     (the tied pooled covariance, the diagonal and scalar Wishart updates)."""
+    # lane verify-light-1, 2026-11-28 (`_spread`): the spherical fit (it answers the infer and batch columns) is the
+    # anchor on every cell; tied and diag are dealt over the nine fixtures, each once per side
     parts = {}
     last = None
-    for ct in ("tied", "diag", "spherical"):
+    for ct in _spread(("spherical", "tied", "diag")):
         m = ml.BayesianGaussianMixture(n_components=4, covariance_type=ct, max_iter=20, random_state=3).fit(X[:1500, 1:5])
         parts[ct + "_means"] = _h(m.means_)
         parts[ct + "_cov"] = _h(m.covariances_)
         parts[ct + "_lb"] = _h(np.float64(m.lower_bound_))
-        last = m
+        last = last if last is not None else m
     return _fit(parts, last, lambda e: (e.score_samples(Xh[:256, 1:5]),))
 
 
@@ -272,30 +274,38 @@ def _(ml, X, yc, yr, Xh=None):
     'k-means++' with n_init 2, means_init and weights_init, precisions_init,
     and warm_start.
     The default GaussianMixture fit is the mixture lane's and is not here."""
+    # lane verify-light-1, 2026-11-28 (`_Dealer`): the spherical fit (it answers the infer and batch columns) is the
+    # anchor on every cell; tied, diag, k-means++, the three inits and warm_start are dealt over the nine fixtures,
+    # each once per side (18 s on the worst 0.9.0 Apple cell). Every option and iteration count is unchanged.
     Z = X[:1500, 1:5]
     parts = {}
     last = None
-    for ct in ("tied", "diag", "spherical"):
+    deal = _Dealer()
+    for ct in deal.units(("spherical", "tied", "diag")):
         m = ml.GaussianMixture(n_components=3, covariance_type=ct, max_iter=25, random_state=3).fit(Z)
         parts[ct + "_means"] = _h(m.means_)
         parts[ct + "_cov"] = _h(m.covariances_)
         parts[ct + "_lb"] = _h(np.float64(m.lower_bound_))
-        last = m
-    m = ml.GaussianMixture(n_components=3, init_params="k-means++", n_init=2, max_iter=25, random_state=3).fit(Z)
-    parts["kpp_means"] = _h(m.means_)
-    mi = np.ascontiguousarray(Z[:3], dtype=np.float32)
-    m = ml.GaussianMixture(n_components=3, means_init=mi, weights_init=[0.2, 0.3, 0.5], max_iter=25,
-                           random_state=3).fit(Z)
-    parts["init_means"] = _h(m.means_)
-    parts["init_weights"] = _h(m.weights_)
-    P = np.stack([np.eye(4, dtype=np.float32) * s for s in (1.0, 2.0, 0.5)])
-    m = ml.GaussianMixture(n_components=3, precisions_init=P, max_iter=25, random_state=3).fit(Z)
-    parts["pinit_means"] = _h(m.means_)
-    parts["pinit_prec"] = _h(m.precisions_cholesky_)
-    m = ml.GaussianMixture(n_components=3, covariance_type="diag", warm_start=True, max_iter=5, random_state=3)
-    m.fit(Z)
-    m.fit(Z)
-    parts["warm_means"] = _h(m.means_)
+        last = last if last is not None else m
+    if deal.take():
+        m = ml.GaussianMixture(n_components=3, init_params="k-means++", n_init=2, max_iter=25, random_state=3).fit(Z)
+        parts["kpp_means"] = _h(m.means_)
+    if deal.take():
+        mi = np.ascontiguousarray(Z[:3], dtype=np.float32)
+        m = ml.GaussianMixture(n_components=3, means_init=mi, weights_init=[0.2, 0.3, 0.5], max_iter=25,
+                               random_state=3).fit(Z)
+        parts["init_means"] = _h(m.means_)
+        parts["init_weights"] = _h(m.weights_)
+    if deal.take():
+        P = np.stack([np.eye(4, dtype=np.float32) * s for s in (1.0, 2.0, 0.5)])
+        m = ml.GaussianMixture(n_components=3, precisions_init=P, max_iter=25, random_state=3).fit(Z)
+        parts["pinit_means"] = _h(m.means_)
+        parts["pinit_prec"] = _h(m.precisions_cholesky_)
+    if deal.take():
+        m = ml.GaussianMixture(n_components=3, covariance_type="diag", warm_start=True, max_iter=5, random_state=3)
+        m.fit(Z)
+        m.fit(Z)
+        parts["warm_means"] = _h(m.means_)
     return _fit(parts, last, lambda e: (e.score_samples(Xh[:256, 1:5]), e.predict(Xh[:256, 1:5])))
 
 
@@ -453,14 +463,17 @@ def _(ml, X, yc, yr, Xh=None):
     distance_threshold."""
     Z = X[:300, :4]
     C = _cluster_index_graph(300, 150)
+    # lane verify-light-1, 2026-11-28 (`_spread`): single linkage (its distances set the threshold fit's cut) and the
+    # threshold fit run on every cell; ward, complete and average are dealt over the nine fixtures, each once per side
     parts = {}
-    for linkage in ("ward", "complete", "average", "single"):
+    last = None
+    for linkage in _spread(("single", "ward", "complete", "average")):
         m = ml.AgglomerativeClustering(n_clusters=6, linkage=linkage, connectivity=C,
                                        compute_full_tree=False, compute_distances=True).fit(Z)
         parts[linkage + "_children"] = _h(m.children_)
         parts[linkage + "_dist"] = _h(m.distances_)
         parts[linkage + "_labels"] = _h(m.labels_)
-    last = m
+        last = last if last is not None else m
     thr = float(np.median(np.asarray(last.distances_, dtype=np.float32)))
     t = ml.AgglomerativeClustering(n_clusters=None, linkage="average", connectivity=C, distance_threshold=thr).fit(Z)
     parts.update(thr_children=_h(t.children_), thr_labels=_h(t.labels_), thr_n=_h(np.int64(t.n_clusters_)))

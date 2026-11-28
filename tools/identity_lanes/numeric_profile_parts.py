@@ -115,7 +115,10 @@ def _(ml, X, yc, yr, Xh=None):
                   default_m.numeric_profile == "fixed15_v1",
                   default_y.tobytes() == presets["fixed15_v1"].tobytes(),
                   presets["fixed15_v1"].tobytes() != presets["fp32_v1"].tobytes()]
-        for case in _NPP_CASES:  # driver-loop: over the cases (data)
+        # lane verify-light-1, 2026-11-28 (`_spread`, anchor 0): the per-part cases are dealt over the nine fixtures,
+        # each case loaded, run and checked once per side (17 s a cell on the 0.9.0 Apple record, a CausalLM load and
+        # forward a case); the presets, generate, save-reload and the block run on every cell
+        for case in _spread(_NPP_CASES, anchor=0):  # driver-loop: over this cell's dealt cases (data)
             spec = case["spec"]
             if case["refused"] is not None:
                 flags.append(_hf_refused(lambda: CLM.load(root, numeric_profile=spec), case["refused"]))

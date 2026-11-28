@@ -726,8 +726,13 @@ def _generic_run(ml, X, yc, yr, mechanism, group):
     classes = _generic_classes(group, want)
     if not classes:
         raise AssertionError(f"{lane_name}: the registry walk found no class in this group")
+    # THE FITTING MECHANISM LANES DEAL THEIR CLASSES OVER THE NINE FIXTURES (lane verify-light-1, 2026-11-28;
+    # `_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the mechanisms read
+    # (attributes, copies, digests) are the class's, not the fixture's pathology, and every class still runs once per
+    # side. The unfitted params lanes keep every class on every cell (they cost no fit).
+    run = _spread(classes, anchor=0) if fit else classes
     parts, failed = {}, []
-    for where, name, cls in classes:  # driver-loop: over the public classes of one group, one bounded unit each
+    for where, name, cls in run:  # driver-loop: over the public classes of one group, one bounded unit each
         label = f"{where}.{name}" if where else name
         est, args, why = _generic_prepare(ml, fixture, where, name, cls, fit, label, side, failed, group)
         if est is None and why is None:

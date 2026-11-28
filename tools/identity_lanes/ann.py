@@ -69,8 +69,12 @@ def _(ml, X, yc, yr, Xh=None):
     a class imported inside a method as narrow, so without this line the
     lane is not declared for the estimators binding, the lane check never
     builds it, and the GPU arm refuses on a fresh box (2026-09-28)."""
+    # lane verify-light-1, 2026-11-28: 252 steps (was 300; 22 s on the worst 0.9.0 Apple cell, train and the
+    # held-out refit about half each, every step one launch sequence on Metal): the 250 exaggerated steps the
+    # binding requires (x_ann/tsne_core.mojo tsne_validate) and two after them, so the post-exaggeration switch and
+    # its gains still run; the lane is the PCA start, the optimizer at length is x-ann-tsne's (300 steps)
     pca = ml.PCA(n_components=2).fit_transform(np.ascontiguousarray(X[:400], dtype=np.float32))
-    m = ml.TSNE(perplexity=10.0, max_iter=300, init="pca", random_state=5)
+    m = ml.TSNE(perplexity=10.0, max_iter=252, init="pca", random_state=5)
     # the scaled start TSNE builds in the binding (x_ann/tsne_init.mojo mode 2),
     # restated here because TSNE no longer exposes it: the first column's
     # population std by an exact sum, then (pca / std) * 1e-4 in float32.
@@ -87,7 +91,7 @@ def _(ml, X, yc, yr, Xh=None):
     m.fit(X[:400])
     return _fit(dict(pca=_h(np.asarray(pca, dtype=np.float32)), init=_h(y0), embedding=_h(m.embedding_),
                      kl=_h(np.float32(m.kl_divergence_))),
-                m, lambda e: (ml.TSNE(perplexity=10.0, max_iter=300, init="pca",
+                m, lambda e: (ml.TSNE(perplexity=10.0, max_iter=252, init="pca",
                                       random_state=5).fit(Xh[:400]).embedding_,))
 
 
