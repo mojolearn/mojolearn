@@ -91,6 +91,7 @@ def _time(
     var params = UMAPParams(
         n_neighbors=K, n_components=C, n_epochs=0, random_seed=UInt64(7),
         negative_sample_rate=5,
+        min_dist=Float32(0.1),
     )
     var batch = _head(queries, rows)
     var t0 = perf_counter_ns()

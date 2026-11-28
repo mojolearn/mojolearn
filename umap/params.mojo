@@ -41,7 +41,9 @@ struct UMAPParams(Copyable, Movable):
         n_components: Int = 2,
         local_connectivity: Float32 = Float32(1.0),
         set_op_mix_ratio: Float32 = Float32(1.0),
-        min_dist: Float32 = Float32(0.1),
+        # 0.5: the public default (python/mojolearn/_umap_impl.py, Scanpy's;
+        # lane leiden-umap-1, 2026-11-28), was umap-learn's 0.1
+        min_dist: Float32 = Float32(0.5),
         spread: Float32 = Float32(1.0),
         n_epochs: Int = 0,
         random_seed: UInt64 = UInt64(0),

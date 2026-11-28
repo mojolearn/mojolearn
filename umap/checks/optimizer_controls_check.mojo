@@ -17,6 +17,7 @@ def main() raises:
                 n_neighbors=3, n_components=2, n_epochs=4, random_seed=UInt64(19),
                 learning_rate=Float32(0.5), repulsion_strength=Float32(2),
                 negative_sample_rate=negatives,
+                min_dist=Float32(0.1),
             )
             fit_case(ctx, x, 8, 1, params, "controls-neg" + String(negatives))
             var indices = List[UInt32]()

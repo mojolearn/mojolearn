@@ -148,6 +148,7 @@ def _run(
     var params = UMAPParams(
         n_neighbors=K, n_components=C, n_epochs=0, random_seed=UInt64(7),
         negative_sample_rate=negatives,
+        min_dist=Float32(0.1),
     )
     var scalars = _scalars(training, batch, rows)
     print(
@@ -341,6 +342,7 @@ def _floor_arm() raises:
     var params = UMAPParams(
         n_neighbors=K, n_components=C, n_epochs=0, random_seed=UInt64(7),
         negative_sample_rate=0,
+        min_dist=Float32(0.1),
     )
     var near_scalars = _scalars(training, near, 2)
     var far_scalars = _scalars(training, far, 2)

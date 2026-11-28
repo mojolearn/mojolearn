@@ -45,6 +45,9 @@ print(umap.embedding_.shape)        # (10000, 2)
 Y = umap.transform(X[:10])          # place new rows on the same map
 ```
 
+`min_dist` defaults to 0.5, as in Scanpy's `tl.umap`. umap-learn defaults to 0.1, which packs clusters
+more tightly; pass `min_dist=0.1` to match it.
+
 ## Saving a model
 
 `PCA`, `TruncatedSVD` and `UMAP` save to a file and load back:

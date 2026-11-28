@@ -10,6 +10,7 @@ the groups you expect.
 | Soft assignments and a density model | `GaussianMixture`, `BayesianGaussianMixture` |
 | A tree of merges | `AgglomerativeClustering` |
 | Groups found from a similarity graph | `SpectralClustering`, `AffinityPropagation`, `MeanShift` |
+| Communities in a graph you already have | `Leiden`, `Louvain` |
 
 ## K-means
 
@@ -49,6 +50,32 @@ gmm = mojolearn.GaussianMixture(n_components=3).fit(X)
 proba = gmm.predict_proba(X[:5])
 print(gmm.bic(X))
 ```
+
+## Communities in a graph
+
+`Leiden` and `Louvain` take a symmetric weighted adjacency matrix (dense, scipy.sparse, or an
+`(indptr, indices, n)` tuple) and return a community for every node. `Leiden` is the method single-cell
+pipelines use (Scanpy's `tl.leiden`): it refines each community before merging, so every community it
+returns is connected.
+
+```python
+import numpy as np
+import mojolearn
+
+M = np.random.default_rng(0).random((2_000, 2_000)) < 0.005
+A = (M | M.T).astype(np.float32)
+
+leiden = mojolearn.Leiden(resolution=1.0).fit(A)
+print(leiden.n_communities_, leiden.quality_)
+
+cpm = mojolearn.Leiden(resolution=0.05, objective_function="CPM").fit_predict(A)
+```
+
+`resolution` sets the community size: larger values give more, smaller communities. With
+`objective_function="CPM"` it is the edge density a community must exceed. `n_iterations=-1` (the
+default) repeats the algorithm until the partition stops improving, and `random_state` fixes the order
+in which nodes move. The moves run in parallel in a fixed order, so the partition is reproducible but
+can differ from leidenalg's.
 
 ## Saving a model
 
