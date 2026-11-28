@@ -50,7 +50,7 @@ _OP = _operation_codes()
 
 __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch",
            "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer",
-           "PageRank", "connected_components", "Louvain", "Leiden", "SVGP"]
+           "PageRank", "connected_components", "Louvain", "Leiden", "SVGP", "shared_neighbors_graph", "PAGA"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -2233,6 +2233,150 @@ class Leiden(_XNeighbors):
             Community of each node.
         """
         return _NATIVE(self, _OP.family_xn_graph_leiden_fit_predict, (None, A), _NATIVE_CONTEXT)
+
+# ====================================================================== shared-nearest-neighbor graph
+# Reference: Seurat `FindNeighbors` / `ComputeSNN` (src/snn.cpp): the
+# neighbor sets of a kNN graph, an edge between every two nodes that share a
+# neighbor weighted by the Jaccard index of their sets, weights below
+# `prune.SNN` dropped. One k-way merge per row of the transposed neighbor
+# lists on the device (x_neighbors/graph_par.mojo `sn_drive`); integers and
+# one float32 quotient per edge, so the same bits on every device.
+def shared_neighbors_graph(knn, prune_snn=1 / 15, numeric_mode=None, *, device=None):
+    """Shared-nearest-neighbor graph of a k-nearest-neighbor graph.
+
+    Follows Seurat's ``FindNeighbors``: two nodes are joined when their
+    neighbor sets overlap, with the Jaccard index of the two sets
+    (shared neighbors over the union) as the edge weight, and weights below
+    ``prune_snn`` are dropped. Seurat counts every cell among its own
+    neighbors, as ``NearestNeighbors.kneighbors`` on the training data
+    does; each node is then joined to itself with weight 1. The result is
+    the weighted graph :class:`Louvain` and :class:`Leiden` cluster, the
+    clustering step of a Seurat workflow.
+
+    Parameters
+    ----------
+    knn : array-like of shape (n, k), scipy.sparse matrix, or tuple
+        The neighbors of every node: an integer array whose row i lists the
+        k neighbors of node i (the indices ``kneighbors`` returns), or a
+        sparse kNN graph (a scipy.sparse matrix or an ``(indptr, indices,
+        n)`` CSR tuple) whose stored columns in row i are the neighbors of
+        node i; rows may then have different lengths.
+    prune_snn : float, default 1/15
+        Smallest Jaccard index kept, between 0 and 1 (Seurat's
+        ``prune.SNN``). 0 keeps every pair that shares a neighbor.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode for the call. None uses the process default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation.
+
+    Returns
+    -------
+    graph : scipy.sparse.csr_matrix of shape (n, n), float32
+        The symmetric shared-nearest-neighbor graph, columns sorted within
+        each row.
+
+    Raises
+    ------
+    ValueError
+        If ``prune_snn`` is outside [0, 1], a neighbor index is outside
+        [0, n), or a node is listed twice among one node's neighbors.
+    TypeError
+        If ``knn`` is a dense array that does not hold integers.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).normal(size=(500, 10)).astype(np.float32)
+    >>> knn = mojolearn.NearestNeighbors(n_neighbors=20).fit(X).kneighbors(X, return_distance=False)
+    >>> snn = mojolearn.shared_neighbors_graph(knn)
+    >>> labels = mojolearn.Louvain(resolution=0.8).fit_predict(snn)
+    """
+    return _NATIVE(None, _OP.family_xn_graph_snn, (numeric_mode, knn, prune_snn, device), _NATIVE_CONTEXT)
+
+
+# ====================================================================== PAGA
+# Reference: Scanpy `tl.paga` (Wolf et al. 2019), `PAGA._compute_connectivities_v1_2`
+# and `_get_connectivities_tree_v1_2`: the observed inter-group edge count
+# against the count expected when edges connect at random, and the maximum
+# spanning tree of the edge counts. Integer counts by atomics and a
+# widest-path closure for the tree (x_neighbors/graph_par.mojo `pg_drive`).
+class PAGA(_XNeighbors):
+    """Partition-based graph abstraction of a neighbor graph and its groups.
+
+    Follows Scanpy's ``tl.paga`` (model ``'v1.2'``): for every two groups
+    of nodes, the number of graph edges between them is compared with the
+    number expected if every node's edges went to random nodes, giving a
+    connectivity between 0 and 1; the spanning tree that keeps the most
+    edges summarizes the groups' layout. Every stored edge of the graph
+    counts once (Scanpy passes the kNN distances graph). Ties between equal
+    edge counts in the tree go to the pair of lower group indices.
+
+    Parameters
+    ----------
+    model : {'v1.2'}, default 'v1.2'
+        The PAGA connectivity model.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode for this estimator. None uses the process default.
+
+    Attributes
+    ----------
+    connectivities_ : Array of shape (n_groups, n_groups), float32
+        Symmetric connectivity of every two groups, zero on the diagonal
+        and between groups without an edge.
+    connectivities_tree_ : Array of shape (n_groups, n_groups), float32
+        The connectivities on the edges of the spanning tree (both
+        directions), zero elsewhere.
+    group_sizes_ : Array of shape (n_groups,), int32
+        Number of nodes in each group.
+    n_groups_ : int
+        Number of groups: the largest label plus one.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).normal(size=(500, 10)).astype(np.float32)
+    >>> knn = mojolearn.NearestNeighbors(n_neighbors=15).fit(X).kneighbors(X, return_distance=False)
+    >>> graph = mojolearn.shared_neighbors_graph(knn)
+    >>> labels = mojolearn.Leiden().fit_predict(graph)
+    >>> paga = mojolearn.PAGA().fit(graph, labels)
+    >>> paga.connectivities_.shape == (paga.n_groups_, paga.n_groups_)
+    True
+    """
+    _mojolearn_native_public = True
+    _mojolearn_device = True
+
+    def __init__(self, model="v1.2", *, numeric_mode=None, device=None):
+        self.model = model
+        self.numeric_mode = numeric_mode
+        self.device = device
+
+    def fit(self, A, y):
+        """Compute the group connectivities.
+
+        Parameters
+        ----------
+        A : array-like of shape (n, n), scipy.sparse matrix, or tuple
+            The neighbor graph: a dense square array (a nonzero cell is an
+            edge), a scipy.sparse matrix or an ``(indptr, indices, n)`` CSR
+            tuple (every stored entry is an edge).
+        y : array-like of shape (n,)
+            Group of every node, integers numbered from 0.
+
+        Returns
+        -------
+        self : PAGA
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If ``model`` is not 'v1.2', the graph has fewer than 2 nodes,
+            ``y`` does not have one label per node, or a label is negative
+            or larger than n - 1.
+        """
+        return _NATIVE(self, _OP.family_xn_graph_paga_fit, (None, A, y), _NATIVE_CONTEXT)
+
 
 # ====================================================================== SVGP
 # Reference: GPflow `gpflow/models/svgp.py` (SVGP with a Gaussian

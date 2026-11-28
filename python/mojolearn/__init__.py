@@ -242,6 +242,7 @@ _LAZY_NAMES = {
     "LabelSpreading": "._expansion_neighbors", "KNNImputer": "._expansion_neighbors",
     "PageRank": "._expansion_neighbors", "connected_components": "._expansion_neighbors",
     "Louvain": "._expansion_neighbors", "Leiden": "._expansion_neighbors", "SVGP": "._expansion_neighbors",
+    "shared_neighbors_graph": "._expansion_neighbors", "PAGA": "._expansion_neighbors",
     # _expansion_decomp
     "IncrementalPCA": "._expansion_decomp", "GaussianRandomProjection": "._expansion_decomp",
     "SparseRandomProjection": "._expansion_decomp", "johnson_lindenstrauss_min_dim": "._expansion_decomp",
