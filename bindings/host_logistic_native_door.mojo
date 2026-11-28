@@ -12,7 +12,8 @@ from bindings.classical_pandas_door import classical_admit_value, native_pandas_
 from bindings.sequential_admission_door import _one_of, _ordinary_torch
 from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
-from bindings.host_input_native_door import host_archive_typed, host_archive_class_values
+from bindings.host_array_native_pack import host_archive_typed
+from bindings.host_input_native_door import host_archive_class_values
 from bindings.host_input_native_door import host_tree_input
 from bindings.host_kernel_inference_native_unpack import _kernel_buffer
 from bindings.host_inference_features_unpack import host_inference_feature_names
