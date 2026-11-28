@@ -358,6 +358,73 @@ def xn_leiden_relabel_check(in_range: Bool) raises:
         raise Error("RuntimeError: Leiden: a community label fell outside [0, n)")
 
 
+# ---------------------------------------------------------------- shared-nearest-neighbor graph
+
+
+def xn_snn_prune_check(prune: Float64) raises:
+    """`prune_snn`: a Jaccard index in [0, 1] (Seurat's `prune.SNN`)."""
+    if not (prune >= 0.0 and prune <= 1.0):
+        raise Error("ValueError: prune_snn must be between 0 and 1, got " + String(prune))
+
+
+def xn_snn_shape_check(n: Int, k: Int) raises:
+    """An (n, k) neighbor-index array: at least one node and one neighbor."""
+    if n < 1 or k < 1:
+        raise Error("ValueError: shared_neighbors_graph: the neighbor-index array must be (n, k) with n >= 1 and"
+                    " k >= 1, got (" + String(n) + ", " + String(k) + ")")
+
+
+def xn_snn_request(indptr: Int, indices: Int, out_indptr: Int, out_indices: Int, out_data: Int, info: Int,
+                   n: Int, nnz: Int, k_uniform: Int, cap: Int, prune: Float64) -> XnOpRequest:
+    """The `snn` operation (graph_par.sn_drive): indptr is a length-1 dummy
+    when k_uniform > 0 (the (n, k) array's offsets are made on the image)."""
+    return XnOpRequest("snn", [indptr, indices, out_indptr, out_indices, out_data, info],
+        [n, nnz, k_uniform, cap], [xn_f32_word(prune)])
+
+
+def xn_snn_room(n: Int, nnz: Int) -> Int:
+    """The first output room of the shared-nearest-neighbor graph: four
+    entries per input entry. A row keeps the nodes whose Jaccard index with
+    it reaches the prune value; with the self entry and a kNN graph's
+    neighbors of neighbors that is a few times the row's own list, so the
+    second run (with the exact room the first one counted) is the
+    exception. A rule from the entry count, not a dataset size."""
+    return max(4 * nnz, n)
+
+
+def xn_graph_device_message(message: String, who: String) -> String:
+    """A device check's message as a ValueError from `who` on; empty when
+    the message is not one."""
+    var at = message.find(who)
+    if at < 0:
+        return String("")
+    return "ValueError: " + String(message[byte=at:message.byte_length()])
+
+
+# ---------------------------------------------------------------- PAGA
+
+
+def xn_paga_size_check(n: Int, labels: Int) raises:
+    """Two nodes at least (the null model divides by n - 1) and one label
+    per node."""
+    if n < 2:
+        raise Error("ValueError: PAGA needs a graph of at least 2 nodes, got " + String(n))
+    if labels != n:
+        raise Error("ValueError: PAGA: labels has " + String(labels) + " entries for a graph of " + String(n)
+                    + " nodes")
+
+
+def xn_paga_request(a: Int, labels: Int, conn: Int, tree: Int, sizes: Int, info: Int, n: Int,
+                    cap: Int) -> XnOpRequest:
+    return XnOpRequest("paga", [a, labels, conn, tree, sizes, info], [n, cap], List[Float64]())
+
+
+def xn_paga_csr_request(indptr: Int, indices: Int, labels: Int, conn: Int, tree: Int, sizes: Int, info: Int,
+                        n: Int, nnz: Int, cap: Int) -> XnOpRequest:
+    return XnOpRequest("paga_csr", [indptr, indices, labels, conn, tree, sizes, info], [n, nnz, cap],
+        List[Float64]())
+
+
 # ---------------------------------------------------------------- SVGP
 
 
