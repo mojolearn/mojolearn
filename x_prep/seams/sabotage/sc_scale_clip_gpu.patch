@@ -1,0 +1,13 @@
+diff --git a/x_prep/sc_prep.mojo b/x_prep/sc_prep.mojo
+--- a/x_prep/sc_prep.mojo
++++ b/x_prep/sc_prep.mojo
+@@ -1113,6 +1113,9 @@ def sp_csr_select_unit(t: Int, f: FP, q: IP):
+ 
+ @always_inline
+ def _clip(var v: Float32, mv: Float32, both: Bool) -> Float32:
++    from std.sys import is_defined
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sc_scale_clip-gpu (lane sc-prep-1): every scaled value is multiplied by 1.001 before the clip, the GPU bindings only
++        v = mul(v, Float32(1.001))
+     if v > mv:
+         return mv
+     if both and v < -mv:

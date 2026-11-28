@@ -1,0 +1,13 @@
+diff --git a/x_prep/sc_prep.mojo b/x_prep/sc_prep.mojo
+--- a/x_prep/sc_prep.mojo
++++ b/x_prep/sc_prep.mojo
+@@ -266,6 +266,9 @@ def sp_log1p_unit(t: Int, f: FP, q: IP):
+     var y = _log1p(ld(f, p(q, 0) + t))
+     if p(q, 1) >= 0:
+         y = div(y, logf(ld(f, p(q, 1))))
++    from std.sys import is_defined
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sc_log1p-gpu (lane sc-prep-1): every log1p value gains 0.001, the GPU bindings only
++        y = add(y, Float32(0.001))
+     st(f, p(q, 2) + t, y)
+ 
+ 
