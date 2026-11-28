@@ -88,6 +88,25 @@ random-order queue of the fast local move; the refinement merges greedily
 a random order; `random_state` seeds the colouring's priority hash
 (`_prio`), not a random number stream; a sweep that lowers the quality is
 undone, and an iteration that does not raise it is dropped.
+
+Shared-nearest-neighbor graph (lane sc-graph-1, 2026-11-28; Seurat
+`FindNeighbors`, `ComputeSNN`), `sn_drive`: the neighbor lists are a CSR
+in PageRank's CSR-entry slots, transposed by PageRank's own stages (one
+sort of the (column, entry) keys), and one item per row merges the sorted
+transposed lists of its neighbors (`sn_row_item`): each node sharing a
+neighbor comes out once, ascending, with the shared count, and the Jaccard
+weight s / (|N(i)| + |N(j)| - s) is kept from the prune value up. Integer
+work and one float32 quotient per kept entry: the same bits on every
+column. The result is symmetric with sorted rows, the CSR form Louvain's
+and Leiden's loaders take.
+
+PAGA (lane sc-graph-1, 2026-11-28; Scanpy `tl.paga`, the v1.2
+statistic), `pg_drive`: graph slot G0 from Louvain's loaders, the group
+edge counts and sizes by 32-bit integer atomics (order-free), the
+connectivity min(1, v / E) per pair of groups (`pg_stat_item`), and the
+spanning tree of the edge counts by a widest-path closure over unique
+integer keys (`_pg_fw`, one launch per group): integers to the last
+conversion, so the same bits on every column.
 """
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -2762,3 +2781,205 @@ def _ld_run[E: GExec](
     var inf = FP(unsafe_from_address=info)
     inf.unsafe_store(0, qbest)
     inf.unsafe_store(1, Float32(iters))
+
+
+# ------------------------------------------------------------------ shared-nearest-neighbor driver
+def sn_drive[E: GExec](
+    mut ex: E, n: Int, nnz: Int, indptr: Int, indices: Int, k_uniform: Int, prune: Float32, cap: Int,
+    out_indptr: Int, out_indices: Int, out_data: Int, info: Int,
+) raises:
+    """The shared-nearest-neighbor graph (module note at `sn_row_item`) of
+    the neighbor lists: a CSR (indptr n + 1, indices nnz) or, when
+    k_uniform > 0, an (n, k_uniform) index array whose row offsets are
+    made on the executor (`_sn_kip`). The transpose is PageRank's CSR
+    stages (one sort of the (column, entry) keys); the rows are counted,
+    scanned and filled by `sn_row_item`. info (int32 x 2): [0] the number
+    of entries of the result, [1] 1 when it exceeds `cap` (then nothing is
+    written and the caller runs again with that room). The result is a
+    symmetric CSR (out_indptr n + 1, out_indices / out_data info[0]) with
+    every row's columns ascending and its diagonal (|N(i)| > 0) at 1."""
+    var nbs = gp_scan_blocks(n)
+    var lb = Lay(SN_NSLOT)
+    lb.i(P_CNT, n + 1)
+    lb.i(P_PART, nbs + 1)
+    lb.i(P_DG, n)
+    lb.i(P_ROWS, nnz)
+    lb.f(P_RS, n)
+    lb.f(P_VALS, nnz)
+    lb.i(P_IP, n + 1)
+    lb.i(P_IDX, nnz)
+    lb.f(P_W, 1)
+    lb.i(P_SRC, nnz)
+    lb.l(P_KA, nnz)
+    lb.l(P_KB, nnz)
+    lb.i(P_IC, 4)
+    lb.i(SN_PTR, nnz)
+    lb.i(SN_OFF, n + 1)
+    lb.i(SN_PART, nbs + 1)
+    lb.i(SN_COL, cap)
+    lb.f(SN_VAL, cap)
+    var g = ex.alloc(lb)
+    var q = g
+    q.n0 = n
+    if k_uniform > 0:
+        q.n4 = k_uniform
+        ex.run(SN_KIP, n + 1, q)
+    else:
+        ex.up_i(P_IP, indptr, n + 1)
+    if nnz > 0:
+        ex.up_i(P_IDX, indices, nnz)
+    var z = g
+    z.n4 = P_IC
+    ex.run(GP_IZERO, 4, z)
+    # the transpose: PageRank's CSR-entry stages, unweighted (n1 = 1, n3 = 0)
+    var c = g
+    c.n0 = n
+    c.n1 = 1
+    c.n2 = nnz
+    c.n3 = 0
+    ex.run(PR_CSR_ROW, n, c)
+    var ic = ex.get_is(P_IC, 2)
+    if Int(ic[1]) != 0:
+        raise Error("shared_neighbors_graph: a neighbor index is outside [0, n)")
+    if nnz > 0:
+        c.n4 = gp_sort(ex, g, P_KA, P_KB, nnz)
+    else:
+        c.n4 = P_KA
+    ex.run(PR_CSR_OFF, n + 1, c)
+    ex.run(PR_CSR_FILL, nnz, c)
+    # count, scan, fill
+    var r = g
+    r.n0 = n
+    r.n5 = 0
+    r.x0 = prune
+    ex.run(SN_ROW, n, r)
+    var dup = ex.get_is(P_IC, 3)
+    if Int(dup[2]) != 0:
+        raise Error("shared_neighbors_graph: a node appears twice among one node's neighbors")
+    gp_scan(ex, g, SN_OFF, SN_PART, n)
+    var total = ex.get_i(SN_OFF, n)
+    var inf = IP(unsafe_from_address=info)
+    inf.unsafe_store(0, Int32(total))
+    if total > cap:
+        inf.unsafe_store(1, Int32(1))
+        return
+    inf.unsafe_store(1, Int32(0))
+    r.n5 = 1
+    ex.run(SN_ROW, n, r)
+    ex.down_i(SN_OFF, out_indptr, n + 1)
+    if total > 0:
+        ex.down_i(SN_COL, out_indices, total)
+        ex.down_f(SN_VAL, out_data, total)
+
+
+# ------------------------------------------------------------------ PAGA driver
+def _pg_layout(mut lb: Lay, n: Int, nnz: Int, c: Int):
+    """PAGA's slots: graph G0 and the loaders' words, the labels, the c x c
+    words."""
+    lb.i(L_G0, n + 1)
+    lb.i(L_G0 + 1, nnz)
+    lb.i(L_G0 + 2, nnz)
+    lb.f(L_G0 + 3, nnz)
+    lb.i(L_PART, gp_scan_blocks(n) + 1)
+    lb.i(L_LAB, n)
+    lb.i(L_IC, 8)
+    lb.i(PG_LAB, n)
+    lb.i(PG_CNT, c * c)
+    lb.i(PG_NS, c)
+    lb.i(PG_ES, c)
+    lb.l(PG_EK, c * c)
+    lb.l(PG_W, c * c)
+    lb.f(PG_CON, c * c)
+    lb.f(PG_TREE, c * c)
+
+
+def pg_drive[E: GExec](
+    mut ex: E, n: Int, nnz: Int, csr: Bool, indptr: Int, indices: Int, labels: Int, cap: Int,
+    conn: Int, tree: Int, sizes: Int, info: Int,
+) raises:
+    """PAGA (module note at `pg_stat_item`) of the graph (the dense n x n
+    input held by the executor, or the caller's CSR: indptr n + 1, indices
+    nnz) and the int32 labels (n). The group count c is the largest label
+    plus one (an atomic max on the executor). info (int32 x 2): [0] c,
+    [1] 1 when c * c exceeds `cap` (nothing else is done: the caller runs
+    again with that room). Out: conn and tree (c x c float32, row-major,
+    symmetric), sizes (c int32)."""
+    var la = Lay(PG_NSLOT)
+    la.i(PG_LAB, n)
+    la.i(L_IC, 8)
+    var g = ex.alloc(la)
+    ex.up_i(PG_LAB, labels, n)
+    var z = g
+    z.n4 = L_IC
+    ex.run(GP_IZERO, 8, z)
+    ex.run(PG_LMAX, n, g)
+    var ic = ex.get_is(L_IC, 2)
+    if Int(ic[1]) != 0:
+        raise Error("PAGA: a group label is negative")
+    var c = Int(ic[0])
+    var inf = IP(unsafe_from_address=info)
+    inf.unsafe_store(0, Int32(c))
+    if c * c > cap:
+        inf.unsafe_store(1, Int32(1))
+        return
+    inf.unsafe_store(1, Int32(0))
+    # graph slot G0 by Louvain's loaders, every stored edge once
+    var m = nnz
+    if csr:
+        var lb = Lay(PG_NSLOT)
+        _pg_layout(lb, n, nnz, c)
+        g = ex.alloc(lb)
+        ex.up_i(L_G0, indptr, n + 1)
+        if nnz > 0:
+            ex.up_i(L_G0 + 2, indices, nnz)
+        var q = g
+        q.n0 = n
+        q.n1 = 1
+        q.n4 = L_IC
+        ex.run(GP_IZERO, 8, q)
+        ex.run(LV_CSRSRC, n, q)
+        var ck = ex.get_is(L_IC, 4)
+        if Int(ck[3]) != 0:
+            raise Error("PAGA: a column index of the CSR adjacency is outside [0, n)")
+    else:
+        var lc = Lay(PG_NSLOT)
+        lc.i(L_G0, n + 1)
+        lc.i(L_PART, gp_scan_blocks(n) + 1)
+        lc.i(L_LAB, n)
+        g = ex.alloc(lc)
+        var q0 = g
+        q0.n0 = n
+        ex.run(LV_ROWCNT, n, q0)
+        gp_scan(ex, g, L_G0, L_PART, n)
+        m = ex.get_i(L_G0, n)
+        var lb = Lay(PG_NSLOT)
+        _pg_layout(lb, n, m, c)
+        g = ex.alloc(lb)
+        var q = g
+        q.n0 = n
+        ex.run(LV_ROWCNT, n, q)
+        gp_scan(ex, g, L_G0, L_PART, n)
+        ex.run(LV_FILL, n, q)
+    ex.up_i(PG_LAB, labels, n)
+    var zc = g
+    zc.n4 = PG_CNT
+    ex.run(GP_IZERO, c * c, zc)
+    zc.n4 = PG_NS
+    ex.run(GP_IZERO, c, zc)
+    var s = g
+    s.n0 = n
+    s.n1 = c
+    s.n6 = 0
+    ex.run(PG_EDGE, n, s)
+    ex.run(PG_ES, c, s)
+    ex.run(PG_STAT, c * c, s)
+    for k in range(c):  # driver-loop: over the groups of the widest-path closure (one launch per round)
+        var f = s
+        f.n4 = k
+        ex.run(PG_FW, c * c, f)
+    ex.run(PG_TREE, c * c, s)
+    if c > 0:
+        ex.down_f(PG_CON, conn, c * c)
+        ex.down_f(PG_TREE, tree, c * c)
+        ex.down_i(PG_NS, sizes, c)
+    _ = m
