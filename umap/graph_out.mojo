@@ -4,10 +4,12 @@
 2026-11-28): the fuzzy simplicial set as CSR (`UMAP.graph_`, umap-learn's
 `graph_`) and the curve's (a, b) the optimizer used (`a_`, `b_`).
 
-The fit already holds the finished CSR on the host (the graph build reads it
-back once into `SparseFuzzySimplicialGraph`, umap/sparse_graph.mojo; the CPU
-column builds it on the host): publishing it is one memcpy per array into the
-caller's arrays, no device read and no pass over the edges. The caller sizes
+The graph build holds the finished CSR on the host (it reads it back once
+into `SparseFuzzySimplicialGraph`, umap/sparse_graph.mojo; the CPU column
+builds it on the host): publishing it is one memcpy per array into the
+caller's arrays, no device read and no pass over the edges. The public fit
+does not ask for it (lane sc-leftovers-1, 2026-11-28): `UMAP.graph_` is
+UMAP_OP_FIT_GRAPH, the same graph body run when the attribute is read. The caller sizes
 the arrays by `umap_graph_capacity` (the stored-edge bound below) before the
 fit, since the edge count is known only after it; the door trims them to the
 count `indptr[n]` names. A leaf with no device and no Python imports, so the
