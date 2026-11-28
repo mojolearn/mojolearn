@@ -77,12 +77,62 @@ default) repeats the algorithm until the partition stops improving, and `random_
 in which nodes move. The moves run in parallel in a fixed order, so the partition is reproducible but
 can differ from leidenalg's.
 
-In a single-cell workflow the communities are usually drawn on a UMAP map. Scanpy's `tl.umap` uses
-`min_dist=0.5`, while the `UMAP` default is 0.1, so pass it to get the same spacing:
+## Single-cell workflows
+
+The steps of the Scanpy and Seurat tutorials after normalization and PCA are graph steps, and each has a
+Mojolearn counterpart. They all start from the k nearest neighbors of every cell, computed on the PCA
+coordinates (`pcs` below, one row per cell).
 
 ```python
-embedding = mojolearn.UMAP(n_neighbors=15, min_dist=0.5).fit_transform(X)
+import numpy as np
+import mojolearn
+
+pcs = np.random.default_rng(0).normal(size=(5_000, 30)).astype(np.float32)
+knn = mojolearn.NearestNeighbors(n_neighbors=20).fit(pcs).kneighbors(pcs, return_distance=False)
 ```
+
+**Seurat** (`FindNeighbors`, then `FindClusters`): `shared_neighbors_graph` joins two cells when their
+neighbor lists overlap, weighted by the Jaccard index of the two lists, and drops weights below
+`prune_snn` (Seurat's `prune.SNN`, 1/15 by default). Each cell counts among its own neighbors, as
+`kneighbors` on the training data returns it, so the result matches Seurat's `snn` graph. Cluster it with
+`Louvain`, Seurat's default algorithm, or with `Leiden`:
+
+```python
+snn = mojolearn.shared_neighbors_graph(knn, prune_snn=1 / 15)   # scipy.sparse CSR
+clusters = mojolearn.Louvain(resolution=0.8).fit_predict(snn)
+```
+
+**Scanpy** (`pp.neighbors`, `tl.leiden`, `tl.diffmap`, `tl.paga`, `tl.umap`): cluster the neighbor graph
+with `Leiden`, then summarize it. `DiffusionMap` returns Scanpy's `X_diffmap` (`embedding_`) and
+`diffmap_evals` (`eigenvalues_`) from a symmetric weighted graph; the first component is the stationary
+one, as in Scanpy. `PAGA` compares the edges between every two clusters with the number expected if
+edges were random (Scanpy's `paga` model `'v1.2'`) and keeps the spanning tree of the strongest links:
+
+```python
+graph = snn   # or any symmetric connectivity matrix, such as UMAP's fuzzy graph
+groups = mojolearn.Leiden(resolution=1.0).fit_predict(graph)
+
+dm = mojolearn.manifold.DiffusionMap(n_comps=15).fit(graph)
+print(dm.eigenvalues_[:5])
+
+paga = mojolearn.PAGA().fit(graph, groups)
+print(paga.connectivities_.shape, paga.connectivities_tree_.shape)
+```
+
+Scanpy counts PAGA's edges on the directed neighbor lists; pass those (each row's neighbors as a sparse
+matrix or an `(indptr, indices, n)` tuple) to count them the same way.
+
+The clusters are usually drawn on a UMAP map. Scanpy's `tl.umap` uses `min_dist=0.5`, while the `UMAP`
+default is 0.1, so pass it to get the same spacing:
+
+```python
+embedding = mojolearn.UMAP(n_neighbors=15, min_dist=0.5).fit_transform(pcs)
+```
+
+Every step runs on the GPU and gives the same result on every device in `identical` mode. Partitions,
+diffusion components and PAGA trees can differ from Scanpy's and Seurat's in tie-breaks and in the last
+digits: the clustering moves nodes in a fixed parallel order, and the eigenvectors come from a seeded
+solver in single precision.
 
 ## Saving a model
 
