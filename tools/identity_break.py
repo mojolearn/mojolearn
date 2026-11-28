@@ -3637,6 +3637,37 @@ def _block_weights(lane, shapes, ones=(), near_one=()):
 _DUMP_TAG = ""
 
 
+# THE NINE VARIANTS SHARE A LANE'S OPTION UNITS (lane verify-light-1, 2026-11-28; AGENTS.md "Verification has light
+# fixtures": a lane reaches each code path ONCE, and a cell over 10 s on the Apple laptop is a fixture defect). A lane
+# whose body is a list of independent units (a cross-product of options over one estimator, or the public classes of
+# a mechanism lane) fitted every unit on every one of the nine fixtures, so the protocol paid each option nine times
+# though the option is a code path and the fixture is a data pathology. A lane that opts in with `_spread(units)`
+# keeps its ANCHOR units (the first `anchor`: the fit that answers the infer, model and batch columns) on all nine
+# cells, and deals the rest round robin over the nine fixtures in FIXTURES order: option unit i runs on the cell of
+# FIXTURES[i % 9] only, so every unit still runs once per side, every cell still hashes its anchor on its own
+# pathology, and a cell pays its anchor plus about a ninth of the options. A fault arm that reaches one option still
+# moves the lane (tools/coverage_sabotage.py counts a lane caught when ANY of its fixtures moved). The fixture is read
+# from `_DUMP_TAG` ("<lane>/<fixture>/<repeat>"), which the record loop below and `python -m mojolearn verify`
+# (python/mojolearn/_verify_all.py: the record, the smoke, the cross-check and the model emit) set before every lane
+# call; with no tag (a caller outside the protocol) every unit runs.
+def _cell_fixture():
+    """The fixture of the cell being run, from `_DUMP_TAG`; "" when no caller set one."""
+    fields = _DUMP_TAG.split("/")
+    return fields[1] if len(fields) >= 3 and fields[1] in FIXTURES else ""
+
+
+def _cell_takes(slot):
+    """True when option unit `slot` (0-based, after the anchors) belongs to this cell (`_spread`)."""
+    fx = _cell_fixture()
+    return not fx or slot % len(FIXTURES) == FIXTURES.index(fx)
+
+
+def _spread(units, anchor=1):
+    """`units` as this cell runs them: the first `anchor` always, then the option units `_cell_takes` deals here."""
+    units = list(units)
+    return units[:anchor] + [u for i, u in enumerate(units[anchor:]) if _cell_takes(i)]
+
+
 def _dump(arrays):
     d = os.environ.get("MOJOLEARN_IDENTITY_DUMP_DIR", "")
     if not d or not _DUMP_TAG:

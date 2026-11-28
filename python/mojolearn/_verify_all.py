@@ -1602,6 +1602,8 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
             t0 = time.time()
             X, yc, yr = harness.fixture(fx)
             held = harness.heldout(fx)
+            # the cell tag the lanes read (`_cell_fixture`), as the record loop sets it
+            harness._DUMP_TAG = f"{lane}/{fx}/0"
             try:
                 # fitted on the GPU side through device="gpu" (the device view)
                 fit, gml = harness.call_lane(lane, ml, "gpu", X, yc, yr, held.copy())
@@ -5266,6 +5268,7 @@ def _cmd_emit_models(args, ml):
             data[fixture] = (harness.fixture(fixture), harness.heldout(fixture))
         (X, yc, yr), Xh = data[fixture]
         # the GPU side through device="gpu", as the GPU columns were recorded
+        harness._DUMP_TAG = f"{lane}/{fixture}/0"
         fit, _ = harness.call_lane(lane, ml, "gpu", X, yc, yr, Xh.copy())
         sl = harness._save_load(fit.est)
         if sl is None:
