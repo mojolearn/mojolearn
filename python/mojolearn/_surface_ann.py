@@ -60,4 +60,6 @@ TRAINING_LANE_NAMES = {"x-ann-ivf-pq": "the IVF-PQ index", "x-ann-tsne": "t-SNE"
                        "x-ann-refine-euclidean": "exact candidate refine under euclidean distance",
     # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table (RECORD OWED)
     "fn-refine": "refine on host and device-resident inputs",}
-PUBLIC_PENDING_LANES = {}
+# lane sc-ann-1 (2026-11-28): RECORD OWED (the next release record)
+PUBLIC_PENDING_LANES = {"x-ann-knn-graph": "no reference", "x-ann-knn-graph-ivf": "no reference",
+                        "x-ann-knn-graph-ivf-all": "no reference"}

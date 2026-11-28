@@ -1,0 +1,38 @@
+diff --git a/x_ann/knn_graph_device.mojo b/x_ann/knn_graph_device.mojo
+index 30eda52124..20c63ee511 100644
+--- a/x_ann/knn_graph_device.mojo
++++ b/x_ann/knn_graph_device.mojo
+@@ -10,6 +10,7 @@ column is x_ann/host/knn_graph_host.mojo, the same words under IDENTICAL."""
+ from max.gpu import block_idx, block_dim, thread_idx
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from checks.numerics import identical_sqrt
++from std.memory import bitcast
+ from x_ann.device_ctx import x_ann_ctx
+ from x_ann.io import upload_f32_ptr, download_f32_into, download_i32_into
+ from x_ann.knn_device import knn_enqueue
+@@ -28,6 +29,14 @@ def kg_root_kernel(dist: F32P, total: Int32):
+         dist.unsafe_store(e, identical_sqrt(dist.unsafe_load(e)))
+ 
+ 
++def kg_ulp_sabotage_kernel(dist: F32P, total: Int32):
++    # SABOTAGE (never shipped): one ulp up on every graph distance
++    var e = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if e < Int(total):
++        var w = bitcast[DType.uint32](dist.unsafe_load(e))
++        dist.unsafe_store(e, bitcast[DType.float32](w + UInt32(1)))
++
++
+ def knn_graph_device_ptr(
+     xp: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int, k: Int, plan: KnnGraphPlan,
+     dist_p: MutPointer[Float32, MutUntrackedOrigin], idx_p: MutPointer[Int32, MutUntrackedOrigin], root: Bool,
+@@ -52,6 +61,10 @@ def knn_graph_device_ptr(
+             dnd.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(total),
+             grid_dim=(total + KG_TPB - 1) // KG_TPB, block_dim=KG_TPB,
+         )
++    ctx.enqueue_function[kg_ulp_sabotage_kernel](
++        dnd.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(total),
++        grid_dim=(total + KG_TPB - 1) // KG_TPB, block_dim=KG_TPB,
++    )
+     download_f32_into(ctx, dnd, total, dist_p)
+     download_i32_into(ctx, dni, total, idx_p)
+     _ = dx^  # the rows outlive every launch above (the downloads drain the queue)
