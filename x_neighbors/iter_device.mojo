@@ -89,8 +89,8 @@ from x_neighbors.device_ops import (
 )
 from x_neighbors.items import K_RBF, U_IDENTITY
 from x_neighbors.lp_spmm import lp_ell_fill_kernel, lp_ell_spmm_enqueue, lp_rowcount_kernel
-from autograd.program_loop import LoopTimers
-from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_criterion_below, loop_lap
+from core.bounded_loop import LoopTimers
+from core.bounded_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_criterion_below, loop_lap
 from core.step_gate import STEP_DONE, STEP_ITER, STEP_STOP_ITER, step_gate_open_word
 from core.device_zero import enqueue_fill
 from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop

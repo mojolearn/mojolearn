@@ -123,8 +123,8 @@ from cluster.impl.detail.min_cluster_distance_compute import (
     min_cluster_and_distance_compute_gated,
 )
 from core.device_plan import DevicePlan
-from autograd.program_loop import LoopTimers
-from autograd.program_loop_device import (
+from core.bounded_loop import LoopTimers
+from core.bounded_loop_device import (
     LoopRegisters, LoopStep, bounded_device_loop, loop_criterion_below, loop_lap,
 )
 from cluster.multi_gpu import assignment_device_count, kmeans_device_plan

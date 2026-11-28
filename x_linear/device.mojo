@@ -52,8 +52,8 @@ from x_linear.sgd_end import sgd_mb_ovr_act_kernel, sgd_mb_ovr_res_kernel, sgd_f
 from x_linear.sgd_loop_words import sgd_loop_store
 from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 # lane n3b-sgd-on-program-fit: the SGD epochs on the executor's bounded device loop
-from autograd.program_loop import LoopTimers, fit_epochs_per_read
-from autograd.program_loop_device import LoopOutcome, LoopRegisters, LoopStep, bounded_device_loop, loop_lap
+from core.bounded_loop import LoopTimers, fit_epochs_per_read
+from core.bounded_loop_device import LoopOutcome, LoopRegisters, LoopStep, bounded_device_loop, loop_lap
 from x_linear.vfold import vscratch
 from x_linear.sgd import LR_INVSCALING
 from x_linear.sgd import (

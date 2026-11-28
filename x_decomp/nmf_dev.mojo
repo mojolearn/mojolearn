@@ -20,8 +20,8 @@ CD 1-2 violation words per iteration."""
 from std.memory import unsafe_memcpy
 from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext
-from autograd.program_loop import LoopTimers
-from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_lap
+from core.bounded_loop import LoopTimers
+from core.bounded_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_lap
 from core.step_gate import STEP_DONE, STEP_FAIL, STEP_ITER, STEP_STOP_ITER
 from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from x_decomp.cells import F32Ptr, I32Ptr, add
