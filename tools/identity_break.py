@@ -6402,12 +6402,13 @@ def _(ml, X, yc, yr, Xh=None):
     Xc = _gbdt_cat_x(X[:crows])
     w = _hw((crows,), "gbdt-gaps:rest-cat:sample_weight", 0.25, 4.0)
     cat_parts = {}
-    for name, loss, ys, (cols, cats), options in [
+    # lane verify-light-1, 2026-11-28 (`_spread`): option slots 4-6, after the four of the numeric fits above
+    for name, loss, ys, (cols, cats), options in [u for i, u in enumerate([
         ("logloss_all", "Logloss", yc[:crows], _GBDT_CAT_ALL, _GBDT_CAT_PLAIN),
         ("rmse_ctr_defaults", "RMSE", yr[:crows], _GBDT_CAT_CTR, _GBDT_CAT_DEFAULTS),
         ("logloss_onehot_bernoulli", "Logloss", yc[:crows], _GBDT_CAT_ONEHOT,
          dict(bootstrap_type="Bernoulli", subsample=0.7, random_strength=0.0)),
-    ]:
+    ]) if _cell_takes(4 + i)]:
         kw = dict(n_estimators=_GBDT_GAPS_TREES, max_depth=4, learning_rate=_GBDT_GAPS_RATE, l2_leaf_reg=3.0,
                   border_count=128, leaf_estimation_iterations=1, boosting_type="Plain",
                   random_state=7, loss=loss, cat_features=list(cats))
@@ -6431,8 +6432,8 @@ def _(ml, X, yc, yr, Xh=None):
     groups, rel = _rank_groups(rows), _relevance(yr[:rows])
     w = _hw((rows,), "gbdt-gaps:special:sample_weight", 0.25, 4.0)
     pw = dict(use_pointwise_searcher=True)
-    parts, first = {}, None
-    for name, loss, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, loss, options in deal.units([
         ("QueryRMSE", "QueryRMSE", {}),
         ("QueryRMSE_bayesian_noise", "QueryRMSE", dict(bootstrap_type="Bayesian", bagging_temperature=1.0,
                                                        random_strength=1.0)),
@@ -6440,7 +6441,7 @@ def _(ml, X, yc, yr, Xh=None):
         ("YetiRank_pointwise_cosine", "YetiRank", dict(pw, score_function="Cosine")),
         ("PairLogit_pointwise_bernoulli", "PairLogit", dict(pw, score_function="Cosine",
                                                             bootstrap_type="Bernoulli", subsample=0.7)),
-    ]:
+    ]):
         kw = dict(loss=loss, max_depth=4, n_estimators=10, leaf_estimation_method="Newton",
                   leaf_estimation_iterations=1)
         kw.update(options)
@@ -6450,10 +6451,12 @@ def _(ml, X, yc, yr, Xh=None):
         first = first if first is not None else m
     wo = _hw((X.shape[0],), "gbdt-gaps:special:ordered_weight", 0.25, 4.0)
     perm = np.argsort(_hashed_uniform(X.shape[0], 1, "ordered-permutation").reshape(-1), kind="stable")
-    om = ml.OrderedRMSE(n_estimators=_GBDT_GAPS_TREES, max_depth=4).fit(X, yr, permutation=perm, sample_weight=wo)
-    parts["OrderedRMSE_weighted"] = _h(om.predict(X))
-    fm = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(_coded(X), yr, sample_weight=wo)
-    parts["FeatureFreq_weighted"] = _h(fm.predict(_coded(X)))
+    if deal.take():
+        om = ml.OrderedRMSE(n_estimators=_GBDT_GAPS_TREES, max_depth=4).fit(X, yr, permutation=perm, sample_weight=wo)
+        parts["OrderedRMSE_weighted"] = _h(om.predict(X))
+    if deal.take():
+        fm = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(_coded(X), yr, sample_weight=wo)
+        parts["FeatureFreq_weighted"] = _h(fm.predict(_coded(X)))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -6473,8 +6476,8 @@ def _(ml, X, yc, yr, Xh=None):
     dw = dict(grow_policy="Depthwise", score_function="Cosine")
     lg = dict(grow_policy="Lossguide", max_leaves=16, min_data_in_leaf=4)
     newton = dict(leaf_estimation_method="Newton", leaf_estimation_iterations=1)
-    parts, first = {}, None
-    for name, Xf, yf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, Xf, yf, options in deal.units([
         ("symmetric_rmse_ff", X, yr, dict(loss="RMSE", boost_from_average=False, feature_fraction=0.5, **newton)),
         ("symmetric_rmse_nan_min", Xn, yr, dict(loss="RMSE", boost_from_average=True, nan_mode="Min", **newton)),
         ("depthwise_rmse_nan_max", Xn, yr, dict(dw, loss="RMSE", boost_from_average=True, nan_mode="Max",
@@ -6496,24 +6499,25 @@ def _(ml, X, yc, yr, Xh=None):
         ("pointwise_unweighted", X, yc, dict(loss="Logloss", score_function="L2", use_pointwise_searcher=True,
                                              bootstrap_type="Bayesian", bagging_temperature=0.5,
                                              boost_from_average=True)),
-    ]:
+    ]):
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**options)).fit(Xf, yf)
         _gbdt_gaps_parts(parts, name, m, Xf)
         first = first if first is not None else m
     # the pointwise losses on a non-symmetric tree with an eval set: the
     # held-out curve, the detector's stop and the shrink, hashed
-    Xe = np.ascontiguousarray(Xh[:rows])
-    yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows]
-    yen = (_pos(yeh) + _hw((rows,), "gbdt-gaps:shape:eval_noise", 0.0, 3.0)).astype(np.float32)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(lg, loss="MAE", score_function="NewtonL2",
-                                                    leaf_estimation_method="Exact", n_estimators=30,
-                                                    learning_rate=1.0, max_depth=6, od_type="Iter", od_wait=2,
-                                                    use_best_model=True, best_model_min_trees=3))
-                             ).fit(X, y, eval_set=(Xe, yen))
-    _gbdt_gaps_parts(parts, "lossguide_mae_exact_eval", ev, X)
-    parts["lossguide_mae_exact_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["lossguide_mae_exact_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                            ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows]
+        yen = (_pos(yeh) + _hw((rows,), "gbdt-gaps:shape:eval_noise", 0.0, 3.0)).astype(np.float32)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(lg, loss="MAE", score_function="NewtonL2",
+                                                        leaf_estimation_method="Exact", n_estimators=30,
+                                                        learning_rate=1.0, max_depth=6, od_type="Iter", od_wait=2,
+                                                        use_best_model=True, best_model_min_trees=3))
+                                 ).fit(X, y, eval_set=(Xe, yen))
+        _gbdt_gaps_parts(parts, "lossguide_mae_exact_eval", ev, X)
+        parts["lossguide_mae_exact_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["lossguide_mae_exact_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                                ev.best_iteration_], dtype=np.int64))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -6541,8 +6545,8 @@ def _(ml, X, yc, yr, Xh=None):
     pw_rmse = dict(loss="RMSE", score_function="L2", use_pointwise_searcher=True, bootstrap_type="Bayesian",
                    bagging_temperature=0.5, boost_from_average=True, leaf_estimation_method="Newton",
                    leaf_estimation_iterations=1)
-    parts, first = {}, None
-    for name, Xf, yf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, Xf, yf, options in deal.units([
         ("symmetric_mae_exact_ff", X, y, dict(loss="MAE", leaf_estimation_method="Exact", feature_fraction=0.5)),
         ("onevsall_ff", X, t3, dict(loss="MultiClassOneVsAll", feature_fraction=0.5,
                                     leaf_estimation_method="Newton", leaf_estimation_iterations=1)),
@@ -6550,12 +6554,12 @@ def _(ml, X, yc, yr, Xh=None):
                                                bootstrap_type="Bayesian", bagging_temperature=1.0,
                                                leaf_estimation_method="Newton", leaf_estimation_iterations=1)),
         ("pointwise_rmse", X, yr, pw_rmse),
-    ]:
+    ]):
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**options)).fit(Xf, yf)
         _gbdt_gaps_parts(parts, name, m, Xf)
         first = first if first is not None else m
     # the held-out fits: the curve, the detector's stop and the shrink, hashed
-    for name, yf, ye, options in [
+    for name, yf, ye, options in deal.units([
         ("symmetric_quantile_eval", y, yen, dict(stop, loss="Quantile", loss_alpha=0.3,
                                                  leaf_estimation_method="Gradient",
                                                  leaf_estimation_iterations=1)),
@@ -6565,7 +6569,7 @@ def _(ml, X, yc, yr, Xh=None):
                                                                   od_type="Iter", od_wait=2,
                                                                   use_best_model=True,
                                                                   best_model_min_trees=3)),
-    ]:
+    ]):
         ev = ml.GradientBoosting(**_gbdt_gaps_kw(**options)).fit(X, yf, eval_set=(Xe, ye))
         _gbdt_gaps_parts(parts, name, ev, X)
         parts[name + ":test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
@@ -6575,7 +6579,7 @@ def _(ml, X, yc, yr, Xh=None):
     # beside a CTR column (column 0) and a one-hot column (column 2)
     Xc = _gbdt_cat_x(X)
     Xc[::8, 3] = np.float32(np.nan)
-    for name, (cols, cats) in [("cat_ctr_nan", _GBDT_CAT_CTR), ("cat_onehot_nan", _GBDT_CAT_ONEHOT)]:
+    for name, (cols, cats) in deal.units([("cat_ctr_nan", _GBDT_CAT_CTR), ("cat_onehot_nan", _GBDT_CAT_ONEHOT)]):
         Xs = np.ascontiguousarray(Xc[:, cols])
         m = ml.GradientBoosting(**_gbdt_gaps_kw(loss="RMSE", cat_features=list(cats), nan_mode="Min",
                                                 boost_from_average=False, leaf_estimation_iterations=1)
@@ -6900,8 +6904,8 @@ def _(ml, X, yc, yr, Xh=None):
     w = _hw((rows,), "gbdt-symmetric-rest:sample_weight", 0.25, 4.0)
     y3 = np.digitize(yr, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
     sym = dict(score_function="Cosine", leaf_estimation_iterations=1, boost_from_average=False)
-    parts, first = {}, None
-    for name, yf, wf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, yf, wf, options in deal.units([
         # lane gbdt-units-7: no score noise under L2 -- the public API has
         # refused random_strength > 0 with L2 / NewtonL2 since 2026-08-21 on
         # both columns (catboost_options.check, gbdt_validate_search_options:
@@ -6928,7 +6932,7 @@ def _(ml, X, yc, yr, Xh=None):
         ("ordered_crossentropy_newtoncosine_bfa", yc, None, dict(loss="CrossEntropy", boosting_type="Ordered",
                                                                  score_function="NewtonCosine",
                                                                  boost_from_average=True)),
-    ]:
+    ]):
         kw = dict(sym)
         kw.update(options)
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yf, sample_weight=wf)
@@ -6936,22 +6940,24 @@ def _(ml, X, yc, yr, Xh=None):
         parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
         first = first if first is not None else m
     # the held-out fit: NewtonCosine with Gradient leaves, the curve, the stop
-    Xe = np.ascontiguousarray(Xh[:rows])
-    ye = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
-    kw = dict(sym, loss="RMSE", score_function="NewtonCosine", leaf_estimation_method="Gradient",
-              n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True,
-              best_model_min_trees=3)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yr, eval_set=(Xe, ye))
-    _gbdt_gaps_parts(parts, "rmse_newtoncosine_gradient_eval", ev, X)
-    parts["rmse_newtoncosine_gradient_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["rmse_newtoncosine_gradient_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                                   ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        ye = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
+        kw = dict(sym, loss="RMSE", score_function="NewtonCosine", leaf_estimation_method="Gradient",
+                  n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True,
+                  best_model_min_trees=3)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yr, eval_set=(Xe, ye))
+        _gbdt_gaps_parts(parts, "rmse_newtoncosine_gradient_eval", ev, X)
+        parts["rmse_newtoncosine_gradient_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["rmse_newtoncosine_gradient_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                                       ev.best_iteration_], dtype=np.int64))
     # Logloss L2 with boost_from_average over one CTR column (40 categories)
-    cols, cats = _GBDT_CAT_CTR
-    Xc = np.ascontiguousarray(_gbdt_cat_x(X)[:, cols])
-    kw = dict(sym, loss="Logloss", score_function="L2", cat_features=list(cats), boost_from_average=True)
-    mc = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xc, yc)
-    _gbdt_gaps_parts(parts, "logloss_l2_ctr_bfa", mc, Xc)
+    if deal.take():
+        cols, cats = _GBDT_CAT_CTR
+        Xc = np.ascontiguousarray(_gbdt_cat_x(X)[:, cols])
+        kw = dict(sym, loss="Logloss", score_function="L2", cat_features=list(cats), boost_from_average=True)
+        mc = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xc, yc)
+        _gbdt_gaps_parts(parts, "logloss_l2_ctr_bfa", mc, Xc)
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -6973,8 +6979,8 @@ def _(ml, X, yc, yr, Xh=None):
     y3 = np.digitize(yr, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
     y2 = np.ascontiguousarray(np.stack([yr, (yc - np.float32(0.5)) * yr], axis=1).astype(np.float32))
     sym = dict(score_function="Cosine", boost_from_average=False)
-    parts, first = {}, None
-    for name, yf, wf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, yf, wf, options in deal.units([
         ("multiclass_newton3", y3, None, dict(loss="MultiClass", leaf_estimation_method="Newton",
                                               leaf_estimation_iterations=3)),
         ("multiclass_gradient_default", y3, None, dict(loss="MultiClass", leaf_estimation_method="Gradient")),
@@ -6992,7 +6998,7 @@ def _(ml, X, yc, yr, Xh=None):
         ("multirmse_newton2", y2, None, dict(loss="MultiRMSE", leaf_estimation_method="Newton",
                                              leaf_estimation_iterations=2)),
         ("logloss_border255", yc, None, dict(loss="Logloss", leaf_estimation_iterations=1, border_count=255)),
-    ]:
+    ]):
         kw = dict(sym)
         kw.update(options)
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yf, sample_weight=wf)
@@ -7000,17 +7006,18 @@ def _(ml, X, yc, yr, Xh=None):
         parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
         first = first if first is not None else m
     # the held-out fit: MultiClass Gradient, the curve, the stop
-    Xe = np.ascontiguousarray(Xh[:rows])
-    ye = labels_for(Xh, HELDOUT_SEED)[1][:rows]
-    y3e = np.digitize(ye, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
-    kw = dict(sym, loss="MultiClass", leaf_estimation_method="Gradient", leaf_estimation_iterations=2,
-              n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True,
-              best_model_min_trees=3)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, y3, eval_set=(Xe, y3e))
-    _gbdt_gaps_parts(parts, "multiclass_gradient_eval", ev, X)
-    parts["multiclass_gradient_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["multiclass_gradient_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                            ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        ye = labels_for(Xh, HELDOUT_SEED)[1][:rows]
+        y3e = np.digitize(ye, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
+        kw = dict(sym, loss="MultiClass", leaf_estimation_method="Gradient", leaf_estimation_iterations=2,
+                  n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True,
+                  best_model_min_trees=3)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, y3, eval_set=(Xe, y3e))
+        _gbdt_gaps_parts(parts, "multiclass_gradient_eval", ev, X)
+        parts["multiclass_gradient_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["multiclass_gradient_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                                ev.best_iteration_], dtype=np.int64))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
