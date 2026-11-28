@@ -324,11 +324,16 @@ def main(argv):
         print(n)
     elif what == "describe":
         print("%d\t%s" % (n, why))
+    elif what == "mem-kb":
+        available = mem_available_bytes()
+        if available is None:
+            return 1
+        print(available // 1024)
     elif what == "usage":   # "<wall us> <cpu us> <source>" for the shell samplers, or "none"
         wall, cpu, source = usage_sample()
         print("none" if cpu is None else "%d %d %s" % (wall * 1e6, cpu * 1e6, source.replace(" ", "_")))
     else:
-        print("usage: _allocation.py cores|describe|usage", file=sys.stderr)
+        print("usage: _allocation.py cores|describe|mem-kb|usage", file=sys.stderr)
         return 2
     return 0
 

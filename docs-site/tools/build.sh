@@ -18,7 +18,7 @@ echo "== docs build: mojolearn $VERSION"
 export PYTHONPATH="$PWD/_build/pkg"
 "$PY" tools/gen_api.py
 "$PY" tools/gen_models.py   # user_guide/verified_models.md from the release's model catalog (verified rows only)
-rm -rf _site _build/doctrees api/generated   # stubs regenerate; stale ones (excluded names) must not publish
+rm -rf _site _build/doctrees
 mkdir -p _build
 "$PY" -m sphinx -b html . _site -d _build/doctrees -q -j 4 -w _build/warnings.log
 rm -rf _site/.doctrees _site/_sources

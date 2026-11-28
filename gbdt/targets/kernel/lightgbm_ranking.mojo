@@ -17,6 +17,12 @@ from gbdt.targets.ranking_options import OBJECTIVE_LAMBDARANK, OBJECTIVE_RANK_XE
 comptime RANK_THREADS = 128
 
 
+@always_inline
+def _dp[dt: DType](b: DeviceBuffer[dt]) -> MutPointer[Scalar[dt], MutAnyOrigin]:
+    # a device buffer's pointer as the RF/RU argument RankView takes (its origin is the buffer's otherwise)
+    return MutPointer[Scalar[dt], MutAnyOrigin](unsafe_from_address=Int(b.unsafe_ptr()))
+
+
 def _rank_rows_kernel[phase: Int](
     labels: RF, scores: RF, weights: RF, offsets: RU, sizes: RU, qids: RU, order: RU, second: RU,
     scratch: RF, direction: RF, hessian: RF, rows: Int32, groups: Int32, seed: UInt32, iteration: UInt32,
@@ -72,21 +78,24 @@ struct LightGBMRankWorkspace(RankStages, Movable):
 
     def rows[phase: Int](mut self, a: RankView, count: Int, arg: Int, width: Int, col: Int) raises:
         self.ctx.enqueue_function[_rank_rows_kernel[phase]](
-            a.labels, a.scores, a.weights, a.offsets, a.sizes, a.qids, a.order, a.second, a.scratch,
-            a.direction, a.hessian, Int32(a.n), Int32(a.groups), UInt32(a.seed), UInt32(a.iteration),
+            rebind[RF](a.labels), rebind[RF](a.scores), rebind[RF](a.weights), rebind[RU](a.offsets),
+            rebind[RU](a.sizes), rebind[RU](a.qids), rebind[RU](a.order), rebind[RU](a.second), rebind[RF](a.scratch),
+            rebind[RF](a.direction), rebind[RF](a.hessian), Int32(a.n), Int32(a.groups), UInt32(a.seed), UInt32(a.iteration),
             Int32(1 if a.weighted else 0), Int32(count), Int32(arg), Int32(width), Int32(col),
             grid_dim=(count + RANK_THREADS - 1) // RANK_THREADS, block_dim=RANK_THREADS,
         )
 
     def order_by[labels: Bool](mut self, a: RankView) raises:
-        var src = a.labels if labels else a.scores
+        var src = rebind[RF](a.labels if labels else a.scores)
+        var qids = rebind[RU](a.qids)
+        var order = rebind[RU](a.order)
         var blocks = (a.n + RANK_THREADS - 1) // RANK_THREADS
-        self.ctx.enqueue_function[_keys_kernel[False]](src, a.qids, self.keys.unsafe_ptr(), a.order, Int32(a.n),
+        self.ctx.enqueue_function[_keys_kernel[False]](src, qids, self.keys.unsafe_ptr(), order, Int32(a.n),
                                                        grid_dim=blocks, block_dim=RANK_THREADS)
         stable_radix_sort_pairs_u32(self.ctx, a.n, 32, self.keys, self.order, self.temp_keys, self.other,
                                     self.counts, self.block_sums)
         if a.groups > 1:
-            self.ctx.enqueue_function[_keys_kernel[True]](src, a.qids, self.keys.unsafe_ptr(), a.order, Int32(a.n),
+            self.ctx.enqueue_function[_keys_kernel[True]](src, qids, self.keys.unsafe_ptr(), order, Int32(a.n),
                                                           grid_dim=blocks, block_dim=RANK_THREADS)
             stable_radix_sort_pairs_u32(self.ctx, a.n, key_bits_for(a.groups - 1), self.keys, self.order,
                                         self.temp_keys, self.other, self.counts, self.block_sums)
@@ -101,9 +110,9 @@ def launch_lightgbm_ranking(
 ) raises:
     if n_rows != ws.n or n_queries != ws.groups:
         raise Error("LightGBM ranking workspace does not match this pool")
-    var a = RankView(targets.unsafe_ptr(), scores.unsafe_ptr(), weights.unsafe_ptr(), offsets.unsafe_ptr(),
-                     sizes.unsafe_ptr(), qids.unsafe_ptr(), ws.order.unsafe_ptr(), ws.other.unsafe_ptr(),
-                     ws.scratch.unsafe_ptr(), directions.unsafe_ptr(), hessians.unsafe_ptr(), n_rows, n_queries,
+    var a = RankView(_dp(targets), _dp(scores), _dp(weights), _dp(offsets),
+                     _dp(sizes), _dp(qids), _dp(ws.order), _dp(ws.other),
+                     _dp(ws.scratch), _dp(directions), _dp(hessians), n_rows, n_queries,
                      seed, iteration, has_weights)
     var largest = ws.largest
     if objective == OBJECTIVE_LAMBDARANK:
@@ -127,9 +136,9 @@ def launch_lightgbm_ndcg(
 ) raises:
     if n_rows != ws.n or n_queries != ws.groups:
         raise Error("LightGBM ranking workspace does not match this pool")
-    var a = RankView(targets.unsafe_ptr(), scores.unsafe_ptr(), targets.unsafe_ptr(), offsets.unsafe_ptr(),
-                     sizes.unsafe_ptr(), qids.unsafe_ptr(), ws.order.unsafe_ptr(), ws.other.unsafe_ptr(),
-                     ws.scratch.unsafe_ptr(), result.unsafe_ptr(), result.unsafe_ptr(), n_rows, n_queries, 0, 0, False)
+    var a = RankView(_dp(targets), _dp(scores), _dp(targets), _dp(offsets),
+                     _dp(sizes), _dp(qids), _dp(ws.order), _dp(ws.other),
+                     _dp(ws.scratch), _dp(result), _dp(result), n_rows, n_queries, 0, 0, False)
     var largest = ws.largest
     if ws.ideal_cutoff != cutoff:
         rank_ideal(ws, a, largest, cutoff)
@@ -148,8 +157,8 @@ def launch_ranking_metric[reuse_terms: Bool = False](
         return
     if n != ws.n or groups != ws.groups:
         raise Error("ranking workspace does not match this pool")
-    var a = RankView(targets.unsafe_ptr(), scores.unsafe_ptr(), weights.unsafe_ptr(), offsets.unsafe_ptr(),
-                     sizes.unsafe_ptr(), qids.unsafe_ptr(), ws.order.unsafe_ptr(), ws.other.unsafe_ptr(),
-                     ws.scratch.unsafe_ptr(), result.unsafe_ptr(), result.unsafe_ptr(), n, groups, 0, 0, weighted)
+    var a = RankView(_dp(targets), _dp(scores), _dp(weights), _dp(offsets),
+                     _dp(sizes), _dp(qids), _dp(ws.order), _dp(ws.other),
+                     _dp(ws.scratch), _dp(result), _dp(result), n, groups, 0, 0, weighted)
     var largest = ws.largest
     query_softmax[LightGBMRankWorkspace, True, reuse_terms](ws, a, largest)

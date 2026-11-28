@@ -76,19 +76,24 @@ comptime QS_ROW_EXP = 6
 comptime QS_LOSS_SUM = 8
 comptime QS_WEIGHT_SUM = 10
 
-@fieldwise_init
+# Struct fields cannot expose AnyOrigin (Mojo 1.2): the view keeps untracked pointers built from the RF/RU
+# arguments; a field passed on to an RF/RU parameter is rebound at that call (kernel launches, host sorts).
+comptime _RFS = MutPointer[Float32, MutUntrackedOrigin]
+comptime _RUS = MutPointer[UInt32, MutUntrackedOrigin]
+
+
 struct RankView(ImplicitlyCopyable, Movable):
-    var labels: RF
-    var scores: RF
-    var weights: RF
-    var offsets: RU
-    var sizes: RU
-    var qids: RU
-    var order: RU
-    var second: RU
-    var scratch: RF
-    var direction: RF
-    var hessian: RF
+    var labels: _RFS
+    var scores: _RFS
+    var weights: _RFS
+    var offsets: _RUS
+    var sizes: _RUS
+    var qids: _RUS
+    var order: _RUS
+    var second: _RUS
+    var scratch: _RFS
+    var direction: _RFS
+    var hessian: _RFS
     var n: Int
     var groups: Int
     var seed: Int
@@ -96,8 +101,30 @@ struct RankView(ImplicitlyCopyable, Movable):
     var weighted: Bool
 
     @always_inline
+    def __init__(
+        out self, labels: RF, scores: RF, weights: RF, offsets: RU, sizes: RU, qids: RU, order: RU, second: RU,
+        scratch: RF, direction: RF, hessian: RF, n: Int, groups: Int, seed: Int, iteration: Int, weighted: Bool,
+    ):
+        self.labels = rebind[_RFS](labels)
+        self.scores = rebind[_RFS](scores)
+        self.weights = rebind[_RFS](weights)
+        self.offsets = rebind[_RUS](offsets)
+        self.sizes = rebind[_RUS](sizes)
+        self.qids = rebind[_RUS](qids)
+        self.order = rebind[_RUS](order)
+        self.second = rebind[_RUS](second)
+        self.scratch = rebind[_RFS](scratch)
+        self.direction = rebind[_RFS](direction)
+        self.hessian = rebind[_RFS](hessian)
+        self.n = n
+        self.groups = groups
+        self.seed = seed
+        self.iteration = iteration
+        self.weighted = weighted
+
+    @always_inline
     def plane(self, col: Int) -> RF:
-        return self.scratch + col * self.n
+        return rebind[RF](self.scratch + col * self.n)
 
     @always_inline
     def wide_plane(self, col: Int) -> MutPointer[UInt64, MutAnyOrigin]:

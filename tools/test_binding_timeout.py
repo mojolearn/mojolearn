@@ -89,8 +89,10 @@ class BindingTimeout(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             log = Path(tmp) / 'b.log'
             t0 = time.monotonic()
+            # `sleep` stands in for a silent compiler (RELEASE_STALL_COMPILERS names it one)
             r = bash('with_binding_timeout 60 "%s" sh -c "sleep 300"; echo rc=$?' % log,
-                     {'RELEASE_BINDING_STALL_SECONDS': '2', 'RELEASE_BINDING_STALL_POLL': '0.2'})
+                     {'RELEASE_BINDING_STALL_SECONDS': '2', 'RELEASE_BINDING_STALL_POLL': '0.2',
+                      'RELEASE_STALL_COMPILERS': 'sleep'})
             self.assertIn('rc=125', r.stdout, r.stderr)
             self.assertLess(time.monotonic() - t0, 30)
             text = log.read_text()
@@ -110,6 +112,15 @@ class BindingTimeout(unittest.TestCase):
                      {'RELEASE_BINDING_STALL_SECONDS': '3', 'RELEASE_BINDING_STALL_POLL': '0.2'})
             self.assertIn('rc=0', r.stdout, r.stderr)
             self.assertNotIn('STALLED', log.read_text())
+
+    def test_a_quiet_transfer_with_no_compiler_is_not_stalled(self):
+        # review of the 0.9.0 integration: a slow cache download (bincache.py) at flat CPU, no compiler live
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / 'b.log'
+            r = bash('with_binding_timeout 60 "%s" sh -c "sleep 5"; echo rc=$?' % log,
+                     {'RELEASE_BINDING_STALL_SECONDS': '2', 'RELEASE_BINDING_STALL_POLL': '0.2'})
+            self.assertIn('rc=0', r.stdout, r.stderr)
+            self.assertNotIn('STALLED', log.read_text() if log.exists() else '')
 
     def test_reparented_child_is_stopped(self):
         with tempfile.TemporaryDirectory() as tmp:

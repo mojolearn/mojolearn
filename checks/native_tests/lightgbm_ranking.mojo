@@ -95,17 +95,23 @@ def test_cutoff_and_stable_ties() raises:
     labels[30] = 1
     labels[31] = 2
     var result = _evaluate(OBJECTIVE_LAMBDARANK, [32], labels, List[Float32](length=32, fill=0), [], 0)
-    _close([result[0][30], result[0][31]], [0.26893362, 0.82027589])
-    _close([result[1][30], result[1][31]], [0.13446681, 0.41013794])
-    require(result[2] == 0, "both relevant rows are below the NDCG cutoff")
+    # copies, not interior references into the returned tuple (Mojo refuses those across the list literal)
+    var d = result[0].copy()
+    var h = result[1].copy()
+    var ndcg = result[2]
+    _close([d[30], d[31]], [0.26893362, 0.82027589])
+    _close([h[30], h[31]], [0.13446681, 0.41013794])
+    require(ndcg == 0, "both relevant rows are below the NDCG cutoff")
 
 
 def test_saturated_softmax_and_zero_relevance() raises:
     var xe = _evaluate(OBJECTIVE_RANK_XENDCG, [3], [0, 0, 0], [1000, 0, -1], [], 0)
+    var d = xe[0].copy()
+    var h = xe[1].copy()
     require(xe[2] == 1, "all-zero relevance has unit NDCG")
     for i in range(3):
-        require(isfinite(xe[0][i]) and isfinite(xe[1][i]), "a saturated softmax must have finite derivatives")
-    require(abs(xe[0][0] + xe[0][1] + xe[0][2]) < Float32(0.000005), "query derivatives sum to zero")
+        require(isfinite(d[i]) and isfinite(h[i]), "a saturated softmax must have finite derivatives")
+    require(abs(d[0] + d[1] + d[2]) < Float32(0.000005), "query derivatives sum to zero")
 
 
 def test_query_softmax_weighted_targets_and_empty_query() raises:

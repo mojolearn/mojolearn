@@ -61,6 +61,7 @@ THE POLICY CHOICES
    this repository benchmarks a different number from the one it returns.
 """
 
+from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF
 from max.gpu.host import DeviceContext
 from core.device_plan import DevicePlan, plan_for_single
 from ensemble.instruments import StageTimes as HostStageTimes
@@ -455,6 +456,8 @@ def gbdt_fit(
     # default); `train` hands it to every tree searcher.
     device_plan: DevicePlan = plan_for_single(),
     eval_group_sizes: List[UInt32] = List[UInt32](),
+    # the ranking eval metric's NDCG cutoff (`eval_at`), handed to `train`
+    eval_at: Int = DEFAULT_NDCG_CUTOFF,
 ) raises -> GbdtFitResult:
     """Fit and return the model as `model_text`, plus both loss curves.
 
@@ -622,7 +625,7 @@ def gbdt_fit(
         x_borrow=x_borrow,
         x_row_major=x_row_major,
         x_word=x_word,
-        group_sizes=group_sizes, eval_group_sizes=eval_group_sizes,
+        group_sizes=group_sizes, eval_group_sizes=eval_group_sizes, eval_at=eval_at,
         pair_winners=pair_winners,
         pair_losers=pair_losers,
         pair_weights=pair_weights,

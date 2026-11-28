@@ -257,7 +257,7 @@ def case_shape(driver: KMeansNativeDriver) raises:
     var bad = 0
     for i in range(512 * 5):
         var v = t[i]
-        if not (v >= 0.0 and v <= Float32.MAX):
+        if not (v >= 0.0 and v <= Float32.MAX_FINITE):  # Float32.MAX is +inf in Mojo
             bad += 1
     require(bad == 0, "SHAPE: " + String(bad) + " distances are negative or non-finite")
     same_bits(fit_cells, t, "SHAPE: fit_transform is fit then transform")

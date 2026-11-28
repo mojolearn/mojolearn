@@ -75,35 +75,22 @@ templates_path = ["_templates"]
 myst_enable_extensions = ["colon_fence", "deflist"]
 myst_heading_anchors = 3
 
-autosummary_generate = True
-autosummary_imported_members = True
-# A module page lists only the module's own public names (its __all__), not helpers it imports.
-autosummary_ignore_module_all = False
-# Names that differ only in case (the hdbscan module and the HDBSCAN class) would share one file on a
-# case-insensitive disk; give the lower-case ones a distinct page name.
-_lower = {}
-for _n in mojolearn.__all__:
-    _lower.setdefault(_n.lower(), []).append(_n)
-autosummary_filename_map = {f"mojolearn.{n}": f"mojolearn.{n}-module"
-                            for group in _lower.values() if len(group) > 1 for n in group if n == n.lower()}
-# API page layout and navigation.
-# - A class page documents every public method it has, inherited ones included (save, load, fit, score
-#   from shared bases), but not the members that tuple or Exception supply.
-# - No "Bases:" line: the bases are mostly private helpers. autodoc reads any value of a flag option as on,
-#   False included, so the key is left out rather than set to False.
-# - _templates/autosummary/class.rst (templates_path above) drops the __init__ block that repeated the
-#   class signature.
-# - _ext/mojolearn_nav.py links API names on the guide pages and adds "See also" lines to class pages.
-autodoc_default_options = {"members": True, "inherited-members": "object,tuple,BaseException",
-                           "exclude-members": "__init__"}
-import pathlib as _pathlib, sys as _sys  # noqa: E401,E402
-_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent / "_ext"))
+# The generator writes the public member lists. Sphinx renders their signatures and docstrings.
+autosummary_generate = False
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent / "tools"))
+from api_pages import filename_map
+autosummary_filename_map = filename_map(f"mojolearn.{name}" for name in mojolearn.__all__)
+_sys.path.insert(0, str(_Path(__file__).resolve().parent / "_ext"))
 extensions.append("mojolearn_nav")
 # Docstrings write names in single backticks; render them as code, not as italic title references.
 default_role = "code"
 autodoc_typehints = "description"
 autodoc_member_order = "bysource"
 napoleon_numpy_docstring = True
+# Keep the Methods overview as prose. The class page supplies each method signature.
+napoleon_custom_sections = [("Methods", "params_style")]
 napoleon_google_docstring = True
 # Types in docstrings are prose ("float32 array of shape (n,)"); render them as text, not cross-references.
 napoleon_use_param = False

@@ -16,7 +16,7 @@ def program_checks(recorder,public,methods):
     from .importers._program import ImportedProgram
     def check(method):
         with ops.Session(device=current_side()) as s, tempfile.TemporaryDirectory() as tmp:
-            a=np.array([[.25]],np.float32);x=s.tensor(a);w=s.tensor([[2.]],requires_grad=True)
+            a=np.array([[.25]],np.float32);x=s.tensor(a);w=s.tensor([[2.]])
             p=s.capture(x,s.matmul(x,w))
             if public == 'mojolearn.importers._program.ImportedProgram':
                 info=(p._id,p.input_shapes,p.output_shapes,p.params,p.input_kinds)

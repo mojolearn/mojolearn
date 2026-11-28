@@ -32,8 +32,9 @@ def _params(name):
     ("huber", ["self", "prediction", "target", "delta", "reduction", "weight"]),
     ("bce_with_logits", ["self", "logits", "target", "reduction", "weight"]),
     ("cross_entropy", ["self", "logits", "codes", "reduction", "weight", "probabilities"]),
+    # weight_hr: the projected LSTM (keyword-only, lane post-release-090)
     ("lstm", ["self", "x", "weight_ih", "weight_hh", "bias_ih", "bias_hh", "h_0", "c_0", "lengths", "reverse",
-              "return_state"]),
+              "return_state", "weight_hr"]),
     ("gru", ["self", "x", "weight_ih", "weight_hh", "bias_ih", "bias_hh", "h_0", "lengths", "reverse",
              "return_state"]),
     ("rnn", ["self", "x", "weight_ih", "weight_hh", "bias_ih", "bias_hh", "h_0", "lengths", "reverse",

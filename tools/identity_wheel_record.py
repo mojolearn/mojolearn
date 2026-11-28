@@ -71,9 +71,16 @@ COLUMNS = {
     "apple": ("apple-{device}", None),
     "cpu": ("cpu", None),
 }
-#: CPU threads per record worker: record_identity_column.sh's own default (CPU_THREADS=3), unchanged, so a
-#: parallel run records under exactly the thread pools a serial one did.
+#: CPU threads per record worker on the CPU column: record_identity_column.sh's own default (CPU_THREADS=3). The CPU
+#: column's fits ARE the host thread pool, and a 3-thread pool is the parallel host path that column records.
 CPU_THREADS = 3
+#: CPU threads per record worker on a GPU column (nvidia, ptx, amd, apple) (lane/verify-speed-1, 2026-11-28; Andrew:
+#: more workers on Apple). Its fits run on the device; the host pool runs the lane's glue only. The 0.9.0 Apple record
+#: (0f0842675b, apple-m4, 10 cores) planned 10 // 3 = 3 workers of 3 threads; its 4,197 cells averaged 4.1 s, and the
+#: same cells took 996 s in all on the CPU column, so the Metal side waits on the device, not on its pool. One thread
+#: a worker lets the cores carry workers instead. Identical bits never depend on the pool size (the CPU column, the
+#: verify of every user and the admission's tamper test run other counts), so the record at 1 thread is the same bits.
+GPU_COLUMN_THREADS = 1
 #: evidence column -> the graph verifier's --vendor (its loaded x_sequence binding's own vendor read-back)
 GRAPH_VENDOR = {"cpu": "cpu", "nvidia": "cuda", "amd": "hip", "apple": "metal"}
 #: the reference captures of the single-device verify commands: profile -> argv after `-m mojolearn`
@@ -94,11 +101,39 @@ GPU_GIB_PER_WORKER = 3
 #: max 3.6 busy cores, so a worker averages 0.83 of a core (the GPU and the lane's serial host glue bound it, not its
 #: thread pool). One worker per core of the allocation, CPU_THREADS unchanged.
 GPU_WORKER_CORES = 1
-#: Host memory per record worker (GiB): the verify cell workers' bound (mojolearn._verify_all.VERIFY_WORKER_GIB).
+#: Host memory per record worker (GiB): the verify cell workers' bound (mojolearn._verify_all.VERIFY_WORKER_GIB). The
+#: planned figure until a record of the column has measured its own (`PEAKS`).
 HOST_GIB_PER_WORKER = 4
+#: THE MEASURED PEAK RSS OF ONE RECORD WORKER, per column (lane/verify-speed-1, 2026-11-28): the largest resident set
+#: of any process a record's chunks ran (getrusage RUSAGE_CHILDREN ru_maxrss after every chunk is reaped), which the
+#: record prints as "host memory: peak RSS ..." and writes to identity-wheels.json timing.host_memory. A column with
+#: no figure plans at its ESTIMATES entry, else HOST_GIB_PER_WORKER. Put the printed figure here after a record; the
+#: plan reads it with PEAK_HEADROOM on top. No record has printed it yet.
+PEAKS = {}
+#: UNMEASURED, until PEAKS has the column: the CPU smoke's largest lane process is 0.34 GiB (mamba2,
+#: tools/ops/wheel_verify_smoke_plan/lanes.tsv, every lane in its own process); a record chunk runs a few hundred
+#: lanes in one interpreter, so the Apple plan takes 1.5 GiB, four times that, not the verify sweep's 4 GiB guess
+#: (which on a 16 GiB Mac with 10 GiB available would plan 2 workers, fewer than the 3 of the 0.9.0 record).
+ESTIMATES = {"apple": 1.5}
+#: the share of a measured peak added before dividing the available memory by it
+PEAK_HEADROOM = 1.25
+#: APPLE GPU MEMORY IS THE HOST'S (unified memory). Metal admits a working set of about two thirds of the RAM
+#: (MTLDevice.recommendedMaxWorkingSetSize on a 16 GiB M-series Mac: 10.7 GiB); the record's Metal buffers are small
+#: fixtures (the largest cell's arrays are under 0.1 GiB), so a worker plans METAL_GIB_PER_WORKER of that set.
+METAL_WORKING_SET_SHARE = 2.0 / 3.0
+METAL_GIB_PER_WORKER = 1.0
+#: a column's cells are SMALL when its measured mean cell is under this many seconds; a small-cell GPU column records
+#: at GPU_COLUMN_THREADS, a column of large cells keeps CPU_THREADS (a cell of minutes on one host thread would set
+#: the wall)
+SMALL_CELL_S = 10.0
 #: The per-lane cost hints that pack the chunks: the verify sweep's measured mean seconds per cell of each lane
 #: (the same harness lanes), shipped in the tree; a lane's record runs its fixtures one after another.
 COST_HINTS = ROOT / "python" / "mojolearn" / "verify_reference" / "cell_seconds.json"
+#: A COLUMN'S OWN MEASURED SECONDS (lane/verify-speed-1, 2026-11-28): tools/identity_record_seconds/<column>.json,
+#: the same format (mean seconds of one cell per lane), written by a record as DIR/record-seconds-<column>.json and
+#: committed after it. The shipped hints are the L40S's: x-decomp-robust-cov is 1.2 s a cell there and 49 s on the
+#: apple-m4, so Apple lanes packed by them start in the wrong order. A column with its own file packs by it.
+COLUMN_HINTS = ROOT / "tools" / "identity_record_seconds"
 #: seconds a lane costs the recorder beyond its fits (start, hashing, the record write): the L40S chunk w1 spent
 #: 1013 s wall on 330 lanes whose fits summed 724 s
 LANE_OVERHEAD_S = 1.0
@@ -125,15 +160,55 @@ def label(column, device):
     return pattern.format(device=device)
 
 
-def lane_costs(lanes, path=None):
-    """{lane: estimated record seconds}: the shipped verify cost hint (mean seconds of one cell) plus
-    LANE_OVERHEAD_S; a lane with no hint gets its family's (`_allocation.lane_cost`). Only packs the chunks; nothing recorded reads it."""
+def cost_hints_path(column):
+    """The cost hints a column packs by: its own measured file when committed, else the shipped verify hints."""
+    own = COLUMN_HINTS / ("%s.json" % column)
+    return own if own.is_file() else COST_HINTS
+
+
+def column_hints(column, shipped=None, own=None):
+    """{lane: mean cell seconds} a column packs by: its own measured seconds (`cost_hints_path`) where it has them;
+    a lane it has not measured takes the shipped hint times the median ratio own / shipped over the lanes both
+    measured (the column's speed against the L40S), so a new or unmeasured lane still packs in its place."""
+    shipped = read_hints(COST_HINTS) if shipped is None else shipped
+    own = (read_hints(cost_hints_path(column)) if cost_hints_path(column) != COST_HINTS else {}) if own is None else own
+    if not own:
+        return dict(shipped)
+    ratios = sorted(own[k] / shipped[k] for k in own if shipped.get(k, 0) > 0)
+    scale = ratios[len(ratios) // 2] if ratios else 1.0
+    merged = {k: v * scale for k, v in shipped.items()}
+    merged.update(own)
+    return merged
+
+
+def read_hints(path=None):
+    """{lane: mean seconds of one cell} of a hints file ('@' keys are not lanes); {} when unreadable."""
     try:
         doc = json.loads(Path(path or COST_HINTS).read_text())
-        hints = {k: float(v) for k, v in (doc.get("seconds") or {}).items()
-                 if not k.startswith("@") and isinstance(v, (int, float)) and v >= 0}
+        return {k: float(v) for k, v in (doc.get("seconds") or {}).items()
+                if not k.startswith("@") and isinstance(v, (int, float)) and v >= 0}
     except (OSError, ValueError, AttributeError):
-        hints = {}
+        return {}
+
+
+def record_threads(column, hints=None):
+    """CPU threads per record worker: CPU_THREADS on the CPU column; on a GPU column GPU_COLUMN_THREADS when its
+    cells are small (the hints' mean cell under SMALL_CELL_S, or no hints), else CPU_THREADS. RECORD_CPU_THREADS in
+    the environment pins it (a positive integer)."""
+    pinned = (os.environ.get("RECORD_CPU_THREADS") or "").strip()
+    if pinned.isdigit() and int(pinned) > 0:
+        return int(pinned)
+    if column == "cpu":
+        return CPU_THREADS
+    values = list((hints or {}).values())
+    mean = sum(values) / len(values) if values else 0.0
+    return GPU_COLUMN_THREADS if mean < SMALL_CELL_S else CPU_THREADS
+
+
+def lane_costs(lanes, path=None, hints=None):
+    """{lane: estimated record seconds}: the cost hint (mean seconds of one cell; `hints`, else the file `path`) plus
+    LANE_OVERHEAD_S; a lane with no hint gets its family's (`_allocation.lane_cost`). Only packs the chunks; nothing recorded reads it."""
+    hints = read_hints(path) if hints is None else hints
     # a lane with no hint packs at its family's cost (`_allocation.lane_cost`, rel-fix-3), not the median: 42 lanes
     # (most of them gbdt-*) have no row in the shipped table and packed at 0.41 s
     return {x: ALLOCATION.lane_cost(hints, x)[0] + LANE_OVERHEAD_S for x in lanes}
@@ -173,12 +248,26 @@ def plan_slots(columns, devices, workers_per_device):
     return out
 
 
-def auto_workers(gpus, nproc, free_gib, host_gib=None):
+def worker_gib(column):
+    """Host memory one record worker plans on: its column's measured peak RSS (`PEAKS`) with PEAK_HEADROOM, else its
+    `ESTIMATES` entry, else HOST_GIB_PER_WORKER."""
+    peak = PEAKS.get(column)
+    return peak * PEAK_HEADROOM if peak else ESTIMATES.get(column, HOST_GIB_PER_WORKER)
+
+
+def auto_workers(gpus, nproc, free_gib, host_gib=None, column="cpu", threads=None, metal_gib=None):
     """Record workers per device: every core busy, bounded by the GPU's free memory and the host's available memory.
-    A GPU worker keeps GPU_WORKER_CORES busy (measured); a CPU-column worker runs its CPU_THREADS pool."""
-    by_host = max(1, int(host_gib // HOST_GIB_PER_WORKER)) if host_gib else None
+    A GPU worker keeps GPU_WORKER_CORES busy (measured). With no devices (the cpu and apple columns) a worker runs
+    `threads` host threads (`record_threads`), so the cores allow nproc // threads of them; the apple column is also
+    bounded by its Metal working set (`metal_gib`, the unified memory Metal admits) at METAL_GIB_PER_WORKER. Host
+    memory: the available GiB over `worker_gib(column)`."""
+    threads = threads or (CPU_THREADS if column == "cpu" else GPU_COLUMN_THREADS)
+    per = worker_gib(column)
+    by_host = max(1, int(host_gib // per)) if host_gib else None
     if gpus <= 0:
-        n = max(1, nproc // CPU_THREADS)
+        n = max(1, nproc // threads)
+        if column == "apple" and metal_gib:
+            n = min(n, max(1, int(metal_gib // METAL_GIB_PER_WORKER)))
         return max(1, min(n, by_host)) if by_host else n
     by_cores = max(1, nproc // (GPU_WORKER_CORES * gpus))
     by_memory = max(1, int(free_gib // GPU_GIB_PER_WORKER)) if free_gib else 1
@@ -188,11 +277,53 @@ def auto_workers(gpus, nproc, free_gib, host_gib=None):
     return max(1, n)
 
 
-def host_available_gib():
+def host_available_gib(run=subprocess.run):
     """Available host memory in GiB (python/mojolearn/_allocation.py `mem_available_bytes`: MemAvailable capped by
-    the cgroup v2 or v1 memory limit less its use), or None where unreadable."""
+    the cgroup v2 or v1 memory limit less its use); on macOS, where that reads nothing, `darwin_available_bytes`;
+    None where unreadable."""
     avail = ALLOCATION.mem_available_bytes()
+    if avail is None and sys.platform == "darwin":
+        avail = darwin_available_bytes(run)
     return None if avail is None else avail / 2 ** 30
+
+
+VM_STAT_PAGE = re.compile(r"page size of (\d+) bytes")
+VM_STAT_LINE = re.compile(r"^Pages (free|inactive|speculative|purgeable):\s+(\d+)\.", re.M)
+
+
+def darwin_available_bytes(run=subprocess.run):
+    """macOS available memory: the free, inactive, speculative and purgeable pages of `vm_stat` (the pages the
+    kernel hands out without swapping), or None. Kept in this tool, not in _allocation.mem_available_bytes, so the
+    verify sweep's worker plan on a Mac (which reads no memory bound today) does not change with it."""
+    try:
+        text = run(["vm_stat"], capture_output=True, text=True, timeout=30).stdout or ""
+    except (OSError, subprocess.SubprocessError):
+        return None
+    page = VM_STAT_PAGE.search(text)
+    pages = VM_STAT_LINE.findall(text)
+    if not page or not pages:
+        return None
+    return int(page.group(1)) * sum(int(n) for _, n in pages)
+
+
+def darwin_memsize_gib(run=subprocess.run):
+    """The Mac's RAM in GiB (`sysctl -n hw.memsize`), or None: the base of the Metal working set (unified memory)."""
+    try:
+        out = run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, timeout=30).stdout
+        return int(out.strip()) / 2 ** 30
+    except (OSError, ValueError, AttributeError, subprocess.SubprocessError):
+        return None
+
+
+def peak_rss_gib():
+    """The largest resident set of any reaped child process of this run, in GiB (ru_maxrss: bytes on macOS, KiB on
+    Linux), or None."""
+    try:
+        import resource
+        rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    except (ImportError, OSError, AttributeError):
+        return None
+    return rss / (2 ** 30 if sys.platform == "darwin" else 2 ** 20) if rss else None
 
 
 def children_cpu_seconds():
@@ -206,6 +337,23 @@ def children_cpu_seconds():
 
 
 DONE_LINE = re.compile(r"^# DONE (\S+?)/\S+ \S+ ([0-9.]+)s$", re.M)
+
+
+CELL_LINE = re.compile(r"^# CELL (\S+?)/\S+ \S+ ([0-9.]+)s$", re.M)
+
+
+def cell_means(paths):
+    """{lane: mean seconds of one cell} over the harness's `# CELL <lane>/<fixture> <verdict> <s>s` lines."""
+    total, count = {}, {}
+    for path in paths:
+        try:
+            text = Path(path).read_text(errors="replace")
+        except OSError:
+            continue
+        for lane, sec in CELL_LINE.findall(text):
+            total[lane] = total.get(lane, 0.0) + float(sec)
+            count[lane] = count.get(lane, 0) + 1
+    return {lane: total[lane] / count[lane] for lane in total}
 
 
 def lane_seconds(paths):
@@ -286,6 +434,7 @@ class Run:
         self.out = Path(args.out).resolve()
         self.lock = threading.Lock()
         self.scratch = None  # the throwaway venv's temp dir (install), removed by main
+        self.threads = {}    # column -> CPU threads per record worker (`record_threads`), set by _main
 
     def say(self, msg):
         with self.lock:
@@ -326,7 +475,7 @@ class Run:
     def env(self, py, listed, device, column, extra=None):
         env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "LANES", "SHARD", "ONLY_CHANGED", "FULL", "REUSE")}
         env.update(RECORD_FROM_INSTALLED="1", PYTHON=str(py), INSTALLED_WHEELS=str(listed), REPEATS="1",
-                   SCOPE="all", CPU_THREADS=str(CPU_THREADS))
+                   SCOPE="all", CPU_THREADS=str(self.threads.get(column, CPU_THREADS)))
         var = COLUMNS[column][1]
         if var and device is not None:
             env[var] = str(device)
@@ -389,7 +538,12 @@ class Run:
         vendor = "nvidia" if columns[0] in ("nvidia", "ptx") else columns[0]
         free = gpu_free_gib(vendor) if devices else None
         host = host_available_gib()
-        workers = (auto_workers(len(devices), nproc, free, host) if self.a.workers_per_gpu == "auto"
+        hints = {c: column_hints(c) for c in columns}
+        self.threads = {c: record_threads(c, hints[c]) for c in columns}
+        pool = max(self.threads.values())
+        metal = (darwin_memsize_gib() or 0.0) * METAL_WORKING_SET_SHARE if "apple" in columns else None
+        workers = (auto_workers(len(devices), nproc, free, host, column=columns[0], threads=pool,
+                                metal_gib=metal) if self.a.workers_per_gpu == "auto"
                    else int(self.a.workers_per_gpu))
         slots = plan_slots(columns, devices, workers)
         selected, report = {}, dict(schema=SCHEMA, columns={}, nproc=nproc, gpus=len(devices), shard=self.a.shard,
@@ -408,15 +562,19 @@ class Run:
                                                  len(lanes) if self.a.reuse_unchanged else "all (%d)" % len(lanes)))
         tasks = []
         for c in columns:
-            cost = lane_costs(selected[c])
+            cost = lane_costs(selected[c], hints=hints[c])
             for i, (chunk, slot) in enumerate(zip(chunks(selected[c], len(slots[c]), cost), slots[c])):
                 tasks.append((c, i, chunk, slot))
         total = sum(len(s) for s in slots.values()) if devices else len(next(iter(slots.values())))
         busy = len(tasks)
-        self.say("busy plan: %d worker(s) of %d (%d device(s), %d core(s) from %s, %d CPU thread(s) per worker%s%s)"
-                 % (busy, total, len(devices), nproc, ALLOCATION.cores()[1], CPU_THREADS,
+        self.say("busy plan: %d worker(s) of %d (%d device(s), %d core(s) from %s, %d CPU thread(s) per worker%s%s%s;"
+                 " %.2f GiB a worker planned%s; lanes packed by %s)"
+                 % (busy, total, len(devices), nproc, ALLOCATION.cores()[1], pool,
             "" if free is None else ", %.0f GiB free per device" % free,
-            "" if host is None else ", %.0f GiB host memory available" % host))
+            "" if host is None else ", %.0f GiB host memory available" % host,
+            "" if not metal else ", %.1f GiB Metal working set" % metal,
+            worker_gib(columns[0]), " (measured peak)" if PEAKS.get(columns[0]) else " (unmeasured)",
+            ", ".join(sorted({str(cost_hints_path(c).relative_to(ROOT)) for c in columns}))))
         threads, results = [], {}
         # WHERE THE TIME GOES (rel-fix-2): the record's wall, busy cores (CPU seconds of the reaped chunks over the
         # wall), the chunks' spread, the 5 slowest lanes, and the GPU's peak used memory per worker.
@@ -476,6 +634,7 @@ class Run:
             sampler.join()
         report["timing"] = self.timing(time.monotonic() - t_rec, children_cpu_seconds() - cpu0, nproc, results,
                                        labels, peak, workers)
+        report["threads_per_worker"] = dict(self.threads)
         ok = True
         for (c, i), r in sorted(results.items()):
             row = report["columns"][c]
@@ -521,9 +680,24 @@ class Run:
             self.say("gpu memory: peak %.1f GiB used (%.1f before) with %d worker(s) on a device: %.2f GiB a worker "
                      "(GPU_GIB_PER_WORKER plans %d)" % (peak[0], base, per_device, gpu["per_worker_gib"],
                                                         GPU_GIB_PER_WORKER))
+        rss = peak_rss_gib()
+        host_memory = None
+        if rss is not None:
+            host_memory = dict(peak_rss_gib=round(rss, 2), planned_gib=round(worker_gib(next(iter(labels))), 2))
+            self.say("host memory: peak RSS %.2f GiB of one worker process (plans %.2f GiB a worker; put the peak in "
+                     "identity_wheel_record.py PEAKS)" % (rss, host_memory["planned_gib"]))
+        # the column's own measured seconds, for tools/identity_record_seconds/<column>.json (COLUMN_HINTS)
+        for column in labels:
+            col_logs = [p for p in logs if p.parent.parent.name == labels[column]]
+            means = cell_means(col_logs)
+            if means:
+                (self.out / ("record-seconds-%s.json" % column)).write_text(json.dumps(dict(
+                    format="mojolearn.record-seconds.v1", column=column, label=labels[column],
+                    note="mean seconds of one cell per lane, from this record's # CELL lines",
+                    seconds={k: round(v, 3) for k, v in sorted(means.items())}), indent=1, sort_keys=True) + "\n")
         return dict(wall_s=round(wall), busy_cores_mean=round(busy, 1), cores=nproc,
                     chunk_seconds=sorted(secs), slowest_lanes=[dict(lane=k, seconds=round(v, 1)) for k, v in slow],
-                    gpu_memory=gpu)
+                    gpu_memory=gpu, host_memory=host_memory)
 
     def capture_extended(self, py, columns, devices):
         """The single-device verify commands' reference captures (tools/admit_extended_references.py), from the

@@ -4027,9 +4027,11 @@ def _heldout_cindex(
         ctx.enqueue_copy(dst_buf=d_treat, src_ptr=treatment.unsafe_ptr())
         enqueue_fill(ctx, d_bad, STAGE_NO_BAD)
         var blocks = min((rows * cols + STAGE_BLOCK - 1) // STAGE_BLOCK, 65535)
-        # Column-major input: each stage thread reads and writes its own cell.
+        # Column-major input: each stage thread reads and writes its own cell. The in-place stage passes one
+        # buffer as src and dst; an untracked view keeps the launch from refusing two mutable borrows of it.
+        var cells = expanded.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         ctx.enqueue_function[resident_stage_kernel](
-            expanded.unsafe_ptr(), expanded.unsafe_ptr(), d_treat.unsafe_ptr(), d_bad.unsafe_ptr(),
+            cells, cells, d_treat.unsafe_ptr(), d_bad.unsafe_ptr(),
             Int32(rows), Int32(cols), Int32(0), grid_dim=blocks, block_dim=STAGE_BLOCK,
         )
         ctx.enqueue_copy(dst_buf=h_bad, src_buf=d_bad)

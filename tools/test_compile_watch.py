@@ -102,3 +102,43 @@ def test_unreadable_interval_starts_a_new_observation_window():
     assert not sc.observe(10.0, None)
     assert not sc.observe(30.0, 4.0)
     assert sc.observe(40.0, 4.0)
+
+
+def _stat_named(pid, ppid, comm, u, s=0):
+    return f"{pid} ({comm}) S {ppid} " + " ".join(["0"] * 9) + f" {u} {s} 0 0 0 0\n"
+
+
+def test_only_compiler_processes_are_timed(tmp_path):
+    # review of the 0.9.0 integration: the leg's tree also runs bincache transfers (python, curl) and the packer.
+    tick = os.sysconf("SC_CLK_TCK")
+    rows = {10: (1, "bash", 50), 11: (10, "python3", 40), 12: (11, "curl", 30), 13: (10, "mojo", 2),
+            14: (13, "x86_64-conda-li", 1)}
+    for pid, (ppid, comm, u) in rows.items():
+        (tmp_path / str(pid)).mkdir()
+        (tmp_path / str(pid) / "stat").write_text(_stat_named(pid, ppid, comm, u * tick))
+    assert cw.compile_cpu_seconds(10, proc=str(tmp_path)) == (3.0, True)
+    assert cw.compile_cpu_seconds(11, proc=str(tmp_path)) == (0.0, False)
+    assert cw.compile_cpu_seconds(1234, proc=str(tmp_path)) == (None, False)
+
+
+def test_a_slow_transfer_is_not_stalled_and_a_silent_compiler_is(tmp_path):
+    log, marker = tmp_path / "b.log", tmp_path / "b.log.stalled"
+    log.write_text("start\n")
+    now = [0.0]
+    step = lambda s: now.__setitem__(0, now[0] + 4)
+    # 400 s of a cache download at flat CPU and no output: no compiler live, never STALLED
+    ticks = iter(range(100))
+    rc = cw.watch(1, log, 10, marker, poll=0, clock=lambda: now[0], sleep=step,
+                  cpu_probe=lambda pid: (0.0, False), is_alive=lambda p: next(ticks) < 99)
+    assert rc == 0 and not marker.exists()
+    # the transfer ends and a compiler starts, then goes silent: STALLED 10 s after its last move
+    phases = iter([(0.0, False)] * 5 + [(1.0, True), (2.0, True)] + [(2.0, True)] * 20)
+    now[0] = 0.0
+    rc = cw.watch(1, log, 10, marker, poll=0, clock=lambda: now[0], sleep=step,
+                  cpu_probe=lambda pid: next(phases), is_alive=lambda p: True)
+    assert rc == 3 and "flat at 2 s" in marker.read_text()
+
+
+def test_the_release_watchdog_uses_the_compiler_probe():
+    import inspect
+    assert inspect.signature(cw.watch).parameters["cpu_probe"].default is cw.compile_cpu_seconds

@@ -26,6 +26,7 @@ fi
   || { echo "bad env"; exit 9; }
 echo "{}" > "$out/$label.lanes-x.identical.json"
 echo "DEVICE ${CUDA_VISIBLE_DEVICES:-${HIP_VISIBLE_DEVICES:-none}} LANES $LANES"
+echo "CPU_THREADS ${CPU_THREADS:-unset}"
 echo "RECORDED $label.lanes-x rc=0 admissible=yes json=$out/$label.lanes-x.identical.json"
 '''
 
@@ -86,6 +87,80 @@ def test_workers_use_every_core_bounded_by_memory():
     assert R.auto_workers(1, 13, 44.0, host_gib=20.0) == 5   # host memory: 20 // 4
     assert R.auto_workers(2, 16, None) == 1
     assert R.auto_workers(0, 16, None, host_gib=8.0) == 2
+
+
+def test_the_apple_plan_on_a_ten_core_mac_is_bounded_by_memory_not_by_a_3_thread_pool():
+    """lane/verify-speed-1 (2026-11-28): the 0.9.0 Apple record planned 10 // 3 = 3 workers. A GPU column's worker runs
+    one host thread, so the cores allow 10; 10 GiB available at the unmeasured 1.5 GiB a worker allow 6; the Metal
+    working set of a 16 GiB Mac (2/3, 10.7 GiB) at 1 GiB a worker allows 10."""
+    metal = 16.0 * R.METAL_WORKING_SET_SHARE
+    assert R.auto_workers(0, 10, None, host_gib=10.0, column="apple", threads=1, metal_gib=metal) == 6
+    assert R.auto_workers(0, 10, None, column="apple", threads=1, metal_gib=metal) == 10
+    assert R.auto_workers(0, 10, None, column="apple", threads=1, metal_gib=4.0) == 4
+    assert R.auto_workers(0, 10, None, column="apple", threads=3) == 3      # the 0.9.0 plan, pinned threads
+    assert R.auto_workers(0, 4, None, column="cpu") == 1                    # the CPU column keeps its 3-thread pool
+
+
+def test_a_measured_peak_replaces_the_estimate(monkeypatch):
+    assert R.worker_gib("apple") == R.ESTIMATES["apple"] and R.worker_gib("cpu") == R.HOST_GIB_PER_WORKER
+    monkeypatch.setitem(R.PEAKS, "apple", 0.8)
+    assert R.worker_gib("apple") == 0.8 * R.PEAK_HEADROOM
+    assert R.auto_workers(0, 10, None, host_gib=10.0, column="apple", threads=1) == 10   # 10 // 1.0
+
+
+def test_threads_per_worker_one_on_a_small_cell_gpu_column(monkeypatch):
+    monkeypatch.delenv("RECORD_CPU_THREADS", raising=False)
+    assert R.record_threads("cpu", {"a": 0.1}) == R.CPU_THREADS == 3
+    assert R.record_threads("apple", {"a": 4.0, "b": 2.0}) == R.GPU_COLUMN_THREADS == 1
+    assert R.record_threads("nvidia", {}) == 1
+    assert R.record_threads("apple", {"a": 30.0, "b": 20.0}) == R.CPU_THREADS   # cells of minutes keep the pool
+    monkeypatch.setenv("RECORD_CPU_THREADS", "2")
+    assert R.record_threads("apple", {"a": 4.0}) == 2 and R.record_threads("cpu", {}) == 2
+
+
+def test_a_column_packs_by_its_own_seconds_and_scales_the_rest():
+    shipped = {"robust": 1.2, "trees": 50.0, "knn": 2.0, "new": 4.0}
+    own = {"robust": 49.0, "trees": 60.0, "knn": 6.0}                     # ratios 40.8, 1.2, 3.0 -> median 3.0
+    got = R.column_hints("apple", shipped=shipped, own=own)
+    assert got["robust"] == 49.0 and got["trees"] == 60.0 and got["new"] == 12.0
+    assert R.column_hints("nvidia", shipped=shipped, own={}) == shipped
+    cost = R.lane_costs(list(got), hints=got)
+    assert R.chunks(list(got), 2, cost)[0][0] == "trees" and R.chunks(list(got), 2, cost)[1][0] == "robust"
+    committed = R.read_hints(R.COLUMN_HINTS / "apple.json")
+    assert committed and all(v >= 0 for v in committed.values())
+
+
+def test_macos_available_memory_reads_vm_stat():
+    text = ("Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free:      100.\n"
+            "Pages active:   999.\nPages inactive:  200.\nPages speculative:  50.\nPages purgeable:  10.\n")
+
+    class P:
+        stdout = text
+    assert R.darwin_available_bytes(lambda *a, **k: P()) == 16384 * 360
+    assert R.darwin_available_bytes(lambda *a, **k: (_ for _ in ()).throw(OSError("no vm_stat"))) is None
+
+
+def test_cell_means_read_the_cell_lines(tmp_path):
+    log = tmp_path / "x.log"
+    log.write_text("# CELL knn/base STABLE 3.0s\n# CELL knn/odd STABLE 1.0s\n# CELL ols/base STABLE 0.5s\n"
+                   "# CELL lm/base N/A n/a:one-sided: no GPU implementation\n")
+    assert R.cell_means([log]) == {"knn": 2.0, "ols": 0.5}
+
+
+def test_an_apple_record_plans_from_memory_and_runs_one_thread_a_worker(tmp_path, fake, capsys):
+    fake.delenv("RECORD_CPU_THREADS", raising=False)
+    fake.setattr(R.Run, "all_lanes", lambda self, py, column, lab: (["a", "b", "c", "d", "e", "f", "g", "h"], 0))
+    fake.setattr(R, "host_available_gib", lambda *a, **k: 10.0)
+    fake.setattr(R, "darwin_memsize_gib", lambda *a, **k: 16.0)
+    fake.setattr(R, "alloc_cores", lambda: 10)
+    a = args(tmp_path, "--columns", "apple", "--label-device", "m4")
+    assert R.Run(a).main() == 0
+    out = capsys.readouterr().out
+    assert "busy plan: 6 worker(s) of 6" in out and "1 CPU thread(s) per worker" in out
+    doc = json.loads((tmp_path / "out" / "identity-wheels.json").read_text())
+    assert doc["threads_per_worker"] == {"apple": 1} and len(doc["columns"]["apple"]["chunks"]) == 6
+    log = (tmp_path / "out" / "apple-m4" / "w0" / "record.log").read_text()
+    assert "CPU_THREADS 1" in log
 
 
 def test_chunks_pack_equal_cost_longest_lane_first():

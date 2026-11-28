@@ -232,7 +232,7 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
             lanes |= hit
     return dict(lanes=sorted(lanes), by_path=by_path, unattributed=[], stopped_early=False)
 '''
-PARTS = ("train", "infer", "model", "batch")
+PARTS = ("train", "infer", "model", "batch", "stepfull")  # _verify_reference.PARTS: the admission requires every part (0c06053fcb)
 
 
 def h16(*parts):

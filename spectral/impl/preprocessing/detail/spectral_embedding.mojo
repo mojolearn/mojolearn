@@ -334,8 +334,11 @@ def create_laplacian(
 def _coo_to_square(
     dense: MutPointer[Float32, MutAnyOrigin], rows: MutPointer[Int32, MutAnyOrigin],
     cols: MutPointer[Int32, MutAnyOrigin], vals: MutPointer[Float32, MutAnyOrigin],
-    n: Int, nnz: Int,
+    n_words: Int64, nnz_words: Int64,
 ):
+    # Int is not DevicePassable: the sizes cross the launch as Int64.
+    var n = Int(n_words)
+    var nnz = Int(nnz_words)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < nnz:
         # The Laplacian's canonical COO has distinct coordinates.
@@ -345,8 +348,11 @@ def _coo_to_square(
 def _select_largest_eigenpairs(
     vectors: MutPointer[Float32, MutAnyOrigin], values: MutPointer[Float32, MutAnyOrigin],
     all_vectors: MutPointer[Float32, MutAnyOrigin], all_values: MutPointer[Float32, MutAnyOrigin],
-    n: Int, k: Int, value_count: Int,
+    n_words: Int64, k_words: Int64, value_words: Int64,
 ):
+    var n = Int(n_words)
+    var k = Int(k_words)
+    var value_count = Int(value_words)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < n * k:
         var col = i // n + n - k
@@ -366,7 +372,7 @@ def _direct_embedding_eigenpairs(
     var dense = ctx.enqueue_create_buffer[DType.float32](n * n)
     ctx.enqueue_memset(dense, Float32(0))
     ctx.enqueue_function[_coo_to_square](
-        dense.unsafe_ptr(), lap.rows.unsafe_ptr(), lap.cols.unsafe_ptr(), lap.vals.unsafe_ptr(), n, lap.nnz,
+        dense.unsafe_ptr(), lap.rows.unsafe_ptr(), lap.cols.unsafe_ptr(), lap.vals.unsafe_ptr(), Int64(n), Int64(lap.nnz),
         grid_dim=((lap.nnz + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
     )
     var w = ctx.enqueue_create_buffer[DType.float32](n)
@@ -374,7 +380,7 @@ def _direct_embedding_eigenpairs(
     DevExec.eigh_into(ctx, dense, w, v, n)
     # eigh consumed the input. Reuse its first k words if the caller needs the values.
     ctx.enqueue_function[_select_largest_eigenpairs](
-        vectors.unsafe_ptr(), dense.unsafe_ptr(), v.unsafe_ptr(), w.unsafe_ptr(), n, k, k if need_values else 0,
+        vectors.unsafe_ptr(), dense.unsafe_ptr(), v.unsafe_ptr(), w.unsafe_ptr(), Int64(n), Int64(k), Int64(k if need_values else 0),
         grid_dim=((n * k + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
     )
     if need_values:

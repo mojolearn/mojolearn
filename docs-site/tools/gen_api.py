@@ -10,13 +10,14 @@ import pathlib
 import sys
 
 import mojolearn
+from api_pages import write_pages
 
 # (slug, title, intro, module prefixes, extra names). First match wins, in order.
 FAMILIES = [
     ("runtime", "Runtime and numeric modes",
      "Process-wide numeric mode, device and backend queries.",
      ("mojolearn._backend", "mojolearn._numeric_profile"),
-     {"set_numeric_mode", "numeric_mode", "vendor", "gpu_arch", "gpu_arch_how", "__version__", "Array", "check"}),
+     {"set_numeric_mode", "numeric_mode", "runtime_report", "vendor", "gpu_arch", "gpu_arch_how", "__version__", "Array", "check"}),
     ("boosting", "Gradient boosting", "Gradient-boosted decision trees: classification, regression and ranking losses.",
      ("mojolearn._gbdt_adapters", "mojolearn.gbdt"),
      {"GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor", "OrderedRMSE",
@@ -91,7 +92,8 @@ def main():
     out = root / "api"
     excluded = {line.split("\t", 1)[0].strip() for line in (root / "api_exclude.txt").read_text().splitlines()
                 if line.strip() and not line.startswith("#")}
-    excluded = {e for e in excluded if "." not in e}  # dotted entries are members, skipped in conf.py
+    all_exclusions = excluded
+    excluded = {e for e in excluded if "." not in e}
     # A bare name that is not public may still be a member name that conf.py skips on every class
     # (`training_digest_`, `check`): stale only when no public class has a member of that name.
     classes = [obj for obj in (getattr(mojolearn, n, None) for n in mojolearn.__all__) if isinstance(obj, type)]
@@ -111,6 +113,8 @@ def main():
         (pages[slug] if slug else missing).append(name)
     if missing:
         sys.exit(f"gen_api: public names with no API page: {missing}")
+    write_pages(out / "generated", mojolearn, [name for names in pages.values() for name in names],
+                all_exclusions)
     families = [f for f in FAMILIES if pages[f[0]]]  # a family with every name excluded gets no page
     for old in out.glob("*.rst"):
         old.unlink()
@@ -121,11 +125,19 @@ def main():
         if names:
             body += [".. autosummary::", "   :toctree: generated", "   :nosignatures:", ""]
             body += [f"   {n}" for n in names]
+        if slug == "autograd" and "ops" in names:
+            body += ["", "Session and program methods", "-" * len("Session and program methods"), "",
+                     ".. autosummary::", "   :toctree: generated", "", "   ops.Session", "   ops.Program"]
         (out / f"{slug}.rst").write_text("\n".join(body) + "\n")
     index = ["API reference", "=============", "",
-             f"Every public name in ``mojolearn`` {mojolearn.__version__}, by family. "
+             f"Classes, functions and modules in Mojolearn {mojolearn.__version__}, grouped by family. "
              "Estimators follow the scikit-learn conventions (``fit``, ``predict``, ``transform``) "
-             "unless their page says otherwise.", "", ".. toctree::", "   :maxdepth: 1", ""]
+             "unless their page says otherwise. Class pages give constructor and method signatures. "
+             "Estimator docstrings describe fitted attributes.", "",
+             "For a model built from layers, start with :class:`~mojolearn.Sequential`. "
+             "For individual tensor operations and recorded graphs, see "
+             ":class:`~mojolearn.ops.Session` and :class:`~mojolearn.ops.Program`.", "",
+             ".. toctree::", "   :maxdepth: 1", ""]
     index += [f"   {slug}" for slug, *_ in families]
     (out / "index.rst").write_text("\n".join(index) + "\n")
     print("gen_api:", {s: len(v) for s, v in pages.items()})

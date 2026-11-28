@@ -430,11 +430,9 @@ def _eval_items(eval_set: PythonObject, b: PythonObject) raises -> PythonObject:
     var pair = eval_set
     if Bool(py=py_call(b.isinstance, eval_set, b.list)):
         if len(eval_set) != 1:
-            raise Error("mojolearn: eval_set takes ONE (X, y) pair; the "
-                        + "boosting carries a single test cursor. CatBoost "
-                        + "accepts a list, this takes " + String(len(eval_set)) + " as an "
-                        + "error rather than scoring the first and dropping "
-                        + "the rest")
+            # the fit door's words (bindings/trees_public_gbdt_fit_door.mojo _eval_arrays)
+            raise Error("mojolearn: eval_set takes ONE (X, y) pair or grouped (X, y, group_id) tuple; received "
+                        + String(len(eval_set)))
         pair = eval_set[0]
     var items = PythonObject(None)
     try:

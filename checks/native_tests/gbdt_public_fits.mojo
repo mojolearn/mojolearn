@@ -1273,6 +1273,10 @@ def _heldout_ctr_model_example[I: GbdtImage]() raises:
     require(len(model.test) == 2 and abs(model.test[1] - (d0 * d0 + d1 * d1) / 8) < 2.0e-6,
             "held-out score disagrees with the saved model on known and unseen categories")
     inp.eval_x[0] = bitcast[DType.float32](UInt32(0x7FC00000))
+    # nan_mode Min gives every float column AsFalse (gbdt/data/quantization.mojo nan_value_treatment, CatBoost's
+    # helpers.cpp): an unseen validation NaN is binned, not refused, on every column. Forbidden is AsIs: refused.
+    _ = fit[I](opts, inp)
+    opts.nan_mode = "Forbidden"
     var err = String("")
     try:
         _ = fit[I](opts, inp)
@@ -1718,7 +1722,7 @@ def host_nonsym_rest[I: GbdtImage](part: Int) raises:
         _ns_refused[I](rcw, reg, "class weights take effect only", "Depthwise RMSE class weights")
         var mch = _ns_opts("Poisson", "Depthwise", "NewtonL2")
         mch.min_child_hessian = 1.0
-        _ns_refused[I](mch, reg, "min_child_hessian currently supports", "Depthwise Poisson min_child_hessian")
+        _ns_refused[I](mch, reg, "min_child_hessian supports RMSE, Logloss, CrossEntropy", "Depthwise Poisson min_child_hessian")
         var pb = _ns_opts("Poisson", "Lossguide", "NewtonL2")
         pb.boost_from_average = 1
         _ns_refused[I](pb, reg, "You can use boost_from_average only", "Lossguide Poisson boost_from_average")

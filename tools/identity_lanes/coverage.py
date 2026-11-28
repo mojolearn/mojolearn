@@ -70,8 +70,12 @@ def _(ml, X, yc, yr, Xh=None):
     radial = ml.RBF(0.75)
     matern = ml.Matern(1.25, nu=1.5)
     noise = ml.WhiteKernel(0.125)
-    composed = (constant + (radial * (matern + (noise * radial))),
-                noise + (matern * (radial + (constant * radial))))
+    # The operand stack of a kernel expression is at most GP_MAX_STACK = 4 deep (gaussian_process/checks/kernels.mojo,
+    # a pinned capacity the product refuses beyond); the two five-deep expressions this lane first used were refused
+    # on both sides (L40S smoke of c190631c24, 2026-11-28). These three stay within it and keep the coverage.
+    composed = (constant + (radial * (matern + noise)),
+                noise + (matern * (radial + constant)),
+                (constant * radial) + (noise * matern))
     tiny_x = np.array([[-1.0], [0.0], [1.0]], np.float32)
     tiny_y = np.array([0.25, -0.5, 0.75], np.float32)
     for index, kernel in enumerate(composed):

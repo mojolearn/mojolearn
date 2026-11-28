@@ -63,13 +63,13 @@ def test_copy_false_writes_in_place():
         bufn = Xn.copy()
         outn = est.transform(bufn)
         assert outn is bufn and np.array_equal(np.isnan(bufn), np.isnan(Xn))
-    # a float64 input is converted, so it is not written (the reference copies too)
+    # a float64 input is converted to float32 (lane fp64-inputs, 2026-11-27), so it is not written in place
     X64 = X.astype(np.float64)
     before = X64.copy()
     s = ml.StandardScaler(copy=False).fit(X)
-    with pytest.raises(TypeError):
-        s.transform(X64)
-    assert np.array_equal(X64, before)
+    out64 = s.transform(X64)
+    assert out64 is not X64 and np.array_equal(X64, before)
+    assert _so_b(np.asarray(out64)) == _so_b(np.asarray(ml.StandardScaler().fit(X).transform(X)))
     # StandardScaler.transform(copy=True) on a copy=False scaler leaves X alone
     buf = X.copy()
     s.transform(buf, copy=True)

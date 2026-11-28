@@ -2,7 +2,7 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
-## 0.9.0 (published 2026-11-27)
+## 0.9.0 (published 2026-11-28)
 
 0.9.0 is a large release: the public calls run in compiled Mojo from argument checks to results, `fast` can be named on every vendor, and `verify` is rebuilt.
 
@@ -16,6 +16,8 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 - **Each product's number format can be set on its own.** `numeric_profile` also takes a dict over a preset, such as `{"preset": "fixed15_v1", "lm_head": "fp32_v1"}`, with the parts `q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj`, `lm_head`, `attn_scores` and `attn_context` (`fp32_v1` only). An unknown part, a part the model does not have or a format a part cannot use is refused by name. `model.numeric_profile` and saved states hold the canonical form: the preset name, or a dict with only the overrides that differ from it.
 - **Trees.** Fitting a RandomForest or DecisionTree with more `n_bins` than training rows no longer raises a `UserWarning` (it fired in every nested fit, such as AdaBoost and bagging members); the bins are still limited to the number of rows.
 - **One NVIDIA package.** `mojolearn-nvidia` carries both the native kernels for sm_89 and the PTX build for every NVIDIA GPU of compute capability 8.0 or newer; the separate `mojolearn-nvidia-ptx` package is no longer published. An environment that has `mojolearn-nvidia-ptx` from an earlier release can remove it and reinstall the NVIDIA package once: `pip uninstall -y mojolearn-nvidia-ptx && pip install --force-reinstall --no-deps "mojolearn-nvidia==<version>"`.
+- **Convolutional and graph layers, Adafactor and LAMB.** `Conv1d`, `Conv2d`, the max, average and adaptive pooling layers, `BatchNorm1d`, `BatchNorm2d`, `Dropout2d`, `BasicBlock`, `CNNClassifier`, `GCNConv`, `SAGEConv` and the `Adafactor` and `LAMB` optimizers are documented public API, each with its own `verify` lanes on the CPU and the GPU.
+- **float64 inputs.** A float64 array passed to a public call is converted to float32 once at the entry, rounding to nearest even, the same way on every vendor and on the CPU. NaN and infinities are kept as float32 NaN and infinities. A finite value too large for float32 raises a `ValueError` that names the column.
 
 ## 0.8.66 (published 2026-11-05)
 

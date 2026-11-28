@@ -176,7 +176,7 @@ def test_extra_native_roots_keep_the_wheel_inventory(monkeypatch, tmp_path):
         path = tmp_path / name
         path.parent.mkdir(parents=True)
         path.touch()
-    assert natives(tmp_path, configured_dirs()) == expected
+    assert natives(tmp_path, configured_dirs()) == sorted(expected)  # the inventory is path-sorted
 
 
 def test_fallback_records_independent_build_statuses(tmp_path, monkeypatch):

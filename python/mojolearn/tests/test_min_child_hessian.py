@@ -57,7 +57,7 @@ def test_symmetric_policy_refuses_enabled_guard():
 
 @pytest.mark.parametrize("loss", ["Poisson", "MAE", "MAPE"])
 def test_unaudited_objective_curvature_refused(loss):
-    with pytest.raises(ValueError, match="RMSE, Logloss and CrossEntropy"):
+    with pytest.raises(ValueError, match="RMSE, Logloss, CrossEntropy, lambdarank and rank_xendcg"):
         _model(loss=loss, min_child_hessian=0)
 
 

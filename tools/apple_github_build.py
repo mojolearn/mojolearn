@@ -565,7 +565,30 @@ def cmd_run(a):
           + (f"; failed jobs {'; '.join(failed)}" if failed else ""))
     if len(wheels) != 1:
         raise SystemExit(f"no macOS wheel from run {run['databaseId']} ({'; '.join(failed) or view.get('conclusion')})")
+    print(runner_lanes_verdict(out, wheels[0]))
     return 0
+
+
+def runner_lanes_verdict(out, wheel):
+    """The runner's Apple-lanes smoke for WHEEL, read here so macos-build fails on it (0.9.0 review: under
+    --identity-on-wheels the release skips macos-smoke, so a lane that failed on the runner's usable Metal device
+    was never read). PASSED passes; NO-METAL / PASSED-NO-GPU pass only as the runner's explicit report that its
+    Metal device is unusable; FAILED, a record for other bytes, or no record at all fails the build."""
+    p = Path(out) / "apple-smoke" / "apple-lanes" / "apple-lanes.json"
+    try:
+        rec = json.loads(p.read_text())
+    except (OSError, ValueError):
+        raise SystemExit(f"the smoke job reported no Apple-lanes record for {Path(wheel).name} ({p})")
+    if rec.get("wheel_sha256") != sha256(wheel):
+        raise SystemExit(f"the runner's Apple-lanes record is for other bytes than {Path(wheel).name} ({p})")
+    status, usable = rec.get("status"), rec.get("metal_usable")
+    if status == "PASSED" and usable:
+        return f"APPLE LANES PASSED on the runner's Metal device ({','.join(rec.get('lanes') or [])})"
+    if status in ("NO-METAL", "PASSED-NO-GPU") and usable is False:
+        return (f"APPLE LANES {status}: the runner reports its Metal device unusable (metal_usable=false); "
+                "the Apple column decides on the Mac")
+    raise SystemExit(f"the Apple lanes {','.join(rec.get('lanes') or [])} {status} on the runner "
+                     f"(metal_usable={usable}) for {Path(wheel).name}: {p.parent}")
 
 
 def main(argv=None):

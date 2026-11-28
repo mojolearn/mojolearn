@@ -196,8 +196,9 @@ def test_minmax_inverse_transform_refusals():
     fitted = pp.MinMaxScaler().fit(X)
     with pytest.raises(ValueError, match="feature count"):
         fitted.inverse_transform(X[:, :2])
-    with pytest.raises(TypeError, match="float32"):
-        fitted.inverse_transform(X.astype(np.float64))
+    # float64 is converted to float32 once (lane fp64-inputs, 2026-11-27): the float32 result's bits
+    np.testing.assert_array_equal(np.asarray(fitted.inverse_transform(X.astype(np.float64))),
+                                  np.asarray(fitted.inverse_transform(X)))
 
 
 @pytest.mark.parametrize("scaler", [pp.MinMaxScaler, pp.StandardScaler], ids=["MinMaxScaler", "StandardScaler"])

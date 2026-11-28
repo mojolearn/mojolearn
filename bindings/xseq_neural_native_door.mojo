@@ -1656,6 +1656,7 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
             raise Error("ValueError: invalid MLP optimizer checkpoint vector length")
         var old_progress_ptr = MutPointer[MLPProgress, MutUntrackedOrigin](unsafe_from_address=Int(py=xseq_addr(old_progress)))
         progress[] = old_progress_ptr[]
+        _ = old_progress^  # keep the checkpoint array alive past the pointer read
         progress[].check_resume(rows, Int(py=py_item(fields, nk[].k_n_iter_)), Int(py=py_item(fields, nk[].k_t_)),
                                 len(py_item(fields, nk[].k_loss_curve_)))
         seed = Int(progress[].seed)
@@ -1741,6 +1742,7 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     with GILReleased(py):
         best = xseq_run_curve_min(best_entry, curve_address, n_iter)
     _ = best_entry_owner
+    _ = curve^  # the curve array outlives the native read of curve_address
     if continuing:
         var prior_best = xseq_float(py_item(fields, nk[].k_best_loss_))
         best = best if best < prior_best else prior_best
@@ -1762,6 +1764,7 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     py_setitem(fields, nk[].k_loss_, last_loss)
     py_setitem(fields, nk[].k_best_loss_, best)
     py_setitem(fields, nk[].k_t_, Int(progress[].samples))
+    _ = progress_words^  # progress points into this array
     py_setitem(fields, PythonObject("_optimizer_state_"), checkpoint)
     _ = route.owner
     return model

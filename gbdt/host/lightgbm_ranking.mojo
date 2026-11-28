@@ -88,15 +88,15 @@ struct HostLightGBMRank(RankStages, Movable):
             keys[i] = rank_sort_key(src[i])
             a.order[i] = UInt32(i)
         host_cells(keyed, a.n, 4)
-        stable_radix_pairs_u32_host[4](keys, a.order, temp, a.second, counts, a.n)
+        stable_radix_pairs_u32_host[4](keys, rebind[RU](a.order), temp, rebind[RU](a.second), counts, a.n)
         if a.groups > 1:
             def grouped(i: Int) {imm a, imm keys}:
                 keys[i] = a.qids[Int(a.order[i])]
             host_cells(grouped, a.n, 2)
             if a.groups <= 65536:
-                stable_radix_pairs_u32_host[2](keys, a.order, temp, a.second, counts, a.n)
+                stable_radix_pairs_u32_host[2](keys, rebind[RU](a.order), temp, rebind[RU](a.second), counts, a.n)
             else:
-                stable_radix_pairs_u32_host[4](keys, a.order, temp, a.second, counts, a.n)
+                stable_radix_pairs_u32_host[4](keys, rebind[RU](a.order), temp, rebind[RU](a.second), counts, a.n)
 
     def _view(self, targets: List[Float32], scores: List[Float32], weights: List[Float32], seed: Int,
               iteration: Int, direction: RF, hessian: RF) raises -> RankView:

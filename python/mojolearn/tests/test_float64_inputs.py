@@ -298,10 +298,16 @@ def test_curve_metric_float64_is_the_float32_bits():
         assert np.asarray(wide).tobytes() == np.asarray(narrow).tobytes()
 
 
-def test_label_metric_float64_predictions_are_the_float32_bits():
+def test_label_metric_float64_predictions_are_treated_as_float32():
+    # label metrics take integer labels (int32 kernels): float32 label arrays are refused, and float64 ones,
+    # converted to float32 at the entry, are refused the same way (never a float64-only refusal)
     y = _labels(60, 34)
     pred = _labels(60, 35).astype(np.float64)
-    assert _same(ml.metrics.accuracy_score(y, pred), ml.metrics.accuracy_score(y, pred.astype(np.float32)))
+    with pytest.raises(ValueError, match="integer label array"):
+        ml.metrics.accuracy_score(y, pred.astype(np.float32))
+    with pytest.raises(ValueError, match="integer label array"):
+        ml.metrics.accuracy_score(y, pred)
+    assert _same(ml.metrics.accuracy_score(y, pred.astype(np.int64)), ml.metrics.accuracy_score(y, pred.astype(np.int32)))
 
 
 def test_cluster_metric_float64_is_the_float32_bits():
@@ -398,9 +404,12 @@ def test_forecaster_refuses_overflow_in_pandas_object_storage():
 def test_value_that_rounds_to_float32_max_is_kept():
     x64 = _wide(32, 3, 26)
     x64[4, 1] = _KEPT
-    wide = ml.StandardScaler().fit(x64)
-    narrow = ml.StandardScaler().fit(x64.astype(np.float32))
-    assert _same(wide.mean_, narrow.mean_)
+    # max_error reads the value itself (a scaler's variance or 1/range of float32's max overflows or underflows
+    # float32 arithmetic for the float32 input as well)
+    y64, zeros = x64[:, 1].copy(), np.zeros(32)
+    wide = ml.metrics.max_error(y64, zeros)
+    narrow = ml.metrics.max_error(y64.astype(np.float32), zeros.astype(np.float32))
+    assert _same(wide, narrow) and float(wide) == float(np.finfo(np.float32).max)
 
 
 # ---------------------------------------------------------------- strict entries stay strict

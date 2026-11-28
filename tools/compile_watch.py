@@ -14,6 +14,12 @@ for the rest of the leg's bound. Two callers share it:
 
     python3 tools/compile_watch.py watch --pid PID --log LOG --stall 240 --marker LOG.stalled
 
+THE CLOCK RUNS ONLY WHILE A COMPILER RUNS (review of the 0.9.0 integration, 2026-11-27). The build leg's tree also
+downloads and uploads cache archives (bincache.py) and runs the macOS packer: a slow R2 transfer sits at low CPU
+with no log output and is not a stalled compile. `watch` therefore sums the CPU of the compiler processes in the
+tree only (COMPILER_NAMES: the mojo driver, the linkers and the C compilers it calls; RELEASE_STALL_COMPILERS
+names others, comma separated) and holds the clock at zero while none is live.
+
 `watch` exits 0 when PID ends and 3 after writing the verdict line to MARKER once the build stalls; the
 watchdog then stops the tree and fails the build as STALLED by name. One watcher per compile: it is a
 watchdog over one process, not a unit of work to split.
@@ -27,6 +33,15 @@ from pathlib import Path
 
 #: CPU seconds a compile must gain to count as moving (the probe reads whole-second TIME on macOS `ps`)
 STALL_CPU_STEP = 0.5
+#: process names (comm, basename) that are compiles; everything else in the tree (transfers, packers) is not timed
+COMPILER_NAMES = frozenset({"mojo", "ld", "ld.lld", "lld", "ld64", "ld64.lld", "clang", "clang++", "cc", "c++",
+                            "gcc", "g++", "collect2", "cc1", "cc1plus"})
+#: toolchain suffixes (the conda linker x86_64-conda-linux-gnu-ld; /proc comm keeps 15 characters, so "-conda-li")
+COMPILER_MARKS = ("-ld", "-gcc", "-g++", "-cc", "-clang", "-conda-li", "-conda-l")
+
+
+def is_compiler(name, names):
+    return name in names or name.endswith(COMPILER_MARKS)
 #: lines of a failed build log that name it (first compiler diagnostics, else its last lines)
 ERROR_LINES = 6
 
@@ -42,10 +57,11 @@ class StallClock:
         self.last_output = None
         self.last_move = start
 
-    def observe(self, now, cpu, output=None):
+    def observe(self, now, cpu, output=None, active=True):
         if not self.stall:
             return False
-        if cpu is None:
+        if cpu is None or not active:
+            # No compiler live (a cache transfer, the packer) or a failed observation: neither is idle compile time.
             # A failed observation cannot establish how long the compiler was idle.
             self.last_move = now
             self.last_cpu = -1.0
@@ -143,6 +159,74 @@ def tree_cpu_seconds(pid, proc="/proc"):
     return ticks / tick if ticks is not None else None
 
 
+def compiler_names():
+    extra = os.environ.get("RELEASE_STALL_COMPILERS", "")
+    return COMPILER_NAMES | {n.strip() for n in extra.split(",") if n.strip()}
+
+
+def _compiler_sum(pid, children, cpu, comm, names):
+    """(CPU of the compiler subtrees under PID, whether any compiler is live). None CPU when PID is unreadable."""
+    if pid not in cpu:
+        return None, False
+    roots, todo = [], [pid]
+    while todo:
+        p = todo.pop()
+        if is_compiler(comm.get(p, ""), names):
+            roots.append(p)
+            continue
+        todo.extend(children.get(p, ()))
+    if not roots:
+        return 0.0, False
+    return float(sum(_tree_sum(r, children, cpu) for r in roots)), True
+
+
+def compile_cpu_seconds(pid, proc="/proc", names=None):
+    """(CPU seconds of the compiler processes in PID's tree, compiler live) from Linux /proc, or the macOS process
+    table. (None, False) when PID cannot be read."""
+    names = compiler_names() if names is None else names
+    if proc == "/proc" and sys.platform == "darwin":
+        try:
+            result = subprocess.run(["ps", "-axo", "pid=,ppid=,time=,comm="], capture_output=True, text=True,
+                                    timeout=10, check=True)
+            children, cpu, comm = {}, {}, {}
+            for row in result.stdout.splitlines():
+                process, parent, stamp, command = row.split(None, 3)
+                days, separator, clock = stamp.rpartition("-")
+                seconds = 0.0
+                for component in clock.split(":"):
+                    seconds = seconds * 60 + float(component)
+                process = int(process)
+                children.setdefault(int(parent), []).append(process)
+                cpu[process] = seconds + (86400 * int(days) if separator else 0)
+                comm[process] = os.path.basename(command.strip())
+            return _compiler_sum(pid, children, cpu, comm, names)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return None, False
+    try:
+        tick = os.sysconf("SC_CLK_TCK")
+        entries = os.listdir(proc)
+    except (ValueError, OSError, AttributeError):
+        return None, False
+    children, cpu, comm = {}, {}, {}
+    for name in entries:
+        if not name.isdigit():
+            continue
+        try:
+            text = Path(proc, name, "stat").read_text()
+        except OSError:
+            continue
+        head, _, tail = text.rpartition(")")
+        rest = tail.split()
+        try:
+            ppid, ticks = int(rest[1]), sum(int(x) for x in rest[11:15])
+        except (IndexError, ValueError):
+            continue
+        children.setdefault(ppid, []).append(int(name))
+        cpu[int(name)] = ticks / tick
+        comm[int(name)] = head.partition("(")[2]
+    return _compiler_sum(pid, children, cpu, comm, names)
+
+
 def alive(pid):
     try:
         os.kill(pid, 0)
@@ -158,16 +242,19 @@ def alive(pid):
         return True
 
 
-def watch(pid, log, stall, marker, poll=5.0, clock=time.monotonic, sleep=time.sleep, cpu_probe=tree_cpu_seconds,
+def watch(pid, log, stall, marker, poll=5.0, clock=time.monotonic, sleep=time.sleep, cpu_probe=compile_cpu_seconds,
           is_alive=alive):
-    """0 when PID ends; 3 after writing the STALLED line to MARKER."""
+    """0 when PID ends; 3 after writing the STALLED line to MARKER. cpu_probe(pid) gives (cpu, compiler live) or a
+    bare CPU figure (always live)."""
     sc = StallClock(stall, clock())
     while is_alive(pid):
         try:
             size = Path(log).stat().st_size
         except OSError:
             size = None
-        if sc.observe(clock(), cpu_probe(pid), size):
+        probe = cpu_probe(pid)
+        cpu, active = probe if isinstance(probe, tuple) else (probe, True)
+        if sc.observe(clock(), cpu, size, active):
             Path(marker).write_text(sc.describe() + "\n")
             return 3
         sleep(poll)
