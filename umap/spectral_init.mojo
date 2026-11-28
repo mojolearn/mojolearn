@@ -4,6 +4,7 @@
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.atomic import Atomic
+from core.cc_label_bodies import cc_hook_edge, cc_jump_node
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
@@ -286,40 +287,24 @@ def sc_label_init_kernel(labels: _SC_I32P, n_in: Int32):
 
 
 def sc_label_hook_kernel(rows: _SC_I32P, cols: _SC_I32P, labels: _SC_I32P, changed: _SC_I32P, nnz_in: Int32):
-    """One round of min-label propagation over the edges: both endpoints and
-    both endpoints' labels take the smaller label (integer `Atomic.min`).
-    Every label stays a vertex of its own component and never rises, so the
-    fixed point is unique: every vertex labelled with the SMALLEST index of
-    its component, whatever the thread order."""
+    """One round of min-label hooking over the COO edges: the one hook body
+    of the connected components (core/cc_label_bodies.mojo `cc_hook_edge`,
+    shared with x_neighbors/iter_device.mojo `cc_hook_kernel`). The fixed
+    point is unique: every vertex labelled with the SMALLEST index of its
+    component, whatever the thread order (that file's docstring)."""
     var e = _sc_gid()
     if e >= Int(nnz_in):
         return
-    var r = Int(rows.unsafe_load(e))
-    var c = Int(cols.unsafe_load(e))
-    var a = labels.unsafe_load(r)
-    var b = labels.unsafe_load(c)
-    if a == b:
-        return
-    var m = a if a < b else b
-    _ = Atomic.min(labels.unsafe_offset(r), m)
-    _ = Atomic.min(labels.unsafe_offset(c), m)
-    _ = Atomic.min(labels.unsafe_offset(Int(a)), m)
-    _ = Atomic.min(labels.unsafe_offset(Int(b)), m)
-    _ = Atomic.max(changed, Int32(1))
+    if cc_hook_edge(labels, Int(rows.unsafe_load(e)), Int(cols.unsafe_load(e))):
+        _ = Atomic.max(changed, Int32(1))
 
 
 def sc_label_jump_kernel(labels: _SC_I32P, n_in: Int32):
-    """Pointer jumping: each label follows its chain to a self-labelled
-    vertex (the chain strictly descends, so it ends)."""
+    """Pointer jumping (core/cc_label_bodies.mojo `cc_jump_node`)."""
     var i = _sc_gid()
     if i >= Int(n_in):
         return
-    var v = labels.unsafe_load(i)
-    var w = labels.unsafe_load(Int(v))
-    while w != v:
-        v = w
-        w = labels.unsafe_load(Int(v))
-    labels.unsafe_store(i, v)
+    cc_jump_node(labels, i)
 
 
 def sc_root_flag_kernel(labels: _SC_I32P, flag: _SC_I32P, n_in: Int32):

@@ -15,13 +15,13 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.neighbors_entry_table_umap import (
-    UMAP_OP_FIT, UMAP_OP_FIT_EX, UMAP_OP_TRANSFORM, UMAP_OP_ROWS_READ, UMAP_OP_GRAPH, umap_ops_check_layout, umap_ops_check_spans,
+    UMAP_OP_FIT, UMAP_OP_FIT_EX, UMAP_OP_TRANSFORM, UMAP_OP_ROWS_READ, UMAP_OP_GRAPH, UMAP_OP_FIT_GRAPH, umap_ops_check_layout, umap_ops_check_spans,
 )
 from metrics.host.metrics_host_entries_impl import require_finite_f32
-from umap.host.umap_oracle import host_umap_fit_transform, host_umap_transform, host_umap_neighbors_graph
+from umap.host.umap_oracle import host_umap_fit_transform, host_umap_transform, host_umap_neighbors_graph, host_umap_fit_graph
 from umap.graph_out import UmapFitOut
 from umap.ops_entry_words import (
-    UmapWordPtr, UmapFloatPtr, umap_fit_config, umap_fit_ex_config, umap_transform_config, umap_graph_config,
+    UmapWordPtr, UmapFloatPtr, umap_fit_config, umap_fit_ex_config, umap_transform_config, umap_graph_config, umap_fit_graph_config,
 )
 
 
@@ -52,6 +52,19 @@ def umap_ops_host_run(operation: Int, a: UmapWordPtr, na: Int, p: UmapWordPtr, n
         var gd = p[1]
         var gx = read_f32(a[0], gn * gd)
         return host_umap_neighbors_graph(gx, gn, gd, gconfig, a[1], a[2], a[3], UmapFitOut(a[4], a[5], a[6], 0))
+    if operation == UMAP_OP_FIT_GRAPH:
+        # `UMAP.graph_` read after a fit (lane sc-leftovers-1): the fit's graph body over the fit's words.
+        var fgconfig = umap_fit_graph_config(a, p, np, f)
+        var fgn = p[0]
+        var fgd = p[1]
+        var fgkind = p[8]
+        var fgdims = p[9]
+        var fgx = read_f32(a[0], fgn * fgd)
+        var fgtarget = List[Float32]()
+        if fgkind != 0:
+            fgtarget = read_f32(a[1], fgn * fgdims)
+        return host_umap_fit_graph(fgx, fgn, fgd, fgconfig, fgtarget, fgkind, fgdims, p[10], Float32(f[9]),
+                                   UmapFitOut(a[2], a[3], a[4], 0))
     if operation == UMAP_OP_FIT:
         var config = umap_fit_config(p, np, f)
         var n = p[0]

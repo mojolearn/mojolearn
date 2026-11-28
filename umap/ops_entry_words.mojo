@@ -48,6 +48,19 @@ def umap_fit_ex_config(a: UmapWordPtr, p: UmapWordPtr, np: Int, f: UmapFloatPtr)
     target_kind, target_dims, target_n_neighbors (, neighbors)], f [min_dist, spread,
     set_op_mix_ratio, local_connectivity, learning_rate, repulsion_strength,
     metric_arg, a, b, target_weight]."""
+    return _fit_ex_params(a[2] != 0, a[3], p, np, f)
+
+
+def umap_fit_graph_config(a: UmapWordPtr, p: UmapWordPtr, np: Int, f: UmapFloatPtr) raises -> UMAPParams:
+    """UMAP_OP_FIT_GRAPH: a [x, target, indptr, indices, data], p and f
+    UMAP_OP_FIT_EX's. The fit's refusals over the same words; the spectral
+    sample count is the start's, not the graph's, so it is not asked."""
+    return _fit_ex_params(True, a[1], p, np, f)
+
+
+def _fit_ex_params(init_given: Bool, target_addr: Int, p: UmapWordPtr, np: Int,
+                   f: UmapFloatPtr) raises -> UMAPParams:
+    """The one decoding of UMAP_OP_FIT_EX's words (the fit and `graph_`)."""
     var n = p[0]
     var d = p[1]
     var seed = p[5]
@@ -77,11 +90,9 @@ def umap_fit_ex_config(a: UmapWordPtr, p: UmapWordPtr, np: Int, f: UmapFloatPtr)
     var tdims = p[9]
     var tk = p[10]
     var tw = Float32(f[9])
-    var init_addr = a[2]
-    var target_addr = a[3]
     if config.n_components < 1 or config.n_components > 32:
         raise Error("UMAP supports 1 to 32 output dimensions")
-    if init_addr == 0 and n < 2 * config.n_components + 4:
+    if not init_given and n < 2 * config.n_components + 4:
         raise Error("UMAP has too few samples for spectral init")
     if tkind < 0 or tkind > 2 or (tkind != 0 and (target_addr == 0 or tdims < 1)):
         raise Error("UMAP supervised target is malformed")

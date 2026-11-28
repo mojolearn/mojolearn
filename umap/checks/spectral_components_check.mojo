@@ -16,7 +16,8 @@ sc-ann-1-spectral, 2026-11-27): native checks on hand-sized graphs.
 3. FALLBACK, under `-D MOJOLEARN_UMAP_SPECTRAL_SABOTAGE_SOLVE`: every solve
    counts as failed, `n_fallback` equals the solvable components, the
    message is set, every cell finite, and the host column agrees. Without
-   the define, `n_fallback == 0` is asserted instead.
+. MANY COMPONENTS, SPLIT (host only): 120,000 vertices in uneven components, edges scrambled; the host
+   labelling, split across the host cores, gives the serial union-find's component ids.
 
 Run (CPU column and any GPU):
   mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/spectral_components_check.mojo
@@ -32,7 +33,7 @@ from core.identity_trace import IdentityTrace
 from spectral.checks.device_io import upload_f32, upload_i32
 from spectral.impl.sparse.coo import CooGraph
 from spectral.impl.preprocessing.detail.spectral_embedding import transform_device_coo_device
-from umap.host.spectral_components_host import host_spectral_initialize_report
+from umap.host.spectral_components_host import host_spectral_initialize_report, _host_components
 from umap.spectral_components_math import SC_SABOTAGE_SOLVE
 from umap.spectral_init import (
     _sc_params,
@@ -164,8 +165,89 @@ def one_component(ctx: DeviceContext) raises:
     print("SPECTRAL_COMPONENTS_PASS one_component")
 
 
+def _oracle_components(g: CooGraph) -> List[Int32]:
+    """A serial union-find with the smaller root kept (the host column's former body, test-only): component ids
+    in order of their smallest vertex."""
+    var parent = List[Int](capacity=g.n)
+    for i in range(g.n):
+        parent.append(i)
+    for e in range(g.nnz()):
+        var a = Int(g.rows[e])
+        while parent[a] != a:
+            a = parent[a]
+        var b = Int(g.cols[e])
+        while parent[b] != b:
+            b = parent[b]
+        if a < b:
+            parent[b] = a
+        elif b < a:
+            parent[a] = b
+    var comp = List[Int32](length=g.n, fill=Int32(0))
+    var count = 0
+    for i in range(g.n):
+        var r = i
+        while parent[r] != r:
+            r = parent[r]
+        if r == i:
+            comp[i] = Int32(count)
+            count += 1
+        else:
+            comp[i] = comp[r]
+    return comp^
+
+
+def many_components_host() raises:
+    """4. MANY COMPONENTS, SPLIT (lane sc-leftovers-1): 120,000 vertices in components of uneven size (vertex v
+    links to v + 7 and v + 11 inside blocks of 5 + v // 1000 % 37 vertices, edges in a scrambled order, both
+    directions), enough edges and vertices for the host labelling to run on many tasks: the component ids equal
+    the serial union-find's."""
+    var n = 120000
+    var rows = List[Int32]()
+    var cols = List[Int32]()
+    var vals = List[Float32]()
+    var start = 0
+    while start < n:
+        var size = 5 + (start // 1000) % 37
+        var stop = min(start + size, n)
+        for v in range(start, stop):
+            for step in range(2):
+                var u = v + (7 if step == 0 else 11)
+                if u < stop:
+                    rows.append(Int32(v))
+                    cols.append(Int32(u))
+                    vals.append(Float32(1.0))
+                    rows.append(Int32(u))
+                    cols.append(Int32(v))
+                    vals.append(Float32(1.0))
+        start = stop
+    var m = len(rows)
+    for e in range(m):  # a fixed scramble: the labelling must not depend on the edge order
+        var f = (e * 7919) % m
+        var tr = rows[e]
+        rows[e] = rows[f]
+        rows[f] = tr
+        var tc = cols[e]
+        cols[e] = cols[f]
+        cols[f] = tc
+    var g = CooGraph(n, rows^, cols^, vals^)
+    var want = _oracle_components(g)
+    var got = List[Int32]()
+    var count = _host_components(g, got)
+    var want_count = 0
+    for i in range(n):
+        if Int(want[i]) + 1 > want_count:
+            want_count = Int(want[i]) + 1
+    if count != want_count:
+        raise Error("spectral components: host component count " + String(count) + " != " + String(want_count))
+    for i in range(n):
+        if got[i] != want[i]:
+            raise Error("spectral components: host component id differs at vertex " + String(i))
+    print("SPECTRAL_COMPONENTS_PASS many_components_host")
+
+
 def main() raises:
     var ctx = DeviceContext()
+    many_components_host()
     two_components(ctx)
     one_component(ctx)
     print("SPECTRAL_COMPONENTS_PASS all")

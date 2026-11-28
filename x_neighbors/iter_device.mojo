@@ -54,6 +54,7 @@ from gemm.contract import OP_TN as _SVGP_OP_TN
 from x_linear.ff import ff_of, ff_add, ff_sub, ff_mul, ff_div, ff_sqrt, ff_ld, ff_st
 from std.memory import bitcast, unsafe_memcpy
 from std.atomic import Atomic
+from core.cc_label_bodies import cc_hook_edge, cc_jump_node
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
@@ -426,26 +427,17 @@ def cc_hook_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP):
     var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if u < Int(n):
         for e in range(Int(indptr.unsafe_load(u)), Int(indptr.unsafe_load(u + 1))):
-            var v = Int(indices.unsafe_load(e))
-            var a = lab.unsafe_load(u)
-            var b = lab.unsafe_load(v)
-            if a != b:
-                var lo = a if a < b else b
-                var hi = b if a < b else a
-                # a racing read only costs a spare round: the flag is set
-                # whenever this edge could still lower an entry
-                if lab.unsafe_load(Int(hi)) > lo:
-                    Atomic[Int32].min(lab + Int(hi), lo)
-                    changed.unsafe_store(0, Int32(1))
+            # the one hook body (core/cc_label_bodies.mojo); a racing read only
+            # costs a spare round: the flag is set whenever this edge could
+            # still lower an entry
+            if cc_hook_edge(lab, u, Int(indices.unsafe_load(e))):
+                changed.unsafe_store(0, Int32(1))
 
 
 def cc_jump_kernel(lab: IP, n: Int32):
     var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if v < Int(n):
-        var p = Int(lab.unsafe_load(v))
-        while Int(lab.unsafe_load(p)) != p:
-            p = Int(lab.unsafe_load(p))
-        lab.unsafe_store(v, Int32(p))
+        cc_jump_node(lab, v)
 # TOMBSTONE: MOJOLEARN_CC_FAST_OFF (removed) deleted 2026-10-08 by 2851a6627; code recoverable at 2851a6627^.
 # Restore: git apply experiments/removed/MOJOLEARN_CC_FAST_OFF.patch; record in docs/TOMBSTONES.md.
 
@@ -497,15 +489,8 @@ def cc_hook_round_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP
     var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if u < Int(n):
         for e in range(Int(indptr.unsafe_load(u)), Int(indptr.unsafe_load(u + 1))):
-            var v = Int(indices.unsafe_load(e))
-            var a = lab.unsafe_load(u)
-            var b = lab.unsafe_load(v)
-            if a != b:
-                var lo = a if a < b else b
-                var hi = b if a < b else a
-                if lab.unsafe_load(Int(hi)) > lo:
-                    _ = Atomic[Int32].min(lab + Int(hi), lo)
-                    changed.unsafe_store(0, rid)
+            if cc_hook_edge(lab, u, Int(indices.unsafe_load(e))):
+                changed.unsafe_store(0, rid)
 
 
 def cc_root_count_kernel(lab: IP, bcount: IP, n_: Int64):
@@ -702,14 +687,8 @@ def cc_hook_dense_kernel(a: FP, lab: IP, n: Int32, changed: IP):
     if v < nn:
         for t in range(nn):
             if a.unsafe_load(t * nn + v) != Float32(0):
-                var x = lab.unsafe_load(t)
-                var y = lab.unsafe_load(v)
-                if x != y:
-                    var lo = x if x < y else y
-                    var hi = y if x < y else x
-                    if lab.unsafe_load(Int(hi)) > lo:
-                        _ = Atomic[Int32].min(lab + Int(hi), lo)
-                        changed.unsafe_store(0, Int32(1))
+                if cc_hook_edge(lab, t, v):
+                    changed.unsafe_store(0, Int32(1))
 
 
 def cc_label_init_kernel(lab: IP, n: Int32):
