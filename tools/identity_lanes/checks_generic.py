@@ -285,8 +285,22 @@ def _checks_generic_run(ml, X, yc, yr, group):
     if not classes:
         raise AssertionError(f"check-generic-{group}: the registry walk found no class with check in this group")
     parts, failed = {}, []
+    # WHERE A CELL'S TIME GOES (lane verify-speed-2, 2026-11-28): one stderr line a class, "# CHECK-CLASS <lane>
+    # <class> <s>s", the build, fit and check of that class. check-generic-trees was 536 s a lane on the 0.9.0 Apple
+    # record and 3 s on the CPU column, and no record said which classes cost it; the product lane on the Metal
+    # per-call cost reads these lines. Only in a record chunk (RECORD_FROM_INSTALLED=1, tools/identity_wheel_record.py),
+    # never in a user's verify. Not digested, not a part, outside every hash.
+    import os
+    import sys
+    import time
+    timed = None
+    say = os.environ.get("RECORD_FROM_INSTALLED") == "1"
     for where, name, cls in classes:  # driver-loop: over the public classes of one group, one bounded check each
         label = f"{where}.{name}" if where else name
+        if say and timed is not None:
+            print(f"# CHECK-CLASS check-generic-{group} {timed[0]} {time.perf_counter() - timed[1]:.3f}s",
+                  file=sys.stderr, flush=True)
+        timed = (label, time.perf_counter())
         try:
             est, why = _checks_generic_build(ml, where, name, cls)
         except Exception as exc:  # noqa: BLE001 -- a constructor that refuses the side is a failure, never n/a
@@ -329,6 +343,9 @@ def _checks_generic_run(ml, X, yc, yr, group):
         part = _checks_generic_side_part(result, side, label, failed)
         if part is not None:
             parts[label] = part
+    if say and timed is not None:
+        print(f"# CHECK-CLASS check-generic-{group} {timed[0]} {time.perf_counter() - timed[1]:.3f}s",
+              file=sys.stderr, flush=True)
     if failed:
         raise AssertionError(f"check-generic-{group} ({side} side): " + "; ".join(failed))
     parts["classes"] = _h(np.asarray([len(classes)], dtype=np.int64))
