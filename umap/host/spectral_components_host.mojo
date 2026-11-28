@@ -31,6 +31,7 @@ from umap.host.spectral_post_pass_host import host_spectral_post_pass
 from core.host_parallel import host_parallelize
 from umap.spectral_components_math import (
     SC_MAX_RESTARTS,
+    SC_SABOTAGE_SOLVE,
     SC_STREAM_LAYOUT,
     SpectralInitReport,
     sc_accept,
@@ -77,6 +78,8 @@ def _host_solve(
         if res.n_out != dim or len(res.embedding) != g.n * dim:
             return False
         if not sc_accept(res.converged, resid):
+            return False
+        comptime if SC_SABOTAGE_SOLVE:
             return False
         emb = List[Float32](capacity=g.n * dim)
         for i in range(len(res.embedding)):  # small-loop(one component's embedding words, a copy)

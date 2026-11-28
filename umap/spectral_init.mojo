@@ -25,6 +25,7 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from std.sys import stderr
 from umap.spectral_components_math import (
     SC_MAX_RESTARTS,
+    SC_SABOTAGE_SOLVE,
     SC_STREAM_LAYOUT,
     SpectralInitReport,
     sc_accept,
@@ -500,6 +501,8 @@ def _sc_solve(
             status.converged, status.residual
         )
     except:
+        ok = False
+    comptime if SC_SABOTAGE_SOLVE:
         ok = False
     _ = diagonal^
     _ = lap^

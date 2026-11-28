@@ -32,7 +32,15 @@ every vendor and on the host, in any thread order.
 
 from std.memory import bitcast
 
+from std.sys.compile import is_defined
+
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_sqrt
+
+
+comptime SC_SABOTAGE_SOLVE = is_defined["MOJOLEARN_UMAP_SPECTRAL_SABOTAGE_SOLVE"]()
+"""NEGATIVE CONTROL (checks only): every eigen solve of the UMAP init is
+treated as failed after it ran, on both columns, so the stated fallback is
+exercised (`umap/checks/spectral_components_check.mojo`)."""
 
 
 comptime SC_MAX_RESTARTS = 1000
