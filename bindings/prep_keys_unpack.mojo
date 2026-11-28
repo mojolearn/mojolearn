@@ -33,6 +33,8 @@ comptime PREP_OPN_F_CLASSIF = 20
 comptime PREP_OPN_CHI2 = 21
 comptime PREP_OPN_F_REGRESSION = 22
 comptime PREP_OPN_R_REGRESSION = 23
+# lane sc-stats-1 (2026-11-28): rank_genes_groups (bindings/prep_markers_native_door.mojo)
+comptime PREP_OPN_RANK_GENES_GROUPS = 24
 
 
 struct PrepKeys(Defaultable, Movable):
@@ -478,6 +480,7 @@ def _prep_keys_fill(nk: UnsafePointer[PrepKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "chi2", PREP_OPN_CHI2)
     py_op_add(ops, "f_regression", PREP_OPN_F_REGRESSION)
     py_op_add(ops, "r_regression", PREP_OPN_R_REGRESSION)
+    py_op_add(ops, "rank_genes_groups", PREP_OPN_RANK_GENES_GROUPS)
     nk[].ops = ops
     nk[].ready = True
 

@@ -257,7 +257,7 @@ _LAZY_NAMES = {
     "EllipticEnvelope": "._expansion_decomp", "AlternatingLeastSquares": "._expansion_decomp",
     # _expansion_prep
     "f_classif": "._expansion_prep", "f_regression": "._expansion_prep", "r_regression": "._expansion_prep",
-    "chi2": "._expansion_prep", "mutual_info_classif": "._expansion_prep",
+    "chi2": "._expansion_prep", "rank_genes_groups": "._expansion_prep", "mutual_info_classif": "._expansion_prep",
     "mutual_info_regression": "._expansion_prep", "RobustScaler": "._expansion_prep",
     "MaxAbsScaler": "._expansion_prep", "OrdinalEncoder": "._expansion_prep", "OneHotEncoder": "._expansion_prep",
     "TargetEncoder": "._expansion_prep", "SimpleImputer": "._expansion_prep",
