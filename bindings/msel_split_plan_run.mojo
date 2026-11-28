@@ -67,7 +67,8 @@ from bindings.arena_prog_run import MetricArenaOwner, MetricRoute, metric_inputs
 from core.native_descriptor_call import native_descriptor_call
 from x_metrics.descriptor_schema import MP_MODE, MP_VENDOR
 from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE
-from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
+from core.prep_entry_table import xp_transport_call
+from core.store_entry_table import xp_store_ref
 from bindings.msel_split_run import (
     MSEL_SPLIT_GOLDEN, MSEL_SPLIT_NONE, MselCounterRng, MselFoldRows, msel_fold_rows_fits, msel_split_mix64,
     msel_split_signed32, msel_shuffled_fold_rows_plan, msel_stratified_fold_rows_plan,
@@ -231,11 +232,12 @@ def msel_prog_run_slots(route: MselSplitRoute, prog: MselProg, slots: List[Int])
 
 
 def msel_prog_store(route: MselSplitRoute) raises -> EntryRef:
-    """The x_prep transport entry of the program image's tier and vendor: the
-    store a program input slot lives in (`MselProgSlot`)."""
+    """The resident store entry (core/store_entry_table.mojo) of the program
+    image's tier and vendor: the store a program input slot lives in
+    (`MselProgSlot`)."""
     var mode = native_descriptor_call(route.program, MP_MODE, [], [], [])
     var vendor = native_descriptor_call(route.program, MP_VENDOR, [], [], [])
-    return xp_transport_ref(PrepEntryKey(mode, vendor))
+    return xp_store_ref(mode, vendor)
 
 
 def msel_stratified_on_slot(route: MselSplitRoute, labels: MselCodes, form: Int, k: Int) -> Bool:

@@ -180,6 +180,7 @@ from checks.vendor import COMPILED_VENDOR
 from core.device_route import device_vendor_code
 from core.kmeans_member import kmeans_member_publish
 from core.base_helpers_device import publish_base_helpers_device
+from core.store_transport_device import publish_store_transport_device
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -1832,6 +1833,12 @@ def build__mojolearn() -> PythonObject:
         # The base helper table (core/base_entry_table.mojo): the same
         # helpers for native callers in other extension modules.
         publish_base_helpers_device()
+        # The resident device store's entry (core/store_entry_table.mojo; lane lane-loads-3, 2026-11-28): the
+        # one resident input store of this tier, for the native callers in other extension modules that keep
+        # or read a slot (metric slots, x_metrics residents, member folds, model-selection programs, scope
+        # caches). Published here, at the base binding's init, so those callers need no `_mojolearn_x_prep`
+        # image; the x_prep transport keeps its own table and runs the same store body.
+        publish_store_transport_device()
         # The parallel base table (core/parallel_entry_table.mojo): the
         # parallel owners call its entry natively, not this module's doors.
         publish_parallel_base_device()

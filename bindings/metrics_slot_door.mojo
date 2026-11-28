@@ -33,7 +33,8 @@ host.
 """
 from std.python import Python, PythonObject
 from core.entry_table import EntryRef, entry_ref_unresolved
-from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
+from core.prep_entry_table import xp_transport_call
+from core.store_entry_table import xp_store_ref
 from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS
 from bindings.py_balanced import py_item, py_type, py_call
 from bindings.classical_arrays_door import classical_address
@@ -106,13 +107,14 @@ struct McSlots(Movable):
         var mode = Int(py=key[0])
         var vendor = Int(py=key[1])
         try:
-            self.store = xp_transport_ref(PrepEntryKey(mode, vendor))
+            self.store = xp_store_ref(mode, vendor)
         except error:
             if vendor == 0:
                 return False  # the host image (vendor 0): no device store to reach
             # A GPU image whose store cannot be reached is refused in words,
-            # never sent to the host route (lane vdf-xm-wire2; the x_prep
-            # image is connected with the metrics image at import,
+            # never sent to the host route (lane vdf-xm-wire2; the store
+            # entry is the base binding's, core/store_entry_table.mojo,
+            # connected with the metrics image at import,
             # python/mojolearn/_native_labels_bridge.py `_metrics`).
             raise Error(metric_store_refusal("metrics", mode, vendor, String(error)))
         self.resident.store = self.store

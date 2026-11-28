@@ -63,6 +63,7 @@ from x_metrics.descriptor_device import metrics_program_device_v1
 from x_metrics.descriptor_schema import MP_MODE, MP_VENDOR
 from x_prep.transport_abi import XP_DEV_LIVE
 from x_prep.transport_device import publish_x_prep_transport_device
+from core.store_transport_device import publish_store_transport_device
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
 from core.native_descriptor_call import native_descriptor_call
 from bindings.msel_split_plan_run import (
@@ -321,6 +322,8 @@ def _run_gpu() raises:
     require(slot.store, "msel_split_stratified_res: the slot route has no store")
     # the one resident store is the x_prep image's (lane vdf-xm-wire): published here, read by its transport entry
     publish_x_prep_transport_device()
+    # the slot route resolves the store through the base binding's store entry (core/store_entry_table.mojo)
+    publish_store_transport_device()
     var store = xp_transport_ref(PrepEntryKey(native_descriptor_call(slot.program, MP_MODE, [], [], []),
                                               native_descriptor_call(slot.program, MP_VENDOR, [], [], [])))
 

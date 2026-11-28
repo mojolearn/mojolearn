@@ -54,7 +54,7 @@ from core.msel_scope_codes import msel_scope_codes_put, msel_helper_store_ops, M
 from bindings.classical_arrays_door import classical_address
 from core.arena_state import ARENA_HANDLE_NONE
 from core.entry_table import EntryRef, entry_ref_unresolved
-from core.prep_entry_table import PrepEntryKey, xp_transport_ref
+from core.store_entry_table import xp_store_ref
 
 
 struct MselScopeRows(Movable):
@@ -93,7 +93,7 @@ def msel_scope_rows(context: PythonObject) raises -> MselScopeRows:
     if vendor == 0:
         return held^
     try:
-        held.store = xp_transport_ref(PrepEntryKey(Int(py=key[0]), vendor))
+        held.store = xp_store_ref(Int(py=key[0]), vendor)
     except:
         return held^  # the column's image ships no x_prep store: the per-call route
     held.floor = arena_scope_floor(scope)

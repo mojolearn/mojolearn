@@ -69,6 +69,7 @@ from core.arena_state import (
 )
 from core.entry_table import EntryRef, entry_ref_mode, entry_ref_vendor
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
+from core.store_entry_table import xp_store_ref
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_LIVE, XP_DEV_TAKE_ROWS, XP_DEV_READ
 
@@ -159,8 +160,18 @@ def arena_cache_route(store: EntryRef) -> Int:
 
 def arena_cache_store(route: Int) raises -> EntryRef:
     """The transport entry a route word names (resolved once per scope
-    close; a cache owner object holds its own)."""
-    return xp_transport_ref(PrepEntryKey((route >> 8) & 0xFF, route & 0xFF))
+    close; a cache owner object holds its own). The store entry of the
+    route's base binding (core/store_entry_table.mojo; lane lane-loads-3,
+    2026-11-28); when that tier's base binding is not loaded, the x_prep
+    transport of the route, as before: a cache put through the x_prep image's
+    own ref (bindings/x_prep_native_owner_door.mojo `xprep_key`, a
+    `DeviceCache` on that binding) is on the same store, and that image is
+    then loaded. Both entries run one store body on one store; the refusal
+    when neither is published is the x_prep table's, in its old words."""
+    try:
+        return xp_store_ref((route >> 8) & 0xFF, route & 0xFF)
+    except:
+        return xp_transport_ref(PrepEntryKey((route >> 8) & 0xFF, route & 0xFF))
 
 
 def arena_cache_store(prefix: String, route: Int) raises -> EntryRef:

@@ -52,7 +52,7 @@ def run_case(which: Int) raises:
     else:
         var got = metric_store_refusal("x_metrics", 1, 2, "native entry table: provider is not published: X")
         require(got == "RuntimeError: x_metrics: the identical GPU image (vendor 2) keeps device-resident inputs in "
-                + "the x_prep store, but the x_prep image of the same tier and vendor is not connected or does not "
+                + "the x_prep store, but the base binding of the same tier and vendor is not connected or does not "
                 + "match (native entry table: provider is not published: X); install mojolearn binaries of one build",
                 "refusal words: " + got)
         require(metric_store_refusal("metrics", 0, 3, "c").startswith("RuntimeError: metrics: the fast GPU image"),

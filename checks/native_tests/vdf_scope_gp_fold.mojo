@@ -25,7 +25,7 @@ FAIL-PROOF EDITS (each must fail the named case): put back `enqueue_copy(dst_buf
 `gpr_fit_ptr_device` (device 0: a negative host address); drop the `srcs[i] < 0` branch of
 core/fitted_resident_store.mojo `_upload_all` (device 1); pass `x_word` 0 in core/gp_native_device.mojo
 `gpr_optimize` (device 2: an empty X); drop the `x_addr < 0` test in `gpc_fit_all_device` (device 4);
-delete the XP_DEV_READ branch of x_prep/transport_device.mojo (device 5); delete `_host_x` in
+delete the XP_DEV_READ branch of core/store_transport_device.mojo `store_transport_op` (device 5); delete `_host_x` in
 core/gp_native_host.mojo (host 0).
 """
 from std.testing import TestSuite

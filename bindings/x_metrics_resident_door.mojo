@@ -57,7 +57,8 @@ from core.entry_table import EntryRef
 from bindings.metric_store_refusal import metric_store_refusal
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
-from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
+from core.prep_entry_table import xp_transport_call
+from core.store_entry_table import xp_store_ref
 from x_metrics.descriptor_schema import MP_MODE, MP_VENDOR
 from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS
 
@@ -65,20 +66,21 @@ comptime _INT32_MAX = 2147483647
 
 
 def metric_store_ref(program: NativeDescriptorCall) raises -> EntryRef:
-    """The x_prep transport entry of the program image's tier and vendor (two
+    """The resident store entry of the program image's tier and vendor
+    (core/store_entry_table.mojo, published by the base binding; two
     entry calls, then the process table read): the one resident store's
     door. Asked only on an image that has the store (`MetricRoute.store`),
     once per run, at its first input that could be resident. A table refusal
     is raised in words (`metric_store_refusal`): the selector refuses, it
     never widens to the host route (lane vdf-xm-wire2; before, it returned
-    None and the run silently copied the input from the host). The x_prep
-    image of each tier is connected with the x_metrics image at import
+    None and the run silently copied the input from the host). The base
+    binding of each tier is connected with the x_metrics image at import
     (python/mojolearn/_native_arena_prog.py `connect`), so a refusal here
     means mismatched or missing binaries."""
     var mode = native_descriptor_call(program, MP_MODE, [], [], [])
     var vendor = native_descriptor_call(program, MP_VENDOR, [], [], [])
     try:
-        return xp_transport_ref(PrepEntryKey(mode, vendor))
+        return xp_store_ref(mode, vendor)
     except error:
         raise Error(metric_store_refusal("x_metrics", mode, vendor, String(error)))
 

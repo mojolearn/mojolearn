@@ -3,7 +3,9 @@
 published at `_mojolearn_x_prep` init (`publish_x_prep_transport_device`).
 Each branch is the body of the matching `*_binding` entry of
 bindings/_mojolearn_x_prep.mojo on typed words: the same checks, the same
-device program runner and resident store. No numeric change."""
+device program runner and resident store. No numeric change.
+The store operations run `store_transport_op` (core/store_transport_device.mojo), the body the base binding's
+store entry runs too: one store, two entries."""
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
@@ -13,10 +15,9 @@ from core.shared_slot import SharedSlot
 from core.naive_bayes_member import naive_bayes_member_publish
 from core.discriminant_member import discriminant_member_publish
 from x_prep.device import run_program_device, run_program_device_ranges
-from x_prep.store_slot import x_prep_ctx, X_PREP_STORE
+from core.store_transport_device import store_transport_op
 from x_prep.transport_abi import (
-    XP_TRANSPORT_ABI, XP_OP_COUNT, XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, XP_DEV_PUT, XP_DEV_FREE,
-    XP_DEV_TAKE_ROWS, XP_DEV_LIVE, XP_DEV_READ, xp_validate_call, xp_vendor_word,
+    XP_TRANSPORT_ABI, XP_OP_COUNT, XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, xp_validate_call, xp_vendor_word,
 )
 
 
@@ -42,21 +43,11 @@ def _xp_device_op(op: Int, a: List[Int], p: List[Int]) raises -> Int:
             raise Error("x_prep: invalid program buffers")
         run_program_device_ranges(a[0], p[0], a[1], p[3], p[1], a[2], p[2], a[3], p[4], a[4], p[5])
         return p[3]
-    if op == XP_DEV_PUT:
-        return X_PREP_STORE.get_or_create_ptr()[].put(x_prep_ctx(), a[0], p[0])
-    if op == XP_DEV_FREE:
-        X_PREP_STORE.get_or_create_ptr()[].free(x_prep_ctx(), p[0])
-        return 0
-    if op == XP_DEV_TAKE_ROWS:
-        return X_PREP_STORE.get_or_create_ptr()[].take_rows(x_prep_ctx(), p[0], p[1], a[0], p[2])
-    if op == XP_DEV_LIVE:
-        return Int(X_PREP_STORE.get_or_create_ptr()[].live_count())
-    if op == XP_DEV_READ:
-        if p[1] < 0 or (p[1] > 0 and a[0] == 0):
-            raise Error("x_prep: invalid read buffer")
-        X_PREP_STORE.get_or_create_ptr()[].read(x_prep_ctx(), p[0], a[0], p[1])
-        return 0
-    raise Error("x_prep transport ABI: unknown operation " + String(op))
+    # The store operations (XP_DEV_PUT, _FREE, _TAKE_ROWS, _LIVE, _READ): the five branches that stood here
+    # moved byte for byte to core/store_transport_device.mojo `store_transport_op` (lane lane-loads-3,
+    # 2026-11-28), the one body this entry and the base binding's store entry both run on the one store. It
+    # ends with this function's "unknown operation" refusal, in the same words.
+    return store_transport_op(op, a, p)
 
 
 def x_prep_transport_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

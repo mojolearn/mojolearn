@@ -59,7 +59,7 @@ def _metrics():
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes
         try:
             module = _backend.binding("_mojolearn_metrics", mode)
-            _connect_store(_backend, mode)  # the x_prep store the GPU slots read (bindings/metrics_slot_door.mojo)
+            _connect_store(_backend, mode)  # the resident store entry the GPU slots resolve (bindings/metrics_slot_door.mojo)
             table = {}
             for name in ("r2_score", "r2_score_weighted", "metrics_numeric_mode", "umap_numeric_mode"):  # glue: fixed native exports
                 entry = getattr(module, name, None)

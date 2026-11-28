@@ -34,14 +34,18 @@ def _error_text(error):
 
 def _connect_store(backend, mode):
     # glue: import-time connection, once per mode. A GPU metric image keeps
-    # its resident inputs in the x_prep image's store and reaches it through
-    # the x_prep transport table that image publishes when it loads; loading
-    # it here, with the metric image, means a run never meets an unpublished
-    # table (bindings/x_metrics_resident_door.mojo `metric_store_ref` and
-    # bindings/metrics_slot_door.mojo `McSlots` refuse one in words). A load
-    # failure is left for that refusal to name.
+    # its resident inputs in the one resident device store of its tier and
+    # reaches it through the store entry the base binding `_mojolearn`
+    # publishes when it loads (core/store_entry_table.mojo); loading that
+    # tier's base binding here, with the metric image, means a run never
+    # meets an unpublished table (bindings/x_metrics_resident_door.mojo
+    # `metric_store_ref` and bindings/metrics_slot_door.mojo `McSlots` refuse
+    # one in words). The `_mojolearn_x_prep` image is not loaded for this any
+    # more: it published the store through its program transport, which only
+    # its own programs and the scalers still resolve. A load failure is left
+    # for that refusal to name.
     try:
-        backend.binding("_mojolearn_x_prep", mode)
+        backend.binding("_mojolearn", mode)
     except Exception:  # noqa: BLE001 - the run that needs the store refuses in words
         pass
 

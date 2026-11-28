@@ -7,7 +7,7 @@ A member kind that answers `MEMBER_CAN_ROW_INDEX` and `MEMBER_CAN_SCOPE`
 row numbers (`call.row_index`, host int32 or int64) and, inside a
 `resident()` scope, the scope word and X's pin. `member_fold_x_open`:
 
-  1. the x_prep family store of the route's image (`xp_transport_ref`, the
+  1. the x_prep family store of the route's image (`xp_store_ref`, the
      store every GPU image ships and the one the scope's x_prep cache holds,
      so a naive Bayes or discriminant member over the same X shares the
      upload): X is found in the scope's cache, or put ONCE and published
@@ -29,7 +29,7 @@ from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_I32, MEMBER_I64, MEMBER_SCOPE_NONE, MEMBER_HOME_HOST,
 )
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_mode, entry_ref_vendor
-from core.prep_entry_table import PrepEntryKey, xp_transport_ref
+from core.store_entry_table import xp_store_ref
 from core.host_parallel import host_widen_index_i64, host_parallelize
 from core.fold_x_word import fold_x_word
 from bindings.arena_cache_run import (
@@ -73,9 +73,11 @@ struct MemberFoldX(Movable):
 
 def member_fold_store(call: _Call) raises -> EntryRef:
     """The x_prep family store of the image the member's route resolved to
-    (same mode and vendor words); raises when that image ships none."""
+    (same mode and vendor words): the resident store entry its base binding
+    publishes (core/store_entry_table.mojo); raises when none is published
+    (a host route, or a tier whose base binding is not loaded)."""
     var route = call[].route
-    return xp_transport_ref(PrepEntryKey(entry_ref_mode(route.entry), entry_ref_vendor(route.entry)))
+    return xp_store_ref(entry_ref_mode(route.entry), entry_ref_vendor(route.entry))
 
 
 def member_fold_store_ready(call: _Call) -> Bool:
