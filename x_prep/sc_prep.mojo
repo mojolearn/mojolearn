@@ -1112,7 +1112,7 @@ def sp_csr_select_unit(t: Int, f: FP, q: IP):
 
 
 @always_inline
-def _clip(v: Float32, mv: Float32, both: Bool) -> Float32:
+def _clip(var v: Float32, mv: Float32, both: Bool) -> Float32:
     if v > mv:
         return mv
     if both and v < -mv:
