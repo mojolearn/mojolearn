@@ -103,7 +103,7 @@ def seal_capture(output):
     for directory in ('checks', 'core', 'gemm', 'embedding', 'transformer', 'training'):
         for source in sorted(Path(directory).rglob('*.mojo')):
             sources[source.as_posix()] = sha(source.read_bytes())
-    # sequence/decode_slab.mojo: in the transformer and training bindings' closure; it was core/decode_slab.mojo
+    # sequence/decode_slab.mojo: in the transformer and training bindings' closure; it was sequence/decode_slab.mojo
     # (core move, 2026-11-28).
     for name in ('sequence/decode_slab.mojo', 'pixi.toml', 'pixi.lock',
                  'tools/transformer_training_gradient_oracle.py'):

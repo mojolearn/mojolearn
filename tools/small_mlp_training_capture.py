@@ -113,7 +113,7 @@ def sources(root):
     paths = set()
     for directory in ('training', 'gemm', 'core'):
         paths.update((root / directory).rglob('*.mojo'))
-    # sequence/decode_slab.mojo: in the training binding's closure; it was core/decode_slab.mojo (core move, 2026-11-28).
+    # sequence/decode_slab.mojo: in the training binding's closure; it was sequence/decode_slab.mojo (core move, 2026-11-28).
     for name in ('checks/numerics.mojo', 'checks/vendor.mojo', 'sequence/decode_slab.mojo',
                  'bindings/_mojolearn_training.mojo', 'bindings/_mojolearn_linalg.mojo',
                  'python/mojolearn/_mlp_impl.py', 'python/mojolearn/neural_network.py',
