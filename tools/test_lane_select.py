@@ -459,11 +459,11 @@ def test_a_bindings_edge_always_has_a_door_that_resolves_it():
     does not know about, which is how the text search got in.
 
     This replaces an assertion that `tokenizer` never sees the forest host
-    binding. It does see it, and legitimately: `_bufcheck.py` -> `_buffer.py`,
-    which names it (`_FOREST_HOST_EXTENSION`, for `_host_native`; until
-    lane/lazy-imports it imported `_forest_host` itself). That widens the tokenizer
-    lane, which is the safe direction, and the narrowing this file has to
-    protect is covered by FAMILY_CASES."""
+    binding. Until lane-loads-1 (2026-11-28) it did see it: `_bufcheck.py` -> `_buffer.py`,
+    which named it (`_FOREST_HOST_EXTENSION`, for `_host_native`; until
+    lane/lazy-imports it imported `_forest_host` itself). `_buffer.py` names no family
+    binary now (the doors offer their own: `_buffer.register_host_native`). The
+    narrowing this file has to protect is covered by FAMILY_CASES."""
     sources, why = lane_select.lane_sources()
     sinks = lane_select.enumerator_files() | lane_select._reexport_registries()
     for lane in sorted(sources)[::13]:

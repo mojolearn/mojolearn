@@ -685,8 +685,15 @@ def _attribute_roots(fn, module_globals):
         _FOREIGN_CACHE[key] = (foreign, other)
         return foreign, other
     objects = _call_bound_locals(tree)
+    rebound = _rebound_text_builtins(tree, module_globals)
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute):
+            if _builtin_text(node.value, rebound):
+                # A METHOD OF A BUILTIN STRING (lane-loads-1, 2026-11-28):
+                # `str(a.dtype).encode()`, `"|".join(parts).encode()`. See
+                # `_builtin_text`.
+                foreign.add(node.attr)
+                continue
             root = node.value
             while isinstance(root, (ast.Attribute, ast.Call, ast.Subscript)):
                 root = root.func if isinstance(root, ast.Call) else root.value
@@ -713,6 +720,66 @@ def _attribute_roots(fn, module_globals):
                 other.add(alias.asname or alias.name)
     _FOREIGN_CACHE[key] = (foreign, other)
     return foreign, other
+
+
+#: Builtins whose result is always a `str` or a `bytes` object, whatever they are handed.
+_TEXT_BUILTINS = frozenset({"str", "repr", "format", "ascii", "hex", "chr", "bytes", "bytearray"})
+#: Methods of `str` and `bytes` whose result is again a `str` or a `bytes` object.
+_TEXT_METHODS = frozenset({"join", "format", "strip", "lstrip", "rstrip", "lower", "upper", "replace",
+                           "encode", "decode"})
+
+
+def _rebound_text_builtins(tree, module_globals):
+    """The names of `_TEXT_BUILTINS` one function's source (or the harness module) binds to something
+    of its own: a parameter, an assignment, a loop or `with` target, an import. Such a name is not the
+    builtin there, so `_builtin_text` does not trust a call of it."""
+    bound = {n for n in _TEXT_BUILTINS if n in module_globals}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            bound.add(node.id)
+        elif isinstance(node, ast.arg):
+            bound.add(node.arg)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            bound |= {(a.asname or a.name).split(".")[0] for a in node.names}
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            bound |= set(node.names)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            bound.add(node.name)
+    return bound & _TEXT_BUILTINS
+
+
+def _builtin_text(node, rebound=frozenset()):
+    """Is the expression `node` a builtin `str` or `bytes` object BY ITS SYNTAX: a string or bytes
+    literal, an f-string, a call of a text builtin the function does not rebind (`str(x)`,
+    `repr(x)`), or a text method of one of those (`"|".join(parts)`, `str(x).strip()`).
+
+    AN ATTRIBUTE OF A BUILTIN STRING IS NOT A PACKAGE NAME (lane-loads-1, 2026-11-28). The harness
+    hashes with `m.update(str(a.dtype).encode())` (`_h`) and `"|".join(...).encode()`, which leaves
+    `encode` in `co_names`; python/mojolearn/_verify_api.py defines a top-level `encode`, so 956 of
+    1,022 lanes seeded that module, a seed is walked whole, and its `resolve` and `package` import
+    `_verify_device` and the package: every one of those lanes was handed the tokenizer, the scalers
+    and the metrics (tools/release_families.py derive: `_mojolearn_x_tokenizer` 956 lanes,
+    `_mojolearn_x_prep` and `_mojolearn_metrics` 950), none of which a random forest lane runs.
+    No lane calls `_verify_api.encode`. `str(x).encode` is `str.encode`: the receiver's type is
+    fixed by the language, so the name cannot reach a function of a package file. The same rule as
+    `digest` on a hashlib object (`_seed_names`) and a builtin called bare (`_builtin_only_names`).
+    Only what the syntax proves: `token.encode()` on a local or a parameter, and
+    `v.render_ranks().encode()` on a package object's result, still count as package names."""
+    if isinstance(node, ast.JoinedStr):
+        return True
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, (str, bytes))
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _builtin_text(node.left, rebound) and _builtin_text(node.right, rebound)
+    if isinstance(node, ast.IfExp):
+        return _builtin_text(node.body, rebound) and _builtin_text(node.orelse, rebound)
+    if isinstance(node, ast.Call):
+        func = node.func
+        if isinstance(func, ast.Name):
+            return func.id in _TEXT_BUILTINS and func.id not in rebound
+        if isinstance(func, ast.Attribute):
+            return func.attr in _TEXT_METHODS and _builtin_text(func.value, rebound)
+    return False
 
 
 def _call_bound_locals(tree):
