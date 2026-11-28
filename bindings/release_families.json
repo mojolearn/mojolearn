@@ -56,7 +56,8 @@
    "_mojolearn_runtime_classical_host",
    "_mojolearn_runtime_parallel_host",
    "_mojolearn_runtime_model_selection_host",
-   "_mojolearn_tokenizer_host"
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_tokenizer_fast"
   ],
   "linear": [
    "_mojolearn_estimators",
