@@ -54,8 +54,9 @@ from neighbors.svgp_run import (
 )
 from neighbors.graph_fit_run import (
     XN_CAPABILITY_UNIT, PageRankRequest, ComponentsRequest, LouvainRequest, LouvainOutcome, xn_capabilities_run,
-    pagerank_fit_run, components_run, louvain_fit_run,
+    pagerank_fit_run, components_run, louvain_fit_run, LeidenRequest, LeidenOutcome, leiden_fit_run,
 )
+from neighbors.neighbors_graph_run import xn_leiden_quality, xn_leiden_iterations_check
 
 # Each operation is UNPACK (this file: Python reads, admission, the published
 # arrays), RUN (neighbors/graph_fit_run.mojo, neighbors/svgp_run.mojo: typed
@@ -512,6 +513,52 @@ def _louvain_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     py_setitem(fields, "n_levels_", _int(PythonObject(outcome.levels)))
 
 
+# ---------------------------------------------------------------- Leiden
+
+
+def _leiden_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
+    """`Leiden.fit(A)`: UNPACK reads the fields and admits the adjacency
+    (Louvain's forms), RUN is neighbors/graph_fit_run.mojo
+    `leiden_fit_run` under one GIL release, PACK publishes."""
+    # UNPACK
+    classical_connect_numpy(context)
+    var binding = args[0]
+    var fields = py_fields(model)
+    var n_iterations = xn_leiden_iterations_check(Int(py=_int(_attr(model, "n_iterations"))))
+    var quality = xn_leiden_quality(family_str(_attr(model, "objective_function")))
+    var random_state = _attr(model, "random_state")
+    var seed = 0 if random_state is None else Int(py=_int(random_state))
+    var csr = _csr_lists(args[1], True, context)
+    var a = PythonObject(None)
+    var n: Int
+    if csr.present:
+        n = csr.n
+    else:
+        a = _adjacency(args[1], context)
+        n = Int(py=a.shape[0])
+    var resolution = _float_of(model, "resolution")
+    var labels = family_array(Python.tuple(max(n, 1)), "<i4", context)
+    var has_vals = csr.present and csr.vals is not None
+    var request = LeidenRequest(csr.present, _addr(csr.indptr) if csr.present else 0,
+                                _addr(csr.indices) if csr.present else 0, _addr(csr.vals) if has_vals else 0,
+                                Int(py=csr.indices.shape[0]) if csr.present else 0,
+                                0 if csr.present else _addr(a), _addr(labels), n, n_iterations, quality, seed,
+                                resolution)
+    var connection = LofConnection(binding)
+    var outcome = LeidenOutcome()
+    # RUN
+    with GILReleased(Python()):
+        outcome = leiden_fit_run(connection.driver, request)
+    _ = csr^  # keep the admitted lists alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    # PACK
+    py_setitem(fields, "n_communities_", PythonObject(outcome.communities))
+    py_setitem(fields, "labels_", labels)
+    py_setitem(fields, "quality_", PythonObject(outcome.quality))
+    py_setitem(fields, "n_iterations_", _int(PythonObject(outcome.iterations)))
+
+
 # ---------------------------------------------------------------- SVGP
 #
 # Door split (lane dw-neighbors-b, 2026-11-21): UNPACK reads the fields,
@@ -705,6 +752,12 @@ def _neighbors_graph_operation_route(model: PythonObject, operation: String, var
         return model
     if operation == "family_xn_graph_louvain_fit_predict":
         _louvain_fit(model, args, context)
+        return _attr(model, "labels_")
+    if operation == "family_xn_graph_leiden_fit":
+        _leiden_fit(model, args, context)
+        return model
+    if operation == "family_xn_graph_leiden_fit_predict":
+        _leiden_fit(model, args, context)
         return _attr(model, "labels_")
     if operation == "family_xn_graph_connected_components":
         return _connected_components(args, context)

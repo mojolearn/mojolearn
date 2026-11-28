@@ -52,6 +52,8 @@ def operation_names_xn(mut names: List[String], mut leaves: List[Int]):
     names.append("family_xn_ann_sq_fit")
     names.append("family_xn_ann_sq_search")
     names.append("family_xn_graph_connected_components")
+    names.append("family_xn_graph_leiden_fit")
+    names.append("family_xn_graph_leiden_fit_predict")
     names.append("family_xn_graph_louvain_fit")
     names.append("family_xn_graph_louvain_fit_predict")
     names.append("family_xn_graph_pagerank_fit")
