@@ -2763,8 +2763,9 @@ def rank_genes_groups(X, groups, *, method="wilcoxon", reference="rest", tie_cor
 
     Parameters
     ----------
-    X : array-like or scipy.sparse matrix of shape (n_cells, n_genes)
-        Expression matrix, dense or sparse (CSR, or any format convertible to CSR).
+    X : array-like or CSR matrix of shape (n_cells, n_genes)
+        Expression matrix, dense, or sparse in CSR form: any object with ``indptr``, ``indices``,
+        ``data`` and ``shape``. Another sparse format raises ValueError; convert it to CSR first.
     groups : array-like of shape (n_cells,)
         Group label of each cell, such as cluster labels. Groups are ordered
         by sorted label. Every group needs at least two cells.

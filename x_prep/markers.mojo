@@ -4,8 +4,8 @@
 
 References: Scanpy 1.10 `scanpy/tools/_rank_genes_groups.py` (`_RankGenes.wilcoxon`, `t_test`,
 `compute_statistics`, the log fold change `log2((expm1(mean_g) + 1e-9) / (expm1(mean_rest) + 1e-9))`),
-Seurat `FindMarkers` (the same two tests), scipy `ttest_ind_from_stats(equal_var=False)`, statsmodels
-`multipletests(method="fdr_bh")`.
+Seurat `FindMarkers` (the same two tests), Welch's unequal-variance t-test with the Welch-Satterthwaite degrees
+of freedom, Benjamini and Hochberg 1995 (statsmodels' `fdr_bh` arithmetic).
 
 The units run in the prep lane's program model (x_prep/common.mojo): one source, the device launches one thread
 per unit, the host column runs the same function over its pool, so CPU == GPU bit for bit by construction. Each
@@ -147,8 +147,7 @@ def rg_gather_dense_unit(t: Int, f: FP, q: IP):
 
 def rg_gather_csr_unit(t: Int, f: FP, q: IP):
     """q = [INDPTR, INDICES, DATA, n, c0, dc, PERM, G]; t = pos. Row PERM[pos]'s values of the columns
-    [c0, c0 + dc) into G[c*n + pos]: zeros, then each stored entry added in stored order (a repeated column sums,
-    as SciPy's), then `canon`. INDPTR and INDICES are int32 words, DATA float32."""
+    [c0, c0 + dc) into G[c*n + pos]: zeros, then each stored entry added in stored order (a repeated column sums), then `canon`. INDPTR and INDICES are int32 words, DATA float32."""
     var n = p(q, 3)
     var c0 = p(q, 4)
     var dc = p(q, 5)

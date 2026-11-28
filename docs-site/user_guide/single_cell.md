@@ -47,8 +47,8 @@ The soft cluster assignments are in `R_` and the objective of each round in `obj
 
 `rank_genes_groups` tests every gene for each group against the rest of the cells (or against one reference
 group), as Scanpy's `tl.rank_genes_groups` and Seurat's `FindMarkers`. `method="wilcoxon"` is the Wilcoxon
-rank-sum test and `method="t-test"` Welch's t-test. The input is cells x genes, dense or a SciPy sparse matrix,
-with log1p-transformed values.
+rank-sum test and `method="t-test"` Welch's t-test. The input is cells x genes, dense or a sparse matrix in CSR
+form (`indptr`, `indices`, `data`, `shape`), with log1p-transformed values.
 
 ```python
 labels = mojolearn.KMeans(n_clusters=6, n_init=3).fit_predict(Z)

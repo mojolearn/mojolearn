@@ -413,8 +413,8 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """mojolearn.rank_genes_groups (lane sc-stats-1, 2026-11-28; RECORD OWED): 900 cells x 12 genes of
     log1p-like values rounded to tenths (so ranks tie), 4 groups; Wilcoxon against the rest without and with
-    the tie correction, Wilcoxon against reference group 2, Welch's t-test with Bonferroni. Dense input (the
-    lane harness has no scipy; the CSR path is the boundary tests' and the native check's)."""
+    the tie correction, Wilcoxon against reference group 2, Welch's t-test with Bonferroni; the same matrix as CSR buffers
+    (indptr, indices, data, shape on a plain namespace, no SciPy) must give the dense words."""
     Xg = np.round(np.log1p(np.abs(_functions_mat(X, 900, 12, "fn-rank-genes:x")) * 4.0), 1).astype(np.float32)
     g = _functions_classes(X, 900, 4, "fn-rank-genes:g")
 
@@ -425,7 +425,17 @@ def _(ml, X, yc, yr, Xh=None):
         wil=parts(ml.rank_genes_groups(Xg, g)),
         tie=parts(ml.rank_genes_groups(Xg, g, tie_correct=True)),
         ref=parts(ml.rank_genes_groups(Xg, g, reference=2)),
-        tt=parts(ml.rank_genes_groups(Xg, g, method="t-test", corr_method="bonferroni"))), form="scalar")
+        tt=parts(ml.rank_genes_groups(Xg, g, method="t-test", corr_method="bonferroni")),
+        csr=parts(ml.rank_genes_groups(_functions_csr(Xg), g))), form="scalar")
+
+
+def _functions_csr(x):
+    """x's CSR buffers on a plain namespace (rows ascending, columns ascending), no SciPy."""
+    import types
+    nz = x != 0
+    return types.SimpleNamespace(indptr=np.concatenate([[0], np.cumsum(nz.sum(axis=1))]).astype(np.int32),
+                                 indices=np.nonzero(nz)[1].astype(np.int32), data=x[nz].astype(np.float32),
+                                 shape=x.shape)
 
 _batch_decl(_FUNCTIONS_BATCH_NA, "fn-chi2", "fn-rank-genes-groups", "fn-f-classif", "fn-f-regression", "fn-r-regression",
             "fn-mutual-info-classif", "fn-mutual-info-regression", "fn-connected-components", "fn-kpss-test",

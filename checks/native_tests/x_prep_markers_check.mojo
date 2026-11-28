@@ -9,8 +9,8 @@ A hand-checkable case: six cells in two interleaved groups, two genes.
             tie correction (one run of three: T = 24, N^3 - N = 210) z = -1.6230861, p = 0.1045710; group 1 has
             z = +1.5275252.
     gene 1: group 0 = {1, 2, 3}, group 1 = {2, 4, 6}; ranks 1, 2.5, 2.5, 4, 5, 6, rank sum 7.5, z = -1.3093073.
-            Welch: t = (2 - 4) / sqrt(1 / 3 + 4 / 3) = -1.5491933, dof = 50 / 17, p = 0.2208808 (scipy
-            ttest_ind_from_stats(equal_var=False)).
+            Welch: t = (2 - 4) / sqrt(1 / 3 + 4 / 3) = -1.5491933, dof = 50 / 17, p = 0.2208808 (the
+            Student t two-sided tail, I_{dof / (dof + t^2)}(dof / 2, 1 / 2), computed by hand).
     log fold change of gene 0, group 0: log2(expm1(5 / 3) / expm1(3)) = -2.1519210.
     against reference group 1 (two groups: the same pool) group 0's z equals the "rest" one.
     Benjamini-Hochberg of [0.01, 0.04, 0.03, 0.2]: [0.04, 0.0533333, 0.0533333, 0.2]; Bonferroni [0.04, 0.16,

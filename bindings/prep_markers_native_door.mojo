@@ -4,7 +4,8 @@ sc-stats-1, 2026-11-28), reached from bindings/prep_owner_native_door.mojo.
 
 UNPACK: the method words, the group labels as int32 codes (`classical_encode_labels`, f_classif's encoder: the
 group labels sorted as `classes`), the reference group's code, X as dense float32 rows (`xprep_values`) or as CSR
-(`csr_input`, MultinomialNB's admission). RUN: one x_prep chunk program per block of genes
+(any object holding CSR buffers `indptr`, `indices`, `data` and `shape`, read as attributes; nothing of SciPy is
+imported or called). RUN: one x_prep chunk program per block of genes
 (bindings/prep_markers_run.mojo `marker_chunk_stage`, the units of x_prep/markers.mojo), each block's three
 gene-major results copied into the door's three host blocks by one memcpy each, then one program over the whole
 result (`marker_final_stage`: the row-major results and the adjusted p-values). PACK: a dict with Scanpy's
@@ -20,7 +21,8 @@ from bindings.scaler_native_door import _ptr
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.x_prep_native_owner_door import xprep_values
 from bindings.classical_labels_door import classical_encode_labels
-from bindings.prep_classify_common_door import is_sparse, csr_input
+from bindings.prep_classify_common_door import _i32_vector
+from bindings.admitted_input_unpack import admit_x
 from bindings.prep_encode_native_door import EncProg, _take2, _default_mode
 from bindings.cluster_public_native_pack import _xc_array
 from providers.python.x_cluster_out_pyapi_pack import _py_array
@@ -38,6 +40,19 @@ def _text(value: PythonObject, name: String, choices: String) raises -> String:
     if py_type(value) is not b.str:
         raise Error("ValueError: rank_genes_groups: " + name + " must be one of " + choices)
     return String(value)
+
+
+def _csr_like(value: PythonObject) raises -> Bool:
+    """A sparse input in CSR form: an object with `indptr`, `indices`, `data` and `shape` (and, when it names its
+    `format`, "csr"). Another sparse format is refused: convert it to CSR first."""
+    var b = native_loaded_module("builtins")
+    if not Bool(py=py_call(b.hasattr, value, "indptr")):
+        return False
+    if Bool(py=py_call(b.hasattr, value, "format")):
+        var fmt = py_call(b.getattr, value, "format")
+        if not (py_type(fmt) is b.str and String(fmt) == "csr"):
+            raise Error("ValueError: rank_genes_groups: a sparse X must be in CSR form")
+    return True
 
 
 def _arena(ran: PythonObject) raises -> Int:
@@ -77,7 +92,7 @@ def prep_rank_genes_call(args: PythonObject, context: PythonObject) raises -> Py
         raise Error("ValueError: rank_genes_groups: groups must hold at least two different labels")
     var mode = _default_mode(context)
     var entries = _entries(mode, context)
-    var sparse = is_sparse(args[0])
+    var sparse = _csr_like(args[0])
     var n: Int
     var d: Int
     var values = PythonObject(None)
@@ -86,13 +101,18 @@ def prep_rank_genes_call(args: PythonObject, context: PythonObject) raises -> Py
     var data = PythonObject(None)
     var nnz = 0
     if sparse:
-        var csr = csr_input(args[0], context)
-        n = csr.n
-        d = csr.d
-        nnz = csr.nnz
-        indptr = csr.indptr
-        indices = csr.indices
-        data = csr.data
+        var source = args[0]
+        var shape = source.shape
+        n = Int(py=py_call(b.int, shape[0]))
+        d = Int(py=py_call(b.int, shape[1]))
+        indptr = _i32_vector(source.indptr, "indptr", context)
+        indices = _i32_vector(source.indices, "indices", context)
+        nnz = Int(py=py_call(b.len, indices))
+        if Int(py=py_call(b.len, indptr)) != n + 1:
+            raise Error("ValueError: rank_genes_groups: a CSR input's indptr must hold n_cells + 1 offsets")
+        data = admit_x(source.data, 1, "data", context)
+        if Int(py=py_call(b.len, data)) != nnz:
+            raise Error("ValueError: rank_genes_groups: a CSR input's data and indices differ in length")
     else:
         values = xprep_values(args[0], entries, context)
         n = Int(py=values[3])

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """mojolearn.rank_genes_groups at the Python API boundary (lane sc-stats-1, 2026-11-28): the input forms (dense,
-SciPy CSR), the refusals, the result layout, and the statistics against an independent float64 NumPy oracle of
+CSR buffers on a plain object; no SciPy anywhere), the refusals, the result layout, and the statistics against an independent float64 NumPy oracle of
 Scanpy's formulas (Wilcoxon with average ranks and optional tie correction, Welch's t-test, Benjamini-Hochberg,
 the log fold change). The kernels' exact checks are native (checks/native_tests/x_prep_markers_check.mojo)."""
 import math
@@ -128,16 +128,45 @@ def test_wilcoxon_reference_matches_oracle():
         np.testing.assert_allclose(_a(res, "scores")[row], z, rtol=2e-5, atol=2e-5)
 
 
-def test_t_test_matches_scipy_welch():
-    stats = pytest.importorskip("scipy.stats")
+def _betainc(a, b, x):
+    """The regularized incomplete beta I_x(a, b) in float64 (Lentz's continued fraction), the test's own oracle."""
+    if x <= 0.0:
+        return 0.0
+    if x >= 1.0:
+        return 1.0
+    if x > (a + 1.0) / (a + b + 2.0):
+        return 1.0 - _betainc(b, a, 1.0 - x)
+    lbt = math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b) + a * math.log(x) + b * math.log(1.0 - x)
+    tiny = 1e-300
+    c, d = 1.0, 1.0 - (a + b) * x / (a + 1.0)
+    d = 1.0 / (d if abs(d) > tiny else tiny)
+    h = d
+    for m in range(1, 400):
+        for num in (m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m)),
+                    -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1))):
+            d = 1.0 + num * d
+            d = 1.0 / (d if abs(d) > tiny else tiny)
+            c = 1.0 + num / c
+            c = c if abs(c) > tiny else tiny
+            h *= d * c
+        if abs(d * c - 1.0) < 1e-15:
+            break
+    return math.exp(lbt) * h / a
+
+
+def test_t_test_matches_welch_oracle():
     x, g = _data()
     res = mojolearn.rank_genes_groups(x, g, method="t-test", corr_method="bonferroni")
     for j in range(3):
-        t, p = stats.ttest_ind(x[g == j].astype(np.float64), x[g != j].astype(np.float64), equal_var=False)
+        a = x[g == j].astype(np.float64)
+        b = x[g != j].astype(np.float64)
+        va, vb = a.var(0, ddof=1) / len(a), b.var(0, ddof=1) / len(b)
+        t = (a.mean(0) - b.mean(0)) / np.sqrt(va + vb)
+        dof = (va + vb) ** 2 / (va ** 2 / (len(a) - 1) + vb ** 2 / (len(b) - 1))
+        p = np.array([_betainc(df / 2.0, 0.5, df / (df + tt * tt)) for tt, df in zip(t, dof)])
         np.testing.assert_allclose(_a(res, "scores")[j], t, rtol=1e-4, atol=1e-5)
         np.testing.assert_allclose(_a(res, "pvals")[j], p, rtol=2e-3, atol=1e-6)
-        np.testing.assert_allclose(_a(res, "pvals_adj")[j], np.minimum(_a(res, "pvals")[j] * 7, 1),
-                                   rtol=1e-6)
+        np.testing.assert_allclose(_a(res, "pvals_adj")[j], np.minimum(_a(res, "pvals")[j] * 7, 1), rtol=1e-6)
 
 
 def test_log_fold_change_is_scanpys():
@@ -150,14 +179,33 @@ def test_log_fold_change_is_scanpys():
         np.testing.assert_allclose(_a(res, "logfoldchanges")[j], lfc, rtol=1e-4, atol=1e-4)
 
 
+class _Csr:
+    """CSR buffers as plain attributes (what the door reads), built with NumPy only."""
+
+    def __init__(self, x):
+        nz = x != 0
+        self.indptr = np.concatenate([[0], np.cumsum(nz.sum(axis=1))]).astype(np.int32)
+        self.indices = np.nonzero(nz)[1].astype(np.int32)
+        self.data = x[nz].astype(np.float32)
+        self.shape = x.shape
+        self.format = "csr"
+
+
 def test_csr_equals_dense():
-    sparse = pytest.importorskip("scipy.sparse")
     x, g = _data()
     x[x < 0.8] = 0
     dense = mojolearn.rank_genes_groups(x, g)
-    csr = mojolearn.rank_genes_groups(sparse.csr_matrix(x), g)
-    for key in ("scores", "pvals", "pvals_adj", "logfoldchanges"):
+    csr = mojolearn.rank_genes_groups(_Csr(x), g)
+    for key in ("names", "scores", "pvals", "pvals_adj", "logfoldchanges"):
         assert np.asarray(dense[key]).tobytes() == np.asarray(csr[key]).tobytes()
+
+
+def test_other_sparse_format_refused():
+    x, g = _data()
+    other = _Csr(x)
+    other.format = "csc"
+    with pytest.raises(ValueError, match="CSR"):
+        mojolearn.rank_genes_groups(other, g)
 
 
 def test_refusals():
