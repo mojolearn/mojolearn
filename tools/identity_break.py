@@ -1635,11 +1635,11 @@ LANE_REVISIONS = {
 
     "tokenizer": "synthetic-vocab-1",
     # rows: these lanes fitted the full 20,000 x 16 fixture
-    "gbdt-parametric-losses": "rows-1500-1",
+    "gbdt-parametric-losses": "rows-1500-verify-light-20261128-1",
     # NaN moved onto the columns the fitted trees split on; until 2026-09-16
     # (lane/dead-arms) the two nan_mode arms hashed the SAME bytes at every size
     "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
-    "gbdt-lossguide-newtoncosine": "rows-1500-1",
+    "gbdt-lossguide-newtoncosine": "rows-1500-verify-light-20261128-1",
     "gbdt-pair-logit": "rows-1500-1",
     # rows: O(n^2) neighbourhood work
     "hdbscan": "rows-4000-1",
@@ -1667,15 +1667,15 @@ LANE_REVISIONS = {
     # match the GPU trainer; this lane runs the default, so every cell
     # recorded before it hashes a step the library no longer takes by default.
     "byte-lm-host-train": "weight-decay-default-0.01-1",
-    "byte-lm-resident": "shape-l1-d16-ff32-1",
-    "samba": "steps-1-1",
-    "samba-untied-dropout-accum": "steps-3-1",
+    "byte-lm-resident": "verify-light-20261128-1",
+    "samba": "steps-1-verify-light-20261128-1",
+    "samba-untied-dropout-accum": "steps-3-verify-light-20261128-1",
     # sequence length: the (2, 16, 32) slab -> (2, 8, 32)
     # dt_limit (0.01, 0.1) -> (0.5, 0.9): every dt this lane makes was ABOVE
     # the old upper bound, so S9 returned `hi` for every value, the lower
     # bound was inert and a clamp pinned to a constant read IDENTICAL
     # (2026-09-16, lane/dead-arms). The LENGTH did not move; 8 is still 8.
-    "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+    "mamba2-dtlimit": "seqlen-8-verify-light-20261128-1",
     # THE NORMS THAT WERE BITWISE EQUAL (2026-09-16, lane/dead-arms). Two
     # same-shape RMSNorm weights initialised to ones are the same tensor, so
     # exchanging them was the identity function, and these lanes never train,
@@ -1685,7 +1685,7 @@ LANE_REVISIONS = {
     # 2026-11-23, lane sab-host-missed-nrl): its older cells carry no such part.
     "mamba3": "norms-near-one-two-chunk-backward-2",
     "transformer": "norms-near-one-1",
-    "transformer-window": "norms-near-one-1",
+    "transformer-window": "verify-light-20261128-1",
     # arithmetic, not input: UMAP.transform is row separable now
     "tsvd": "explained-variance-train-contract-1",
     "umap": "save-option-extras-contract-2",
@@ -1710,13 +1710,13 @@ LANE_REVISIONS = {
     "sequence-ets": "obs-48-1",
     "x-metrics-permutation-test-score": "perms-4-20261105-1",
     "x-decomp-eigh-wide-linalg": "light-fixture-20261105-1",
-    "x-decomp-eigh-wide-fastica": "light-fixture-20261105-1",
-    "x-decomp-eigh-wide-rotation": "light-fixture-20261105-1",
-    "x-decomp-eigh-wide-factor-analysis": "light-fixture-20261128-1",
-    "x-decomp-eigh-wide-mincovdet": "light-fixture-20261105-1",
-    "x-decomp-umap-options": "light-fixture-20261105-1",
-    "x-decomp-manifold": "light-fixture-20261128-1",
-    "x-decomp-factor-analysis": "light-fixture-20261128-1",
+    "x-decomp-eigh-wide-fastica": "verify-light-20261128-1",
+    "x-decomp-eigh-wide-rotation": "verify-light-20261128-1",
+    "x-decomp-eigh-wide-factor-analysis": "verify-light-20261128-1",
+    "x-decomp-eigh-wide-mincovdet": "verify-light-20261128-1",
+    "x-decomp-umap-options": "verify-light-20261128-1",
+    "x-decomp-manifold": "verify-light-20261128-1",
+    "x-decomp-factor-analysis": "verify-light-20261128-1",
     "trees-calibrated": "light-fixture-20261105-1",
     "trees-stacking-clf": "lacking-fold-20261124-1",
     "trees-voting-clf": "light-fixture-20261105-1",
@@ -1726,7 +1726,7 @@ LANE_REVISIONS = {
     "gbdt-multiclass-offgrid": "light-fixture-20261105-1",
     "gbdt-ordered": "light-fixture-20261105-1",
     "gbdt-ordered-bayesian-noise": "light-fixture-20261105-1",
-    "gbdt-binary-columns": "light-fixture-20261105-1",
+    "gbdt-binary-columns": "verify-light-20261128-1",
     "gbdt-catboost-defaults": "light-fixture-20261105-1",
     "gbdt-stochastic-arms": "light-fixture-20261105-1",
     "gbdt-multiclass": "light-fixture-20261105-1",
@@ -1748,47 +1748,88 @@ LANE_REVISIONS = {
     # 2026-11-28, lane/verify-speed-2: 3 members (was 8), and the linear, decomp and neighbors groups' fitting lanes
     # bound an int max_iter / n_iter above 8 to 8 and an int n_init above 2 to 2 (generic.py `_generic_BOUNDS`,
     # checks_generic.py `_checks_generic_BOUNDS`)
-    "generic-attrs-trees": "ensemble-bound-3-20261128-1",
-    "generic-pickle-trees": "ensemble-bound-3-20261128-1",
-    "generic-digest-trees": "ensemble-bound-3-20261128-1",
-    "check-generic-trees": "ensemble-bound-3-20261128-1",
-    "generic-attrs-linear": "iter-bound-8-20261128-1",
-    "generic-pickle-linear": "iter-bound-8-20261128-1",
-    "generic-digest-linear": "iter-bound-8-20261128-1",
-    "check-generic-linear": "iter-bound-8-20261128-1",
-    "generic-attrs-decomp": "iter-bound-8-20261128-1",
-    "generic-pickle-decomp": "iter-bound-8-20261128-1",
-    "generic-digest-decomp": "iter-bound-8-20261128-1",
-    "check-generic-decomp": "iter-bound-8-20261128-1",
-    "generic-attrs-neighbors": "iter-bound-8-20261128-1",
-    "generic-pickle-neighbors": "iter-bound-8-20261128-1",
-    "generic-digest-neighbors": "iter-bound-8-20261128-1",
-    "check-generic-neighbors": "iter-bound-8-20261128-1",
+    "generic-attrs-trees": "verify-light-20261128-1",
+    "generic-pickle-trees": "verify-light-20261128-1",
+    "generic-digest-trees": "verify-light-20261128-1",
+    "check-generic-trees": "verify-light-20261128-1",
+    "generic-attrs-linear": "verify-light-20261128-1",
+    "generic-pickle-linear": "verify-light-20261128-1",
+    "generic-digest-linear": "verify-light-20261128-1",
+    "check-generic-linear": "verify-light-20261128-1",
+    "generic-attrs-decomp": "verify-light-20261128-1",
+    "generic-pickle-decomp": "verify-light-20261128-1",
+    "generic-digest-decomp": "verify-light-20261128-1",
+    "check-generic-decomp": "verify-light-20261128-1",
+    "generic-attrs-neighbors": "verify-light-20261128-1",
+    "generic-pickle-neighbors": "verify-light-20261128-1",
+    "generic-digest-neighbors": "verify-light-20261128-1",
+    "check-generic-neighbors": "verify-light-20261128-1",
     # 2026-11-28, lane/verify-speed-1: the GBDT gap and categorical lanes fit half the trees (`_GBDT_GAPS_TREES`,
     # `_GBDT_CAT_TREES`, `_GBDT_CTR_TABLES_TREES`); rows, depth, rate and options unchanged
-    "gbdt-categorical-ctr-tables": "trees-half-20261128-1",
-    "gbdt-cat-rmse": "trees-half-20261128-1",
-    "gbdt-cat-bootstrap": "trees-half-20261128-1",
-    "gbdt-cat-noise": "trees-half-20261128-1",
-    "gbdt-cat-ordered": "trees-half-20261128-1",
-    "gbdt-cat-rest": "trees-half-20261128-1",
-    "gbdt-cat-nonsym": "trees-half-20261128-1",
-    "gbdt-weighted-symmetric": "trees-half-20261128-1",
-    "gbdt-weighted-nonsym": "trees-half-20261128-1",
+    "gbdt-categorical-ctr-tables": "verify-light-20261128-1",
+    "gbdt-cat-rmse": "verify-light-20261128-1",
+    "gbdt-cat-bootstrap": "verify-light-20261128-1",
+    "gbdt-cat-noise": "verify-light-20261128-1",
+    "gbdt-cat-ordered": "verify-light-20261128-1",
+    "gbdt-cat-rest": "verify-light-20261128-1",
+    "gbdt-cat-nonsym": "verify-light-20261128-1",
+    "gbdt-weighted-symmetric": "verify-light-20261128-1",
+    "gbdt-weighted-nonsym": "verify-light-20261128-1",
     "gbdt-weighted-rank": "trees-half-20261128-1",
-    "gbdt-eval-gaps": "trees-half-20261128-1",
-    "gbdt-weighted-rest": "trees-half-20261128-1",
-    "gbdt-weighted-special": "trees-half-20261128-1",
-    "gbdt-shape-gaps": "trees-half-20261128-1",
-    "gbdt-rest-gaps": "trees-half-20261128-1",
-    "gbdt-pointwise-arms": "trees-half-20261128-1",
-    "gbdt-pointwise-rest": "trees-half-20261128-1",
-    "gbdt-ordered-weights": "trees-half-20261128-1",
-    "gbdt-nonsym-rest": "trees-half-20261128-1",
-    "gbdt-symmetric-rest": "trees-half-20261128-1",
-    "gbdt-multi-walk": "trees-half-20261128-1",
-    "gbdt-pointwise-multiclass": "trees-half-20261128-1",
-    "gbdt-simple-leaves": "trees-half-20261128-1",
+    "gbdt-eval-gaps": "verify-light-20261128-1",
+    "gbdt-weighted-rest": "verify-light-20261128-1",
+    "gbdt-weighted-special": "verify-light-20261128-1",
+    "gbdt-shape-gaps": "verify-light-20261128-1",
+    "gbdt-rest-gaps": "verify-light-20261128-1",
+    "gbdt-pointwise-arms": "verify-light-20261128-1",
+    "gbdt-pointwise-rest": "verify-light-20261128-1",
+    "gbdt-ordered-weights": "verify-light-20261128-1",
+    "gbdt-nonsym-rest": "verify-light-20261128-1",
+    "gbdt-symmetric-rest": "verify-light-20261128-1",
+    "gbdt-multi-walk": "verify-light-20261128-1",
+    "gbdt-pointwise-multiclass": "verify-light-20261128-1",
+    "gbdt-simple-leaves": "verify-light-20261128-1",
+    # 2026-11-28, lane/verify-light-1 (AGENTS.md "Verification has light fixtures"): option units dealt over the
+    # nine fixtures (`_spread`), serving parts dealt (`_DEALT_PARTS`), lighter fixtures; NON_SIZE_REVISIONS says what each changed
+    "x-decomp-robust-cov": "verify-light-20261128-1",
+    "x-decomp-pls": "verify-light-20261128-1",
+    "x-decomp-fastica": "verify-light-20261128-1",
+    "x-decomp-dict-learning": "verify-light-20261128-1",
+    "x-decomp-pca-randomized": "verify-light-20261128-1",
+    "generic-attrs-prep": "verify-light-20261128-1",
+    "generic-pickle-prep": "verify-light-20261128-1",
+    "generic-digest-prep": "verify-light-20261128-1",
+    "check-generic-prep": "verify-light-20261128-1",
+    "generic-attrs-cluster": "verify-light-20261128-1",
+    "generic-pickle-cluster": "verify-light-20261128-1",
+    "generic-digest-cluster": "verify-light-20261128-1",
+    "check-generic-cluster": "verify-light-20261128-1",
+    "generic-attrs-sequence": "verify-light-20261128-1",
+    "generic-pickle-sequence": "verify-light-20261128-1",
+    "generic-digest-sequence": "verify-light-20261128-1",
+    "check-generic-sequence": "verify-light-20261128-1",
+    "generic-attrs-other": "verify-light-20261128-1",
+    "generic-pickle-other": "verify-light-20261128-1",
+    "generic-digest-other": "verify-light-20261128-1",
+    "check-generic-other": "verify-light-20261128-1",
+    "gbdt-yeti-rank-pointwise": "verify-light-20261128-1",
+    "gbdt-rank-bootstrap": "verify-light-20261128-1",
+    "gbdt-rank-leaves": "verify-light-20261128-1",
+    "gbdt-rank-pointwise-arms": "verify-light-20261128-1",
+    "gbdt-rank-pairs": "verify-light-20261128-1",
+    "gbdt-adapter-score-weighted": "verify-light-20261128-1",
+    "mamba1-int8w": "verify-light-20261128-1",
+    "mamba2-bf16w": "verify-light-20261128-1",
+    "transformer-bf16w": "verify-light-20261128-1",
+    "x-ann-tsne-pca": "verify-light-20261128-1",
+    "cross-val": "verify-light-20261128-1",
+    "numeric-profile-parts": "verify-light-20261128-1",
+    "x-metrics-search": "verify-light-20261128-1",
+    "x-cluster-gmm-options": "verify-light-20261128-1",
+    "x-cluster-bgmm-covtypes": "verify-light-20261128-1",
+    "x-cluster-agglo-connectivity": "verify-light-20261128-1",
+    "fn-msel-permutation-test-score": "verify-light-20261128-1",
+    "x-logistic-cv-proba": "verify-light-20261128-1",
     # The neural sequence lanes' 2026-11-05 change is to the batchscale and
     # rlpair PROTOCOLS (SEQ_SCALE_WHOLE, SCALE_LONG_L, SCALE_PREFIXES,
     # RLPAIR_DECODE, RLPAIR_LEAVE_AFTER), not to their train input; those parts
@@ -1901,6 +1942,7 @@ NON_SIZE_REVISIONS = {
         "4088 single-byte tokens and 4 two-byte tokens over the 4096 fixture bytes, so the BPE merge "
         "loop runs four times and the endoftext branch never matches"),
     "byte-lm-resident": (
+        "2026-11-28, lane/verify-light-1: the serving parts batchgrad, batchscale, ragged, stepfull and rlpair run on one fixture each (`_DEALT_PARTS`, FIXTURES[1..5]) and read n/a:dealt on the other eight; the train input and the batch part unchanged; before that: "
         "what changed is the model SHAPE, one block at d_model 16 instead of two at 32 (2026-09-16, "
         "lane/neural-shape-shrink), which is a property of the trainer rather than a count in the "
         "fixture. The lane's claim survives it by construction: it asserts the resident export equals "
@@ -1930,6 +1972,7 @@ NON_SIZE_REVISIONS = {
         "identity function and the cell read 295d4e62d4c78b14 either way. Not a size, and this lane does "
         "not train"),
     "transformer-window": (
+        "2026-11-28, lane/verify-light-1: the serving parts batchgrad, batchscale, ragged, stepfull and rlpair run on one fixture each (`_DEALT_PARTS`, FIXTURES[1..5]) and read n/a:dealt on the other eight; the train input and the batch part unchanged; before that: "
         "the same pair as `transformer`, through the same helper (2026-09-16, lane/dead-arms); the cell "
         "read 49ffb2316f238e6d with and without the swap. The shrink audit did not name this lane, which "
         "is why the lane/dead-arms census was run over every sequence "
@@ -1947,26 +1990,33 @@ NON_SIZE_REVISIONS = {
         "2026-11-05 lane/slow-verification-lanes: the second eigh width moves from 128 to 65, which is the "
         "exact-multiple panel arm and the odd-n Jacobi pad arm; 72 is kept."),
     "x-decomp-eigh-wide-fastica": (
+        "2026-11-28, lane/verify-light-1: d 72 only (was 72 and 65): one wide matrix reaches the whitening and decorrelation eighs; 65's arms are x-decomp-eigh-wide-linalg's; before that: "
         "2026-11-05 lane/slow-verification-lanes: the widths move from 72/128 to 72/65 and FastICA max_iter "
         "from 8 to 4; every iteration still runs the decorrelation eigh."),
     "x-decomp-eigh-wide-rotation": (
+        "2026-11-28, lane/verify-light-1: ONE varimax fit at n_components 64 (was varimax 72 and quartimax 65; 283.7 s a cell on the 0.9.0 Apple record) on simple-structure input (`_decomp_rotation_simple`: disjoint column supports in exact +x/-x pairs, so the unrotated loadings are the axes and the rotation stops after its second eigh), 16d rows, EM 2 (was 3); quartimax is x-decomp-factor-analysis's, 65's exact panel x-decomp-eigh-wide-linalg's; before that: "
         "2026-11-05 lane/slow-verification-lanes: quartimax n_components moves from 128 to 65, rows from 4d "
         "to 2d and EM max_iter from 5 to 3; varimax stays at 72."),
     "x-decomp-eigh-wide-factor-analysis": (
+        "2026-11-28, lane/verify-light-1: d 72 only (was 72 and 65): one wide matrix reaches the n < d EM eigh; 65's arms are x-decomp-eigh-wide-linalg's; before that: "
         "2026-11-05 lane/slow-verification-lanes: the widths move from 72/128 to 72/65 with rows still "
         "width - 1, and EM max_iter from 10 to 4; 2026-11-28 lane/verify-speed-2: EM max_iter from 4 to 2 "
         "(each step the same d x d eigh, about 0.7 s on Metal)."),
     "x-decomp-eigh-wide-mincovdet": (
+        "2026-11-28, lane/verify-light-1: ONE fit at d 64 (was 72 and 65; 267.5 s a cell on the 0.9.0 Apple record) whose last column repeats the first (`_decomp_mcd_singular`), so every candidate's log determinant is -inf, no C-step loop runs and the wide pinvh runs about a dozen times; the held-out probe at 64; before that: "
         "2026-11-05 lane/slow-verification-lanes: the MinCovDet widths move from 72/128 to 72/65; rows stay "
         "at 3d and every hashed part is kept."),
     "x-decomp-umap-options": (
+        "2026-11-28, lane/verify-light-1: the n_components 5 fit runs on every cell, the eleven other option fits are dealt over the nine fixtures (`_spread`); every option, size and epoch count unchanged; before that: "
         "2026-11-05 lane/slow-verification-lanes: the rows move from 384 to 192 and the epochs from 8 to 4 "
         "(the array-init pre-fit from 4 to 2); every option arm is kept."),
     "x-decomp-manifold": (
+        "2026-11-28, lane/verify-light-1: the first Isomap runs on every cell, the fourteen other manifold fits are dealt over the nine fixtures (`_spread`); every size, option and iteration count unchanged; before that: "
         "2026-11-05 lane/slow-verification-lanes: the MDS max_iter values are halved (40/30/25 to 20/15/12) "
         "and the shift-invert LLE moves from 300 to 240 rows, still above 200; 2026-11-28 lane/verify-speed-2: "
         "MDS max_iter again 20/15/12 to 8/6/6, n_init 2 and every Isomap and LLE fit unchanged."),
     "x-decomp-factor-analysis": (
+        "2026-11-28, lane/verify-light-1: the main fit runs on every cell, the varimax, quartimax and fit_transform fits are dealt one fixture each (`_Dealer`); sizes and iteration counts unchanged; before that: "
         "2026-11-28 lane/verify-speed-2: EM max_iter 60 to 16 (the main fit), 40 to 12 (varimax, quartimax) "
         "and 20 to 8 (fit_transform); rows, n_components, rotations and every hashed part unchanged."),
     "trees-calibrated": (
@@ -2005,6 +2055,7 @@ NON_SIZE_REVISIONS = {
         "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 6000 (floored at 5000, the min_fold_size "
         "arm) and trees 20 -> 8; Bayesian bootstrap, noise and NewtonCosine twin kept"),
     "gbdt-binary-columns": (
+        "2026-11-28, lane/verify-light-1: trees 8 -> 4 for the six fits; rows (floored at 5000) unchanged; before that: "
         "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 6000 (floored at 5000) and trees 20 -> 8 "
         "for all six fits; batch part on the first 2048 held-out rows"),
     "gbdt-catboost-defaults": (
@@ -2036,78 +2087,103 @@ NON_SIZE_REVISIONS = {
         "1024 replicates for every arm, in the lane body and its batch part, on 2026-11-05 "
         "(lane/slow-verification-lanes)."),
     "generic-attrs-trees": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the trees group whose n_estimators is unset or above 3 fits at 3 (was 8 since 2026-11-26, lane/slow-lanes-1; GradientBoosting's unset 1000 and the forests' 100 -> 3): 3 members still fold a first, a middle and a last member through the same build, predict, vote and sum kernels; the 0.9.0 Apple record had check-generic-trees at 59.6 s and generic-attrs-trees at 19.9 s a cell (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-pickle-trees": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the trees group whose n_estimators is unset or above 3 fits at 3 (was 8 since 2026-11-26, lane/slow-lanes-1; GradientBoosting's unset 1000 and the forests' 100 -> 3): 3 members still fold a first, a middle and a last member through the same build, predict, vote and sum kernels; the 0.9.0 Apple record had check-generic-trees at 59.6 s and generic-attrs-trees at 19.9 s a cell (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-digest-trees": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the trees group whose n_estimators is unset or above 3 fits at 3 (was 8 since 2026-11-26, lane/slow-lanes-1; GradientBoosting's unset 1000 and the forests' 100 -> 3): 3 members still fold a first, a middle and a last member through the same build, predict, vote and sum kernels; the 0.9.0 Apple record had check-generic-trees at 59.6 s and generic-attrs-trees at 19.9 s a cell (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "check-generic-trees": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the trees group whose n_estimators is unset or above 3 fits at 3 (was 8 since 2026-11-26, lane/slow-lanes-1; GradientBoosting's unset 1000 and the forests' 100 -> 3): 3 members still fold a first, a middle and a last member through the same build, predict, vote and sum kernels; the 0.9.0 Apple record had check-generic-trees at 59.6 s and generic-attrs-trees at 19.9 s a cell (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-attrs-linear": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-pickle-linear": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-digest-linear": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "check-generic-linear": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-attrs-decomp": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-pickle-decomp": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-digest-decomp": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "check-generic-decomp": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-attrs-neighbors": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-pickle-neighbors": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-digest-neighbors": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "check-generic-neighbors": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged; before that: "
         "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "gbdt-categorical-ctr-tables": (
+        "2026-11-28, lane/verify-light-1: 3 trees (was 10): every CTR table is built at tree one; rows, depth and columns unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-cat-rmse": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-cat-bootstrap": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-cat-noise": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-cat-ordered": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-cat-rest": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-cat-nonsym": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-weighted-symmetric": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-weighted-nonsym": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
@@ -2118,70 +2194,161 @@ NON_SIZE_REVISIONS = {
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-eval-gaps": (
+        "2026-11-28, lane/verify-light-1: each shape's plain fit and its detector-and-shrink pair are dealt over the nine fixtures (`_Dealer`, the first plain fit on every cell), and the stop fits take 12 trees (was 30); the detector and shrink checks are unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-weighted-rest": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-weighted-special": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-shape-gaps": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-rest-gaps": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-pointwise-arms": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-pointwise-rest": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-ordered-weights": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-nonsym-rest": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-symmetric-rest": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-multi-walk": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-pointwise-multiclass": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
     "gbdt-simple-leaves": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged; before that: "
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
         "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
         "parts and the nine fixtures unchanged"),
+    "x-decomp-robust-cov": (
+        "2026-11-28, lane/verify-light-1: one multivariate search (was two): the MinCovDet parts are read from the EllipticEnvelope fit, a MinCovDet subclass, on the same 400 x 6 rows (49.3 s a cell on the 0.9.0 Apple record); the d = 1 MinCovDet and every option unchanged"),
+    "x-decomp-pls": (
+        "2026-11-28, lane/verify-light-1: PLSRegression runs on every cell, the canonical, CCA, svd-canonical and two-target fits are dealt one fixture each (`_Dealer`), each with its own score part; sizes unchanged"),
+    "x-decomp-fastica": (
+        "2026-11-28, lane/verify-light-1: the parallel logcosh fit runs on every cell, the deflation exp and cube fits are dealt one fixture each (`_Dealer`); sizes and iteration counts unchanged"),
+    "x-decomp-dict-learning": (
+        "2026-11-28, lane/verify-light-1: the first DictionaryLearning and its three SparseCoders run on every cell, the cd, threshold and mini-batch fits are dealt one fixture each (`_Dealer`); sizes unchanged"),
+    "x-decomp-pca-randomized": (
+        "2026-11-28, lane/verify-light-1: the randomized PCA runs on every cell, the six other fits are dealt one fixture each (`_Dealer`); sizes unchanged"),
+    "generic-attrs-prep": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-pickle-prep": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-digest-prep": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "check-generic-prep": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-attrs-cluster": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-pickle-cluster": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-digest-cluster": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "check-generic-cluster": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-attrs-sequence": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-pickle-sequence": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-digest-sequence": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "check-generic-sequence": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-attrs-other": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-pickle-other": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "generic-digest-other": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "check-generic-other": (
+        "2026-11-28, lane/verify-light-1: the fitting mechanism lanes deal their classes over the nine fixtures (`_spread`, anchor 0): each class is built, fitted and read on one cell per side, not nine; the class list, the bounds and the 64 x 4 rows unchanged"),
+    "gbdt-yeti-rank-pointwise": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged"),
+    "gbdt-rank-bootstrap": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged"),
+    "gbdt-rank-leaves": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged"),
+    "gbdt-rank-pointwise-arms": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged"),
+    "gbdt-rank-pairs": (
+        "2026-11-28, lane/verify-light-1: the option fits are dealt over the nine fixtures (`_spread`, `_Dealer`): the first fit, which answers the infer, model and batch columns, runs on every cell and every other fit on one fixture per side; rows, trees, depth, rate and options unchanged"),
+    "gbdt-adapter-score-weighted": (
+        "2026-11-28, lane/verify-light-1: 3 trees a model (was 20; 22 s a cell on the 0.9.0 Apple record): the lane is the weighted score on the pinned-sum path; rows and depth unchanged"),
+    "mamba1-int8w": (
+        "2026-11-28, lane/verify-light-1: the serving parts batchgrad, batchscale, ragged, stepfull and rlpair run on one fixture each (`_DEALT_PARTS`, FIXTURES[1..5]) and read n/a:dealt on the other eight; the train input and the batch part unchanged"),
+    "mamba2-bf16w": (
+        "2026-11-28, lane/verify-light-1: the serving parts batchgrad, batchscale, ragged, stepfull and rlpair run on one fixture each (`_DEALT_PARTS`, FIXTURES[1..5]) and read n/a:dealt on the other eight; the train input and the batch part unchanged"),
+    "transformer-bf16w": (
+        "2026-11-28, lane/verify-light-1: the serving parts batchgrad, batchscale, ragged, stepfull and rlpair run on one fixture each (`_DEALT_PARTS`, FIXTURES[1..5]) and read n/a:dealt on the other eight; the train input and the batch part unchanged"),
+    "x-ann-tsne-pca": (
+        "2026-11-28, lane/verify-light-1: 252 steps (was 300) in the fit and the held-out refit: the 250 exaggerated steps the binding requires and two after; rows and perplexity unchanged"),
+    "cross-val": (
+        "2026-11-28, lane/verify-light-1: 2 trees a fold (was 8) in the lane and its batch part; folds, rows and depth unchanged"),
+    "numeric-profile-parts": (
+        "2026-11-28, lane/verify-light-1: the per-part cases are dealt over the nine fixtures (`_spread`, anchor 0); presets, generate, save-reload and the block on every cell"),
+    "x-metrics-search": (
+        "2026-11-28, lane/verify-light-1: 2 trees for the searched estimator (was 6), a grid over 2 and 3 trees (was 4 and 8); the grid search on every cell, cross_validate, the named cross_val_score and cross_val_predict dealt (`_Dealer`)"),
+    "x-cluster-gmm-options": (
+        "2026-11-28, lane/verify-light-1: the spherical fit runs on every cell, tied, diag, k-means++, the three inits and warm_start are dealt one fixture each (`_Dealer`); options and iteration counts unchanged"),
+    "x-cluster-bgmm-covtypes": (
+        "2026-11-28, lane/verify-light-1: the spherical fit runs on every cell, tied and diag are dealt one fixture each (`_spread`); options and iteration counts unchanged"),
+    "x-cluster-agglo-connectivity": (
+        "2026-11-28, lane/verify-light-1: single linkage and the threshold fit run on every cell, ward, complete and average are dealt one fixture each (`_spread`); the graph and rows unchanged"),
+    "fn-msel-permutation-test-score": (
+        "2026-11-28, lane/verify-light-1: 2 permutations (was 4) and the groups call on one fixture (`_cell_takes`); folds and rows unchanged"),
+    "x-logistic-cv-proba": (
+        "2026-11-28, lane/verify-light-1: Cs 2 (was 4) for both fits; folds, iterations and rows unchanged"),
 }
 
 
