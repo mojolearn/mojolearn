@@ -104,6 +104,23 @@ def _mode(context: PythonObject) raises -> PythonObject:
     return context["backend_fields"]["_DEFAULT_MODE"]
 
 
+def scprep_csr_like(source: PythonObject) raises -> Bool:
+    """A sparse X in CSR form: a scipy.sparse container (by its defining module), or any object exposing a
+    CSR form (`format == "csr"` and `shape`, `indptr`, `indices`, `data`), read as buffers only."""
+    if is_sparse(source):
+        return True
+    var b = _b()
+    if not Bool(py=py_call(b.hasattr, source, PythonObject("format"))):
+        return False
+    var fmt = py_call(b.getattr, source, PythonObject("format"))
+    if py_type(fmt) is not b.str or String(fmt) != "csr":
+        return False
+    return (Bool(py=py_call(b.hasattr, source, PythonObject("indptr")))
+            and Bool(py=py_call(b.hasattr, source, PythonObject("indices")))
+            and Bool(py=py_call(b.hasattr, source, PythonObject("data")))
+            and Bool(py=py_call(b.hasattr, source, PythonObject("shape"))))
+
+
 struct _SpX(Movable):
     """X of one call, held for its programs: dense (`values`, `xprep_values`' tuple) or CSR (`indptr`, `indices`,
     `data`, `csr_input`'s int32 / float32 vectors)."""
@@ -118,7 +135,7 @@ struct _SpX(Movable):
     var data: PythonObject
 
     def __init__(out self, source: PythonObject, entries: PythonObject, context: PythonObject) raises:
-        self.csr = is_sparse(source)
+        self.csr = scprep_csr_like(source)
         self.cls = py_type(source)
         self.values = PythonObject(None)
         self.indptr = PythonObject(None)
@@ -642,7 +659,7 @@ struct _Cov(Movable):
         if source is None:
             raise Error("ValueError: RegressOut needs the covariates of X's rows: pass them as y (n_samples x "
                         "n_covariates)")
-        if is_sparse(source):
+        if scprep_csr_like(source) or is_sparse(source):
             raise Error("TypeError: RegressOut takes dense covariates (n_samples x n_covariates)")
         self.values = xprep_values(source, entries, context)
         if Int(py=self.values[3]) != n:

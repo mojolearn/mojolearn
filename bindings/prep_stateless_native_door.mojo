@@ -59,7 +59,7 @@ from bindings.prep_normalizer_lifecycle_pack import normalizer_transform
 from bindings.prep_normalizer_fit_pack import normalizer_fit
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 # lane sc-prep-1 (2026-11-28): the count-data transformers, kinds "sc_*" (dense and CSR X)
-from bindings.prep_scprep_native_door import scprep_dispatch
+from bindings.prep_scprep_native_door import scprep_dispatch, scprep_csr_like
 
 
 
@@ -801,8 +801,11 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
                 # tested only off the public data path).
                 return prep_context_vendor_used(model, context, b.str).steal_data()
             return _stateless_dispatch(model, kind, operation, args, context).steal_data()
-        # the count-data transformers (kinds "sc_*") take a CSR X natively
-        var depth = lifecycle_begin(model, operation, args[0], True, kind.startswith("sc_"), True, context)
+        # the count-data transformers (kinds "sc_*") take a CSR X natively; their door checks a CSR X's shape
+        # itself (the dense checks read a table)
+        var count_data = kind.startswith("sc_")
+        var x_checks = not (count_data and scprep_csr_like(args[0]))
+        var depth = lifecycle_begin(model, operation, args[0], x_checks, count_data, True, context)
         var result = PythonObject(None)
         try:
             result = _stateless_dispatch(model, kind, operation, args, context)
