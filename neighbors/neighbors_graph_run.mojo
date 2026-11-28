@@ -401,6 +401,21 @@ def xn_graph_device_message(message: String, who: String) -> String:
     return "ValueError: " + String(message[byte=at:message.byte_length()])
 
 
+def xn_label_order(name: String) raises -> Bool:
+    """`label_order`: "first" (communities numbered by their first node) or
+    "size" (largest first, Scanpy's order); True for "size"."""
+    if name == "first":
+        return False
+    if name == "size":
+        return True
+    raise Error("ValueError: label_order must be 'first' or 'size', got '" + name + "'")
+
+
+def xn_size_relabel_request(labels: Int, n: Int, c: Int) -> XnOpRequest:
+    """The `size_relabel` operation (graph_par.sr_drive) on the published labels, in place."""
+    return XnOpRequest("size_relabel", [labels], [n, c], List[Float64]())
+
+
 # ---------------------------------------------------------------- PAGA
 
 

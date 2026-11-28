@@ -21,7 +21,7 @@ from neighbors.neighbors_graph_run import (
     xn_graph_symmetry_request, xn_louvain_symmetry_check, xn_louvain_device_message, xn_louvain_relabel_check,
     xn_louvain_decode, xn_leiden_csr_request, xn_leiden_request, xn_leiden_symmetry_check,
     xn_leiden_device_message, xn_leiden_relabel_check, xn_i32_word, xn_snn_request, xn_snn_room,
-    xn_graph_device_message, xn_paga_request, xn_paga_csr_request,
+    xn_graph_device_message, xn_paga_request, xn_paga_csr_request, xn_size_relabel_request,
 )
 
 comptime _GRAPH_I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -477,3 +477,11 @@ def paga_run(driver: XnDriver, request: PagaRequest) raises -> PagaOutcome:
     _ = spare_f^
     _ = info^
     return out^
+
+
+def size_relabel_run(driver: XnDriver, labels: Int, n: Int, communities: Int) raises:
+    """`label_order="size"` (lane sc-graph-1): the fit's labels (numbered by
+    first occurrence) renumbered on the image by community size, the largest
+    0, ties to the community whose first node comes first (Scanpy's order)."""
+    if n > 0 and communities > 1:
+        _ = xn_request_run(driver, xn_size_relabel_request(labels, n, communities))

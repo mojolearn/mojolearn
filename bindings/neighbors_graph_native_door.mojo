@@ -58,10 +58,11 @@ from neighbors.svgp_run import (
 from neighbors.graph_fit_run import (
     XN_CAPABILITY_UNIT, PageRankRequest, ComponentsRequest, LouvainRequest, LouvainOutcome, xn_capabilities_run,
     pagerank_fit_run, components_run, louvain_fit_run, LeidenRequest, LeidenOutcome, leiden_fit_run,
-    SnnRequest, SnnOutcome, snn_run, PagaRequest, PagaOutcome, paga_run,
+    SnnRequest, SnnOutcome, snn_run, PagaRequest, PagaOutcome, paga_run, size_relabel_run,
 )
 from neighbors.neighbors_graph_run import (
     xn_leiden_quality, xn_leiden_iterations_check, xn_snn_prune_check, xn_snn_shape_check, xn_paga_size_check,
+    xn_label_order,
 )
 
 # Each operation is UNPACK (this file: Python reads, admission, the published
@@ -496,6 +497,7 @@ def _louvain_fit(model: PythonObject, args: PythonObject, context: PythonObject)
         n = Int(py=a.shape[0])
     var resolution = _float_of(model, "resolution")
     var threshold = _float_of(model, "threshold")
+    var by_size = xn_label_order(family_str(_attr(model, "label_order")))
     # `_p2m_relabel`'s answer: one word for an empty graph, as before.
     var labels = family_array(Python.tuple(max(n, 1)), "<i4", context)
     var has_vals = csr.present and csr.vals is not None
@@ -509,6 +511,8 @@ def _louvain_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     # RUN
     with GILReleased(Python()):
         outcome = louvain_fit_run(connection.driver, request)
+        if by_size:
+            size_relabel_run(connection.driver, request.labels, n, outcome.communities)
     _ = csr^  # keep the admitted lists alive through the native call above
     _ = a  # keep the Python object alive through the native call above
     _ = labels  # keep the Python object alive through the native call above
@@ -543,6 +547,7 @@ def _leiden_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         a = _adjacency(args[1], context)
         n = Int(py=a.shape[0])
     var resolution = _float_of(model, "resolution")
+    var by_size = xn_label_order(family_str(_attr(model, "label_order")))
     var labels = family_array(Python.tuple(max(n, 1)), "<i4", context)
     var has_vals = csr.present and csr.vals is not None
     var request = LeidenRequest(csr.present, _addr(csr.indptr) if csr.present else 0,
@@ -555,6 +560,8 @@ def _leiden_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     # RUN
     with GILReleased(Python()):
         outcome = leiden_fit_run(connection.driver, request)
+        if by_size:
+            size_relabel_run(connection.driver, request.labels, n, outcome.communities)
     _ = csr^  # keep the admitted lists alive through the native call above
     _ = a  # keep the Python object alive through the native call above
     _ = labels  # keep the Python object alive through the native call above

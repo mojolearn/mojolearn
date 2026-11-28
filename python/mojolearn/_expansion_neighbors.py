@@ -2032,6 +2032,11 @@ class Louvain(_XNeighbors):
         Maximum number of levels (a positive integer); None means no limit.
     seed : int or None, default None
         Accepted for networkx compatibility; unused.
+    label_order : {'first', 'size'}, default 'first'
+        How communities are numbered: ``'first'`` in order of each
+        community's lowest node, ``'size'`` from the largest community
+        (label 0) down, ties to the community whose lowest node comes first,
+        as Scanpy numbers its clusters.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator. None uses
         the process default.
@@ -2039,8 +2044,7 @@ class Louvain(_XNeighbors):
     Attributes
     ----------
     labels_ : Array of shape (n,), int32
-        Community of each node, numbered in order of each community's lowest
-        node.
+        Community of each node, numbered as ``label_order`` says.
     n_communities_ : int
         Number of communities.
     modularity_ : float
@@ -2064,11 +2068,13 @@ class Louvain(_XNeighbors):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
 
-    def __init__(self, resolution=1.0, *, threshold=1e-7, max_level=None, seed=None, numeric_mode=None, device=None):
+    def __init__(self, resolution=1.0, *, threshold=1e-7, max_level=None, seed=None, label_order="first",
+                 numeric_mode=None, device=None):
         self.resolution = resolution
         self.threshold = threshold
         self.max_level = max_level
         self.seed = seed
+        self.label_order = label_order
         self.numeric_mode = numeric_mode
         self.device = device
 
@@ -2157,14 +2163,18 @@ class Leiden(_XNeighbors):
         improving.
     random_state : int or None, default 0
         Seed of the node coloring that fixes the order of the moves.
+    label_order : {'first', 'size'}, default 'first'
+        How communities are numbered: ``'first'`` in order of each
+        community's lowest node, ``'size'`` from the largest community
+        (label 0) down, ties to the community whose lowest node comes first,
+        as Scanpy's ``tl.leiden`` numbers its clusters.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator. None uses the process default.
 
     Attributes
     ----------
     labels_ : Array of shape (n,), int32
-        Community of each node, numbered in order of each community's lowest
-        node.
+        Community of each node, numbered as ``label_order`` says.
     n_communities_ : int
         Number of communities.
     quality_ : float
@@ -2184,11 +2194,12 @@ class Leiden(_XNeighbors):
     _mojolearn_device = True
 
     def __init__(self, resolution=1.0, *, objective_function="modularity", n_iterations=-1, random_state=0,
-                 numeric_mode=None, device=None):
+                 label_order="first", numeric_mode=None, device=None):
         self.resolution = resolution
         self.objective_function = objective_function
         self.n_iterations = n_iterations
         self.random_state = random_state
+        self.label_order = label_order
         self.numeric_mode = numeric_mode
         self.device = device
 

@@ -10081,63 +10081,72 @@
           "value": {
             "parameter": "resolution"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2186"
+          "source": "python/mojolearn/_expansion_neighbors.py:2196"
         },
         {
           "field": "objective_function",
           "value": {
             "parameter": "objective_function"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2186"
+          "source": "python/mojolearn/_expansion_neighbors.py:2196"
         },
         {
           "field": "n_iterations",
           "value": {
             "parameter": "n_iterations"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2186"
+          "source": "python/mojolearn/_expansion_neighbors.py:2196"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2186"
+          "source": "python/mojolearn/_expansion_neighbors.py:2196"
+        },
+        {
+          "field": "label_order",
+          "value": {
+            "parameter": "label_order"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:2196"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2186"
+          "source": "python/mojolearn/_expansion_neighbors.py:2196"
         },
         {
           "field": "device",
           "value": {
             "parameter": "device"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2186"
+          "source": "python/mojolearn/_expansion_neighbors.py:2196"
         }
       ],
       "trace": [
-        "python/mojolearn/_expansion_neighbors.py:2186"
+        "python/mojolearn/_expansion_neighbors.py:2196"
       ],
-      "constructor": "python/mojolearn/_expansion_neighbors.py:2186",
-      "signature_source": "def __init__(self, resolution=1.0, *, objective_function='modularity', n_iterations=-1, random_state=0, numeric_mode=None, device=None)",
+      "constructor": "python/mojolearn/_expansion_neighbors.py:2196",
+      "signature_source": "def __init__(self, resolution=1.0, *, objective_function='modularity', n_iterations=-1, random_state=0, label_order='first', numeric_mode=None, device=None)",
       "parameters": [
         "resolution",
         "objective_function",
         "n_iterations",
         "random_state",
+        "label_order",
         "numeric_mode",
         "device"
       ],
-      "constructor_ast_sha256": "a0c03559c0522b7afd700cdfe4d333db0929924eb4794210ff9191907f4f326a",
+      "constructor_ast_sha256": "e558784e8e4924565cfed08f503d5b5cc3aaaf47baf36a9beabbc68961ab3fec",
       "field_order": [
         "resolution",
         "objective_function",
         "n_iterations",
         "random_state",
+        "label_order",
         "numeric_mode",
         "device"
       ],
@@ -10154,6 +10163,9 @@
         "random_state": {
           "parameter": "random_state"
         },
+        "label_order": {
+          "parameter": "label_order"
+        },
         "numeric_mode": {
           "parameter": "numeric_mode"
         },
@@ -10166,6 +10178,7 @@
         "objective_function": "'modularity'",
         "n_iterations": "-1",
         "random_state": "0",
+        "label_order": "'first'",
         "numeric_mode": "None",
         "device": "None"
       },
@@ -10176,8 +10189,8 @@
         {
           "path": "python/mojolearn/_expansion_neighbors.py",
           "name": "__init__",
-          "line": 2186,
-          "ast_sha256": "a0c03559c0522b7afd700cdfe4d333db0929924eb4794210ff9191907f4f326a"
+          "line": 2196,
+          "ast_sha256": "e558784e8e4924565cfed08f503d5b5cc3aaaf47baf36a9beabbc68961ab3fec"
         }
       ],
       "constructor_ancestry": [
@@ -10246,63 +10259,72 @@
           "value": {
             "parameter": "resolution"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2002"
+          "source": "python/mojolearn/_expansion_neighbors.py:2071"
         },
         {
           "field": "threshold",
           "value": {
             "parameter": "threshold"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2002"
+          "source": "python/mojolearn/_expansion_neighbors.py:2071"
         },
         {
           "field": "max_level",
           "value": {
             "parameter": "max_level"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2002"
+          "source": "python/mojolearn/_expansion_neighbors.py:2071"
         },
         {
           "field": "seed",
           "value": {
             "parameter": "seed"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2002"
+          "source": "python/mojolearn/_expansion_neighbors.py:2071"
+        },
+        {
+          "field": "label_order",
+          "value": {
+            "parameter": "label_order"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:2071"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2002"
+          "source": "python/mojolearn/_expansion_neighbors.py:2071"
         },
         {
           "field": "device",
           "value": {
             "parameter": "device"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2002"
+          "source": "python/mojolearn/_expansion_neighbors.py:2071"
         }
       ],
       "trace": [
-        "python/mojolearn/_expansion_neighbors.py:2002"
+        "python/mojolearn/_expansion_neighbors.py:2071"
       ],
-      "constructor": "python/mojolearn/_expansion_neighbors.py:2002",
-      "signature_source": "def __init__(self, resolution=1.0, *, threshold=1e-07, max_level=None, seed=None, numeric_mode=None, device=None)",
+      "constructor": "python/mojolearn/_expansion_neighbors.py:2071",
+      "signature_source": "def __init__(self, resolution=1.0, *, threshold=1e-07, max_level=None, seed=None, label_order='first', numeric_mode=None, device=None)",
       "parameters": [
         "resolution",
         "threshold",
         "max_level",
         "seed",
+        "label_order",
         "numeric_mode",
         "device"
       ],
-      "constructor_ast_sha256": "f5143b7ed9c01be673771a643cb82465189576abe160d0dbed863185a26ebdcf",
+      "constructor_ast_sha256": "c0dabb599c06897e5a4f42fe9f137fe3379ecc7a7691233caf4cd97e61af1903",
       "field_order": [
         "resolution",
         "threshold",
         "max_level",
         "seed",
+        "label_order",
         "numeric_mode",
         "device"
       ],
@@ -10319,11 +10341,14 @@
         "seed": {
           "parameter": "seed"
         },
-        "device": {
-          "parameter": "device"
+        "label_order": {
+          "parameter": "label_order"
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -10331,6 +10356,7 @@
         "threshold": "1e-07",
         "max_level": "None",
         "seed": "None",
+        "label_order": "'first'",
         "numeric_mode": "None",
         "device": "None"
       },
@@ -10341,8 +10367,8 @@
         {
           "path": "python/mojolearn/_expansion_neighbors.py",
           "name": "__init__",
-          "line": 2002,
-          "ast_sha256": "f5143b7ed9c01be673771a643cb82465189576abe160d0dbed863185a26ebdcf"
+          "line": 2071,
+          "ast_sha256": "c0dabb599c06897e5a4f42fe9f137fe3379ecc7a7691233caf4cd97e61af1903"
         }
       ],
       "constructor_ancestry": [
