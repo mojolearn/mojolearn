@@ -16,6 +16,10 @@ from x_ann.neighbors_ann_run import (
 )
 from bindings.admitted_family_door import admit_family_meta
 from x_ann.knn_graph_plan import knn_graph_check
+from core.neighbors_entry_table_umap import umap_ops_entry, umap_neighbors_graph_call
+from umap.graph_out import umap_graph_capacity
+from bindings.umap_graph_pack import umap_graph_stores, umap_store_address, umap_graph_pack
+from bindings.py_balanced import py_fields
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_prepared_owner_unpack import prepared_drop
@@ -1029,6 +1033,111 @@ def _knn_graph(args: PythonObject, context: PythonObject) raises -> PythonObject
                                   "knn_graph", PythonObject(None), context)
 
 
+# ---------------------------------------------------------------- neighbors_graph
+
+
+def _ng_float(name: String, value: PythonObject) raises -> Float64:
+    """An exact int or float (not a bool), finite."""
+    var b = native_loaded_module("builtins")
+    var cls = py_type(value)
+    if cls is not b.int and cls is not b.float:
+        raise Error("TypeError: mojolearn neighbors_graph: " + name + " must be a float, got " + family_type_name(value))
+    var v = Float64(py=py_call(b.float, value))
+    if not (v - v == 0.0):
+        raise Error("ValueError: mojolearn neighbors_graph: " + name + " must be finite")
+    return v
+
+
+def _neighbors_graph(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`neighbors_graph(X, n_neighbors, method, n_lists, n_probes,
+    random_state, set_op_mix_ratio, local_connectivity, numeric_mode,
+    device)` (lane sc-ann-1-umap): args are (binding, X, n_neighbors, method,
+    n_lists, n_probes, random_state, set_op_mix_ratio, local_connectivity,
+    numeric_mode, device). UNPACK (admission and the words), one call of the
+    UMAP operations table of the metrics image (UMAP_OP_GRAPH: UMAP's own
+    k-NN and fuzzy-set body, umap/sparse_estimator.mojo
+    `umap_neighbors_graph_device` and its CPU column), PACK (the two CSR
+    tuples)."""
+    var b = native_loaded_module("builtins")
+    var device = function_device_default()
+    if args[0] is None and args[10] is not None:
+        device = function_device_admit(args[10], "neighbors_graph", True, True, context, b)
+    classical_connect_numpy(context)
+    var method = args[3]
+    if py_type(method) is not b.str:
+        raise Error("TypeError: mojolearn neighbors_graph: method must be a string")
+    var method_name = String(method)
+    var method_code = -1
+    if method_name == "exact":
+        method_code = 0
+    elif method_name == "ivf":
+        method_code = 1
+    else:
+        raise Error("ValueError: mojolearn neighbors_graph: method must be 'exact' or 'ivf', got "
+                    + String(family_repr(method)))
+    var x_pin = ArrayPin()
+    var x = admit_family_meta(args[1], 2, "X", context, x_pin, False, True,
+                              refusal=admitted_finite_wording("neighbors_graph", "X"))
+    var n = x.shape[0]
+    var d = x.shape[1]
+    var k = Int(py=_ann_int("neighbors_graph", "n_neighbors", args[2]))
+    var n_lists = _knn_graph_opt_int("neighbors_graph", "n_lists", args[4])
+    var n_probes = _knn_graph_opt_int("neighbors_graph", "n_probes", args[5])
+    var random_state = _knn_graph_opt_int("neighbors_graph", "random_state", args[6])
+    var mix = _ng_float("set_op_mix_ratio", args[7])
+    var connectivity = _ng_float("local_connectivity", args[8])
+    # the shape refusals before any allocation (the entry checks them again, typed)
+    if n < 2 or d < 1:
+        raise Error("ValueError: mojolearn neighbors_graph: X needs at least 2 rows and 1 feature")
+    if k < 2 or k > n:
+        raise Error("ValueError: mojolearn neighbors_graph: n_neighbors must be in [2, n_samples], got " + String(k))
+    if args[4] is not None and (n_lists < 1 or n_lists > n):
+        raise Error("ValueError: mojolearn neighbors_graph: n_lists must be None or in [1, n_samples], got "
+                    + String(n_lists))
+    if args[5] is not None and n_probes < 1:
+        raise Error("ValueError: mojolearn neighbors_graph: n_probes must be None or >= 1, got " + String(n_probes))
+    if args[4] is not None and args[5] is not None and n_probes > n_lists:
+        raise Error("ValueError: mojolearn neighbors_graph: n_probes must not exceed n_lists")
+    if args[6] is not None and random_state < 0:
+        raise Error("ValueError: mojolearn neighbors_graph: random_state must be None or >= 0")
+    if not (mix >= 0.0 and mix <= 1.0):
+        raise Error("ValueError: mojolearn neighbors_graph: set_op_mix_ratio must be in [0, 1]")
+    if connectivity < 0.0:
+        raise Error("ValueError: mojolearn neighbors_graph: local_connectivity must be >= 0")
+    if n * k >= 2147483647:
+        raise Error("ValueError: mojolearn neighbors_graph: n_samples * n_neighbors must be below 2^31")
+    var native = estimator_binding_device(device, args[9], "_mojolearn_metrics", context) if args[0] is None else args[0]
+    # The image's UMAP table key, published as its module attribute (core/neighbors_entry_table_umap.mojo).
+    var key_word = py_get(py_fields(native), PythonObject("umap_native_key"))
+    if key_word is None or py_type(key_word) is not b.tuple or len(key_word) != 2:
+        raise Error("ImportError: mojolearn: the metrics binding publishes no native UMAP table; rebuild it")
+    var entry = umap_ops_entry(NeighborsEntryKey(Int(py=key_word[0]), Int(py=key_word[1])))
+    var kept = n * (k - 1)
+    var dist_ptr = _ann_empty(n + 1, "<i8", context)
+    var dist_idx = _ann_empty(kept, "<i4", context)
+    var dist_val = _ann_empty(kept, "<f4", context)
+    var cap = umap_graph_capacity(n, k, 0, k)
+    var stores = umap_graph_stores(n, cap)
+    var x_address = x.source.addr
+    var a_dp = Int(py=classical_address(dist_ptr))
+    var a_di = Int(py=classical_address(dist_idx))
+    var a_dv = Int(py=classical_address(dist_val))
+    var a_cp = umap_store_address(stores[0])
+    var a_ci = umap_store_address(stores[1])
+    var a_cv = umap_store_address(stores[2])
+    var edges = 0
+    with GILReleased(Python()):
+        edges = umap_neighbors_graph_call(entry, x_address, a_dp, a_di, a_dv, a_cp, a_ci, a_cv, n, d, k,
+                                          method_code, n_lists, n_probes, random_state, mix, connectivity)
+    _ = x  # keep the admitted X alive through the native call above
+    _ = x_pin
+    _ = edges
+    var connectivities = umap_graph_pack(stores, n, cap, context)
+    var distances = Python.tuple(dist_ptr, dist_idx, dist_val)
+    return parallel_public_result(Python.tuple(distances, connectivities), "neighbors_graph", PythonObject(None),
+                                  context)
+
+
 def neighbors_ann_operation(model: PythonObject, operation: String, var args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     # NumPy's connected types first, so an ndarray input is read as one
@@ -1050,6 +1159,8 @@ def neighbors_ann_operation(model: PythonObject, operation: String, var args: Py
         return _refine(args, context)
     if operation == "family_xn_ann_knn_graph":
         return _knn_graph(args, context)
+    if operation == "family_xn_ann_neighbors_graph":
+        return _neighbors_graph(args, context)
     if operation == "family_xn_ann_pq_search":
         return neighbors_ann_search(model, 0, args, context)
     if operation == "family_xn_ann_sq_search":
