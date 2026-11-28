@@ -162,6 +162,68 @@ trait ClusterOps(Movable):
     def exp(mut self, src: Int, dst: Int, n: Int) raises:
         ...
 
+    # ---------------------------------------------------------------- Harmony (lane sc-stats-1, 2026-11-28)
+    # One body each in x_cluster/harmony_bodies.mojo; the driver is x_cluster/harmony.mojo.
+
+    def hm_rownorm(mut self, src: Int, n: Int, d: Int, dst: Int) raises:
+        """dst rows = src rows over their L2 norms (`hm_rownorm_row`); in place allowed."""
+        ...
+
+    def hm_counts(mut self, codes: Int, n: Int, c: Int, nb: Int, dst: Int) raises:
+        """dst (nb floats) = the cells at each batch level of the int slot `codes` (n x c) (`hm_count_cell`)."""
+        ...
+
+    def hm_scale(mut self, dist: Int, n: Int, k: Int, sigma: Float32, dst: Int, normalize: Bool) raises:
+        """dst (n x k) = exp(-dist / sigma - row max), row-normalized with `normalize` (`hm_scale_row`)."""
+        ...
+
+    def hm_eo(mut self, r: Int, codes: Int, pr: Int, n: Int, k: Int, c: Int, nb: Int, e: Int, o: Int) raises:
+        """E, O (k x nb) of the soft assignments R (`hm_eo_cell`)."""
+        ...
+
+    def hm_block_eo(
+        mut self, r: Int, codes: Int, pr: Int, n: Int, k: Int, c: Int, nb: Int, a: Int, c0: Int, lo: Int, hi: Int,
+        sign: Float32, e: Int, o: Int,
+    ) raises:
+        """E, O += sign times one update block's share (`hm_block_eo_cell`)."""
+        ...
+
+    def hm_block_r(
+        mut self, sd: Int, e: Int, o: Int, codes: Int, theta: Int, n: Int, k: Int, c: Int, nb: Int, a: Int,
+        c0: Int, lo: Int, hi: Int, r: Int,
+    ) raises:
+        """R of one update block's cells with the diversity penalty (`hm_block_r_cell`)."""
+        ...
+
+    def hm_objective_cells(
+        mut self, r: Int, dist: Int, e: Int, o: Int, codes: Int, theta: Int, n: Int, k: Int, c: Int, nb: Int,
+        sigma: Float32, dst: Int,
+    ) raises:
+        """dst (n) = each cell's share of the objective (`hm_objective_row`)."""
+        ...
+
+    def hm_centroids(mut self, r: Int, z: Int, n: Int, k: Int, d: Int, y: Int) raises:
+        """y (k x d) = R^T Zc (`hm_centroid_cell`)."""
+        ...
+
+    def hm_ridge(
+        mut self, r: Int, z: Int, codes: Int, lamb: Int, n: Int, k: Int, d: Int, c: Int, b1: Int, am: Int,
+        rhs: Int,
+    ) raises:
+        """The per-cluster ridge systems: am (k x b1 x b1), rhs (k x b1 x d) (`hm_ridge_a_cell`,
+        `hm_ridge_rhs_cell`)."""
+        ...
+
+    def hm_solve(mut self, am: Int, rhs: Int, k: Int, b1: Int, d: Int, w: Int) raises:
+        """am <- its Cholesky factors (`hm_chol_block`), then w (k x b1 x d) = the solutions (`hm_solve_cell`)."""
+        ...
+
+    def hm_correct(
+        mut self, z: Int, r: Int, w: Int, codes: Int, n: Int, k: Int, d: Int, c: Int, b1: Int, dst: Int
+    ) raises:
+        """dst (n x d) = Z minus the mixture of experts' batch terms (`hm_correct_cell`)."""
+        ...
+
     def argmax_rows(mut self, src: Int, n: Int, kc: Int, labels: Int) raises:
         """labels (int, n) = each row's `bodies.argmax_row` of src (n x kc)."""
         ...

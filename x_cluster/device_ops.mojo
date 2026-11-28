@@ -58,6 +58,11 @@ from x_cluster.bodies import (
     LINK_WARD,
 )
 from cluster.estimator import kmeans_fit, kmeans_fit_rows, kmeans_fit_rows_resident, kmeans_fit_device
+from x_cluster.harmony_kernels import (
+    hm_rownorm_kernel, hm_count_kernel, hm_scale_kernel, hm_eo_kernel, hm_block_eo_kernel, hm_block_r_kernel,
+    hm_objective_kernel, hm_centroid_kernel, hm_ridge_a_kernel, hm_ridge_rhs_kernel, hm_chol_kernel,
+    hm_solve_kernel, hm_correct_kernel,
+)
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_TN
@@ -2209,6 +2214,117 @@ struct DeviceOps(ClusterOps):
             self._fp(src), self._fp(dst), Int32(n), grid_dim=_grid(n), block_dim=TPB,
         )
         self._ph1("exp")
+
+    # ---------------------------------------------------------------- Harmony (lane sc-stats-1, 2026-11-28)
+    # Each primitive is one kernel of x_cluster/harmony_kernels.mojo over its cells (hm_solve: two).
+
+    def hm_rownorm(mut self, src: Int, n: Int, d: Int, dst: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[hm_rownorm_kernel](
+            self._fp(src), self._fp(dst), Int32(n), Int32(d), grid_dim=_grid(n), block_dim=TPB,
+        )
+        self._ph1("hm_rownorm")
+
+    def hm_counts(mut self, codes: Int, n: Int, c: Int, nb: Int, dst: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[hm_count_kernel](
+            self._ip(codes), Int32(n), Int32(c), Int32(nb), self._fp(dst), grid_dim=_grid(nb), block_dim=TPB,
+        )
+        self._ph1("hm_counts")
+
+    def hm_scale(mut self, dist: Int, n: Int, k: Int, sigma: Float32, dst: Int, normalize: Bool) raises:
+        self._ph0()
+        self.ctx.enqueue_function[hm_scale_kernel](
+            self._fp(dist), Int32(n), Int32(k), sigma, self._fp(dst), Int32(1 if normalize else 0),
+            grid_dim=_grid(n), block_dim=TPB,
+        )
+        self._ph1("hm_scale")
+
+    def hm_eo(mut self, r: Int, codes: Int, pr: Int, n: Int, k: Int, c: Int, nb: Int, e: Int, o: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[hm_eo_kernel](
+            self._fp(r), self._ip(codes), self._fp(pr), Int32(n), Int32(k), Int32(c), Int32(nb), self._fp(e),
+            self._fp(o), grid_dim=_grid(k * nb), block_dim=TPB,
+        )
+        self._ph1("hm_eo")
+
+    def hm_block_eo(
+        mut self, r: Int, codes: Int, pr: Int, n: Int, k: Int, c: Int, nb: Int, a: Int, c0: Int, lo: Int, hi: Int,
+        sign: Float32, e: Int, o: Int,
+    ) raises:
+        self._ph0()
+        self.ctx.enqueue_function[hm_block_eo_kernel](
+            self._fp(r), self._ip(codes), self._fp(pr), Int32(n), Int32(k), Int32(c), Int32(nb), Int64(a),
+            Int64(c0), Int32(lo), Int32(hi), sign, self._fp(e), self._fp(o), grid_dim=_grid(k * nb), block_dim=TPB,
+        )
+        self._ph1("hm_block_eo")
+
+    def hm_block_r(
+        mut self, sd: Int, e: Int, o: Int, codes: Int, theta: Int, n: Int, k: Int, c: Int, nb: Int, a: Int,
+        c0: Int, lo: Int, hi: Int, r: Int,
+    ) raises:
+        self._ph0()
+        self.ctx.enqueue_function[hm_block_r_kernel](
+            self._fp(sd), self._fp(e), self._fp(o), self._ip(codes), self._fp(theta), Int32(n), Int32(k), Int32(c),
+            Int32(nb), Int64(a), Int64(c0), Int32(lo), Int32(hi), self._fp(r), grid_dim=_grid(hi - lo),
+            block_dim=TPB,
+        )
+        self._ph1("hm_block_r")
+
+    def hm_objective_cells(
+        mut self, r: Int, dist: Int, e: Int, o: Int, codes: Int, theta: Int, n: Int, k: Int, c: Int, nb: Int,
+        sigma: Float32, dst: Int,
+    ) raises:
+        self._ph0()
+        self.ctx.enqueue_function[hm_objective_kernel](
+            self._fp(r), self._fp(dist), self._fp(e), self._fp(o), self._ip(codes), self._fp(theta), Int32(n),
+            Int32(k), Int32(c), Int32(nb), sigma, self._fp(dst), grid_dim=_grid(n), block_dim=TPB,
+        )
+        self._ph1("hm_objective_cells")
+
+    def hm_centroids(mut self, r: Int, z: Int, n: Int, k: Int, d: Int, y: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[hm_centroid_kernel](
+            self._fp(r), self._fp(z), Int32(n), Int32(k), Int32(d), self._fp(y), grid_dim=_grid(k * d),
+            block_dim=TPB,
+        )
+        self._ph1("hm_centroids")
+
+    def hm_ridge(
+        mut self, r: Int, z: Int, codes: Int, lamb: Int, n: Int, k: Int, d: Int, c: Int, b1: Int, am: Int,
+        rhs: Int,
+    ) raises:
+        self._ph0()
+        self.ctx.enqueue_function[hm_ridge_a_kernel](
+            self._fp(r), self._ip(codes), self._fp(lamb), Int32(n), Int32(k), Int32(c), Int32(b1), self._fp(am),
+            grid_dim=_grid(k * b1 * b1), block_dim=TPB,
+        )
+        self.ctx.enqueue_function[hm_ridge_rhs_kernel](
+            self._fp(r), self._fp(z), self._ip(codes), Int32(n), Int32(k), Int32(d), Int32(c), Int32(b1),
+            self._fp(rhs), grid_dim=_grid(k * b1 * d), block_dim=TPB,
+        )
+        self._ph1("hm_ridge")
+
+    def hm_solve(mut self, am: Int, rhs: Int, k: Int, b1: Int, d: Int, w: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[hm_chol_kernel](
+            self._fp(am), Int32(k), Int32(b1), grid_dim=_grid(k), block_dim=TPB,
+        )
+        self.ctx.enqueue_function[hm_solve_kernel](
+            self._fp(am), self._fp(rhs), Int32(k), Int32(b1), Int32(d), self._fp(w), grid_dim=_grid(k * d),
+            block_dim=TPB,
+        )
+        self._ph1("hm_solve")
+
+    def hm_correct(
+        mut self, z: Int, r: Int, w: Int, codes: Int, n: Int, k: Int, d: Int, c: Int, b1: Int, dst: Int
+    ) raises:
+        self._ph0()
+        self.ctx.enqueue_function[hm_correct_kernel](
+            self._fp(z), self._fp(r), self._fp(w), self._ip(codes), Int32(n), Int32(k), Int32(d), Int32(c),
+            Int32(b1), self._fp(dst), grid_dim=_grid(n * d), block_dim=TPB,
+        )
+        self._ph1("hm_correct")
 
     def argmax_rows(mut self, src: Int, n: Int, kc: Int, labels: Int) raises:
         self._ph0()
