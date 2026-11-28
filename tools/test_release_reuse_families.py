@@ -74,12 +74,50 @@ def test_check_refuses_a_binding_or_a_lane_with_no_family_and_a_lane_loading_ano
     assert RF.load().lane("anything") == "shared"
 
 
-def test_derive_gives_a_lane_its_one_family_else_shared():
+def test_derive_gives_a_lane_the_set_of_families_it_loads_and_shared_only_when_unknown():
     lanes, problems = RF.derive(fam(), {"gbdt-rmse": ["_mojolearn_gbdt", "_mojolearn_gbdt_host", "_mojolearn"],
                                         "pipeline": ["_mojolearn_gbdt", "_mojolearn_x_prep"],
                                         "core-only": ["_mojolearn"], "odd": ["_mojolearn_unknown"]})
-    assert lanes == {"gbdt-rmse": "trees", "pipeline": "shared", "core-only": "shared", "odd": "shared"}
+    # one family: its name; several: the sorted list; none, or a binding with no family: shared (unknown)
+    assert lanes == {"gbdt-rmse": "trees", "pipeline": ["prep", "trees"], "core-only": "shared", "odd": "shared"}
     assert problems == ["lane odd loads binding(s) with no family: _mojolearn_unknown"]
+    lines = RF.derive_table(fam(), lanes)
+    assert lines[0].startswith("DERIVED-SETS 4 lane(s): 1 family 1, 2 families 1; shared (unknown loads")
+    by = {l.split()[1]: l for l in lines[1:]}
+    assert "records    4 of 4 lane(s)" in by["trees"] and "(2 load it, 2 shared)" in by["trees"]
+    assert "records    3 of 4 lane(s)" in by["prep"] and "records    2 of 4 lane(s)" in by["neural"]
+
+
+def test_a_lane_of_several_families_records_when_any_of_them_does_and_only_then():
+    f = fam(lanes={"stack": ["kernel", "trees"], "svc": "kernel", "mlp": "neural", "cv": "shared"})
+    assert f.lane_families("stack") == ("kernel", "trees") and f.lane("stack") == "shared"
+    assert f.lane_families("svc") == ("kernel",) and f.lane("svc") == "kernel"
+    assert f.lane_families("cv") == ("shared",) and f.lane_families("orphan") is None
+    order = ["stack", "svc", "mlp", "cv"]
+
+    def recorded(*names):
+        return RF.lanes_to_record(dict(families=[dict(family=n, record=n in names) for n in f.names()]), order, f)
+    assert recorded("shared", "trees") == ["stack", "cv"]            # trees alone: the set that holds it, and shared
+    assert recorded("shared", "kernel") == ["stack", "svc", "cv"]
+    assert recorded("shared", "neural") == ["mlp", "cv"]             # neither family of `stack` changed: it keeps
+    assert recorded() == []
+    # the shared core changing marks every family (apply), so every set records
+    out = RF.apply(plan_of([row("_mojolearn", "BUILD"), row("_mojolearn_svm"), row("_mojolearn_gbdt"),
+                            row("_mojolearn_training")]), f, merged=NO_MERGED)
+    assert RF.lanes_to_record(out, order, f) == order
+    # a list that is empty or names shared is unknown, the safe side; an unknown family in a list is refused
+    assert fam(lanes={"a": []}).lane_families("a") == ("shared",)
+    assert fam(lanes={"a": ["shared", "trees"]}).lane_families("a") == ("shared",)
+    with pytest.raises(SystemExit, match="unknown family"):
+        fam(lanes={"a": ["trees", "nope"]})
+    with pytest.raises(SystemExit, match="a family or a list"):
+        fam(lanes={"a": 3})
+    # check: a set lane may load its families and shared, nothing else
+    problems = RF.check(f, [], order, {"stack": ["_mojolearn_svm", "_mojolearn_gbdt", "_mojolearn"],
+                                       "svc": ["_mojolearn_svm", "_mojolearn_x_prep"]})
+    assert problems == ["lane svc is in family kernel but loads _mojolearn_x_prep (prep)"]
+    problems = RF.check(f, [], order, {"stack": ["_mojolearn_svm", "_mojolearn_training"]})
+    assert problems == ["lane stack is in family kernel+trees but loads _mojolearn_training (neural)"]
 
 
 # ---------------------------------------------------------------- the plan, whole per family

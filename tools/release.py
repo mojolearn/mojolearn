@@ -6780,7 +6780,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 continue
             by_lane = {}
             for lane in lanes:
-                f = fams.get(fam.lane(lane)) or {}
+                # a lane of several families (RF.Families.lane_families) is explained by the one that records
+                mine = [fams.get(n) or {} for n in (fam.lane_families(lane) or ())]
+                f = next((x for x in mine if x.get("record")), mine[0] if mine else {})
                 if lane in owed:
                     by_lane[lane] = dict(owed=True, device=self.PLAN_COLUMN_DEVICE.get(col),
                                          reason="family %s records: %s" % (f.get("family"), f.get("record_reason")))

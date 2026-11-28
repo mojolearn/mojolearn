@@ -10,9 +10,10 @@
     python3 tools/release_families.py lanes --plan PLAN.json [--lanes-file F | --families a,b]
                                                                          the lanes a plan records, one csv line
 
-THE MAP is bindings/release_families.json: every binding the release ships and every verify lane belongs to exactly
-one family, plus `shared`. `check` refuses a binding or lane with no family (and, with --loads, an explicit lane that
-loads a binding of another family than its own and shared), a merged file of bindings/merged_groups.json that holds
+THE MAP is bindings/release_families.json: every binding the release ships belongs to exactly one family, plus
+`shared`, and every verify lane to THE SET of families it loads (one family, or a list of several; `shared` for a lane
+whose loads are unknown). `check` refuses a binding or lane with no family (and, with --loads, a lane that loads a
+binding outside its set and shared), a merged file of bindings/merged_groups.json that holds
 bindings of two families (merged_span_problems), and a Python glue file with no family or with a family another
 family's code imports (python_problems).
 
@@ -29,13 +30,14 @@ diff). `apply` turns its per-binding REUSE/BUILD rows into whole families:
   * `shared` builds when the Linux runtime closure (.libs) builds;
   * --rebuild-all builds every family;
   * every row of a BUILD family becomes BUILD; a REUSE family ships the previous release's bytes.
-A family RECORDS its lanes on every device when it builds, when `shared` builds (every family loads it), and `shared`'s
-own lanes (the lanes that load several families) record whenever any family records. `settle` then refuses to keep a
-family whose recorded columns do not rest on the bytes shipped (`kept_refusals`): every cell of every lane of a kept
+A family RECORDS on every device when it builds and when `shared` builds (every family loads it). A LANE records when
+any family of its set records (lanes_to_record): a lane that loads linear and trees keeps its columns through a
+release that changed only neural. `shared`'s own lanes (unknown loads) record whenever any family records.
+`settle` then refuses to keep a family whose recorded columns do not rest on the bytes shipped (`kept_refusals`): every cell of every lane of a kept
 family must come from a record that ran installed release wheels, taken at a commit where each of the family's
 bindings had today's identity. Anything else records.
 
-Nothing here builds, rents or records. Tests: tools/test_release_families.py.
+Nothing here builds, rents or records. Tests: tools/test_release_reuse_families.py.
 """
 import argparse
 import fnmatch
@@ -80,11 +82,17 @@ class Families:
                     raise SystemExit("release_families: %s is in two families (%s, %s)"
                                      % (name, self.by_binding[name], fam))
                 self.by_binding[name] = fam
+        #: lane -> ONE family (a string; `shared`: its loads are unknown, it records whenever any family does) or
+        #: THE SET of families it loads (a list of two or more, none of them `shared`)
         self.lanes = dict(doc.get("lanes") or {})
         self.rules = [tuple(r) for r in (doc.get("lane_rules") or [])]
-        for lane, fam in list(self.lanes.items()) + [(p, f) for p, f in self.rules]:
-            if fam not in self.families:
-                raise SystemExit("release_families: %s names the unknown family %r" % (lane, fam))
+        for lane, value in list(self.lanes.items()) + [(p, f) for p, f in self.rules]:
+            if not isinstance(value, (str, list, tuple)) or not all(isinstance(f, str) for f in _as_set(value)):
+                raise SystemExit("release_families: %s must name a family or a list of families, not %r"
+                                 % (lane, value))
+            for fam in _as_set(value):
+                if fam not in self.families:
+                    raise SystemExit("release_families: %s names the unknown family %r" % (lane, fam))
         self.metal1_suffix = metal1_suffix
         #: bindings/merged_groups.json as loaded with the map (load, load_at); None: apply reads the tooling's
         self.merged = None
@@ -103,13 +111,28 @@ class Families:
             fam = self.by_binding.get(name[:-len(self.metal1_suffix)])
         return fam
 
+    def lane_families(self, name):
+        """THE SET of families the lane NAME loads, as a sorted tuple: one family, or several; `(shared,)` for a
+        lane whose loads are unknown (it records whenever any family records); None for a lane the map does not
+        have. A list that is empty or names `shared` is read as unknown, the safe side."""
+        value = self.lanes.get(name)
+        if value is None:
+            for pattern, fam in self.rules:
+                if fnmatch.fnmatchcase(name, pattern):
+                    value = fam
+                    break
+        if value is None:
+            return None
+        fams = tuple(sorted(set(_as_set(value))))
+        return fams if fams and SHARED not in fams else (SHARED,)
+
     def lane(self, name):
-        if name in self.lanes:
-            return self.lanes[name]
-        for pattern, fam in self.rules:
-            if fnmatch.fnmatchcase(name, pattern):
-                return fam
-        return None
+        """The lane's one family; `shared` for a lane of several families or of unknown loads (read alone, that
+        is the safe answer: record on any change). `lane_families` is what the plan decides from."""
+        fams = self.lane_families(name)
+        if fams is None:
+            return None
+        return fams[0] if len(fams) == 1 else SHARED
 
     def python(self, rel):
         """The family of the file REL (a path under python.root) by the first rule that matches it: a family,
@@ -118,6 +141,11 @@ class Families:
             if fnmatch.fnmatchcase(rel, pattern):
                 return fam
         return None
+
+
+def _as_set(value):
+    """A lane's map value as a list of family names: a string is one family, a list is itself."""
+    return [value] if isinstance(value, str) else list(value)
 
 
 def load(path=None, merged_path=None):
@@ -200,19 +228,21 @@ def all_lanes(root=ROOT, python=None):
 
 def check(fam, bindings, lanes, lane_bindings=None):
     """[problem] for every binding or lane with no family; with lane_bindings ({lane: [binding]}) also every
-    EXPLICIT lane that loads a binding outside its family and shared (a rule-mapped lane to `shared` may load any)."""
+    lane that loads a binding outside its set of families and shared (a lane mapped to `shared`, whose loads are
+    unknown, may load any). That is the dangerous direction: such a lane would keep its columns when the family
+    it loads and is not mapped to changes."""
     problems = ["binding %s has no family (bindings/release_families.json)" % b for b in bindings
                 if fam.binding(b) is None]
     problems += ["lane %s has no family (bindings/release_families.json; tools/release_families.py derive --write)"
-                 % lane for lane in lanes if fam.lane(lane) is None]
+                 % lane for lane in lanes if fam.lane_families(lane) is None]
     for lane, loaded in sorted((lane_bindings or {}).items()):
-        own = fam.lane(lane)
-        if own is None or own == SHARED:
+        own = fam.lane_families(lane)
+        if own is None or SHARED in own:
             continue
-        outside = sorted(b for b in loaded if fam.binding(b) not in (own, SHARED))
+        outside = sorted(b for b in loaded if fam.binding(b) not in own + (SHARED,))
         if outside:
             problems.append("lane %s is in family %s but loads %s" % (
-                lane, own, ", ".join("%s (%s)" % (b, fam.binding(b)) for b in outside[:6])))
+                lane, "+".join(own), ", ".join("%s (%s)" % (b, fam.binding(b)) for b in outside[:6])))
     return problems
 
 
@@ -229,16 +259,43 @@ def lane_loads(lanes=None):
 
 
 def derive(fam, loads):
-    """({lane: family}, [problem]): the one non-shared family of what each lane loads, else shared (it loads
-    none, or several families). A loaded binding with no family is a problem, never guessed."""
+    """({lane: family or [families]}, [problem]): THE SET of non-shared families of what each lane loads: the
+    one family as a string, several as a sorted list. `shared` (record whenever any family records) only for a
+    lane whose set is not known: it loads no family's binding at all (nothing ties it to a family, so nothing
+    says which change it is safe from), or it loads a binding with no family, which is a problem, never guessed."""
     lanes, problems = {}, []
     for lane, loaded in sorted(loads.items()):
         unknown = [b for b in loaded if fam.binding(b) is None]
         if unknown:
             problems.append("lane %s loads binding(s) with no family: %s" % (lane, ", ".join(unknown)))
-        own = {fam.binding(b) for b in loaded} - {None, SHARED}
-        lanes[lane] = own.pop() if len(own) == 1 else SHARED
+        own = sorted({fam.binding(b) for b in loaded} - {None, SHARED})
+        if unknown or not own:
+            lanes[lane] = SHARED
+        else:
+            lanes[lane] = own[0] if len(own) == 1 else own
     return lanes, problems
+
+
+def derive_table(fam, lanes):
+    """The lines `derive` prints about a {lane: family or [families]} map: the lanes by the number of families
+    they load, and per family the lanes that record when ONLY that family changed (the lanes whose set holds it,
+    plus the `shared` lanes, which record on any change). The second column is what the family split saves."""
+    sets = {lane: tuple(sorted(set(_as_set(v)))) for lane, v in lanes.items()}
+    unknown = sorted(lane for lane, s in sets.items() if SHARED in s or not s)
+    sizes = {}
+    for lane, s in sets.items():
+        if lane not in unknown:
+            sizes[len(s)] = sizes.get(len(s), 0) + 1
+    out = ["DERIVED-SETS %d lane(s): %s; shared (unknown loads, record on any change) %d" % (
+        len(sets), ", ".join("%d famil%s %d" % (n, "y" if n == 1 else "ies", c) for n, c in sorted(sizes.items()))
+        or "none with a family", len(unknown))]
+    for name in fam.names():
+        if name == SHARED:
+            continue
+        own = sum(1 for lane, s in sets.items() if lane not in unknown and name in s)
+        out.append("DERIVED-FAMILY %-10s records %4d of %d lane(s) when it alone changes (%d load it, %d shared)" % (
+            name, own + len(unknown), len(sets), own, len(unknown)))
+    return out
 
 
 def loaders(fam, loads, bindings):
@@ -503,9 +560,9 @@ def apply(plan, fam=None, merged=None, rebuild_all=False, python=None):
             f.update(record=True, record_reason="its Python glue changed (%s); its binaries are reused"
                      % named(glue[f["family"]]))
         elif f["family"] == SHARED and any_build:
-            f.update(record=True, record_reason="its lanes load several families, and one builds")
+            f.update(record=True, record_reason="its lanes' loads are unknown, and one builds")
     if not fams[SHARED]["record"] and any(f["record"] for f in fams.values()):
-        fams[SHARED].update(record=True, record_reason="its lanes load several families, and one records")
+        fams[SHARED].update(record=True, record_reason="its lanes' loads are unknown, and one records")
     for r in rows:
         f = fams[r["family"]]
         if f["decision"] == "BUILD" and r["decision"] == "REUSE":
@@ -525,14 +582,17 @@ def by_name(fplan):
 
 
 def lanes_to_record(fplan, lanes, fam=None):
-    """The lanes (in the given order) of every family that records."""
+    """The lanes (in the given order) that record: a lane records when ANY family of its set records
+    (`Families.lane_families`). A lane mapped to `shared` (unknown loads) records when `shared` records, which
+    `apply` and `settle` make true whenever any family records. When the shared core itself changes, `apply`
+    marks every family, so every lane of every set records."""
     fam = fam or load()
     rec = {n for n, f in by_name(fplan).items() if f.get("record")}
-    unmapped = [lane for lane in lanes if fam.lane(lane) is None]
+    unmapped = [lane for lane in lanes if fam.lane_families(lane) is None]
     if unmapped:
         raise SystemExit("release_families: lane(s) with no family: %s (tools/release_families.py derive --write)"
                          % ", ".join(unmapped[:20]))
-    return [lane for lane in lanes if fam.lane(lane) in rec]
+    return [lane for lane in lanes if rec.intersection(fam.lane_families(lane))]
 
 
 def recording(fplan):
@@ -604,7 +664,9 @@ def kept_refusals(plan, lanes, fam=None, source_root=ROOT, cache_dir=None):
     if not table:
         return {n: "no reference table at %s" % TABLE for n in kept}
     rows_of = {n: [r for r in plan["rows"] if r.get("family") == n] for n in kept}
-    lanes_of = {n: [lane for lane in lanes if fam.lane(lane) == n] for n in kept}
+    # A LANE OF SEVERAL FAMILIES IS CHECKED UNDER EACH OF THEM: it keeps its columns only when every family of
+    # its set is kept, and each kept one must find the lane's cells resting on its own bindings and glue.
+    lanes_of = {n: [lane for lane in lanes if n in (fam.lane_families(lane) or ())] for n in kept}
     cells = _cell_commits(table, [lane for n in kept for lane in lanes_of[n]])
     records = table.get("records") or []
     refusals, digests, glue_at = {}, {}, {}
@@ -695,7 +757,7 @@ def settle(plan, lanes, fam=None, source_root=ROOT, cache_dir=None):
     for n, why in refusals.items():
         fams[n].update(record=True, record_reason="its kept columns do not rest on the shipped bytes: " + why)
     if refusals and not fams[SHARED].get("record"):
-        fams[SHARED].update(record=True, record_reason="its lanes load several families, and one records")
+        fams[SHARED].update(record=True, record_reason="its lanes' loads are unknown, and one records")
     plan["families"]["kept_refusals"] = refusals
     return lanes_to_record(plan["families"], lanes, fam)
 
@@ -757,11 +819,16 @@ def main(argv=None):
         lanes, problems = derive(fam, lane_loads())
         counts = {}
         for f in lanes.values():
-            counts[f] = counts.get(f, 0) + 1
+            key = f if isinstance(f, str) else "+".join(f)
+            counts[key] = counts.get(key, 0) + 1
         print("DERIVED %d lane(s): %s" % (len(lanes), ", ".join("%s %d" % kv for kv in sorted(counts.items()))))
+        for line in derive_table(fam, lanes):
+            print(line)
         for line in problems:
             print("REFUSED " + line)
         if a.write and not problems:
+            # NO CATCH-ALL RULE ONCE THE LANES ARE WRITTEN: a lane the map does not name is refused (check,
+            # lanes_to_record), never silently kept or silently shared.
             doc = dict(fam.doc, lanes=lanes, lane_rules=[])
             MAP.write_text(json.dumps(doc, indent=1) + "\n")
             print("wrote %s" % MAP)
