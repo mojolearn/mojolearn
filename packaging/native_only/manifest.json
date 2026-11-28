@@ -240,11 +240,13 @@
       "Louvain",
       "NearestCentroid",
       "OneClassSVM",
+      "PAGA",
       "PageRank",
       "PolynomialCountSketch",
       "SVGP",
       "SkewedChi2Sampler",
-      "connected_components"
+      "connected_components",
+      "shared_neighbors_graph"
     ],
     "python/mojolearn/_expansion_prep.py": [
       "BernoulliNB",
@@ -530,6 +532,7 @@
       "StandardScaler"
     ],
     "python/mojolearn/manifold.py": [
+      "DiffusionMap",
       "SpectralEmbedding",
       "UMAP",
       "spectral_embedding"
@@ -3260,6 +3263,15 @@
       "symbol_origin": "mojolearn._expansion_prep.OrdinalEncoder"
     },
     {
+      "algorithm": "mojolearn.PAGA",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/_expansion_neighbors.py",
+      "canonical_algorithm": "mojolearn.PAGA",
+      "symbol_origin": "mojolearn._expansion_neighbors.PAGA"
+    },
+    {
       "algorithm": "mojolearn.PCA",
       "status": "ready",
       "cases": [
@@ -5080,6 +5092,15 @@
       "canonical_algorithm": "mojolearn.ClassicalMDS",
       "symbol_origin": "mojolearn._expansion_decomp.ClassicalMDS",
       "alias_of": "mojolearn.ClassicalMDS"
+    },
+    {
+      "algorithm": "mojolearn.manifold.DiffusionMap",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/manifold.py",
+      "canonical_algorithm": "mojolearn.manifold.DiffusionMap",
+      "symbol_origin": "mojolearn._spectral_impl.DiffusionMap"
     },
     {
       "algorithm": "mojolearn.manifold.Isomap",
@@ -7298,6 +7319,15 @@
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.set_numeric_profile",
       "symbol_origin": "mojolearn.set_numeric_profile"
+    },
+    {
+      "algorithm": "mojolearn.shared_neighbors_graph",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/_expansion_neighbors.py",
+      "canonical_algorithm": "mojolearn.shared_neighbors_graph",
+      "symbol_origin": "mojolearn._expansion_neighbors.shared_neighbors_graph"
     },
     {
       "algorithm": "mojolearn.solve",
