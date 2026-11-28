@@ -10,19 +10,26 @@ spectral_initialize_device_coo_report`; both call the bodies in
 
 - the components: the same partition, every vertex labelled by its
   component's smallest index, components numbered in that order (the device
-  reaches it by min-label propagation, this column by union-find with the
-  smaller root kept; the fixed point is unique, so the labels agree);
+  and this column both reach it by min-label propagation over the same
+  bodies, core/cc_label_bodies.mojo; the fixed point is unique, so the
+  labels agree);
 - each component's vertices in ascending index and its edges in input order,
   relabelled to local indices (the device's stable radix sort);
 - the centroids, `data_range`s, uniform draws, the bounded eigen solve
   (`oracle_embedding_capped`, the device's `SC_MAX_RESTARTS`), the
   acceptance rule, the scaling and the post-pass.
 
-SERIAL PARTS, AND WHY: the union-find and the counting passes over vertices
-and edges are O(n + nnz) single sweeps whose order is the contract (the
-component numbering, the stable grouping); they are not split. The centroid
-ranges, the uniform draws and the per-component eigen solves are independent
-units and run on the host cores (`host_parallelize`).
+SPLIT ACROSS THE HOST CORES: the components (`_host_components`: hook rounds
+over edge chunks, jumps and the root numbering over node chunks; lane
+sc-leftovers-1, 2026-11-28, replacing a serial union-find), the centroid
+ranges, the uniform draws and the per-component eigen solves
+(`host_parallelize`).
+
+SERIAL, AND WHY: the stable grouping of vertices and edges by component (the
+counting passes below) is one O(n + nnz) sweep whose order is the contract.
+Splitting it needs a count table per task of n_comp words (n_comp reaches n
+when most vertices are alone), the shape core/sparse_coo_csr_impl.mojo caps by
+memory; that split is OWED, not refused.
 """
 
 from spectral.host.spectral_oracle import oracle_embedding_capped
@@ -50,16 +57,112 @@ from umap.spectral_components_math import (
     sc_sq_step,
 )
 from std.memory import bitcast
+from std.sys.info import num_physical_cores
+from core.cc_label_bodies import CcLabelPtr, cc_hook_edge, cc_jump_node
 
 
-def _find(mut parent: List[Int], x: Int) -> Int:
-    """Union-find root with path halving."""
-    var v = x
-    while parent[v] != v:
-        parent[v] = parent[parent[v]]
-        v = parent[v]
-    return v
+#: The fewest items (edges or vertices) a host task takes in `_host_components`: below it a split costs more
+#: than it saves (the grain of core/sparse_coo_csr_impl.mojo's tasks, a size rule, not a board shape).
+comptime _SC_HOST_MIN_PER_TASK = 16384
 
+
+def _sc_host_tasks(count: Int) -> Int:
+    """Tasks for `count` items: one per physical core, at most one per
+    `_SC_HOST_MIN_PER_TASK` items, at least one."""
+    var tasks = (count + _SC_HOST_MIN_PER_TASK - 1) // _SC_HOST_MIN_PER_TASK
+    var cores = num_physical_cores()
+    if tasks > cores:
+        tasks = cores
+    return tasks if tasks > 1 else 1
+
+
+def _host_components(coo: CooGraph, mut comp: List[Int32]) -> Int:
+    """The connected components on the CPU column, split across the host
+    cores (lane sc-leftovers-1, 2026-11-28; before, a serial union-find): the
+    device's min-label rounds over the same bodies (core/cc_label_bodies.mojo;
+    umap/spectral_init.mojo `sc_label_hook_kernel` / `sc_label_jump_kernel`),
+    a hook over edge chunks then a jump over node chunks per round until a
+    round lowers nothing, then the roots numbered in index order by a blocked
+    count and scan. The fixed point is unique (every vertex labelled by its
+    component's smallest index, whatever the task order), so `comp` is the
+    union-find's and the device's words: component ids in order of their
+    smallest vertex. Returns the component count."""
+    var n = coo.n
+    var nnz = coo.nnz()
+    var lab = List[Int32](length=max(n, 1), fill=Int32(0))
+    var lp = CcLabelPtr(unsafe_from_address=Int(lab.unsafe_ptr()))
+    var rp = CcLabelPtr(unsafe_from_address=Int(coo.rows.unsafe_ptr()))
+    var cq = CcLabelPtr(unsafe_from_address=Int(coo.cols.unsafe_ptr()))
+    var nt = _sc_host_tasks(n)
+    var nchunk = (n + nt - 1) // nt
+    def _init(t: Int) {imm lp, imm nchunk, imm n}:
+        var hi = min(t * nchunk + nchunk, n)
+        for v in range(t * nchunk, hi):
+            lp.unsafe_store(v, Int32(v))
+    host_parallelize(_init, nt)
+    var et = _sc_host_tasks(nnz)
+    var echunk = (nnz + et - 1) // et if nnz > 0 else 1
+    var lowered = List[Int32](length=et, fill=Int32(0))
+    var wp = CcLabelPtr(unsafe_from_address=Int(lowered.unsafe_ptr()))
+    def _hook(t: Int) {imm lp, imm rp, imm cq, imm wp, imm echunk, imm nnz}:
+        var hi = min(t * echunk + echunk, nnz)
+        var moved = Int32(0)
+        for e in range(t * echunk, hi):
+            if cc_hook_edge(lp, Int(rp.unsafe_load(e)), Int(cq.unsafe_load(e))):
+                moved = Int32(1)
+        wp.unsafe_store(t, moved)
+    def _jump(t: Int) {imm lp, imm nchunk, imm n}:
+        var hi = min(t * nchunk + nchunk, n)
+        for v in range(t * nchunk, hi):
+            cc_jump_node(lp, v)
+    for _ in range(n + 1):  # driver-loop: over label-propagation rounds (at most n, each changing round lowers a label)
+        if nnz == 0:
+            break
+        host_parallelize(_hook, et)
+        host_parallelize(_jump, nt)
+        var changed = False
+        for t in range(et):  # small-loop(the hook tasks' change words, at most the core count)
+            if lowered[t] != Int32(0):
+                changed = True
+        if not changed:
+            break
+    # the roots (lab[v] == v) numbered in index order: per-task counts, their
+    # prefix over the tasks, each task's ranks, then every vertex its root's id
+    var counts = List[Int](length=nt + 1, fill=0)
+    var kp = counts.unsafe_ptr()
+    def _count(t: Int) {imm lp, imm kp, imm nchunk, imm n}:
+        var hi = min(t * nchunk + nchunk, n)
+        var c = 0
+        for v in range(t * nchunk, hi):
+            if Int(lp.unsafe_load(v)) == v:
+                c += 1
+        kp.unsafe_store(t + 1, c)
+    host_parallelize(_count, nt)
+    for t in range(nt):  # small-loop(the node tasks, at most the core count)
+        counts[t + 1] += counts[t]
+    var n_comp = counts[nt]
+    comp = List[Int32](length=max(n, 1), fill=Int32(0))
+    var op = CcLabelPtr(unsafe_from_address=Int(comp.unsafe_ptr()))
+    def _rank(t: Int) {imm lp, imm kp, imm op, imm nchunk, imm n}:
+        var hi = min(t * nchunk + nchunk, n)
+        var r = kp[t]
+        for v in range(t * nchunk, hi):
+            if Int(lp.unsafe_load(v)) == v:
+                op.unsafe_store(v, Int32(r))
+                r += 1
+    host_parallelize(_rank, nt)
+    def _label(t: Int) {imm lp, imm op, imm nchunk, imm n}:
+        var hi = min(t * nchunk + nchunk, n)
+        for v in range(t * nchunk, hi):
+            var root = Int(lp.unsafe_load(v))
+            if root != v:
+                op.unsafe_store(v, op.unsafe_load(root))
+    host_parallelize(_label, nt)
+    _ = len(lab)  # the labels, change words and counts outlive every task above
+    _ = len(lowered)
+    _ = len(counts)
+    _ = len(coo.rows)
+    return n_comp
 
 def _host_solve(
     g: CooGraph, dim: Int, seed: UInt64, mut emb: List[Float32], mut restarts: Int,
@@ -103,26 +206,9 @@ def host_spectral_initialize_report(
         raise Error("UMAP spectral initialization has too few samples")
     var seed_lo = sc_seed_lo(seed)
     var seed_hi = sc_seed_hi(seed)
-    # the components
-    var parent = List[Int](capacity=n)
-    for i in range(n):
-        parent.append(i)
-    for e in range(nnz):
-        var a = _find(parent, Int(coo.rows[e]))
-        var b = _find(parent, Int(coo.cols[e]))
-        if a < b:
-            parent[b] = a
-        elif b < a:
-            parent[a] = b
-    var comp = List[Int32](length=n, fill=Int32(0))
-    var n_comp = 0
-    for i in range(n):
-        var r = _find(parent, i)
-        if r == i:
-            comp[i] = Int32(n_comp)
-            n_comp += 1
-        else:
-            comp[i] = comp[r]
+    # the components (split across the host cores: `_host_components`)
+    var comp = List[Int32]()
+    var n_comp = _host_components(coo, comp)
     if n_comp <= 1:
         var emb1 = List[Float32]()
         var restarts1 = 0
