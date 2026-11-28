@@ -11,7 +11,13 @@
 
 THE MAP is bindings/release_families.json: every binding the release ships and every verify lane belongs to exactly
 one family, plus `shared`. `check` refuses a binding or lane with no family (and, with --loads, an explicit lane that
-loads a binding of another family than its own and shared).
+loads a binding of another family than its own and shared), a merged file of bindings/merged_groups.json that holds
+bindings of two families (merged_span_problems), and a Python glue file with no family or with a family another
+family's code imports (python_problems).
+
+THE PYTHON GLUE (`python.rules` in the map) is in a family's identity too: no binary reads a Python file, so a family
+whose Python files changed since the previous release keeps its binaries and RECORDS its lanes (python_glue, apply).
+Verification tooling is not product glue and is in no family (the map's `_doc` says where the line is).
 
 THE DECISION is code, from the binding identities tools/release_reuse.py computes (never an agent's reading of a
 diff). `apply` turns its per-binding REUSE/BUILD rows into whole families:
@@ -32,8 +38,10 @@ Nothing here builds, rents or records. Tests: tools/test_release_families.py.
 """
 import argparse
 import fnmatch
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -46,6 +54,8 @@ MERGED = ROOT / "bindings" / "merged_groups.json"
 SCHEMA = "mojolearn.release-families.v1"
 PLAN_SCHEMA = "mojolearn.release-family-plan.v1"
 SHARED = "shared"
+#: the `python.rules` family of a file that is not product glue (verification tooling, tests, documents)
+PY_NOT_GLUE = "-"
 TABLE = "python/mojolearn/verify_reference/table.json"
 RECORDS = "verification/records/identity"
 #: identity column class -> the published wheel (release_reuse.previous_release key) its device bytes ship in
@@ -77,6 +87,10 @@ class Families:
         self.metal1_suffix = metal1_suffix
         #: bindings/merged_groups.json as loaded with the map (load, load_at); None: apply reads the tooling's
         self.merged = None
+        #: THE PYTHON GLUE: `python.rules` are [pattern, family] over the tracked files under `python.root`
+        py = doc.get("python") or {}
+        self.py_root = str(py.get("root") or "python/mojolearn").strip("/")
+        self.py_rules = [tuple(r) for r in (py.get("rules") or [])]
 
     def names(self):
         """The families, shared first, the rest in map order."""
@@ -93,6 +107,14 @@ class Families:
             return self.lanes[name]
         for pattern, fam in self.rules:
             if fnmatch.fnmatchcase(name, pattern):
+                return fam
+        return None
+
+    def python(self, rel):
+        """The family of the file REL (a path under python.root) by the first rule that matches it: a family,
+        PY_NOT_GLUE for a file that is not product glue, None when no rule matches."""
+        for pattern, fam in self.py_rules:
+            if fnmatch.fnmatchcase(rel, pattern):
                 return fam
         return None
 
@@ -218,15 +240,183 @@ def derive(fam, loads):
     return lanes, problems
 
 
+# ---------------------------------------------------------------- one family per merged file
+def merged_span_problems(fam, merged=None):
+    """[problem] for every merged file of bindings/merged_groups.json whose members belong to two families.
+
+    A merged file is one `mojo build` and one .so: when it holds two families, a build of either rebuilds the other's
+    bytes and `apply` must build both, so the family rule saves nothing. On macOS a group is written as <stem> and
+    <stem>_m1 (tools/merged_bindings.py plan); both are subsets of the group checked here. A member with no family is
+    `check`'s report, not this one's."""
+    problems = []
+    for key, members in merged_files(merged if merged is not None else getattr(fam, "merged", None)):
+        here = {}
+        for m in members:
+            here.setdefault(fam.binding(m), []).append(m)
+        here.pop(None, None)
+        if len(here) > 1:
+            problems.append("merged file %s holds bindings of %d families (%s): one family per merged file "
+                            "(bindings/merged_groups.json)" % (key, len(here), "; ".join(
+                                "%s: %s" % (f, ", ".join(sorted(ms))) for f, ms in sorted(here.items()))))
+    return problems
+
+
+# ---------------------------------------------------------------- the Python glue of a family
+_PY_FROM = re.compile(r"^[ \t]*from[ \t]+(\.+[\w.]*|mojolearn[\w.]*)[ \t]+import[ \t]+(\([^)]*\)|[^\n#]+)", re.M)
+_PY_IMPORT = re.compile(r"^[ \t]*import[ \t]+mojolearn\.([\w.]+)", re.M)
+_PY_BINDING = re.compile(r"_mojolearn(?:_[a-z0-9]+)*")
+
+
+def python_tree(commit, root=ROOT, py_root="python/mojolearn"):
+    """{path under py_root: blob sha} of every file tracked there at COMMIT: one `git ls-tree -r`, no file is read."""
+    p = subprocess.run(["git", "-C", str(root), "ls-tree", "-r", "-z", commit, "--", py_root],
+                       capture_output=True, text=True)
+    if p.returncode != 0:
+        raise ValueError("git ls-tree %s -- %s: %s" % (commit, py_root, (p.stderr or "").strip()[-200:]))
+    out = {}
+    for ent in p.stdout.split("\0"):
+        meta, _, path = ent.partition("\t")
+        parts = meta.split()
+        if len(parts) == 3 and parts[1] == "blob" and path.startswith(py_root + "/"):
+            out[path[len(py_root) + 1:]] = parts[2]
+    return out
+
+
+def python_owner(fam, rel):
+    """The family whose identity a file under python.root is in: its rule's family, SHARED for a file no rule
+    matches (the safe side; `check` refuses such a file), None for a file that is not product glue."""
+    own = fam.python(rel)
+    if own is None or (own != PY_NOT_GLUE and own not in fam.families):
+        return SHARED
+    return None if own == PY_NOT_GLUE else own
+
+
+def python_digests(fam, tree):
+    """{family: sha256} of each family's Python glue in a python_tree (path and blob of every file, sorted)."""
+    lines = {name: [] for name in fam.names()}
+    for rel, blob in sorted(tree.items()):
+        own = python_owner(fam, rel)
+        if own is not None:
+            lines[own].append("%s\0%s\n" % (rel, blob))
+    return {name: hashlib.sha256("".join(rows).encode()).hexdigest() for name, rows in lines.items()}
+
+
+def python_glue(fam, commit, prev_commit, root=ROOT):
+    """The Python glue facts `apply` takes: dict(changed={family: [files]}, digests={family: sha256}).
+
+    `changed` names, per family, the glue files added, removed or edited between PREV_COMMIT (the source commit of the
+    release whose bytes are reused) and COMMIT, both read with the map of COMMIT. With no previous commit, or one this
+    clone cannot read, the glue is not known to be unchanged: `shared` is marked changed, so every lane records."""
+    now = python_tree(commit, root, fam.py_root)
+    out = dict(changed={}, digests=python_digests(fam, now))
+    try:
+        if not prev_commit:
+            raise ValueError("the previous release names no source commit")
+        before = python_tree(prev_commit, root, fam.py_root)
+    except ValueError as exc:
+        out["changed"][SHARED] = ["<unknown: %s>" % str(exc)[:160]]
+        return out
+    for rel in sorted(set(now) | set(before)):
+        if now.get(rel) != before.get(rel):
+            own = python_owner(fam, rel)
+            if own is not None:
+                out["changed"].setdefault(own, []).append(rel)
+    return out
+
+
+def _python_scan(path):
+    """(import candidates, binding names) of one Python file, by text: the modules its `from ... import` and
+    `import mojolearn...` statements can name, as (dots, dotted module, [imported names]), and every
+    `_mojolearn_*` word. Runs in a worker process (python_problems)."""
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return [], []
+    found = []
+    for mod, names in _PY_FROM.findall(text):
+        dots = len(mod) - len(mod.lstrip("."))
+        mod = mod.lstrip(".")
+        if not dots:
+            mod = mod[len("mojolearn"):].lstrip(".")
+        picked = [n.split(" as ")[0].strip() for n in names.strip("()").replace("\n", " ").split(",")]
+        found.append((dots, mod, [n for n in picked if n.isidentifier()]))
+    found += [(0, mod, []) for mod in _PY_IMPORT.findall(text)]
+    return found, sorted(set(_PY_BINDING.findall(text)))
+
+
+def python_problems(fam, root=ROOT, files=None, workers=None):
+    """[problem] of the Python glue map over the tracked files under python.root of ROOT's working tree:
+
+      * a file no rule matches (a runtime file with no family is refused, like a binding);
+      * a rule that names a family the map does not have;
+      * a file given a family (not `shared`) that a file of another family or of `shared` imports: a lane of that
+        other family then runs it, and would keep its columns when the file changes;
+      * a file given a family that names a binding of another family.
+
+    Verification tooling (`-`) may import anything. The imports are read as text (`from . import x`,
+    `from .x import y`, `from mojolearn.x import y`, `import mojolearn.x`); a module loaded by a name in a string is
+    not seen, which is why a file gets a family only when its public names each load a binding of that family.
+
+    One unit per glue file, scanned across the cores (workers = cpu count, capped by the file count; a scan holds
+    one small source file in memory)."""
+    root = Path(root)
+    base = root / fam.py_root
+    if files is None:
+        p = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--", fam.py_root], capture_output=True, text=True)
+        files = [f[len(fam.py_root) + 1:] for f in p.stdout.split("\0") if f.startswith(fam.py_root + "/")]
+    files = sorted(files)
+    known = set(files)
+    problems = ["python rule %s names the unknown family %r" % (pattern, own) for pattern, own in fam.py_rules
+                if own != PY_NOT_GLUE and own not in fam.families]
+    problems += ["python file %s/%s has no family (bindings/release_families.json python.rules)" % (fam.py_root, rel)
+                 for rel in files if fam.python(rel) is None]
+    glue = [rel for rel in files if rel.endswith(".py") and fam.python(rel) not in (None, PY_NOT_GLUE)]
+    workers = max(1, min(len(glue), int(workers or os.cpu_count() or 1)))
+    paths = [str(base / rel) for rel in glue]
+    if workers == 1:
+        scans = [_python_scan(p) for p in paths]
+    else:
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            scans = list(pool.map(_python_scan, paths, chunksize=max(1, len(paths) // (workers * 4))))
+    for rel, (imports, words) in zip(glue, scans):
+        own = fam.python(rel)
+        package = rel.split("/")[:-1]
+        targets = set()
+        for dots, mod, names in imports:
+            if dots > len(package) + 1:
+                continue
+            stem = (package[:len(package) - (dots - 1)] if dots else []) + [p for p in mod.split(".") if p]
+            for parts in [stem] + [stem + [n] for n in names]:
+                for cand in ("/".join(parts) + ".py", "/".join(parts + ["__init__.py"])):
+                    if parts and cand in known and cand != rel:
+                        targets.add(cand)
+        for target in sorted(targets):
+            theirs = fam.python(target)
+            if theirs not in (None, PY_NOT_GLUE, SHARED, own):
+                problems.append("python glue %s is in family %s but %s (%s) imports it: make it shared or cut the "
+                                "import" % (target, theirs, rel, own))
+        if own != SHARED:
+            other = sorted({"%s (%s)" % (w, fam.binding(w)) for w in words
+                            if fam.binding(w) not in (None, SHARED, own)})
+            if other:
+                problems.append("python glue %s is in family %s but names %s" % (rel, own, ", ".join(other[:6])))
+    return problems
+
+
 # ---------------------------------------------------------------- the family plan
 def _new(name):
     return dict(family=name, decision="REUSE", reason="every binding identity unchanged", bindings=0, built=0,
                 record=False, record_reason="")
 
 
-def apply(plan, fam=None, merged=None, rebuild_all=False):
+def apply(plan, fam=None, merged=None, rebuild_all=False, python=None):
     """Make the REUSE/BUILD rows of a tools/release_reuse.py plan whole per family (in place) and return the family
-    plan, also stored as plan["families"]. SystemExit for a row whose binding has no family."""
+    plan, also stored as plan["families"]. SystemExit for a row whose binding has no family.
+
+    PYTHON (python_glue: the glue files that changed since the release whose bytes are reused, and today's digest per
+    family): a family whose Python glue changed RECORDS its lanes; its binaries stay REUSE, because no binary reads
+    a Python file. Changed `shared` glue records every family. The digests are kept in the plan for kept_refusals."""
     fam = fam or load()
     rows = plan["rows"]
     fams = {f: _new(f) for f in fam.names()}
@@ -263,13 +453,31 @@ def apply(plan, fam=None, merged=None, rebuild_all=False):
                                    % (key, building[0]))
                     moved = True
     any_build = any(f["decision"] == "BUILD" for f in fams.values())
+    glue = {}
+    for name, files in sorted(((python or {}).get("changed") or {}).items()):
+        # a family the map does not have (a plan of another map) is shared's: the safe side
+        glue.setdefault(name if name in fams else SHARED, []).extend(files)
+
+    def named(files):
+        return ", ".join(sorted(files)[:4]) + (" and %d more" % (len(files) - 4) if len(files) > 4 else "")
+
+    for name, files in glue.items():
+        fams[name]["python_changed"] = sorted(files)
     for f in fams.values():
         if f["decision"] == "BUILD":
             f.update(record=True, record_reason="it builds")
         elif fams[SHARED]["decision"] == "BUILD":
             f.update(record=True, record_reason="shared builds (every family loads it)")
+        elif glue.get(SHARED):
+            f.update(record=True, record_reason="the shared Python glue changed (%s); every family runs it"
+                     % named(glue[SHARED]))
+        elif glue.get(f["family"]):
+            f.update(record=True, record_reason="its Python glue changed (%s); its binaries are reused"
+                     % named(glue[f["family"]]))
         elif f["family"] == SHARED and any_build:
             f.update(record=True, record_reason="its lanes load several families, and one builds")
+    if not fams[SHARED]["record"] and any(f["record"] for f in fams.values()):
+        fams[SHARED].update(record=True, record_reason="its lanes load several families, and one records")
     for r in rows:
         f = fams[r["family"]]
         if f["decision"] == "BUILD" and r["decision"] == "REUSE":
@@ -278,6 +486,8 @@ def apply(plan, fam=None, merged=None, rebuild_all=False):
     if rebuild_all and rt:
         rt.update(decision="BUILD", reason="--rebuild-all", reuse_from=None)
     out = dict(schema=PLAN_SCHEMA, rebuild_all=bool(rebuild_all), families=[fams[n] for n in fam.names()])
+    if (python or {}).get("digests"):
+        out["python_digests"] = dict(python["digests"])
     plan["families"] = out
     return out
 
@@ -349,8 +559,9 @@ def kept_refusals(plan, lanes, fam=None, source_root=ROOT, cache_dir=None):
 
     Each cell part of each lane of a kept family names a record (class, commit). The record must exist and have run
     installed release wheels (_record_refusal), and every binding of the family (every target and set) must have
-    today's identity at the record's commit. A lane with no cell at all, a record that names no wheels, a commit
-    this clone lacks: refused, so the family records.
+    today's identity at the record's commit, and so must the family's Python glue and the shared glue
+    (python_digests at that commit against the plan's). A lane with no cell at all, a record that names no wheels,
+    a commit this clone lacks: refused, so the family records.
 
     The commits are evaluated one after another, each through release_reuse.facts_for_commit, which is cached by
     commit and walks its build scripts' closures across every core (tree_facts); a second process pool over commits
@@ -368,8 +579,10 @@ def kept_refusals(plan, lanes, fam=None, source_root=ROOT, cache_dir=None):
     lanes_of = {n: [lane for lane in lanes if fam.lane(lane) == n] for n in kept}
     cells = _cell_commits(table, [lane for n in kept for lane in lanes_of[n]])
     records = table.get("records") or []
-    refusals, digests = {}, {}
+    refusals, digests, glue_at = {}, {}, {}
     host_toolchain = plan.get("host_toolchain")
+    # today's Python glue digest per family (apply stores python_glue's); a plan without it checks the bindings only
+    today_glue = (plan.get("families") or {}).get("python_digests") or {}
     for n in kept:
         why = None
         for lane in lanes_of[n]:
@@ -399,6 +612,20 @@ def kept_refusals(plan, lanes, fam=None, source_root=ROOT, cache_dir=None):
                         if moved:
                             why = "lane %s: its %s cells rest on %s, where %s had another identity" % (
                                 lane, cls, commit[:12], moved[0])
+                    if why is None and today_glue:
+                        if commit not in glue_at:
+                            try:
+                                glue_at[commit] = python_digests(fam, python_tree(commit, source_root, fam.py_root))
+                            except (OSError, ValueError) as exc:
+                                glue_at[commit] = "%s: %s" % (type(exc).__name__, exc)
+                        then = glue_at[commit]
+                        if isinstance(then, str):
+                            why = "lane %s: the Python glue at %s is unreadable (%s)" % (lane, commit[:12], then[:160])
+                        else:
+                            off = [f for f in (n, SHARED) if then.get(f) != today_glue.get(f)]
+                            if off:
+                                why = "lane %s: its %s cells rest on %s, where the Python glue of %s was different" % (
+                                    lane, cls, commit[:12], off[0])
                 if why:
                     why = why if why.startswith("lane ") else "lane %s: %s" % (lane, why)
                     break
@@ -479,10 +706,13 @@ def main(argv=None):
     if a.cmd == "check":
         lanes = given_lanes(a.lanes_file)
         problems = check(fam, known_bindings(), lanes, lane_loads(set(lanes)) if a.loads else None)
+        problems += merged_span_problems(fam)
+        problems += python_problems(fam)
         for line in problems:
             print("REFUSED " + line)
-        print("FAMILIES-CHECK %s: %d binding(s), %d lane(s), %d problem(s)" % (
-            "ok" if not problems else "REFUSED", len(known_bindings()), len(lanes), len(problems)))
+        print("FAMILIES-CHECK %s: %d binding(s), %d lane(s), %d merged file(s), %d python rule(s), %d problem(s)" % (
+            "ok" if not problems else "REFUSED", len(known_bindings()), len(lanes), len(merged_files(fam.merged)),
+            len(fam.py_rules), len(problems)))
         return 0 if not problems else 1
     if a.cmd == "derive":
         lanes, problems = derive(fam, lane_loads())
