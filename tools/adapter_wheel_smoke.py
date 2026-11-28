@@ -15,6 +15,10 @@ checkers against the SHIPPED files (mojolearn/.../_adapters/), never this tree's
     torch-training   tools/check_native_training_adapters.py --extension <shipped registration> --smoke
     max-training     tools/check_max_training_adapters.py --library <shipped .mojoc> ... --smoke
                      (when max imports, after torch-training passed: it compares with its results)
+    anndata          tools/check_anndata_adapter.py (when anndata imports): the AnnData front-end
+                     (mojolearn.adapters.anndata, pure Python glue over the public estimators): every live
+                     row writes Scanpy's slots with the bytes of the estimator called directly. Recorded
+                     under `frontends`, not `frameworks`: it ships no compiled adapter file.
 
 The adapters are whole-model only (Andrew, 2026-10-24): there is no per-operation
 phase, because there is no per-operation surface.
@@ -62,10 +66,11 @@ def version(name):
         return md.version(name)
     except md.PackageNotFoundError:
         return None
-for dist in ("mojolearn", "mojolearn-core", "mojolearn-nvidia", "mojolearn-amd", "torch", "max", "numpy"):
+for dist in ("mojolearn", "mojolearn-core", "mojolearn-nvidia", "mojolearn-amd", "torch", "max", "numpy", "anndata"):
     out[dist] = version(dist)
 out["torch_importable"] = iu.find_spec("torch") is not None
 out["max_importable"] = iu.find_spec("max") is not None
+out["anndata_importable"] = iu.find_spec("anndata") is not None
 try:
     from mojolearn.adapters import _shipped
     m = _shipped.manifest()
@@ -161,7 +166,7 @@ def install_commands(python, adapters, wanted, extras, test_deps=None):
     torch = adapters.get("torch") or {}
     test_deps = test_deps or {}
     cmds = {}
-    for w in ("torch", "max"):
+    for w in ("torch", "max", "anndata"):
         if w not in wanted:
             continue
         listed = list((extras or {}).get(w) or [])
@@ -192,19 +197,20 @@ def main(argv=None):
     ap.add_argument("--python", required=True, help="the interpreter of the venv holding the installed wheel")
     ap.add_argument("--out", required=True, type=pathlib.Path)
     ap.add_argument("--device", default="mps" if sys.platform == "darwin" else "cuda:0")
-    ap.add_argument("--install", default="", help="comma list of torch,max to pip-install first")
-    ap.add_argument("--require", default="", help="comma list of torch,max that must be present and run")
+    ap.add_argument("--install", default="", help="comma list of torch,max,anndata to pip-install first")
+    ap.add_argument("--require", default="", help="comma list of torch,max,anndata that must be present and run")
     ap.add_argument("--seconds", type=int, default=PHASE_SECONDS, help="bound per compile/training phase")
     ap.add_argument("--install-seconds", type=int, default=INSTALL_SECONDS, help="bound per install phase")
     a = ap.parse_args(argv)
     words = lambda s: [w for w in s.split(",") if w]  # glue: parse the comma lists
     install, require = words(a.install), words(a.require)
     for w in install + require:
-        if w not in ("torch", "max"):
+        if w not in ("torch", "max", "anndata"):
             ap.error(f"unknown framework {w!r}")
     out = a.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    report = dict(schema=SCHEMA, python=a.python, device=a.device, phases={}, problems=[], frameworks={})
+    report = dict(schema=SCHEMA, python=a.python, device=a.device, phases={}, problems=[], frameworks={},
+                  frontends={})
     facts = probe(a.python, out)
     report["installed"] = facts
     adapters = facts.get("adapters")
@@ -260,13 +266,22 @@ def main(argv=None):
             report["frameworks"]["max"] = "ran" if r["exit"] == 0 else "failed"
             if r["exit"] != 0:
                 report["problems"].append(f"MAX training adapter check failed (exit {r['exit']}, {r['log']})")
+        if not facts.get("anndata_importable"):
+            report["frontends"]["anndata"] = "absent"
+        else:
+            r = run("anndata", [a.python, HERE / "check_anndata_adapter.py", "--out", out / "anndata"], out, a.seconds)
+            report["phases"]["anndata"] = r
+            report["frontends"]["anndata"] = "ran" if r["exit"] == 0 else "failed"
+            if r["exit"] != 0:
+                report["problems"].append(f"AnnData front-end check failed (exit {r['exit']}, {r['log']})")
         for w in require:
-            if report["frameworks"].get(w) != "ran":
-                report["problems"].append(f"--require {w}: {report['frameworks'].get(w)}")
-    ran = [w for w, state in report["frameworks"].items() if state == "ran"]
+            state = report["frontends" if w == "anndata" else "frameworks"].get(w)
+            if state != "ran":
+                report["problems"].append(f"--require {w}: {state}")
+    ran = [w for w, state in {**report["frameworks"], **report["frontends"]}.items() if state == "ran"]
     report["status"] = "FAILED" if report["problems"] else "PASSED" if ran else "NO_FRAMEWORK"
     (out / "adapter-smoke.json").write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + "\n")
-    print(f"adapter smoke: {report['status']} frameworks={report['frameworks']} "
+    print(f"adapter smoke: {report['status']} frameworks={report['frameworks']} frontends={report['frontends']} "
           f"phases={ {n: p['exit'] for n, p in report['phases'].items()} }"
           + ("" if not report["problems"] else " problems: " + "; ".join(report["problems"])))
     return 1 if report["status"] == "FAILED" else 0

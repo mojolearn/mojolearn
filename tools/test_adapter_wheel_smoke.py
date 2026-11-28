@@ -163,3 +163,28 @@ def test_install_phases_get_the_install_bound_and_the_others_the_phase_bound(tmp
     smoke.main(["--python", "/py", "--out", str(tmp_path / "o2"), "--install", "torch", "--seconds", "5",
                 "--install-seconds", "7"])
     assert bounds["install-torch"] == 7 and bounds["torch-compile"] == 5
+
+
+def test_the_anndata_front_end_runs_as_its_own_phase(tmp_path):
+    # sc-anndata-1: the AnnData front-end is a phase of its own when anndata imports, recorded under `frontends`
+    # so the frameworks' verdict (torch, max) is the same with or without it
+    code, report = verdict(tmp_path, dict(adapters=ADAPTERS, torch_importable=False, max_importable=False,
+                                          anndata_importable=True), "--require", "anndata")
+    assert (code, report["status"]) == (0, "PASSED")
+    assert report["frameworks"] == dict(torch="absent", max="absent")
+    assert report["frontends"] == dict(anndata="ran")
+    argv = json.loads((tmp_path / "out" / "anndata.log").read_text().splitlines()[0][len("argv: "):])
+    assert argv[1].endswith("check_anndata_adapter.py")
+
+
+def test_a_required_absent_anndata_fails(tmp_path):
+    code, report = verdict(tmp_path, dict(adapters=ADAPTERS, torch_importable=False, max_importable=False),
+                           "--require", "anndata")
+    assert (code, report["status"]) == (1, "FAILED")
+    assert report["frontends"] == dict(anndata="absent")
+    assert "--require anndata: absent" in report["problems"]
+
+
+def test_the_anndata_extra_installs_from_the_wheel_metadata():
+    cmds = smoke.install_commands("py", ADAPTERS, ["anndata"], dict(anndata=["anndata>=0.10"]))
+    assert cmds == {"install-anndata": ["py", "-m", "pip", "install", "--disable-pip-version-check", "anndata>=0.10"]}

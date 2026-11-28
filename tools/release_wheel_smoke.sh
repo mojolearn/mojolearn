@@ -375,12 +375,12 @@ QUALIFY_SHA=$(shasum -a 256 "$QUALIFY" | cut -d' ' -f1)
 # own checkers, as one tarball (the checkers import native_training_fixtures).
 if [ "$ADAPTERS" = 1 ]; then
     [ -z "$FROM_INDEX" ] || die "--adapters smokes a local wheel; it is refused with --from-index"
-    [ -z "$ADAPTER_INSTALL" ] || printf '%s' "$ADAPTER_INSTALL" | grep -Eq '^(torch|max)(,(torch|max))?$' \
-        || die "--adapter-install must be torch, max or torch,max"
+    [ -z "$ADAPTER_INSTALL" ] || printf '%s' "$ADAPTER_INSTALL" | grep -Eq '^(torch|max|anndata)(,(torch|max|anndata)){0,2}$' \
+        || die "--adapter-install must be a comma list of torch, max and anndata"
     ADAPTER_BUNDLE="$TMPD/adapter-smoke.tgz"
     tar czf "$ADAPTER_BUNDLE" -C "$ROOT" tools/adapter_wheel_smoke.py tools/check_native_adapters.py \
         tools/check_native_training_adapters.py tools/native_training_fixtures.py \
-        tools/check_max_training_adapters.py || die "could not pack the adapter smoke tools"
+        tools/check_max_training_adapters.py tools/check_anndata_adapter.py || die "could not pack the adapter smoke tools"
     ADAPTER_BUNDLE_SHA=$(shasum -a 256 "$ADAPTER_BUNDLE" | cut -d' ' -f1)
     FETCH_EXTRA="$FETCH_EXTRA adapters adapter_smoke.log adapter_smoke.exit adapter_venv.log"
 elif [ -n "$ADAPTER_INSTALL" ]; then
