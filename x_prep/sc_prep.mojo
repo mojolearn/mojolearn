@@ -23,12 +23,13 @@ Ranks are counted (`sp_rank`: the position of a key among the keys of its batch 
 thread per gene, O(d) each. They are the order every median, percentile and top-n choice reads.
 """
 from checks.numerics import ftz, portable_log1pf
-from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canonical_nan
+from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canonical_nan, canon
+from x_prep.blocked import csr_dense_unit
 from x_prep.prims import add, sub, mul, div, logf, expf, sqrtf
 
 #: The op range of these units (after lane sc-stats-1's 280 .. 290, x_prep/markers.mojo).
 comptime SP_BASE = 300
-comptime SP_N = 48
+comptime SP_N = 45
 
 comptime SP_ZERO = SP_BASE + 0
 comptime SP_INCLUDE = SP_BASE + 1
@@ -72,12 +73,9 @@ comptime SP_COL_SELECT = SP_BASE + 38
 comptime SP_CSR_SELECT = SP_BASE + 39
 comptime SP_SCALE_APPLY = SP_BASE + 40
 comptime SP_SCALE_CSR = SP_BASE + 41
-comptime SP_COL_MEANSTD = SP_BASE + 42
-comptime SP_STANDARDIZE = SP_BASE + 43
-comptime SP_PINV = SP_BASE + 44
-comptime SP_DENSIFY = SP_BASE + 45
-comptime SP_CENTER = SP_BASE + 46
-comptime SP_RESID = SP_BASE + 47
+comptime SP_PINV = SP_BASE + 42
+comptime SP_DENSIFY = SP_BASE + 43
+comptime SP_RESID = SP_BASE + 44
 
 #: Input layout words.
 comptime SP_DENSE = 0
@@ -85,6 +83,8 @@ comptime SP_CSR = 1
 #: Gather transforms (PRE).
 comptime SP_PRE_NONE = 0
 comptime SP_PRE_EXPM1 = 1
+#: -0.0 -> +0.0 and one NaN word (`canon`): equal values get equal sort keys (rank_genes_groups' block)
+comptime SP_PRE_CANON = 2
 #: Variable-column flavors.
 comptime SP_SEURAT = 0
 comptime SP_CELL_RANGER = 1
@@ -124,7 +124,7 @@ def _log1p(x: Float32) -> Float32:
 
 
 @always_inline
-def _expm1(x: Float32) -> Float32:
+def expm1f(x: Float32) -> Float32:
     """expm1 from exp and log (Kahan's form): u = exp(x); x when u == 1, -1 when u - 1 == -1, else
     (u - 1) * x / log(u)."""
     var u = expf(x)
@@ -304,7 +304,9 @@ def sp_order_unit(t: Int, f: FP, q: IP):
 @always_inline
 def _pre(v: Float32, pre: Int) -> Float32:
     if pre == SP_PRE_EXPM1:
-        return _expm1(v)
+        return expm1f(v)
+    if pre == SP_PRE_CANON:
+        return canon(v)
     return v
 
 
@@ -343,6 +345,26 @@ def sp_gather_csr_unit(t: Int, f: FP, q: IP):
             st(f, at, _pre(raw(f, at), pre))
 
 
+@always_inline
+def seg_sum(f: FP, base: Int, lo: Int, hi: Int, s_in: Float32) -> Float32:
+    """s_in + the words base[lo .. hi), ascending (the first pass of every segment mean in this file and in
+    x_prep/markers.mojo; a second range continues the fold through s_in)."""
+    var s = s_in
+    for i in range(lo, hi):
+        s = add(s, ld(f, base + i))
+    return s
+
+
+@always_inline
+def seg_ss(f: FP, base: Int, lo: Int, hi: Int, mean: Float32, s_in: Float32) -> Float32:
+    """s_in + the squared deviations of base[lo .. hi) about `mean`, ascending (the second pass)."""
+    var s = s_in
+    for i in range(lo, hi):
+        var e = sub(ld(f, base + i), mean)
+        s = add(s, mul(e, e))
+    return s
+
+
 def sp_seg_stats_unit(t: Int, f: FP, q: IP):
     """q = [G, n, dc, START, NSEG, ALL, OUT]; t = s*dc + c, s < NSEG + ALL. Segment s < NSEG is batch s's rows
     [START[s], START[s + 1]); s == NSEG (ALL = 1) is every row. Two passes (the mean, then the squared deviations,
@@ -368,18 +390,12 @@ def sp_seg_stats_unit(t: Int, f: FP, q: IP):
         f.unsafe_store(o + s * dc + c, _nan())
         f.unsafe_store(o + ns * dc + s * dc + c, _nan())
         return
-    var sm = Float32(0)
-    for i in range(lo, hi):
-        sm = add(sm, ld(f, base + i))
-    var mean = div(sm, Float32(cnt))
+    var mean = div(seg_sum(f, base, lo, hi, Float32(0)), Float32(cnt))
     st(f, o + s * dc + c, mean)
     if cnt < 2:
         f.unsafe_store(o + ns * dc + s * dc + c, _nan())
         return
-    var ss = Float32(0)
-    for i in range(lo, hi):
-        var e = sub(ld(f, base + i), mean)
-        ss = add(ss, mul(e, e))
+    var ss = seg_ss(f, base, lo, hi, mean, Float32(0))
     st(f, o + ns * dc + s * dc + c, div(ss, Float32(cnt - 1)))
 
 
@@ -1146,33 +1162,6 @@ def sp_scale_csr_unit(t: Int, f: FP, q: IP):
 # ---------------------------------------------------------------- covariate regression
 
 
-def sp_col_meanstd_unit(t: Int, f: FP, q: IP):
-    """q = [A, n, k, MEAN, STD]; t = column c of the n x k row-major A. Two passes, rows ascending: MEAN[c] and the
-    population standard deviation STD[c] (a zero deviation, a constant column, becomes 1)."""
-    var n = p(q, 1)
-    var k = p(q, 2)
-    var A = p(q, 0)
-    var sm = Float32(0)
-    for i in range(n):
-        sm = add(sm, ld(f, A + i * k + t))
-    var mean = div(sm, Float32(max(n, 1)))
-    var ss = Float32(0)
-    for i in range(n):
-        var e = sub(ld(f, A + i * k + t), mean)
-        ss = add(ss, mul(e, e))
-    var sd = sqrtf(div(ss, Float32(max(n, 1))))
-    if sd == Float32(0):
-        sd = Float32(1)
-    st(f, p(q, 3) + t, mean)
-    st(f, p(q, 4) + t, sd)
-
-
-def sp_standardize_unit(t: Int, f: FP, q: IP):
-    """q = [A, k, MEAN, STD, Z]; t = i*k + c. Z[t] = (A[t] - MEAN[c]) / STD[c]."""
-    var c = t % p(q, 1)
-    st(f, p(q, 4) + t, div(sub(ld(f, p(q, 0) + t), ld(f, p(q, 2) + c)), ld(f, p(q, 3) + c)))
-
-
 def sp_pinv_unit(t: Int, f: FP, q: IP):
     """q = [EVAL, EVEC, m, P]; t = i*m + j. The pseudo-inverse of the symmetric Gram from its eigenpairs (x_prep
     `eigh`: EVAL descending, EVEC[c*m + r] component c of eigenvector r): P[i, j] = sum over r with
@@ -1190,29 +1179,6 @@ def sp_pinv_unit(t: Int, f: FP, q: IP):
         if lam > tol:
             s = add(s, div(mul(ld(f, V + i * m + r), ld(f, V + j * m + r)), lam))
     st(f, p(q, 3) + t, s)
-
-
-def sp_densify_unit(t: Int, f: FP, q: IP):
-    """q = [MODE, X, INDPTR, INDICES, d, OUT]; dense: t = value, OUT[t] = X[t]; CSR: t = row, the row's zeros then
-    each stored entry added in stored order (a repeated column sums, as SciPy's)."""
-    var X = p(q, 1)
-    var o = p(q, 5)
-    if p(q, 0) == SP_DENSE:
-        st(f, o + t, ld(f, X + t))
-        return
-    var d = p(q, 4)
-    for c in range(d):
-        f.unsafe_store(o + t * d + c, Float32(0))
-    var lo = ldi(f, p(q, 2) + t)
-    var hi = ldi(f, p(q, 2) + t + 1)
-    for e in range(lo, hi):
-        var at = o + t * d + ldi(f, p(q, 3) + e)
-        st(f, at, add(raw(f, at), ld(f, X + e)))
-
-
-def sp_center_unit(t: Int, f: FP, q: IP):
-    """q = [R, d, MEAN]; t = i*d + c. R[t] -= MEAN[c], in place."""
-    st(f, p(q, 0) + t, sub(ld(f, p(q, 0) + t), ld(f, p(q, 2) + t % p(q, 1))))
 
 
 def sp_resid_unit(t: Int, f: FP, q: IP):
@@ -1313,15 +1279,10 @@ def run_sp_unit[OP: Int](t: Int, f: FP, q: IP):
         sp_scale_apply_unit(t, f, q)
     comptime if OP == SP_SCALE_CSR:
         sp_scale_csr_unit(t, f, q)
-    comptime if OP == SP_COL_MEANSTD:
-        sp_col_meanstd_unit(t, f, q)
-    comptime if OP == SP_STANDARDIZE:
-        sp_standardize_unit(t, f, q)
     comptime if OP == SP_PINV:
         sp_pinv_unit(t, f, q)
     comptime if OP == SP_DENSIFY:
-        sp_densify_unit(t, f, q)
-    comptime if OP == SP_CENTER:
-        sp_center_unit(t, f, q)
+        # q = [INDPTR, INDICES, DATA, d, OUT]; t = row: MultinomialNB's CSR -> dense body (x_prep/blocked.mojo)
+        csr_dense_unit(t, f, q)
     comptime if OP == SP_RESID:
         sp_resid_unit(t, f, q)
