@@ -429,6 +429,12 @@ def _codes(adata, key):
     return column.cat.codes.to_numpy()
 
 
+def _covariates(adata, keys):
+    # One column per obs key (Scanpy takes one key or a list); numeric columns come out as zero-copy arrays.
+    keys = [keys] if isinstance(keys, str) else keys
+    return tuple(adata.obs[k].to_numpy() for k in keys)  # over obs keys
+
+
 def _knn(adata, args):
     key = _neighbors_meta(adata, args).get("distances_key", "distances")
     if key not in adata.obsp:
@@ -445,8 +451,7 @@ _SOURCES = {
     "X+groups": lambda adata, args: (_matrix(adata, args), _codes(adata, args["groupby"])),
     "X+batch": lambda adata, args: ((_matrix(adata, args),) if args.get("batch_key") is None
                                     else (_matrix(adata, args), _codes(adata, args["batch_key"]))),
-    "X+covariates": lambda adata, args: (_matrix(adata, args),
-                                         tuple(adata.obs[k].to_numpy() for k in args["keys"])),  # over obs keys
+    "X+covariates": lambda adata, args: (_matrix(adata, args), _covariates(adata, args["keys"])),
     "rep+batch": lambda adata, args: (adata.obsm[args["basis"]], _codes(adata, args["key"])),
     "knn": lambda adata, args: (_knn(adata, args),),
 }
