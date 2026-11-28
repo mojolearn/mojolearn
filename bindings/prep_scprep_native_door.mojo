@@ -8,7 +8,8 @@ bindings/prep_stateless_native_door.mojo for the kinds that start with "sc_":
   sc_hvg       HighlyVariableGenes    the seurat / cell_ranger / seurat_v3 variable-column recipes
   sc_regress   RegressOut             the residuals of a least-squares fit of every column on covariates
 
-UNPACK: X as dense float32 rows (`xprep_values`) or as CSR (`csr_input`, MultinomialNB's admission), the parameter
+UNPACK: X as dense float32 rows (`xprep_values`) or as the caller's CSR buffers (`indptr`, `indices`, `data`, read
+as they are: no SciPy call, no import), the parameter
 words, the fitted vectors (`prep_fitted_vector`). RUN: the x_prep programs of bindings/prep_scprep_run.mojo (units
 x_prep/sc_prep.mojo), each one call of the program runner with the GIL released. PACK: the fitted attributes and the
 result, a CSR input giving a CSR result where the arithmetic keeps zeros at zero (the row normalizer, the log, the
@@ -29,7 +30,8 @@ from bindings.scaler_native_door import _ptr
 from bindings.x_prep_native_owner_door import xprep_values
 from bindings.p3_prep_fitted_unpack import prep_fitted_vector
 from bindings.classical_labels_door import classical_encode_labels
-from bindings.prep_classify_common_door import is_sparse, csr_input
+from bindings.prep_classify_common_door import is_sparse, _i32_vector
+from bindings.admitted_input_unpack import admit_x
 from bindings.prep_encode_native_door import EncProg, _take1, _take2
 from bindings.prep_stateless_route_unpack import stateless_entries
 from bindings.prep_scprep_run import (
@@ -106,6 +108,7 @@ struct _SpX(Movable):
     """X of one call, held for its programs: dense (`values`, `xprep_values`' tuple) or CSR (`indptr`, `indices`,
     `data`, `csr_input`'s int32 / float32 vectors)."""
     var csr: Bool
+    var cls: PythonObject
     var n: Int
     var d: Int
     var nnz: Int
@@ -116,19 +119,28 @@ struct _SpX(Movable):
 
     def __init__(out self, source: PythonObject, entries: PythonObject, context: PythonObject) raises:
         self.csr = is_sparse(source)
+        self.cls = py_type(source)
         self.values = PythonObject(None)
         self.indptr = PythonObject(None)
         self.indices = PythonObject(None)
         self.data = PythonObject(None)
         self.nnz = 0
         if self.csr:
-            var c = csr_input(source, context)
-            self.n = c.n
-            self.d = c.d
-            self.nnz = c.nnz
-            self.indptr = c.indptr
-            self.indices = c.indices
-            self.data = c.data
+            # UNPACK of the caller's CSR buffers only (no SciPy call): a sparse X must already be in CSR form
+            if String(py_call(_b().str, py_call(_b().getattr, source, PythonObject("format")))) != "csr":
+                raise Error("TypeError: " + String(self.cls.__name__) + " input must be in CSR form (csr_matrix or "
+                            "csr_array); convert it with .tocsr() first")
+            var shape = py_call(_b().getattr, source, PythonObject("shape"))
+            self.n = Int(py=py_call(_b().int, shape[0]))
+            self.d = Int(py=py_call(_b().int, shape[1]))
+            self.indptr = _i32_vector(py_call(_b().getattr, source, PythonObject("indptr")), "indptr", context)
+            self.indices = _i32_vector(py_call(_b().getattr, source, PythonObject("indices")), "indices", context)
+            if Int(py=self.indptr.size) != self.n + 1:
+                raise Error("ValueError: the CSR indptr must hold n_samples + 1 offsets")
+            self.nnz = Int(py=self.indices.size)
+            var data = py_call(_b().getattr, source, PythonObject("data"))
+            self.data = (admit_x(data, 1, "data", context) if self.nnz > 0
+                         else classical_typed(Python.tuple(1), "<f4", context["output_context"]))
         else:
             self.values = xprep_values(source, entries, context)
             self.n = Int(py=self.values[3])
@@ -190,21 +202,19 @@ def _copy_i32(source: PythonObject, count: Int, context: PythonObject) raises ->
     return result
 
 
-def _csr_matrix(data: PythonObject, indices: PythonObject, indptr: PythonObject, n: Int, d: Int) raises -> PythonObject:
-    """scipy.sparse.csr_matrix((data, indices, indptr), shape=(n, d)); a CSR input means SciPy is loaded."""
-    var sp = py_get(native_loaded_module("sys").modules, "scipy.sparse")
-    if sp is None:
-        _ = py_call(_b().__import__, PythonObject("scipy.sparse"))
-        sp = native_loaded_module("sys").modules["scipy.sparse"]
-    return py_call(py_call(_b().getattr, sp, PythonObject("csr_matrix")), Python.tuple(data, indices, indptr),
-                   shape=Python.tuple(n, d))
+def _csr_matrix(cls: PythonObject, data: PythonObject, indices: PythonObject, indptr: PythonObject, n: Int,
+                d: Int) raises -> PythonObject:
+    """PACK of a CSR result: the caller's own sparse class built from the three finished buffers,
+    `cls((data, indices, indptr), shape=(n, d))`; nothing is imported and nothing is computed outside Mojo."""
+    return py_call(cls, Python.tuple(data, indices, indptr), shape=Python.tuple(n, d))
 
 
 def _csr_same_structure(x: _SpX, ran: PythonObject, values_at: Int, context: PythonObject) raises -> PythonObject:
     """A CSR result with X's structure and the program's `values_at` values."""
     var data = _take1(ran, values_at, x.nnz, context) if x.nnz > 0 else classical_typed(Python.tuple(0), "<f4",
                                                                                          context["output_context"])
-    return _csr_matrix(data, _copy_i32(x.indices, x.nnz, context), _copy_i32(x.indptr, x.n + 1, context), x.n, x.d)
+    return _csr_matrix(x.cls, data, _copy_i32(x.indices, x.nnz, context), _copy_i32(x.indptr, x.n + 1, context),
+                       x.n, x.d)
 
 
 def _dense_or_csr(x: _SpX, ran: PythonObject, at: Int, context: PythonObject) raises -> PythonObject:
@@ -609,7 +619,7 @@ def _hvg_transform(model: PythonObject, x: _SpX, entries: PythonObject, context:
         var nnz = _iword(ran, plan.indptr + x.n)
         var data = _take1(ran, plan.data, nnz, context) if nnz > 0 else classical_typed(Python.tuple(0), "<f4",
                                                                                          context["output_context"])
-        var result = _csr_matrix(data, _take_i32(ran, plan.indices, nnz, context),
+        var result = _csr_matrix(x.cls, data, _take_i32(ran, plan.indices, nnz, context),
                                  _take_i32(ran, plan.indptr, x.n + 1, context), x.n, k)
         _ = p^
         return result
