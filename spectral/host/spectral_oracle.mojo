@@ -82,6 +82,7 @@ from spectral.impl.sparse.op.coo_ops import (
     sorted_coo_to_csr,
 )
 from spectral.impl.sparse.solver.lanczos_types import LANCZOS_LA, LANCZOS_SA
+from spectral.diffmap_words import diffmap_density_value, diffmap_eigenvalue
 
 
 # THE HOST FILE (workstream E batch 2, lane/cpu-training-e2, 2026-09-14).
@@ -1216,3 +1217,94 @@ def host_spectral_embedding_coo(
         graph, n_components, norm_laplacian, drop_first, seed, embedding_out,
         tolerance,
     )
+
+
+# ---------------------------------------------------------------------------
+# The diffusion map on the host (lane sc-graph-1, 2026-11-28)
+# ---------------------------------------------------------------------------
+#
+# `spectral_diffmap_graph_host` (spectral/estimator.mojo) restated: W's
+# diagonal dropped, W's Laplacian (`host_laplacian`, negated: the diagonal
+# holds -q, the rest w), the density normalization of
+# `spectral/diffmap_words.mojo` on that canonical COO (its zero diagonal
+# entries kept), then `oracle_embedding` on K with `norm_laplacian` true and
+# `drop_first` false: the same Laplacian, Lanczos and Ritz pairs as the
+# device arm. `-D MOJOLEARN_HOST_SABOTAGE=1` negates eigenvector column 0.
+
+
+def host_spectral_diffmap_coo(
+    rows: List[Int32],
+    cols: List[Int32],
+    vals: List[Float32],
+    n_samples: Int,
+    n_comps: Int,
+    seed: UInt64,
+    mut eigenvectors: List[Float32],
+    mut eigenvalues: List[Float32],
+    tolerance: Float32 = SPECTRAL_EMBEDDING_TOLERANCE,
+) raises -> Int:
+    """The host column of `spectral_diffmap_graph_host`. Returns
+    `n_comps`."""
+    if n_samples <= 0:
+        raise Error("diffusion map: n_samples must be positive, got " + String(n_samples))
+    var nnz = len(vals)
+    if nnz <= 0:
+        raise Error("diffusion map: the connectivity graph has no entries")
+    if len(rows) != nnz or len(cols) != nnz:
+        raise Error(
+            "diffusion map: rows, cols and vals must be the same length, got " + String(len(rows)) + ", "
+            + String(len(cols)) + ", " + String(nnz)
+        )
+    host_validate_connectivity_coo(rows, cols, vals, n_samples, n_comps)
+    var r_copy = rows.copy()
+    var c_copy = cols.copy()
+    var v_copy = vals.copy()
+    var graph = coo_remove_diagonal(CooGraph(n_samples, r_copy^, c_copy^, v_copy^))
+    var lw = host_laplacian[DType.float32](graph, False)
+    var n = n_samples
+    var m = len(lw.vals)
+    var q = List[Float32](length=n, fill=Float32(0))
+    var kv = List[Float32](length=max(m, 1), fill=Float32(0))
+    var qp = q.unsafe_ptr()
+    var kp = kv.unsafe_ptr()
+    var rp = lw.rows.unsafe_ptr()
+    var cp = lw.cols.unsafe_ptr()
+    var vp = lw.vals.unsafe_ptr()
+    def degree(i: Int) {imm qp, imm rp, imm cp, imm vp}:
+        if rp[i] == cp[i]:
+            qp.unsafe_store(Int(rp[i]), -vp[i])
+    host_parallelize(degree, m)
+    def density(i: Int) {imm qp, imm kp, imm rp, imm cp, imm vp}:
+        var r = Int(rp[i])
+        var c = Int(cp[i])
+        if r == c:
+            kp.unsafe_store(i, Float32(0))
+        else:
+            kp.unsafe_store(i, diffmap_density_value(vp[i], qp[r], qp[c]))
+    host_parallelize(density, m)
+    var kr = lw.rows.copy()
+    var kc = lw.cols.copy()
+    if m < len(kv):
+        kv.resize(m, Float32(0))
+    var k_graph = CooGraph(n, kr^, kc^, kv^)
+    var res = oracle_embedding[DType.float32](k_graph, n_comps, True, False, tolerance, seed)
+    var k = n_comps
+    eigenvalues = List[Float32](capacity=k)
+    for c in range(k):  # small-loop(the n_comps eigenvalues): 1 + the Ritz value, decreasing
+        eigenvalues.append(diffmap_eigenvalue(res.ritz[k - 1 - c]))
+    eigenvectors = List[Float32](length=n * k, fill=Float32(0))
+    var ep = eigenvectors.unsafe_ptr()
+    var wp = res.ritz_vectors.unsafe_ptr()
+    def gather(i: Int) {imm ep, imm wp, imm n, imm k}:
+        var p = i // k
+        var c = i - p * k
+        ep.unsafe_store(i, wp[(k - 1 - c) * n + p])
+    host_parallelize(gather, n * k)
+    comptime if SPECTRAL_ORACLE_HOST_SABOTAGE:
+        # THE SABOTAGE ARM: eigenvector column 0 negated. Wrong on purpose.
+        for p in range(n):
+            eigenvectors[p * k] = -eigenvectors[p * k]
+    _ = q^
+    _ = lw^
+    _ = res^
+    return k
