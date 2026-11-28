@@ -7,7 +7,6 @@ from bindings.py_attr import py_attr
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.native_owner_lifetime_door import native_release_admit
-from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_is_array
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.admitted_input_unpack import AdmittedTypedPin, admitted_typed_once, AdmittedBuf, admitted_dtype_admit, admitted_zeros, admitted_shape_tuple

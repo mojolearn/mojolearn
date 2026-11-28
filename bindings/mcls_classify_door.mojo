@@ -29,7 +29,6 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
 from bindings.arena_prog_run import MetricArenaOwner, metric_source_word
-from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address, classical_dtype_str
 from bindings.metric_resident_pair_door import mc_resident_caller_pair

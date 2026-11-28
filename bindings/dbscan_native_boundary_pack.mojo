@@ -5,22 +5,17 @@
 # UNPACK is bindings/dbscan_native_boundary_unpack.mojo. (The two were
 # bindings/dbscan_native_boundary_door.mojo.)
 from std.python import Python, PythonObject
-from bindings.native_owner_registry_pack import borrowed_native_owner
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_fields, py_get, py_setitem
-from bindings.native_loaded_module_door import native_interpreter_finalizing
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.classical_arrays_door import classical_address, classical_wrap_layout
 from bindings.native_array_storage_door import native_array_zeros
-from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
-from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_once
 from core.native_array_layout import NativeArrayLayout, native_array_code
 from core.dbscan_native_api import (
     DBSCAN_NATIVE_ABI, DBSCAN_NATIVE_COUNT, DBSCAN_CAPABILITIES, DBSCAN_CAP_RESIDENT, DBSCANNativeDriver,
     DBSCANFitRequest, DBSCANCoreRequest, DBSCANGatherRequest, DBSCANReferenceRequest, DBSCANQueryRequest, DBSCANResidentQuery,
 )
-from core.dbscan_native_state import DBSCANReferenceKey, DBSCANReferenceState
 from bindings.py_optional import py_present
 from bindings.dbscan_native_boundary_unpack import (
     DBSCANConnection, DBSCANReferenceOwner, dbscan_holder_admit, dbscan_holder_empty, dbscan_release,

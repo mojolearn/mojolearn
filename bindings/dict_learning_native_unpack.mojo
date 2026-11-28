@@ -22,16 +22,9 @@ from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import unsafe_memcpy
-from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
-from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
-from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_typed, classical_address
 from bindings.admitted_input_unpack import admit_x
-from bindings.decomp_public_lifecycle_unpack import decomp_public_begin, decomp_coder_width
-from bindings.decomp_public_lifecycle_pack import decomp_public_finish
-from x_decomp.decomp_public_lifecycle_run import decomp_public_method
-from bindings.public_lifecycle_owner_door import lifecycle_end
 from bindings.decomp_kit_native_door import (
     DecompDoor, DecompF32, decomp_int, decomp_float, decomp_seed, decomp_seed_word, decomp_mode,
     decomp_entries, decomp_entries_routed, decomp_input, decomp_shape, XD_SPARSE_ALGOS, decomp_kit_unpack, decomp_kit_publish,
@@ -43,7 +36,6 @@ from bindings.dict_learning_run import (
     EncodeWords, Gram, DictWords, DictFit, MiniBatchWords, SpcaFit, dl_split_sign, dl_sparse_encode, dl_encode_run,
     dl_inverse_run, dl_dict_learning, dl_minibatch_fit, dl_spca_project, dl_spca_inverse, dl_spca_fit_run,
 )
-from bindings.py_lists import py_list_f64
 from std.python._cpython import GILReleased
 from bindings.dict_keys_unpack import dict_keys
 from bindings.py_balanced import py_item

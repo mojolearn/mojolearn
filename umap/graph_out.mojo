@@ -4,10 +4,12 @@
 2026-11-28): the fuzzy simplicial set as CSR (`UMAP.graph_`, umap-learn's
 `graph_`) and the curve's (a, b) the optimizer used (`a_`, `b_`).
 
-The fit already holds the finished CSR on the host (the graph build reads it
-back once into `SparseFuzzySimplicialGraph`, umap/sparse_graph.mojo; the CPU
-column builds it on the host): publishing it is one memcpy per array into the
-caller's arrays, no device read and no pass over the edges. The caller sizes
+The graph build holds the finished CSR on the host (it reads it back once
+into `SparseFuzzySimplicialGraph`, umap/sparse_graph.mojo; the CPU column
+builds it on the host): publishing it is one memcpy per array into the
+caller's arrays, no device read and no pass over the edges. The public fit
+does not ask for it (lane sc-leftovers-1, 2026-11-28): `UMAP.graph_` is
+UMAP_OP_FIT_GRAPH, the same graph body run when the attribute is read. The caller sizes
 the arrays by `umap_graph_capacity` (the stored-edge bound below) before the
 fit, since the edge count is known only after it; the door trims them to the
 count `indptr[n]` names. A leaf with no device and no Python imports, so the
@@ -79,3 +81,21 @@ def umap_publish_curve(a: Float32, b: Float32, dst: UmapFitOut):
     var p = _F32P(unsafe_from_address=dst.ab)
     p[0] = a
     p[1] = b
+
+
+@always_inline
+def umap_strip_row(knn_d: MutPointer[Float32, MutAnyOrigin], knn_i: MutPointer[UInt32, MutAnyOrigin],
+                   indptr: MutPointer[Int64, MutAnyOrigin], dst_i: MutPointer[Int32, MutAnyOrigin],
+                   dst_d: MutPointer[Float32, MutAnyOrigin], r: Int, n: Int, k: Int):
+    """`mojolearn.neighbors_graph`'s distances CSR, row `r` of the self-first
+    n x k graph (lane sc-leftovers-1: the one body of the device's
+    `umap_knn_strip_kernel` thread and the host's strip task): indptr[r] =
+    r (k - 1) for r <= n, and row r < n keeps slots 1..k-1 (self, slot 0,
+    is dropped: Scanpy's `distances` holds no self edge) in their order."""
+    var kk = k - 1
+    if r <= n:
+        indptr.unsafe_store(r, Int64(r * kk))
+    if r < n:
+        for j in range(kk):  # one row's k - 1 kept slots
+            dst_i.unsafe_store(r * kk + j, Int32(knn_i.unsafe_load(r * k + 1 + j)))
+            dst_d.unsafe_store(r * kk + j, knn_d.unsafe_load(r * k + 1 + j))

@@ -35,6 +35,10 @@ comptime MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM = 15
 # `vendor_used` of the decomp four (Isomap, LocallyLinearEmbedding, MDS,
 # ClassicalMDS): metadata, no input, served before any lifecycle step.
 comptime MANI_OPN_FAMILY_MANI_VENDOR_USED = 16
+# `UMAP.graph_` (lane sc-leftovers-1, 2026-11-28): the fitted graph, built when
+# the attribute is read (bindings/mani_umap_native_door.mojo
+# `umap_graph_attribute`); metadata of a fit, no input, no lifecycle step.
+comptime MANI_OPN_FAMILY_MANI_UMAP_GRAPH = 17
 
 
 def operation_names_mani(mut names: List[String], mut leaves: List[Int]):
@@ -69,6 +73,8 @@ def operation_names_mani(mut names: List[String], mut leaves: List[Int]):
     leaves.append(MANI_OPN_FAMILY_MANI_UMAP_FIT)
     names.append("family_mani_umap_fit_transform")
     leaves.append(MANI_OPN_FAMILY_MANI_UMAP_FIT_TRANSFORM)
+    names.append("family_mani_umap_graph")
+    leaves.append(MANI_OPN_FAMILY_MANI_UMAP_GRAPH)
     names.append("family_mani_umap_transform")
     leaves.append(MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM)
     names.append("family_mani_vendor_used")

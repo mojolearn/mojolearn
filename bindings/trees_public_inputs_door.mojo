@@ -16,22 +16,13 @@
 # and C builtins.
 from std.ffi import c_int
 from std.memory import bitcast
-from bindings.classical_labels_run import labels_env as trees_env
-from bindings.trees_public_inputs_run import trees_finite_f32, TREES_NONFINITE
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.py_cpython_table import cpython_table
-from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.classical_arrays_door import classical_wrap_array, _store_code, _buffer_typestr
-from bindings.native_array_storage_door import native_array_zeros, native_scratch_bytes, native_scratch_address
-from bindings.classical_pandas_door import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get
-from bindings.sequential_admission_door import _ordinary_torch, _one_of
-from bindings.native_torch_admission_door import native_torch_numpy
-from bindings.sequential_inputs_door import sequential_sequence
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.metrics_native_support_door import metric_is_bool, metric_is_integral, metric_is_real
 from bindings.classical_labels_door import ClassicalLabels, classical_encode_labels
@@ -56,7 +47,6 @@ from bindings.classical_labels_door import (
 # The X / weight / view admission is the one path (bindings/admitted_input_unpack.mojo).
 # TOMBSTONE: trees_empty / trees_vector / TreesView / trees_view / trees_check_rank / trees_shape_repr / TreesMatrix / trees_f32 / trees_f32_view / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_prepare_weights aliases, and the trees label encoder copy (_native_labels, _label_list, _flatten_labels, _flatten_into, _label_kind, _sorted_classes, _numeric_label_view, _list_labels) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
-from bindings.admitted_input_run import admitted_width as trees_itemsize
 from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_x_unrecorded, admit_weight_words, admitted_words, admitted_array, admitted_vector,
     admit_c_view, admitted_dtype, classical_view,
@@ -76,8 +66,6 @@ def trees_forest_x(source: PythonObject, name: String, context: PythonObject) ra
     var x = admit_f32(view, 2, name, context, order="C" if row_major else "F", finite=False, admitted=True)
     _ = view^
     return x^
-from bindings.label_input_sources_unpack import labels_storage_source
-from bindings.perf3_label_doors_text_unpack import labels_all_exact_str
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_or_none, py_present
 from bindings.trees_keys_unpack import trees_keys

@@ -9,16 +9,12 @@
 # caller sees the class and message it saw before the migration.
 # The PACK half of the former `bindings/family_common.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/family_common_unpack.mojo`.
-from providers.python.array_metadata_pyapi_door import ArrayMetadata
 from bindings.native_array_storage_door import native_array_zeros
-from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_arrays_door import classical_address, classical_wrap_array, _store_code
-from core.family_cast_impl import family_min_f32
 from bindings.optimizer_public_words_unpack import stash_python_error
-from bindings.native_class_admission_door import static_builtin_type
 
 def family_call(callable: PythonObject, *args: PythonObject) raises -> PythonObject:
     """`callable(*args)` without retaining the arguments; a Python exception

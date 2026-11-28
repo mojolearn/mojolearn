@@ -9,16 +9,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_get, py_type
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.sequential_admission_door import sequential_admit_value
-from bindings.native_scalar_decode_unpack import NativeScalarBuffer, native_scalar_buffer_dtype
-from bindings.native_numpy_metadata_pack import native_numpy_module_fields
-from bindings.sequence_dtype_native_door import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_create
-from bindings.sequence_array_native_unpack import sequence_array_release
-from bindings.training_scalar_native_door import training_scalar_warning
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, stash_python_error, _restore_python_error
-from bindings.manifold_temporal_native import temporal_object_kind
-from core.native_scalar_decode import NativeRealBits
-from x_decomp.pca_fit_scalar_run import PCAFitScalarArray
 from bindings.pca_keys_unpack import pca_keys
 from bindings.py_balanced import py_item
 

@@ -29,13 +29,10 @@ from std.python import PythonObject
 from bindings.admitted_family_door import admit_family, admit_family_weights
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.kde_admission_boundary_unpack import kde_admission_hit, kde_admission_remember, kde_admission_drop
 from bindings.kde_native_boundary_unpack import KDEConnection, KDEResidentOwner, kde_owner_admit, kde_run_query, kde_run_resident
 from bindings.kde_native_boundary_pack import kde_owner_prepare, kde_array
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from bindings.decomp_scalar_compare_unpack import decomp_equal_admitted, decomp_name_admitted
-from bindings.decomp_scalar_admission_unpack import decomp_scalar_repr
-from bindings.decomp_truth_boundary_unpack import decomp_truth
 from neighbors.neighbors_kde_run import (
     KDE_DEFAULT_LEAF_SIZE, kde_refuse_bandwidth_name, kde_bandwidth_positive, kde_refuse_bandwidth,
     kde_refuse_algorithm, kde_refuse_tree_knobs, kde_refuse_names, kde_check_metric_params_count,
@@ -61,7 +58,6 @@ from bindings.host_sparse_native_door import host_sparse_format, host_sparse_den
 # TOMBSTONE: _any_contiguous_address use (the labels admission copy's buffer address read) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.admitted_input_unpack import admitted_finite_refuse
-from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 from bindings.kde_public_native_unpack import (
     KDEDense, _kde_admit_state, _kde_dense, _kde_validate, _kde_text,

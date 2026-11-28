@@ -25,7 +25,6 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_array_storage_door import native_array_zeros, native_array_empty, native_array_from_bytes, native_array_unfilled
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_setattr
-from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.classical_arrays_door import classical_address, classical_wrap_array
 from bindings.classical_labels_door import (

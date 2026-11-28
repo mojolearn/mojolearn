@@ -16,7 +16,6 @@ from bindings.host_inference_scalars_door import host_inference_scalar, host_inf
 from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields
 from bindings.host_archive_native_door import host_archive_radius_refusals
 from bindings.native_buffer_owner_pack import native_buffer_view
-from bindings.native_scalar_decode_unpack import native_scalar_buffer
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.sequential_admission_door import _ordinary_torch

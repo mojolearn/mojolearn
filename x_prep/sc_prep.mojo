@@ -23,13 +23,13 @@ Ranks are counted (`sp_rank`: the position of a key among the keys of its batch 
 thread per gene, O(d) each. They are the order every median, percentile and top-n choice reads.
 """
 from checks.numerics import ftz, portable_log1pf
-from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canonical_nan, canon
+from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canonical_nan, canon, key
 from x_prep.blocked import csr_dense_unit
 from x_prep.prims import add, sub, mul, div, logf, expf, sqrtf
 
 #: The op range of these units (after lane sc-stats-1's 280 .. 290, x_prep/markers.mojo).
 comptime SP_BASE = 300
-comptime SP_N = 45
+comptime SP_N = 47
 
 comptime SP_ZERO = SP_BASE + 0
 comptime SP_INCLUDE = SP_BASE + 1
@@ -76,6 +76,9 @@ comptime SP_SCALE_CSR = SP_BASE + 41
 comptime SP_PINV = SP_BASE + 42
 comptime SP_DENSIFY = SP_BASE + 43
 comptime SP_RESID = SP_BASE + 44
+#: The rank's pairs and chunk sorts (lane sc-leftovers-1; THE RANK, below).
+comptime SP_RANK_KEYS = SP_BASE + 45
+comptime SP_RANK_SORT = SP_BASE + 46
 
 #: Input layout words.
 comptime SP_DENSE = 0
@@ -603,45 +606,184 @@ def sp_bin_stats_unit(t: Int, f: FP, q: IP):
         st(f, p(q, 5) + t, dev)
 
 
+# THE RANK (lane sc-leftovers-1, 2026-11-28). RANK[b*d + g] = the genes of batch b in g's group (GROUP < 0: one
+# group) with a non-NaN key that sort before g's (ascending, or descending when DESC; equal keys, -0.0 == +0.0, by
+# index), -1 for a NaN key or a group below zero. Before, one unit per gene counted the whole batch: d^2 work per
+# batch (sp_rank_unit, recoverable at this lane's parent sha). Now three stages (`sp_rank_stages`,
+# bindings/prep_scprep_run.mojo), split across every core and the device's threads:
+#   SP_RANK_KEYS  one unit per gene: its (order word, gene) pair;
+#   SP_RANK_SORT  one unit per chunk of a batch (at most SP_RANK_CHUNKS_MAX chunks of at least SP_RANK_CHUNK_MIN
+#                 genes): the chunk heap-sorted by (excluded, group, order word, gene);
+#   SP_RANK       one unit per gene: per chunk, the genes before it minus the genes of a lower group (two binary
+#                 searches), summed over the batch's chunks.
+# The rank is an exact count under a total order, so the words are the counted form's on every column and every
+# chunk count: the bits do not change. Work per batch: d log d for the sorts, d x chunks x log(chunk) for the
+# searches (a size rule: the chunk length grows with d so the chunk count stays bounded).
+comptime SP_RANK_CHUNK_MIN = 1024
+comptime SP_RANK_CHUNKS_MAX = 64
+
+
 @always_inline
-def _before(a: Float32, ia: Int, b: Float32, ib: Int, desc: Bool) -> Bool:
-    """Key a (index ia) sorts before key b (index ib): ascending (or descending) values, ties by index; NaN keys
-    are never ranked (the caller skips them)."""
-    if a == b:
-        return ia < ib
-    if desc:
-        return a > b
-    return a < b
+def sp_rank_chunk_len(d: Int) -> Int:
+    """Genes per sorted chunk of a batch of `d` (module note, THE RANK)."""
+    var wide = (d + SP_RANK_CHUNKS_MAX - 1) // SP_RANK_CHUNKS_MAX
+    return wide if wide > SP_RANK_CHUNK_MIN else SP_RANK_CHUNK_MIN
+
+
+@always_inline
+def sp_rank_chunks(d: Int) -> Int:
+    """Sorted chunks of a batch of `d` (at least one)."""
+    var w = sp_rank_chunk_len(d)
+    var c = (d + w - 1) // w
+    return c if c > 1 else 1
+
+
+@always_inline
+def _rank_class(f: FP, kb: Int, grp: Int, gb: Int, g: Int) -> UInt64:
+    """Gene g's (excluded, group) as one word: 1 << 32 for a NaN key or a group below zero (after every ranked
+    gene), else its group (0 for one group)."""
+    var mine = 0
+    if grp >= 0:
+        mine = ldi(f, gb + g)
+    if is_nan(ld(f, kb + g)) or mine < 0:
+        return UInt64(1) << 32
+    return UInt64(UInt32(mine))
+
+
+@always_inline
+def _rank_order(value: Float32, desc: Bool) -> UInt32:
+    """A value's order word: `key` with -0.0 folded to +0.0 (equal values tie), complemented when `desc`."""
+    var x = value
+    if x == Float32(0):
+        x = Float32(0)
+    var k = key(x)
+    return ~k if desc else k
+
+
+@always_inline
+def _rank_word(f: FP, o: Int) -> UInt64:
+    """A pair's (order word, gene) as one word."""
+    var w = f.bitcast[UInt32]()
+    return (UInt64(w.unsafe_load(o)) << 32) | UInt64(w.unsafe_load(o + 1))
+
+
+@always_inline
+def _rank_less(f: FP, kb: Int, grp: Int, gb: Int, o: Int, cls: UInt64, word: UInt64) -> Bool:
+    """The pair at word `o` sorts before the key (cls, word)."""
+    var w = f.bitcast[UInt32]()
+    var c = _rank_class(f, kb, grp, gb, Int(w.unsafe_load(o + 1)))
+    if c != cls:
+        return c < cls
+    return _rank_word(f, o) < word
+
+
+def sp_rank_keys_unit(t: Int, f: FP, q: IP):
+    """q = [KEY, d, DESC, PAIRS]; t = b*d + g. PAIRS[2t], PAIRS[2t + 1] = (order word, g): `key` of the value
+    (-0.0 folded to +0.0, so equal values tie), complemented when DESC."""
+    var d = p(q, 1)
+    var g = t % d
+    var w = f.bitcast[UInt32]()
+    w.unsafe_store(p(q, 3) + 2 * t, _rank_order(ld(f, p(q, 0) + t), p(q, 2) != 0))
+    w.unsafe_store(p(q, 3) + 2 * t + 1, UInt32(g))
+
+
+@always_inline
+def _rank_sift(f: FP, kb: Int, grp: Int, gb: Int, base: Int, start: Int, n: Int):
+    var w = f.bitcast[UInt32]()
+    var root = start
+    while True:
+        var child = 2 * root + 1
+        if child >= n:
+            return
+        if child + 1 < n:
+            var oc = base + 2 * (child + 1)
+            if _rank_less(f, kb, grp, gb, base + 2 * child, _rank_class(f, kb, grp, gb, Int(w.unsafe_load(oc + 1))),
+                          _rank_word(f, oc)):
+                child += 1
+        var oc2 = base + 2 * child
+        if not _rank_less(f, kb, grp, gb, base + 2 * root,
+                          _rank_class(f, kb, grp, gb, Int(w.unsafe_load(oc2 + 1))), _rank_word(f, oc2)):
+            return
+        var a0 = w.unsafe_load(base + 2 * root)
+        var a1 = w.unsafe_load(base + 2 * root + 1)
+        w.unsafe_store(base + 2 * root, w.unsafe_load(oc2))
+        w.unsafe_store(base + 2 * root + 1, w.unsafe_load(oc2 + 1))
+        w.unsafe_store(oc2, a0)
+        w.unsafe_store(oc2 + 1, a1)
+        root = child
+
+
+def sp_rank_sort_unit(t: Int, f: FP, q: IP):
+    """q = [KEY, GROUP, d, PAIRS]; t = b*C + c (C = `sp_rank_chunks(d)`). Chunk c of batch b's pairs heap-sorted
+    ascending by (class, order word, gene) (module note, THE RANK). The order is total (the gene breaks every
+    tie), so the sorted chunk has one answer."""
+    var d = p(q, 2)
+    var nc = sp_rank_chunks(d)
+    var b = t // nc
+    var c = t - b * nc
+    var cl = sp_rank_chunk_len(d)
+    var lo = c * cl
+    var n = min(d - lo, cl)
+    if n < 2:
+        return
+    var kb = p(q, 0) + b * d
+    var grp = p(q, 1)
+    var gb = grp + b * d
+    var w = f.bitcast[UInt32]()
+    var base = p(q, 3) + 2 * (b * d + lo)
+    var start = n // 2 - 1
+    while start >= 0:
+        _rank_sift(f, kb, grp, gb, base, start, n)
+        start -= 1
+    var end = n - 1
+    while end > 0:
+        var a0 = w.unsafe_load(base)
+        var a1 = w.unsafe_load(base + 1)
+        w.unsafe_store(base, w.unsafe_load(base + 2 * end))
+        w.unsafe_store(base + 1, w.unsafe_load(base + 2 * end + 1))
+        w.unsafe_store(base + 2 * end, a0)
+        w.unsafe_store(base + 2 * end + 1, a1)
+        _rank_sift(f, kb, grp, gb, base, 0, end)
+        end -= 1
+
+
+@always_inline
+def _rank_lower(f: FP, kb: Int, grp: Int, gb: Int, base: Int, n: Int, cls: UInt64, word: UInt64) -> Int:
+    """The pairs of a sorted chunk (n at word `base`) before the key (cls, word): a binary search."""
+    var lo = 0
+    var hi = n
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if _rank_less(f, kb, grp, gb, base + 2 * mid, cls, word):
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
 
 
 def sp_rank_unit(t: Int, f: FP, q: IP):
-    """q = [KEY, GROUP, d, DESC, RANK]; t = b*d + g. RANK (an int word) = the keys of batch b, in g's group
-    (GROUP < 0: one group), with a non-NaN key that sort before g's (ascending, or descending when DESC), ties by
-    index; -1 for a NaN key or a group below zero."""
+    """q = [KEY, GROUP, d, DESC, RANK, PAIRS]; t = b*d + g. RANK (an int word) as the module note, THE RANK,
+    states, from the chunks SP_RANK_SORT left in PAIRS: per chunk, its pairs before g's minus its pairs of a lower
+    class (a lower group)."""
     var d = p(q, 2)
     var b = t // d
     var g = t - b * d
-    var K = p(q, 0) + b * d
+    var kb = p(q, 0) + b * d
     var grp = p(q, 1)
-    var desc = p(q, 3) != 0
-    var key = ld(f, K + g)
-    var mine = 0
-    if grp >= 0:
-        mine = ldi(f, grp + t)
-    if is_nan(key) or mine < 0:
+    var gb = grp + b * d
+    var cls = _rank_class(f, kb, grp, gb, g)
+    if cls == (UInt64(1) << 32):
         sti(f, p(q, 4) + t, -1)
         return
+    var word = (UInt64(_rank_order(ld(f, kb + g), p(q, 3) != 0)) << 32) | UInt64(UInt32(g))
+    var nc = sp_rank_chunks(d)
+    var cl = sp_rank_chunk_len(d)
     var r = 0
-    for h in range(d):
-        if h == g:
-            continue
-        var v = ld(f, K + h)
-        if is_nan(v):
-            continue
-        if grp >= 0 and ldi(f, grp + b * d + h) != mine:
-            continue
-        if _before(v, h, key, g, desc):
-            r += 1
+    for c in range(nc):  # small-loop(the batch's sorted chunks, at most SP_RANK_CHUNKS_MAX)
+        var lo = c * cl
+        var n = min(d - lo, cl)
+        var base = p(q, 5) + 2 * (b * d + lo)
+        r += _rank_lower(f, kb, grp, gb, base, n, cls, word) - _rank_lower(f, kb, grp, gb, base, n, cls, UInt64(0))
     sti(f, p(q, 4) + t, r)
 
 
@@ -1233,6 +1375,10 @@ def run_sp_unit[OP: Int](t: Int, f: FP, q: IP):
         sp_bin_stats_unit(t, f, q)
     comptime if OP == SP_RANK:
         sp_rank_unit(t, f, q)
+    comptime if OP == SP_RANK_KEYS:
+        sp_rank_keys_unit(t, f, q)
+    comptime if OP == SP_RANK_SORT:
+        sp_rank_sort_unit(t, f, q)
     comptime if OP == SP_GROUP_START:
         sp_group_start_unit(t, f, q)
     comptime if OP == SP_SCATTER:

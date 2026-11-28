@@ -113,6 +113,32 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(fit_transform=_m_transform_h(E)))
 
 
+@lane("umap-neighbors-graph")
+def _(ml, X, yc, yr, Xh=None):
+    """neighbors_graph, exact (lane sc-leftovers-1, 2026-11-28; RECORD OWED): the distances and connectivities
+    CSRs of umap-fit-transform's 1024 x 8 rows at n_neighbors 8, the connectivities at a half fuzzy union and
+    local connectivity 2, and UMAP.graph_ at umap-fit-transform's settings (built when read, by the fit's graph
+    body; the same CSR as the connectivities of the first call)."""
+    R = np.ascontiguousarray(X[:1024, :8])
+    dist, conn = ml.neighbors_graph(R, 8)
+    _, mixed = ml.neighbors_graph(R, 8, set_op_mix_ratio=0.5, local_connectivity=2.0)
+    graph = ml.UMAP(n_neighbors=8, n_components=2, n_epochs=8, random_state=3).fit(R).graph_
+    return _fit(dict(distances=_m_transform_h(dist), connectivities=_m_transform_h(conn),
+                     mixed=_m_transform_h(mixed), graph=_m_transform_h(graph)))
+
+
+@lane("umap-neighbors-graph-ivf")
+def _(ml, X, yc, yr, Xh=None):
+    """neighbors_graph(method='ivf') (lane sc-leftovers-1, 2026-11-28; RECORD OWED): 2048 x 8 rows in 8 k-means
+    lists (random_state 3's sample), 3 probed lists per row, n_neighbors 10: both CSRs of the approximate
+    graph, and UMAP(neighbors='ivf').graph_ (its own IVF plan) on the same rows."""
+    R = np.ascontiguousarray(X[:2048, :8])
+    dist, conn = ml.neighbors_graph(R, 10, method="ivf", n_lists=8, n_probes=3, random_state=3)
+    graph = ml.UMAP(n_neighbors=10, n_components=2, n_epochs=8, random_state=3, neighbors="ivf").fit(R).graph_
+    return _fit(dict(distances=_m_transform_h(dist), connectivities=_m_transform_h(conn),
+                     graph=_m_transform_h(graph)))
+
+
 @lane("spectral-embedding-fit-transform")
 def _(ml, X, yc, yr, Xh=None):
     """Fit both the nearest-neighbor graph and the four-row full eigenspace."""
@@ -509,6 +535,8 @@ def _m_transform_batch_label_inverse(ml, e, Xh):
 # derived inputs go through a lambda so the prep.py helpers are looked up when the part runs (prep.py loads
 # after this file).
 _batch_decl(_rows_calls("transform", sl=slice(0, 72)), "x-decomp-eigh-wide-kpca-fit")
+_batch_decl("n/a:whole-set (the neighbor graph of every row is computed over the whole set)", "umap-neighbors-graph",
+            "umap-neighbors-graph-ivf")
 _batch_decl(_m_transform_batch_label_inverse, "x-prep-label-encoder-inverse")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=lambda Xh: _prep_nan_first_eight(Xh)),
             "x-prep-iterative-imputer-fit")

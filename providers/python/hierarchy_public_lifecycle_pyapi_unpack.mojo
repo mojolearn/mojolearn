@@ -7,7 +7,6 @@ from bindings.admitted_family_door import admit_family_meta
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.py_cpython_table import cpython_table
 from core.p3nc_scan import P3NC_REAL_OK, P3NC_REAL_NONFINITE, P3NC_REAL_CONTINUOUS
-from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_label_lists_unpack import p3nc_float_list_verdict
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
@@ -26,8 +25,6 @@ from bindings.label_input_sources_unpack import labels_storage_source, labels_li
 from core.label_storage_impl import LABELS_FLOAT_OK, LABELS_FLOAT_NONFINITE, LABELS_FLOAT_CONTINUOUS
 from bindings.classical_warnings_unpack import classical_warn_column
 from bindings.host_inference_scalars_door import host_inference_scalar
-from bindings.native_array_view_pack import native_array_ndarray_view
-from bindings.family_common_unpack import FAMILY_F32P
 from bindings.metrics_native_support_door import metric_float, metric_is_real, metric_is_integral
 from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields
 from bindings.cluster_fit_a_native_door import _pending, _pending_text, _drop_pending

@@ -10,9 +10,6 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.classical_arrays_door import classical_address
-from bindings.admitted_input_unpack import admit_x
-from bindings.decomp_inputs_unpack import decomp_input
-from bindings.py_optional import py_or_none
 from bindings.decomp_owner_common_unpack import (
     F32P, decomp_attr, decomp_check, decomp_eq, decomp_f32, decomp_float, decomp_int, decomp_set_mode,
 )

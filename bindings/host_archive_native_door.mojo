@@ -28,10 +28,8 @@ from bindings.standard_archive_native_pack import standard_archive_decoded
 from std.python import PythonObject
 from bindings.py_balanced import py_fields, py_setitem
 from bindings.native_buffer_owner_pack import native_storage_allocate
-from bindings.classical_archive_door import _archive_open, _archive_methods, _archive_pack_members, _archive_file_call
 from bindings.classical_archive_output_door import archive_f32_c_pack
 from core.native_archive_read import NativeArchiveDecoded
-from core.native_archive_write import NativeArchiveMember
 from core.native_archive_cholesky import NativeCholeskyArchivePlan, NativeCholeskyArchiveSaved, native_cholesky_archive_members
 from core.native_archive_cholesky import native_cholesky_archive_plan, native_cholesky_archive_error
 from core.host_archive_gbdt import host_archive_gbdt_text

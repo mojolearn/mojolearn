@@ -7,8 +7,6 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call
 from sequence.exec_trait import Exec
 from providers.python.sequence_pyapi_door import py_f64s, py_ints
-from providers.python.autograd_pyapi_door import program_info
-from autograd.ops_api import ops_session
 from autograd.model_checkpoint import (
     SEQ_MODEL_INTS, SEQ_OPT_INTS, SEQ_SAVE_INTS, model_checkpoint_info, model_load_checkpoint,
     model_save_checkpoint, ops_load_program, ops_load_state, ops_save_state,

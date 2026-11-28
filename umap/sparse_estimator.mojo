@@ -203,6 +203,58 @@ def _sparse_fit_checks(n_samples: Int, params: UMAPParams, initial_given: List[F
         raise Error("UMAP fit_transform has too few samples for spectral init")
 
 
+def _fitted_graph(
+    ctx: DeviceContext,
+    var graph: SparseFuzzySimplicialGraph,
+    n_samples: Int,
+    params: UMAPParams,
+    target: List[Float32],
+    target_kind: Int,
+    target_dims: Int,
+    target_n_neighbors: Int,
+    target_weight: Float32,
+    fit_out: UmapFitOut,
+) raises -> SparseFuzzySimplicialGraph:
+    """The data's graph after the supervised intersection (umap-learn's
+    `graph_`), published into `fit_out` when its `indptr` is asked: the one
+    body of the fit and of `umap_fit_graph`."""
+    var tk = target_n_neighbors if target_n_neighbors > 0 else params.n_neighbors
+    if target_kind != 0:
+        graph = supervise_graph(
+            ctx, graph, target, n_samples, target_kind, target_dims, tk, target_weight, params.random_seed,
+        )
+    umap_publish_graph(graph, umap_graph_capacity(n_samples, params.n_neighbors, target_kind, tk), fit_out)
+    return graph^
+
+
+def umap_fit_graph(
+    ctx: DeviceContext,
+    x_rowmajor: List[Float32],
+    n_samples: Int,
+    n_features: Int,
+    params: UMAPParams,
+    target: List[Float32],
+    target_kind: Int,
+    target_dims: Int,
+    target_n_neighbors: Int,
+    target_weight: Float32,
+    dst: UmapFitOut,
+) raises -> Int:
+    """UMAP_OP_FIT_GRAPH (`UMAP.graph_`, lane sc-leftovers-1): the graph
+    `sparse_fit_transform` builds from the same words (the same graph body
+    and `_fitted_graph`), into the caller's arrays, without the start or
+    the layout. The fit no longer publishes it, so a fit makes no graph
+    arrays; the graph is built again only when `graph_` is read. Returns
+    the edge count."""
+    params.validate(n_samples)
+    if n_features < 1 or len(x_rowmajor) != n_samples * n_features:
+        raise Error("UMAP input does not match its declared shape")
+    var graph = sparse_fuzzy_graph_from_data(ctx, x_rowmajor, n_samples, n_features, params)
+    graph = _fitted_graph(ctx, graph^, n_samples, params, target, target_kind, target_dims, target_n_neighbors,
+                          target_weight, dst)
+    return len(graph.indices)
+
+
 def _sparse_fit_layout(
     ctx: DeviceContext,
     var graph: SparseFuzzySimplicialGraph,
@@ -222,12 +274,8 @@ def _sparse_fit_layout(
     graph (after the supervised intersection, umap-learn's `graph_`) and
     the curve's (a, b) into the caller's arrays when asked
     (umap/graph_out.mojo; addresses 0 skip them)."""
-    var tk = target_n_neighbors if target_n_neighbors > 0 else params.n_neighbors
-    if target_kind != 0:
-        graph = supervise_graph(
-            ctx, graph, target, n_samples, target_kind, target_dims, tk, target_weight, params.random_seed,
-        )
-    umap_publish_graph(graph, umap_graph_capacity(n_samples, params.n_neighbors, target_kind, tk), fit_out)
+    graph = _fitted_graph(ctx, graph^, n_samples, params, target, target_kind, target_dims, target_n_neighbors,
+                          target_weight, fit_out)
     var initial: List[Float32]
     if len(initial_given) > 0:
         initial = initial_given.copy()

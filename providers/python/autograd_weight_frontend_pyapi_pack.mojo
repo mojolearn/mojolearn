@@ -7,7 +7,6 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_setitem, py_type
 from bindings.native_torch_admission_door import native_torch_metadata
 from sequence.exec_trait import Exec
-from autograd.ops_api import ops_session
 from providers.python.autograd_program_arrays_pyapi_door import mapped_byte_array
 from autograd.program_io import ProgramInput
 from providers.python.autograd_program_pyapi_door import program_input, _integer

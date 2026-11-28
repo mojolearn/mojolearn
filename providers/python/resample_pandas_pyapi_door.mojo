@@ -12,7 +12,6 @@ from std.sys.info import CompilationTarget
 from sequence.sequence_string_storage_run import sequence_storage_image, sequence_string_nan_raw
 from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.arena_materialize_native_door import _address
-from bindings.py_attr import py_attr
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype

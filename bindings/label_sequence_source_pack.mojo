@@ -4,7 +4,6 @@
 # the UNPACK half is `bindings/label_sequence_source_unpack.mojo`.
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_borrowed_pack import borrowed_item
 
 
 from bindings.label_sequence_source_unpack import (

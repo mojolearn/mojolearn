@@ -58,7 +58,6 @@ from bindings.msel_scope_rows_door import (
     msel_scope_rows, msel_scope_take_pair, msel_scope_codes_slot, msel_scope_helper_codes_id,
 )
 # RUN: every fold computation, on typed values (no Python object).
-from bindings.msel_split_run import msel_fold_rows_fits
 from bindings.msel_split_plan_run import (
     MSEL_LABELS_ALIGNED, MSEL_LABELS_SORTED, MSEL_LABELS_FIRST_SEEN, MselCodes, MselSeed, MselSplitRoute,
     MselSplitPlan, msel_seed_refusal, msel_code_counts, msel_plan_default_folds, msel_plan_kfold,

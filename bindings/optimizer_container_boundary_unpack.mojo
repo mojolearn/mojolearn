@@ -2,8 +2,6 @@
 """Optimizer container UNPACK/PACK; native vectors pin admitted Python owners."""
 from std.python import Python, PythonObject
 from bindings.py_cpython_table import cpython_table, _PyBuffer_Release
-from bindings.optimizer_admission_door import opt_value
-from bindings.py_balanced import py_type
 
 
 

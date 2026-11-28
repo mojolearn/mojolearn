@@ -2,7 +2,6 @@
 # Fixed import-connected native operation recipes used by metadata owners.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_type
 from bindings.native_class_admission_door import static_builtin_type
 from bindings.optimizer_public_words_unpack import stash_python_error

@@ -8,7 +8,6 @@ from std.math import isfinite  # nn-activations
 from std.python import Python, PythonObject
 from bindings.sequential_admission_door import sequential_integer, sequential_admit_value
 from bindings.py_balanced import py_call, py_contains, py_fields, py_setitem, py_type
-from bindings.native_identity_key_door import NativeIdentityKey
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
 
 

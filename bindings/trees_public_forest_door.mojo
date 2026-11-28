@@ -71,7 +71,6 @@ from bindings.py_trees_resident import (
 from bindings.py_model_records import model_identity_key, model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 from bindings.metrics_native_support_door import metric_is_integral, metric_warning_location
-from bindings.classical_warnings_unpack import classical_warning
 from bindings.rf_fit_notices_pack import rf_fit_notices_word
 from bindings.forest_fit_loop_pack import forest_fit_loop_store
 from xtrees.trees_forest_run import (

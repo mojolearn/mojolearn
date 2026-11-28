@@ -21,7 +21,6 @@ from bindings.native_json_door import native_json_parse
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.native_transport_door import _transport_json, transport_initialize
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_connect, neural_descriptor_provider_id
-from core.native_descriptor_abi import NativeDescriptorCall
 from bindings.parallel_byte_native_run import (
     ParallelByteSession,
     PARALLEL_SCHEDULE_ABI_NAME, PARALLEL_SCHEDULE_OPERATIONS,

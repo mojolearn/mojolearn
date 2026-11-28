@@ -5,7 +5,6 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from providers.python.autoarima_owner_pyapi_unpack import autoarima_model_class, autoarima_commit
 from providers.python.autoarima_lifecycle_pyapi_door import _fields, _integer, _number, _packed, _buffer
-from bindings.classical_pandas_door import classical_admit_value
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_address, classical_typed

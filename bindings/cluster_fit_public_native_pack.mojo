@@ -35,7 +35,8 @@ from bindings.cluster_centroid_fit_boundary_door import CentroidPackedResult
 from core.optics_fit_api import OpticsFitResultSlot
 from bindings.optics_fit_boundary_door import OpticsPackedResult
 from cluster.cluster_fit_door_run import optics_hierarchy_rows, bisect_tree_rows, cluster_fit_unknown_code
-from bindings.cluster_public_native_pack import cluster_operation, _xc_array
+from bindings.cluster_public_native_pack import cluster_operation
+from bindings.family_common_array_pack import _xc_array
 from bindings.cluster_fit_public_native_unpack import (
     _set, _attr,
     meanshift_fit_stage, meanshift_fit_call,

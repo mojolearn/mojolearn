@@ -12,6 +12,7 @@ the requests the door (bindings/prep_scprep_native_door.mojo) makes. NOT RUN by 
   log1p        [0, 1, 3] -> [0, ln 2, ln 4]; base 2 -> [0, 1, 2].
   scale        one column 1, 2, 3, 4: mean 2.5, var (ddof 1) 5/3, clipped at 1: [-1, -0.3873, 0.3873, 1].
   ranks        keys [3, 1, 2, NaN]: ranks [2, 0, 1, -1]; descending [0, 2, 1, -1].
+  chunked      2 x 2500 genes in three groups (three sorted chunks per batch): every rank equals the counted rank.
   percentiles  the sorted 1 .. 11: p10 = 2, p15 = 2.5, p100 = 11 (numpy linear).
   loess        LY an exact quadratic of LX: the local quadratic fit returns LY itself.
   regress      x = 2 c + 1 (one covariate): residuals 0; dense and CSR X alike.
@@ -23,9 +24,10 @@ from bindings.prep_encode_prog_run import EncProgram, enc_input
 from bindings.prep_scprep_run import (
     SpInput, RowTotalFit, RowTotalApply, ColBlock, ScaleApply, RegressFit, rowtotal_fit_stage, rowtotal_apply_stage,
     log1p_stage, col_block_stage, scale_apply_stage, regress_fit_stage, keep_stage, select_csr_stage,
+    sp_rank_stages,
 )
 from core.preprocessing_program import prep_program_stage
-from x_prep.sc_prep import SP_RANK, SP_PERCENTILES, SP_LOESS, SP_PRE_NONE
+from x_prep.sc_prep import SP_PERCENTILES, SP_LOESS, SP_PRE_NONE
 from checks.native_tests.prep_enc_host import enc_host_run
 from checks.native_tests.prep_cls_host import all_close, arena_words
 from std.testing import TestSuite
@@ -178,7 +180,7 @@ def ranks_unit(unit: Int) raises:
     var prog = EncProgram(True)
     var k = enc_input(prog, 4, 0)
     var r = prog.alloc(4)
-    prep_program_stage(prog.program, SP_RANK, 4, k, -1, 4, unit, r)
+    sp_rank_stages(prog, k, -1, 4, 1, unit, r)
     var arena = enc_host_run(prog, owners)
     var want: List[Int] = [2, 0, 1, -1]
     if unit == 1:
@@ -189,6 +191,58 @@ def ranks_unit(unit: Int) raises:
 
 def test_ranks() raises:
     check_cases("ranks", 2, ranks_unit)
+
+
+def _counted_rank(keys: List[Float32], groups: List[Int], d: Int, b: Int, g: Int, desc: Bool) -> Int:
+    """The counted rank the sort-based stages replace (lane sc-leftovers-1): genes of batch b in g's group with a
+    non-NaN key before g's, ties (-0.0 == +0.0) by index; -1 for a NaN key or a negative group."""
+    var key = keys[b * d + g]
+    var mine = groups[b * d + g]
+    if isnan(key) or mine < 0:
+        return -1
+    var r = 0
+    for h in range(d):  # small-loop(fixture: the oracle's count over the batch)
+        var v = keys[b * d + h]
+        if h == g or isnan(v) or groups[b * d + h] != mine:
+            continue
+        if (v == key and h < g) or (v != key and ((desc and v > key) or (not desc and v < key))):
+            r += 1
+    return r
+
+
+def chunked_ranks_unit(unit: Int) raises:
+    """Two batches of 2500 genes (three sorted chunks each), three groups, repeated keys, -0.0 beside +0.0, NaN
+    keys and a negative group: every rank equals the counted rank, ascending (unit 0) and descending (unit 1)."""
+    var d = 2500
+    var nb = 2
+    var nan = bitcast[DType.float32](UInt32(0x7FC00000))
+    var keys = List[Float32](length=nb * d, fill=0)
+    var groups = List[Int](length=nb * d, fill=0)
+    for t in range(nb * d):  # small-loop(fixture: the keys and groups)
+        keys[t] = Float32((t * 7919) % 613) - Float32(300)
+        groups[t] = t % 3
+    keys[5] = Float32(-0.0)
+    keys[8] = Float32(0.0)
+    keys[17] = nan
+    keys[d + 40] = nan
+    groups[23] = -1
+    groups[d + 99] = -1
+    var owners = List[List[Float32]]()
+    owners.append(keys.copy())
+    owners.append(_ints(groups))
+    var prog = EncProgram(True)
+    var k = enc_input(prog, nb * d, 0)
+    var gw = enc_input(prog, nb * d, 1)
+    var r = prog.alloc(nb * d)
+    sp_rank_stages(prog, k, gw, d, nb, unit, r)
+    var arena = enc_host_run(prog, owners)
+    for t in range(nb * d):  # small-loop(fixture: every rank against the oracle)
+        var want = _counted_rank(keys, groups, d, t // d, t % d, unit == 1)
+        require(_int_at(arena, r + t) == want, "chunked rank " + String(t) + " desc " + String(unit))
+
+
+def test_chunked_ranks() raises:
+    check_cases("chunked ranks", 2, chunked_ranks_unit)
 
 
 def percentiles_unit(unit: Int) raises:

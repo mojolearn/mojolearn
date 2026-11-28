@@ -31,7 +31,6 @@ from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import NativeModules
 from bindings.native_class_admission_door import class_record, class_admit
-from bindings.trees_side_records_unpack import trees_key_shallow
 from bindings.py_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_GP_SVM
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.mode_metadata_native_door import _class_fields

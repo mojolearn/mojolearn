@@ -6,7 +6,7 @@
 # bindings/mani_kit.mojo).
 from std.python import Python, PythonObject
 from bindings.mani_tsne_native_unpack import tsne_operation
-from bindings.mani_umap_native_door import umap_operation
+from bindings.mani_umap_native_door import umap_operation, umap_graph_attribute
 from bindings.mani_decomp_native_door import mani_decomp_operation, mani_decomp_vendor_used
 from bindings.manifold_settings_native_door import ManifoldSettings, manifold_transforms
 from bindings.manifold_lifecycle_native_door import (
@@ -23,7 +23,7 @@ from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end
 from bindings.operation_names_mani import (
     MANI_OPN_FAMILY_MANI_ISO_RECONSTRUCTION_ERROR, MANI_OPN_FAMILY_MANI_MDS_FIT, MANI_OPN_FAMILY_MANI_MDS_FIT_TRANSFORM,
     MANI_OPN_FAMILY_MANI_TSNE_FIT, MANI_OPN_FAMILY_MANI_TSNE_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_UMAP_FIT,
-    MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM, MANI_OPN_FAMILY_MANI_VENDOR_USED,
+    MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM, MANI_OPN_FAMILY_MANI_VENDOR_USED, MANI_OPN_FAMILY_MANI_UMAP_GRAPH,
 )
 from bindings.mani_keys_unpack import mani_keys
 from bindings.py_balanced import py_item
@@ -59,6 +59,10 @@ def manifold_operation(model: PythonObject, operation: Int, args: PythonObject,
     if operation == MANI_OPN_FAMILY_MANI_VENDOR_USED:
         # Metadata, no input and no lifecycle step (as PLS / the decomp kit).
         return mani_decomp_vendor_used(model, settings, context)
+    if operation == MANI_OPN_FAMILY_MANI_UMAP_GRAPH:
+        # `UMAP.graph_`: a fitted attribute read, no input and no lifecycle step
+        # (the record is absent before a fit: AttributeError).
+        return umap_graph_attribute(model, settings, context)
     if operation >= MANI_OPN_FAMILY_MANI_UMAP_FIT and operation <= MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM:
         # UMAP's whole public lifecycle (the former `_mode` wrappers): the
         # fitted check (NotFittedError), X refusals, width and feature-name

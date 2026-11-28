@@ -30,8 +30,6 @@ from bindings.label_sequence_source_unpack import label_source_count, label_sour
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_type, py_get
-from bindings.classical_pandas_door import _pd_class, _pd_fields, _pd_get
-from bindings.p3_labels_metrics_native_door import p3_item
 
 
 from bindings.label_input_sources_pack import (

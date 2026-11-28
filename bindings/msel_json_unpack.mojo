@@ -5,7 +5,6 @@ from std.math import isfinite
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get
-from bindings.msel_inputs_unpack import msel_admit
 
 
 def _text(value: PythonObject, context: PythonObject, b: PythonObject, depth: Int) raises -> String:

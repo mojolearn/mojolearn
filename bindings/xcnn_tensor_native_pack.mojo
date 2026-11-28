@@ -5,7 +5,6 @@
 # the UNPACK half is `bindings/xcnn_tensor_native_unpack.mojo`.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
-from bindings.neural_block_admission_door import neural_plain_value
 from bindings.sequential_admission_door import sequential_admit_value, sequential_integer
 from bindings.sequence_array_native_unpack import sequence_array_cast
 from bindings.xcnn_common_door import (

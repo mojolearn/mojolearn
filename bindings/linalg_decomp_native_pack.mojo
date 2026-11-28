@@ -17,7 +17,6 @@ from std.memory import unsafe_memcpy
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains
-from bindings.admitted_input_unpack import admit_ids
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_address, classical_wrap_array, classical_typed
 from bindings.native_array_storage_door import native_array_unfilled

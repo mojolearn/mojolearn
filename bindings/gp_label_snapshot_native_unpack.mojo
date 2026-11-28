@@ -6,9 +6,6 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_labels_door import _label_list, _flatten_label_pins
-from bindings.native_scalar_decode_unpack import NativeScalarBuffer
-from core.native_scalar_decode import NativeRealBits, native_scalar_real
-from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_BOOL
 from providers.python.array_metadata_pyapi_door import ArrayPin, array_shape_once, array_metadata_once
 
 

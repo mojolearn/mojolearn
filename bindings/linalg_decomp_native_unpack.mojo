@@ -12,26 +12,16 @@ from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import unsafe_memcpy
-from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
-from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains
 from bindings.admitted_input_unpack import admit_ids
-from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.classical_arrays_door import classical_address, classical_wrap_array, classical_typed
 from bindings.admitted_input_unpack import admit_x
-from bindings.host_sparse_native_door import host_sparse_format
 from bindings.classical_validate_unpack import classical_view
-from core.decomp_native_impl import decomp_piv_valid
 from bindings.decomp_kit_native_door import (
     DecompDoor, DecompF32, decomp_int, decomp_float, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
     decomp_input, decomp_freeze_array, decomp_kit_unpack, decomp_kit_publish, decomp_kit_out_shape,
     decomp_door_borrow, decomp_door_input,
 )
 from bindings.decomp_kit_run import DKit, DK_HAS_S_FLAGS, DK_HAS_QFIX_FLAGS, DK_HAS_IDN_FLAGS
-from bindings.linalg_decomp_run import (
-    LstsqOut, ld_rsvd_run, ld_gesv_run, ld_dev_lu_factor_run, ld_device_buffers, ld_resident_solve_run,
-    ld_lu_solve_run, ld_lstsq_run,
-)
 from std.python._cpython import GILReleased
 from bindings.linalg_keys_unpack import linalg_keys
 from core.device_route import device_cpu_fast

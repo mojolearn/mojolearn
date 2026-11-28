@@ -101,7 +101,7 @@ from spectral.impl.sparse.coo import CooGraph
 from umap.curve import fit_umap_curve
 from umap.graph import canonicalize_self_neighbors
 from umap.params import UMAPParams, UMAP_NEIGHBORS_IVF, umap_ivf_plan_seed
-from umap.graph_out import UmapFitOut, umap_graph_capacity, umap_publish_graph, umap_publish_curve
+from umap.graph_out import UmapFitOut, umap_graph_capacity, umap_publish_graph, umap_publish_curve, umap_strip_row
 from x_ann.host.knn_graph_host import ivf_graph_host
 from x_ann.host.ann_host_cells import ann_span, ann_task_count, ann_tasks
 from x_ann.knn_graph_plan import knn_graph_plan, KG_METHOD_IVF
@@ -318,7 +318,6 @@ def host_umap_neighbors_graph(
     var graph = sparse_fuzzy_simplicial_graph(
         indices.copy(), distances.copy(), n, k, params.set_op_mix_ratio, params.local_connectivity,
     )
-    var kk = k - 1
     var sdp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(distances.unsafe_ptr()))
     var sip = MutPointer[UInt32, MutAnyOrigin](unsafe_from_address=Int(indices.unsafe_ptr()))
     var op = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=dist_indptr)
@@ -328,12 +327,8 @@ def host_umap_neighbors_graph(
 
     def strip_task(t: Int) {imm}:
         var span = ann_span(t, tasks, n + 1)
-        for r in range(span[0], span[1]):  # this task's rows (umap_knn_strip_kernel's thread)
-            op.unsafe_store(r, Int64(r * kk))
-            if r < n:
-                for j in range(kk):
-                    oi.unsafe_store(r * kk + j, Int32(sip.unsafe_load(r * k + 1 + j)))
-                    od.unsafe_store(r * kk + j, sdp.unsafe_load(r * k + 1 + j))
+        for r in range(span[0], span[1]):  # this task's rows (umap_knn_strip_kernel's thread; the one body)
+            umap_strip_row(sdp, sip, op, oi, od, r, n, k)
 
     ann_tasks(strip_task, tasks)
     _ = len(distances)  # the pointers above read these lists through the tasks
@@ -792,6 +787,37 @@ def host_supervise_graph(
     return host_general_intersection(graph, tgraph, target_weight)
 
 
+def _host_fitted_graph(
+    var graph: SparseFuzzySimplicialGraph, n_samples: Int, params: UMAPParams, target: List[Float32],
+    target_kind: Int, target_dims: Int, target_n_neighbors: Int, target_weight: Float32, fit_out: UmapFitOut,
+) raises -> SparseFuzzySimplicialGraph:
+    """`_fitted_graph`, `sparse_estimator.mojo`, on the host: the one body
+    of the fit and of `host_umap_fit_graph`."""
+    var tk = target_n_neighbors if target_n_neighbors > 0 else params.n_neighbors
+    if target_kind != 0:
+        graph = host_supervise_graph(
+            graph, target, n_samples, target_kind, target_dims, tk, target_weight, params.random_seed,
+        )
+    umap_publish_graph(graph, umap_graph_capacity(n_samples, params.n_neighbors, target_kind, tk), fit_out)
+    return graph^
+
+
+def host_umap_fit_graph(
+    x_rowmajor: List[Float32], n_samples: Int, n_features: Int, params: UMAPParams, target: List[Float32],
+    target_kind: Int, target_dims: Int, target_n_neighbors: Int, target_weight: Float32, dst: UmapFitOut,
+) raises -> Int:
+    """`umap_fit_graph`, `sparse_estimator.mojo`, on the host (UMAP_OP_FIT_GRAPH,
+    `UMAP.graph_` read after a fit): the fit's graph body and supervised
+    intersection, no start and no layout. Returns the edge count."""
+    params.validate(n_samples)
+    if n_features < 1 or len(x_rowmajor) != n_samples * n_features:
+        raise Error("UMAP input does not match its declared shape")
+    var graph = host_umap_fuzzy_graph(x_rowmajor, n_samples, n_features, params)
+    graph = _host_fitted_graph(graph^, n_samples, params, target, target_kind, target_dims, target_n_neighbors,
+                               target_weight, dst)
+    return len(graph.indices)
+
+
 def host_umap_fit_transform(
     x_rowmajor: List[Float32], n_samples: Int, n_features: Int, params: UMAPParams,
     initial_given: List[Float32] = List[Float32](),
@@ -820,12 +846,8 @@ def host_umap_fit_transform(
         raise Error("UMAP fit_transform has too few samples for spectral init")
     var fit_out = UmapFitOut(out_indptr, out_indices, out_data, out_ab)
     var graph = host_umap_fuzzy_graph(x_rowmajor, n_samples, n_features, params)
-    var tk = target_n_neighbors if target_n_neighbors > 0 else params.n_neighbors
-    if target_kind != 0:
-        graph = host_supervise_graph(
-            graph, target, n_samples, target_kind, target_dims, tk, target_weight, params.random_seed,
-        )
-    umap_publish_graph(graph, umap_graph_capacity(n_samples, params.n_neighbors, target_kind, tk), fit_out)
+    graph = _host_fitted_graph(graph^, n_samples, params, target, target_kind, target_dims, target_n_neighbors,
+                               target_weight, fit_out)
     var initial: List[Float32]
     if given:
         initial = initial_given.copy()

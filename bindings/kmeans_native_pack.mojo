@@ -26,9 +26,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.py_cpython_table import cpython_table
 from bindings.host_inference_scalars_door import host_inference_scalar
-from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.family_common_unpack import (
     FAMILY_F32P,
     family_repr,
@@ -39,7 +37,6 @@ from bindings.family_common_pack import (
     family_array,
     family_field,
 )
-from bindings.classical_arrays_door import classical_is_f32, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
 from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
@@ -85,7 +82,6 @@ from bindings.kmeans_native_unpack import (
     _kmeans_x,
 )
 from bindings.cluster_keys_unpack import cluster_keys
-from bindings.py_balanced import py_item
 
 
 def _kmeans_held(model: PythonObject, fields: PythonObject, binding: PythonObject,

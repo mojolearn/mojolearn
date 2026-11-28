@@ -60,7 +60,6 @@ from bindings.classical_arrays_door import classical_address, classical_c_bytes
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.cluster_fit_public_native_unpack import _attr
 from bindings.dbscan_native_boundary_unpack import DBSCANConnection
-from bindings.family_common_unpack import family_is_str
 from bindings.member_owner_unpack import MemberOwner, member_host_only
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.native_loaded_module_door import native_loaded_module

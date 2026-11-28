@@ -32,7 +32,6 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.native_class_admission_door import _class_arm, _class_epoch, class_watch_ready
 from bindings.native_loaded_module_door import shared_dict_watcher, shared_dict_epoch, shared_dict_watch
-from bindings.py_cpython_table import cpython_table
 from bindings.py_model_records import records_live, records_open, records_slot_array_arena, records_pin_arena_extra
 from core.shared_slot import SharedSlot
 from bindings.p3_array_arena_records_run import P3NumpyClasses, P3DictRecords

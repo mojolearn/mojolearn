@@ -196,7 +196,6 @@ from core.ensemble_member import (
 from providers.python.member_rfe_boundary_door import (
     RfeBase, rfe_base_admit, rfe_count_words, rfe_image, rfe_publish, rfe_dotted_path,
 )
-from bindings.prep_classify_prog_run import ClsRunPlan
 from core.msel_refusal_words import (
     msel_empty_scoring_words, msel_kfold_words, MSEL_REFIT_CALLBACK_WORDS, MSEL_NO_FITS_WORDS,
 )

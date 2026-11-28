@@ -26,7 +26,6 @@ from bindings.trees_public_score_door import (
 )
 from bindings.classical_labels_door import classical_score_from_codes, _classification_encoded as labels_classification_encoded
 from bindings.trees_public_gbdt_door import _adapter_fitted, adapter_codes, adapter_decision_function
-from bindings.trees_public_boost_door import boost_operation, boost_kind, boost_predict_codes
 from bindings.trees_keys_unpack import trees_keys
 from bindings.py_balanced import py_item
 

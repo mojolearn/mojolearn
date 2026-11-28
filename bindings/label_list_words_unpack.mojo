@@ -11,7 +11,6 @@ bool or float (`labels_list_scalar_kind`), so no item's Python method runs.
 """
 from std.python import PythonObject
 from bindings.py_balanced import py_call
-from bindings.native_loaded_module_door import native_loaded_module
 
 
 def label_store_address(store: PythonObject) raises -> Int:

@@ -6,7 +6,6 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.math import isfinite, isnan
 from bindings.py_balanced import py_call, py_type, py_get
-from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
 from bindings.py_balanced import py_item
 

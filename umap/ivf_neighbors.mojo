@@ -25,6 +25,7 @@ from checks.numerics import identical_sqrt
 from x_ann.cagra_fast_knn import ivf_graph_enqueue
 from x_ann.knn_graph_plan import knn_graph_plan, KG_METHOD_IVF
 from umap.params import UMAPParams, umap_ivf_plan_seed
+from umap.graph_out import umap_strip_row
 
 comptime _SF_TPB = 256
 comptime _SF_F32P = MutPointer[Float32, MutAnyOrigin]
@@ -88,12 +89,4 @@ def umap_knn_strip_kernel(knn_d: _SF_F32P, knn_i: _SF_U32P, indptr: MutPointer[I
     Scanpy's `distances` holds no self edge) in their ascending order, and
     indptr[r] = r (k - 1) (thread n writes indptr[n])."""
     var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var n = Int(n_in)
-    var k = Int(k_in)
-    var kk = k - 1
-    if r <= n:
-        indptr.unsafe_store(r, Int64(r * kk))
-    if r < n:
-        for j in range(kk):  # one row's k - 1 kept slots (this thread's row)
-            dst_i.unsafe_store(r * kk + j, Int32(knn_i.unsafe_load(r * k + 1 + j)))
-            dst_d.unsafe_store(r * kk + j, knn_d.unsafe_load(r * k + 1 + j))
+    umap_strip_row(knn_d, knn_i, indptr, dst_i, dst_d, r, Int(n_in), Int(k_in))  # umap/graph_out.mojo

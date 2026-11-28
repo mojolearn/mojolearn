@@ -8,13 +8,9 @@
 # core/dbscan_native_api.mojo; PACK and the operators are
 # bindings/dbscan_public_native_pack.mojo. (This file and that one were the
 # single door bindings/cfb_dbscan_door.mojo.)
-from bindings.admitted_family_door import admit_family, admit_family_weights
-from providers.python.array_metadata_pyapi_door import ArrayPin
-from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
-from bindings.classical_arrays_door import classical_address, classical_is_array
 from bindings.family_common_unpack import (
     FAMILY_F32P,
     family_repr,
@@ -30,19 +26,9 @@ from cluster.dbscan_door_run import (
     dbscan_check_max_iterations, dbscan_check_budget, dbscan_check_x, dbscan_fit_request, dbscan_core_request,
 )
 from core.dbscan_native_state import dbscan_method_accepts
-from bindings.cluster_native_door import _reference_queries
-from bindings.dbscan_native_boundary_unpack import DBSCANConnection, dbscan_run_fit, dbscan_run_count, dbscan_run_gather
-from bindings.dbscan_native_boundary_pack import (
-    dbscan_array, dbscan_publish, dbscan_fresh_holder, dbscan_mint, dbscan_reference_labels,
-)
-from core.dbscan_native_api import DBSCANGatherRequest, DBSCANFitWorkspace, dbscan_empty_labels
 from core.dbscan_native_state import dbscan_metric_code, dbscan_method_code
-from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.decomp_scalar_admission_unpack import decomp_scalar_repr
-from bindings.operation_names_cfb import (
-    CFB_OPN_FAMILY_CFB_DBSCAN_FIT, CFB_OPN_FAMILY_CFB_DBSCAN_FIT_PREDICT, CFB_OPN_FAMILY_CFB_DBSCAN_PREDICT,
-    CFB_OPN_FAMILY_XC_DBSCAN_PREDICT)
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.family_raw_attr_unpack import family_raw_has
 from bindings.family_raw_attr_pack import family_raw_get, family_raw_get_or

@@ -36,7 +36,6 @@ from bindings.classical_arrays_door import (
     classical_address, classical_is_array, classical_dtype_str, classical_wrap_array, classical_cast_kind,
     classical_c_order,
 )
-from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_validate_unpack import classical_view
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.family_common_unpack import (

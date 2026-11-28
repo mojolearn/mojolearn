@@ -8,7 +8,6 @@
 # stashed and restored unchanged at the door (`stash_python_error`), so the
 # caller sees the class and message it saw before the migration.
 from providers.python.array_metadata_pyapi_door import ArrayMetadata
-from bindings.native_array_storage_door import native_array_zeros
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr

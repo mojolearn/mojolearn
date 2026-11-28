@@ -23,7 +23,7 @@ from bindings.classical_labels_door import classical_encode_labels
 from bindings.prep_scprep_native_door import _SpX
 from bindings.prep_scprep_run import sp_chunk_width
 from bindings.prep_encode_native_door import EncProg, _take2, _default_mode
-from bindings.cluster_public_native_pack import _xc_array
+from bindings.family_common_array_pack import _xc_array
 from providers.python.x_cluster_out_pyapi_pack import _py_array
 from bindings.prep_markers_run import (
     MarkerChunk, MarkerFinal, marker_chunk_stage, marker_final_stage, marker_rows_out,

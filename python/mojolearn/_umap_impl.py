@@ -145,8 +145,9 @@ class UMAP(NumericModeMixin):
         int64 of length ``n_samples + 1``, ``indices`` int32 and ``data``
         float32, one entry per stored edge, columns ascending within a row.
         The graph is symmetric. Pass it to graph clustering or diffusion as
-        the weighted adjacency Scanpy calls ``connectivities``. Not saved by
-        ``save``.
+        the weighted adjacency Scanpy calls ``connectivities``. Computed
+        the first time it is read after ``fit``, then kept until the next
+        ``fit``. Not saved by ``save``.
     a_, b_ : float
         Curve parameters the layout optimizer used: `a` and `b` when given,
         otherwise the values derived from `min_dist` and `spread`.
@@ -294,6 +295,16 @@ class UMAP(NumericModeMixin):
             is not finite.
         """
         return _NATIVE(self, "family_mani_umap_transform", (X,), _NATIVE_CONTEXT)
+
+    # `graph_` is built when it is read, not on every fit (lane
+    # sc-leftovers-1, 2026-11-28): one native call over the fit's record and
+    # retained training copy (bindings/mani_umap_native_door.mojo
+    # `umap_graph_attribute`), kept until the next fit.
+    @property
+    def graph_(self):
+        """The fitted fuzzy simplicial set as ``(indptr, indices, data)``
+        (see the class Attributes)."""
+        return _NATIVE(self, "family_mani_umap_graph", (), _NATIVE_CONTEXT)
 
     # Saved layout (lane/inference-forecast-umap-pca, 2026-09-15): training and
     # embedding (float32), `meta` <i8 [n_neighbors, n_components, n_epochs,

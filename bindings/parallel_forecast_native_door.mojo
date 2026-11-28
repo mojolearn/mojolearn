@@ -33,7 +33,6 @@ from std.ffi import external_call
 from bindings.native_prepared_owner_unpack import prepared_key_fields, prepared_key_same, prepared_get, prepared_put
 from bindings.native_loaded_module_door import NativeModules
 from bindings.msel_member_device_unpack import member_says_cpu
-from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.native_process_pool_door import (
     process_pool_create, process_pool_close, process_pool_closed, process_pool_pids,
