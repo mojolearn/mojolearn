@@ -307,6 +307,7 @@ _LAZY_NAMES = {
     # _expansion_ann
     "IVFPQIndex": "._expansion_ann", "TSNE": "._expansion_ann", "CagraIndex": "._expansion_ann",
     "IVFSQIndex": "._expansion_ann", "IVFRaBitQIndex": "._expansion_ann", "refine": "._expansion_ann",
+    "knn_graph": "._expansion_ann",
     # _expansion_metrics
 }
 

@@ -23,6 +23,8 @@ from providers.python.x_ann_resident_pyapi_pack import x_ann_index_release_bindi
 from providers.python.x_ann_resident_pyapi_pack import x_ann_index_export_codes_binding
 from bindings.archive_x_ann_entry import publish_archive_x_ann
 from x_ann.ivf_pq_device import refine_device_ptr
+from x_ann.knn_graph_device import knn_graph_device_ptr
+from x_ann.knn_graph_plan import knn_graph_plan
 from core.hostptr import f32_ptr, i32_ptr
 from x_ann.ops_entry_device import (
     ANN_OPS_DEVICE_API, ann_ops_device_v1, ann_ivf_pq_search_device_run, ann_ivf_sq_search_device_run,
@@ -203,6 +205,26 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
     return PythonObject(m)
 
 
+def knn_graph_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`mojolearn.knn_graph` (lane sc-ann-1). addrs: x (n x d float32), out_d,
+    out_i (n x k float32 / int32). params: n, d, k, method (0 exact, 1 ivf),
+    n_lists (-1 auto), n_probes (-1 auto), random_state (-1 None), root (1:
+    euclidean). Returns the method run. UNPACK and PACK only: the plan is
+    x_ann/knn_graph_plan.mojo, the body x_ann/knn_graph_device.mojo."""
+    var n = p_int(params, 0)
+    var d = p_int(params, 1)
+    var k = p_int(params, 2)
+    var plan = knn_graph_plan(n, d, k, p_int(params, 3), p_int(params, 4), p_int(params, 5), p_int(params, 6))
+    var root = p_int(params, 7) != 0
+    var xp = f32_ptr(a_int(addrs, 0))
+    var odp = f32_ptr(a_int(addrs, 1))
+    var oip = i32_ptr(a_int(addrs, 2))
+    var used = 0
+    with GILReleased(Python()):
+        used = knn_graph_device_ptr(xp, n, d, k, plan, odp, oip, root)
+    return PythonObject(used)
+
+
 def ivf_rabitq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, centers, offsets, list_indices, codes (n x words int32 bit words), norms, ips.
     params: n, dim, n_lists, kmeans_n_iters, seed.
@@ -280,6 +302,7 @@ def build__mojolearn_x_ann() -> PythonObject:
         m.def_function[ivf_sq_build_binding]("x_ann_ivf_sq_build")
         m.def_function[ivf_sq_search_binding]("x_ann_ivf_sq_search")
         m.def_function[refine_binding]("x_ann_refine")
+        m.def_function[knn_graph_binding]("x_ann_knn_graph")
         # TOMBSTONE: x_ann_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by f9b52032a; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_ann.patch
         m.def_function[ivf_rabitq_build_binding]("x_ann_ivf_rabitq_build")
