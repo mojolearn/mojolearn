@@ -26,7 +26,6 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_item, py_setitem
 from bindings.qn_boundary_unpack import qn_route
 from bindings.qn_keys_unpack import qn_keys
-from core.entry_table import EntryRef, entry_ref_word
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,

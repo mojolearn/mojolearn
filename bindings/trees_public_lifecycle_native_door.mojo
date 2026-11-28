@@ -16,7 +16,6 @@ from bindings.classical_labels_door import labels_shape_of, _flatten_labels
 from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.classifier_public_lifecycle_door import classifier_after_fit, _feature_names
 from bindings.prep_lda_admission_door import lda_native_labels
-from bindings.metrics_native_support_door import metric_warn
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside as _outside, estimator_feature_check as _feature_check
 from bindings.sequential_inputs_door import sequential_input
 from bindings.trees_public_forest_door import forest_fit, forest_public_predict, forest_kind, forest_get_params

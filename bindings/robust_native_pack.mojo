@@ -13,8 +13,6 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
 from bindings.classical_attributes_door import classical_connect_numpy, classical_check_layout, classical_getattribute
 from bindings.classical_arrays_door import classical_typed, classical_is_array, classical_input
-from bindings.native_numpy_metadata_unpack import native_numpy_dtype
-from bindings.classical_warnings_unpack import classical_warning, _warning_fields
 from providers.python.linear_metadata_boundary_door import classical_is_fitted
 from bindings.classical_exceptions_door import classical_not_fitted_class
 from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception

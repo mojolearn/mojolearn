@@ -5,7 +5,6 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.mode_metadata_native_door import _fields, _class_fields, _truth
-from bindings.sequential_admission_door import _one_of
 from providers.python.arima_buffer_pyapi_door import ArimaBuffer, arima_buffer
 from providers.python.autoarima_lifecycle_pyapi_door import _integer, _number
 from providers.python.forecast_initialize_pyapi_unpack import _scalar

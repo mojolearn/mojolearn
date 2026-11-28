@@ -13,7 +13,6 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.native_typed_context_pack import native_typed_context
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.sequential_admission_door import _one_of
-from bindings.py_model_records import bump_model_generation
 
 
 def _parameter(name: PythonObject, value: PythonObject, context: PythonObject) raises:

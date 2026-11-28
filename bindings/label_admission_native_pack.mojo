@@ -5,13 +5,9 @@
 # the UNPACK half is `bindings/label_admission_native_unpack.mojo`.
 from std.collections import Dict
 from std.python import Python, PythonObject
-from bindings.native_loaded_module_door import native_loaded_module
-from bindings.native_numpy_metadata_unpack import native_numpy_dtype
-from bindings.native_numpy_metadata_pack import native_numpy_module_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr
-from bindings.p3_labels_metrics_native_door import p3_type_word
 
 from bindings.label_admission_native_unpack import (
     _labels_class,

@@ -8,10 +8,6 @@
 # The PACK half of the former `bindings/svc_native.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/svc_native_unpack.mojo`.
 from std.python import Python, PythonObject
-from bindings.svc_linear_native_door import svc_linear_operation
-from bindings.svc_kernel_native_door import svc_kernel_operation
-from bindings.svc_ocsvm_native_door import svc_ocsvm_operation
-from providers.python.svc_public_state_pyapi_pack import svc_public_state_operation
 from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import FamilyLifecycle
 from bindings.operation_names_svc import (

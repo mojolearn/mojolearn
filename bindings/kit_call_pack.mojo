@@ -25,7 +25,6 @@ from std.python import PythonObject
 from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute, NeuralDescriptorProvider,
 )
-from core.entry_table import EntryRef, entry_ref_word
 from providers.python.compiled_binding_snapshot_pyapi_door import (
     CompiledBindingSnapshot, compiled_binding_retained, compiled_binding_retain,
 )

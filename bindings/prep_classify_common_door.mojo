@@ -12,7 +12,6 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.mode_answer_door import answer_mode_object
 from core.mode_answer import MODE_FAMILY_PREP
-from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_address, classical_dtype_str, classical_c_order, classical_c_bytes, classical_wrap_array, classical_is_array
 from bindings.admitted_input_unpack import admit_x
 from bindings.classical_validate_unpack import classical_view

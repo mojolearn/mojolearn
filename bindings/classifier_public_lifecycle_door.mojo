@@ -6,7 +6,6 @@ from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.py_attr import py_attr
 from bindings.py_cpython_table import cpython_table
 from bindings.classical_pandas_door import _pd_class, _pd_fields, _pd_get
 from bindings.classical_labels_door import _flatten_labels

@@ -10,8 +10,6 @@ from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_admission_door import opt_scalar, opt_value
 from bindings.optimizer_device_native_door import device_shape, shape_count
-from bindings.optimizer_public_door import tensor_view
-from bindings.tensor_view import TensorView, base_format
 from training.optimizer_input_plan import same_shape
 from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.sequence_optimizer_native_door import seq_binding, seq_device, seq_device_get, seq_cast

@@ -7,7 +7,6 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_input, classical_typed, classical_address
-from bindings.classical_pandas_door import classical_admit_value
 from bindings.sequential_admission_door import sequential_integer
 from bindings.sequential_arrays_door import sequential_array
 from bindings.tsa_autoarima_native_door import _new_arima

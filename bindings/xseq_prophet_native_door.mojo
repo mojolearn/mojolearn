@@ -21,7 +21,6 @@ from sequence.xseq_prophet_run import (
 )
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.sequential_arrays_door import sequential_array
-from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_exceptions_door import classical_require_fitted
 from providers.python.prophet_lifecycle_pyapi_unpack import prophet_scalar
 from providers.python.prophet_lifecycle_pyapi_pack import prophet_fields

@@ -21,7 +21,6 @@ from sequence.neural_model_dispatch import (
 )
 from bindings.sequence_device_native_unpack import seq_device_make
 from bindings.classical_arrays_door import classical_input, classical_typed, classical_address
-from bindings.classical_attributes_door import classical_connect_numpy
 from providers.python.sequence_layer_buffer_pyapi_unpack import SequenceFloatBuffer as MoEBuffer, SequenceResidentSnapshot as MoEDevice, _array
 from core.hotpath_impl_rows import normal_init_f32
 from core.sequence_array_cast import sequence_cast_leaf

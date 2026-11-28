@@ -35,7 +35,6 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.py_attr import py_attr
 from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.classical_arrays_door import classical_address, classical_is_array, classical_dtype_str, classical_wrap_array
-from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_validate_unpack import classical_view
 from bindings.family_common_unpack import (
     FAMILY_F32P,

@@ -51,7 +51,6 @@ from bindings.family_common_pack import (
 )
 from bindings.cluster_native_door import _reference_queries
 from core.spectral_assignment_api import SpectralAssignmentRequest
-from bindings.native_array_storage_door import native_array_zeros
 from std.python._cpython import GILReleased
 from core.spectral_assignment_api import (
     SPECTRAL_ASSIGN_ABI, SPECTRAL_ASSIGN_COUNT, SpectralAssignmentDriver,

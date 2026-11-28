@@ -89,8 +89,6 @@ from bindings.mani_kit_run import MRun, MImage
 from bindings.family_common_pack import family_array
 from bindings.metrics_native_support_door import metric_warn
 from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
-from x_decomp.descriptor_schema import XD_CAP_RESIDENT, XD_CAP_DEV_SVD
-from x_decomp.descriptor_mani_schema import XD_CAP_DEV_LU, XD_CAP_DEV_EIGH, XD_CAP_LLE_ORDERED
 from bindings.lda_native_door import _batch_size as lda_batch_size
 from bindings.mcd_native_door import _typed as mcd_typed
 from core.decomp_native_impl import decomp_f32_to_u8

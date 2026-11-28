@@ -29,7 +29,6 @@ from providers.python.arima_buffer_pyapi_door import ArimaBuffer, arima_buffer
 from providers.python.forecast_owner_pyapi_unpack import forecast_commit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind
-from bindings.classical_pandas_door import classical_admit_value
 from bindings.tsa_hw_native_door import tsa_array
 from core.xseq_marshal import xseq_widen_f32_f64
 from core.admitted_input_nd import admitted_cast_nd_f32

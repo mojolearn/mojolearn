@@ -104,7 +104,6 @@ from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.family_common_unpack import family_is_str, family_repr
 from neighbors.neighbors_semi_run import xn_lp_alpha_check, xn_lp_static_weight
 from core.member_families import MEMBER_FAMILY_XNEIGHBORS
-from bindings.family_common_unpack import family_is_int
 from bindings.neighbors_graph_native_door import _svgp_gamma, _float_of as _graph_float_of
 from core.pcs_native_api import pcs_options
 from bindings.kpca_native_door import (

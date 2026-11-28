@@ -4,19 +4,8 @@
 # the UNPACK half is `bindings/minmax_archive_native_unpack.mojo`.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
-from bindings.classical_arrays_door import classical_is_array, classical_c_order, classical_numpy
-from bindings.classical_pandas_door import classical_admit_value
-from bindings.classical_archive_door import (
-    _archive_unpack_member, _archive_class_name_unpack,
-    _archive_open, _archive_methods, _archive_pack_members, _archive_file_call,
-)
-from bindings.classical_archive_read_door import _archive_read_input
 from bindings.classical_archive_output_door import archive_events_pack, archive_numeric_pack
-from bindings.classical_archive_linear_unpack import archive_print_mode_unpack
 from bindings.native_buffer_owner_pack import native_storage_allocate
-from bindings.minmax_metadata_unpack import _flag
-from bindings.minmax_metadata_pack import minmax_range_values
-from core.native_archive_write import NativeArchiveMember
 from core.native_archive_read import NativeArchiveDecoded, native_archive_read_status
 from core.native_archive_minmax import (
     NativeMinMaxArchiveClass, NativeMinMaxArchivePlan, native_minmax_statistic_names,

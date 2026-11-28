@@ -6,8 +6,6 @@ from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_warnings_unpack import _warning_fields, _warning_class_fields, _warning_match, _warning_write
-from bindings.optimizer_public_words_unpack import stash_python_error
-from core.sequence_array_cast import SEQ_CAST_OVERFLOW, SEQ_CAST_UNDERFLOW, SEQ_CAST_INVALID
 from bindings.sequence_keys_unpack import sequence_keys
 from bindings.py_balanced import py_item
 

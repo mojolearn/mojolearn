@@ -2,7 +2,6 @@
 # ABI serialization only: every counter originates in a native executor.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_setitem
-from bindings.native_loaded_module_door import native_loaded_module
 from sequence.execution_profile import ExecutionProfile
 from bindings.autograd_keys_unpack import autograd_keys
 

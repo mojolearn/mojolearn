@@ -57,8 +57,6 @@ from bindings.sequence_optimizer_native_door import seq_device_get
 from bindings.optimizer_admission_door import opt_value, opt_scalar, opt_guards, opt_exact, opt_numpy
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.neural_block_admission_door import neural_record_fields
-from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.sequential_inputs_door import sequential_input
 from bindings.native_loaded_module_door import native_loaded_module, native_interpreter_finalizing
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from core.admitted_input_nd import admitted_cast_nd_f32

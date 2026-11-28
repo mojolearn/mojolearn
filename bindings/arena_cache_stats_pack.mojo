@@ -6,9 +6,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_item
 from bindings.optimizer_public_words_unpack import stash_python_error
-from bindings.sequence_dtype_native_door import sequence_dtype_create
 from bindings.py_cpython_table import cpython_table
-from bindings.native_loaded_module_door import native_namespace_string_keys, native_mapping_string_keys
 from bindings.p3_array_arena_records_unpack import P3_STATS_LAYOUT, p3_layout_admitted, p3_layout_admit
 from bindings.arena_owner_door import ARENA_OWNER_CACHE, arena_owner_held
 from bindings.arena_scope_door import arena_scope_object, arena_scope_word

@@ -37,7 +37,6 @@ from bindings.classical_attributes_door import _type_mro
 from bindings.py_balanced import py_call, py_type, py_contains, py_get
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_arrays_door import classical_address
-from bindings.trees_side_records_unpack import trees_key_same, trees_key_shallow
 from bindings.py_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_CLUSTER
 from bindings.cluster_keys_unpack import cluster_keys
 

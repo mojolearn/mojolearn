@@ -5,7 +5,6 @@
 # the UNPACK half is `providers/python/autograd_import_lower_pyapi_unpack.mojo`.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call
-from sequence.exec_trait import Exec
 from autograd.import_lower import (
     IMPORT_BAD_VALUE, IMPORT_OK, IMPORT_PROBLEMS, IMPORT_READ_FAILED, OnnxImport, _Found,
     onnx_import, onnx_import_file,

@@ -27,7 +27,6 @@ from core.admitted_convert import admitted_convert_vector
 from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_get, py_item
 from bindings.metrics_keys_unpack import metrics_keys
-from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.arena_prog_native_door import metric_route_of, metric_route_entries
 from bindings.msel_helpers_key_unpack import msel_helpers_key
 from bindings.msel_common_door import (

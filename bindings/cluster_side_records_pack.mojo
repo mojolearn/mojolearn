@@ -31,14 +31,8 @@
 # the UNPACK half is `bindings/cluster_side_records_unpack.mojo`.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import NativeModules
-from bindings.native_class_admission_door import class_record, class_admit
-from bindings.mode_metadata_native_door import _class_fields
-from bindings.classical_attributes_door import _type_mro
 from bindings.py_balanced import py_call, py_type, py_contains, py_get
-from bindings.native_loaded_module_door import native_loaded_module
-from bindings.classical_arrays_door import classical_address
 from bindings.trees_side_records_unpack import trees_key_same, trees_key_shallow
 from bindings.py_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_CLUSTER
 

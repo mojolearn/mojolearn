@@ -47,7 +47,6 @@ from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.family_common_pack import family_array
-from bindings.family_common_unpack import family_is_str
 from bindings.member_owner_unpack import MemberOwner, member_host_only
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_fields, py_setitem, py_type

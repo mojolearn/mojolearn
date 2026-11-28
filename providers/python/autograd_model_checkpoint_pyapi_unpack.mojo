@@ -2,9 +2,7 @@
 # Python doors for model and session checkpoints (model_checkpoint.mojo):
 # argument unpacking and Python results around the typed checkpoint entries.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call
 from sequence.exec_trait import Exec
-from providers.python.sequence_pyapi_door import py_f64s, py_ints
 from providers.python.autograd_pyapi_door import program_info
 from autograd.ops_api import ops_session
 from autograd.model_checkpoint import (

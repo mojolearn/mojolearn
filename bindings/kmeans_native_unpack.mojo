@@ -22,8 +22,6 @@ from bindings.admitted_input_unpack import AdmittedX, admit_x_unrecorded, admitt
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
-from bindings.classical_arrays_door import classical_address
-from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.py_cpython_table import cpython_table
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
@@ -38,26 +36,11 @@ from bindings.family_common_pack import (
     family_field,
 )
 from bindings.classical_arrays_door import classical_is_f32, classical_c_order
-from core.host_finite_scan import host_all_finite_f32
-from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
-from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
-from providers.python.family_public_lifecycle_run import family_lifecycle_spec
-from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
-from bindings.py_optional import py_or_none, py_present
-from core.kmeans_native_api import (
-    KMeansFoldStore, KMeansFitRequest, KMeansQueryRequest,
-    KMEANS_CAP_JOINT, KMEANS_CAP_RESIDENT, KMEANS_CAP_FOLD, KMEANS_CAP_HOST,
-)
 from bindings.kmeans_descriptor_boundary_door import (
     kmeans_connection,
     kmeans_run_fit,
     kmeans_run_query,
     kmeans_integer,
-)
-from x_cluster.kmeans_descriptor_boundary_run import kmeans_capabilities
-from bindings.kmeans_owner_boundary_door import (
-    kmeans_owner_matching, kmeans_owner_handle, kmeans_owner_prepare,
-    kmeans_owner_getstate, kmeans_owner_setstate,
 )
 from bindings.cluster_keys_unpack import cluster_keys
 from bindings.py_balanced import py_item

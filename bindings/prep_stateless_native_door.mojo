@@ -17,7 +17,6 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_address, classical_typed, classical_wrap_array
-from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from bindings.scaler_native_door import _ptr, _input
 from core.preprocessing_program import prep_program_stage as _stage
 from x_prep.prep_stateless_native_run import (
@@ -52,7 +51,6 @@ from bindings.x_prep_native_owner_run import xprep_r3, XprepCaps
 from bindings.prep_stateless_route_unpack import stateless_route_context, stateless_entries, stateless_caps
 from bindings.prep_owner_route_unpack import prep_context_vendor_used
 from core.entry_table import entry_ref_unresolved
-from bindings.py_typed_call import py_call_typed
 from bindings.py_cpython_table import cpython_table
 from bindings.prep_support_native_pack import prep_support
 from bindings.prep_normalizer_lifecycle_pack import normalizer_transform

@@ -19,7 +19,6 @@ from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_ex
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind, classical_wrap_array
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.classical_pandas_door import classical_admit_value
 from core.admitted_input_nd import admitted_cast_nd_f32
 from bindings.native_array_storage_door import native_scratch_bytes, native_scratch_address
 from bindings.tsa_hw_native_door import tsa_array, hw_fit, hw_predict, hw_score, hw_vendor_used, hw_initialize, hw_forecast, hw_component, hw_save

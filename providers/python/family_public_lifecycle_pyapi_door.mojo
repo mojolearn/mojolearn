@@ -16,7 +16,6 @@ from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family_meta, admit_family_owned
 from providers.python.array_metadata_pyapi_door import ArrayPin
-from bindings.native_loaded_module_door import native_loaded_module
 from bindings.admitted_call_door import AdmittedCall, admitted_input_dense, admitted_input_shape, ADMITTED_ITEM_F32, ADMITTED_SPARSE_OTHER, ADMITTED_GRAPH_TUPLE
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native_door import _fields, _fitted
@@ -26,8 +25,6 @@ from bindings.classical_validate_run import classical_check_width
 from bindings.classical_exceptions_door import classical_not_fitted_class
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields
-from bindings.family_common_unpack import FAMILY_F32P
-from core.host_finite_scan import host_all_finite_f32
 from bindings.cluster_side_records_unpack import cluster_refuse_fit_callbacks
 from providers.python.estimator_lifecycle_pyapi_unpack import (
     estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_complete,

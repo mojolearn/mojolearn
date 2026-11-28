@@ -9,7 +9,6 @@ from bindings.mode_metadata_native_door import _fields, _class_fields, _fitted
 from bindings.classical_attributes_door import classical_connect_numpy, _type_mro
 from bindings.classical_exceptions_door import classical_not_fitted_class
 from bindings.native_class_admission_door import class_record, class_admit
-from bindings.classical_validate_unpack import classical_estimator_name
 from bindings.classical_validate_run import classical_check_width
 from bindings.public_attributes_native_door import _plan, _lookup
 from bindings.host_inference_scalars_door import host_inference_scalar, host_inference_primitive_number

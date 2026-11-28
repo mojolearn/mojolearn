@@ -24,7 +24,6 @@ from bindings.arena_owner_door import arena_rows
 from bindings.arena_resident_rows_door import arena_rows_store
 from bindings.device_rows_door import DoorRows, door_is_device_rows
 from bindings.device_rows_door_run import DoorRowsStore
-from core.device_route import DEVICE_CPU
 
 
 def door_rows_store_of(door: DoorRows, context: PythonObject) raises -> DoorRowsStore:

@@ -34,9 +34,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.classical_caller_unpack import classical_caller_outside
-from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.host_inference_state_unpack import host_inference_state
-from bindings.host_logistic_native_door import host_logistic_classes, host_logistic_inference
 from bindings.host_logistic_query_boundary_pack import (
     host_logistic_operation,
 )

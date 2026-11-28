@@ -8,12 +8,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.native_numpy_metadata_pack import native_numpy_type, native_numpy_module_fields
-from bindings.native_scalar_decode_unpack import native_scalar_buffer
 from bindings.optimizer_public_words_unpack import stash_python_error
-from bindings.sequence_array_warnings_unpack import sequence_array_report
-from bindings.sequence_array_warnings_pack import sequence_array_errstate
-from core.sequence_array_cast import SEQ_CAST_INVALID
-from core.host_iforest_depth_run import host_iforest_depth_step_run
 from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
 from bindings.py_balanced import py_item
 

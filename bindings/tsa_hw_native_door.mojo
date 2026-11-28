@@ -34,8 +34,6 @@ from bindings.arena_materialize_native_door import _owned
 from bindings.classical_archive_door import classical_archive_write
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind, classical_wrap_array
-from bindings.classical_pandas_door import classical_admit_value
-from providers.python.array_metadata_pyapi_door import ArrayMetadata
 from bindings.tsa_admission_door import tsa_hw_fields, tsa_hw_class, tsa_scalar, tsa_component_index
 from bindings.admitted_input_unpack import admit_view, AdmittedTypedPin
 from bindings.admitted_input_run import admitted_view_kind

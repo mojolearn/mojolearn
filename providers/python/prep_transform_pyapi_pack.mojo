@@ -2,28 +2,17 @@
 # One public preprocessing input snapshot, before dtype conversion or execution.
 # The PACK half of the former `providers/python/prep_transform_pyapi.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `providers/python/prep_transform_pyapi_unpack.mojo`.
-from bindings.admitted_finite_wording import admitted_finite_wording
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_arrays_door import classical_input, classical_is_array, classical_typed, classical_address
-from bindings.classical_pandas_door import classical_admit_value, native_pandas_exact, _pd_class, _pd_fields, _pd_get, _pd_locations
-from bindings.classical_validate_unpack import RESHAPE_HINT
-from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields
-from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.sequential_admission_door import _ordinary_torch, _one_of, sequential_admit_value
-from bindings.sequential_inputs_door import _promote
-from bindings.x_prep_native_inputs_door import _rows_fields
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_slot_once, array_shape_once, array_metadata_once
-from providers.python.prep_metadata_pyapi_unpack import _array_snapshot, _pandas_empty_shape, _description, prep_numeric_vector
-from providers.python.prep_category_pyapi_unpack import prep_ndarray_backed, prep_category_array
 from providers.python.preprocessing_input_pyapi_door import _frozen_values
 from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT
 from core.scaler_fit_impl import scaler_cast
-from core.prep_boundary_impl import prep_float_finite, prep_gather_rows, prep_mask_any, prep_mask_export
-from core.classical_pandas_impl import pd_scatter_numeric
 
 from providers.python.prep_transform_pyapi_unpack import (
     F32P,

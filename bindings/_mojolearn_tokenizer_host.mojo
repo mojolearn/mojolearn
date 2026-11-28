@@ -81,7 +81,6 @@ from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python
 from bindings.native_error_class import error_without_class
 from std.sys.compile import is_defined
 
-from core.hostptr import i32_ptr
 from bindings.native_json_door import native_json_parse, native_path
 from bindings.causal_model_config_door import model_config_c
 from bindings.causal_checkpoint_door import checkpoint_c
@@ -158,7 +157,6 @@ from tokenizer.impl.vocab_build import (
     unspell,
     unspell_error,
 )
-from tokenizer.train.emit import render_ranks, render_tokenizer_json
 from tokenizer.vocab import VocabTokenizer
 from tokenizer.train.bpe_train import (
     BPE_TRAINER_SABOTAGE,
@@ -210,7 +208,6 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
     vocab_encode_ids,
     vocab_fingerprint_hex,
 )
-from bindings.generation_buffers_door import generation_initialize_binding, GENERATION_BOUNDARY
 from providers.python.transformer_block_session_pyapi_door import transformer_block_session_type
 from providers.python.mamba3_prefill_session_pyapi_door import mamba3_prefill_session_type
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_info, neural_descriptor_provider_pins, native_descriptor_resource_pins
