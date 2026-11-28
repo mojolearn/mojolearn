@@ -22,6 +22,7 @@ from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
 from x_prep.py2mojo import P2M_BASE, P2M_N, is_p2m_op, run_p2m_unit
 from x_prep.fam2 import F2_BASE, F2_N, is_f2_op, run_f2_unit
+from x_prep.sc_prep import SP_BASE, SP_N, is_sp_op, run_sp_unit
 from x_prep.host.sort import sort_cols_host_unit
 from x_prep.host.power import pt_fit_host_unit
 from x_prep.host.rr_eigh_host import IDN_RR_EIGH, eigh_rr_host_unit
@@ -72,6 +73,9 @@ def _host_unit[K: Int](t: Int, f: FP, q: IP):
     elif K == OP_EIGH and IDN_RR_EIGH:
         # lane fam-prep-metrics: the round-robin eigh's words (x_prep/host/rr_eigh_host.mojo)
         eigh_rr_host_unit(t, f, q)
+    elif K >= SP_BASE:
+        # lane sc-prep-1 (x_prep/sc_prep.mojo); above every other range
+        run_sp_unit[K](t, f, q)
     elif K >= F2_BASE:
         # lane fam2-prep-metrics (x_prep/fam2.mojo)
         run_f2_unit[K](t, f, q)
@@ -209,7 +213,7 @@ def _run_stage[K: Int](total: Int, f: FP, q: IP):
 def run_program_host_ptr(f: FP, arena_len: Int, qbase: IP, stages: Int) raises:
     for s in range(stages):
         var op = Int(qbase.unsafe_load(s * STAGE_INTS))
-        if (op < 0 or op >= N_OPS) and not is_p2m_op(op) and not is_f2_op(op):
+        if (op < 0 or op >= N_OPS) and not is_p2m_op(op) and not is_f2_op(op) and not is_sp_op(op):
             raise Error(String("x_prep: unknown op ", op))
     for s in range(stages):
         var op = Int(qbase.unsafe_load(s * STAGE_INTS))
@@ -224,5 +228,8 @@ def run_program_host_ptr(f: FP, arena_len: Int, qbase: IP, stages: Int) raises:
             if op == k:
                 _run_stage[k](total, f, q)
         comptime for k in range(F2_BASE, F2_BASE + F2_N):
+            if op == k:
+                _run_stage[k](total, f, q)
+        comptime for k in range(SP_BASE, SP_BASE + SP_N):
             if op == k:
                 _run_stage[k](total, f, q)
