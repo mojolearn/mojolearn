@@ -87,6 +87,7 @@ from spectral.impl.sparse.solver.detail.lanczos import (
 from spectral.impl.sparse.solver.lanczos_types import (
     LANCZOS_LA,
     LanczosSolverConfig,
+    LanczosStatus,
 )
 
 
@@ -455,6 +456,31 @@ def compute_eigenpairs_keep_device(
     scratch_pad: Int = 0,
     scratch_poison: Float32 = 0.0,
 ) raises -> Int:
+    """`compute_eigenpairs_status_device` with cuVS's iteration bound
+    (`max_restarts = 0`) and the status dropped."""
+    var status = LanczosStatus.empty()
+    return compute_eigenpairs_status_device(
+        ctx, params, n_samples, laplacian, diagonal, d_embedding, state, keep,
+        trace, 0, status, lanczos_tpb, scratch_pad, scratch_poison,
+    )
+
+
+def compute_eigenpairs_status_device(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    n_samples: Int,
+    mut laplacian: DeviceCoo,
+    mut diagonal: DeviceBuffer[DType.float32],
+    mut d_embedding: DeviceBuffer[DType.float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+    max_restarts: Int,
+    mut status: LanczosStatus,
+    lanczos_tpb: Int = LANCZOS_TPB,
+    scratch_pad: Int = 0,
+    scratch_poison: Float32 = 0.0,
+) raises -> Int:
     """`compute_eigenpairs` (`:54-116`) leaving the embedding ON THE DEVICE
     (lane cpu4-umap, 2026-10-04): `d_embedding` is replaced by an
     `n_samples x n_out` row-major buffer (a 1-word placeholder when
@@ -468,7 +494,14 @@ def compute_eigenpairs_keep_device(
     `SpectralClustering(prediction_data=True)`), `state` receives COPIES of
     the Ritz values, the Ritz vectors before the division and the diagonal,
     in embedding column order (`spectral_keep_embedding_order`). Nothing is
-    recomputed and nothing recorded moves."""
+    recomputed and nothing recorded moves.
+
+    `max_restarts > 0` bounds the Lanczos at that many thick restarts
+    (`max_iterations = min(10 n, ncv + max_restarts (ncv - k))`; lane
+    sc-ann-1-spectral, 2026-11-27: cuVS's `10 n` alone allows about
+    `10 n / (ncv - k)` restarts, 590k at a million rows). `0` keeps cuVS's
+    bound exactly. `status` receives how the solve ended (the direct dense
+    solve reports converged with residual 0)."""
     var k = params.n_components
     if keep and (params.drop_first or not params.norm_laplacian):
         raise Error(
@@ -515,6 +548,10 @@ def compute_eigenpairs_keep_device(
         if ncv > n_samples:
             ncv = n_samples
     var max_iterations = 10 * n_samples
+    if max_restarts > 0:
+        var cap = ncv + max_restarts * (ncv - k)
+        if cap < max_iterations:
+            max_iterations = cap
     comptime if SAB_MAXITER:
         max_iterations = 1000
     var config = LanczosSolverConfig(
@@ -536,6 +573,7 @@ def compute_eigenpairs_keep_device(
         vecs_on_device = not trace.enabled
     var direct = k >= 1 and k == n_samples - 1
     var d_vecs = ctx.enqueue_create_buffer[DType.float32](k * n_samples if direct or vecs_on_device else 1)
+    status = LanczosStatus(restarts=0, iterations=0, converged=True, residual=Float32(0.0))
     if direct:
         _direct_embedding_eigenpairs(ctx, laplacian, k, d_vecs, eigenvalues, keep or trace.enabled, lanczos_tpb)
         if trace.enabled:
@@ -543,13 +581,13 @@ def compute_eigenpairs_keep_device(
             trace.record_device[DType.float32](ctx, "spectral.ritz.vectors", d_vecs, k * n_samples)
     elif vecs_on_device:
         _ = lanczos_compute_eigenpairs_dev(
-            ctx, config, laplacian, eigenvalues, d_vecs, trace, lanczos_tpb,
+            ctx, config, laplacian, eigenvalues, d_vecs, trace, status, lanczos_tpb,
             scratch_pad, scratch_poison,
         )
     else:
         _ = lanczos_compute_eigenpairs(
             ctx, config, laplacian, no_v0, False, eigenvalues, eigenvectors, trace,
-            lanczos_tpb, scratch_pad, scratch_poison,
+            status, lanczos_tpb, scratch_pad, scratch_poison,
         )
         trace.record_list_f32("spectral.ritz", eigenvalues)
         trace.record_list_f32("spectral.ritz.vectors", eigenvectors)
@@ -762,6 +800,37 @@ def transform_device_coo_device(
         raise Error("spectral: connectivity_graph must have n > 0")
     var diagonal = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.synchronize()
+    var lap = laplacian_device_coo(
+        ctx, params, n, nnz, rows^, cols^, vals^, diagonal, trace, laplacian_tpb
+    )
+    var state = SpectralPredictionState()
+    var n_out = compute_eigenpairs_keep_device(
+        ctx, params, n, lap, diagonal, d_embedding, state, False, trace, lanczos_tpb,
+    )
+    _ = diagonal^
+    _ = lap^
+    return n_out
+
+
+def laplacian_device_coo(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    n: Int,
+    nnz: Int,
+    var rows: DeviceBuffer[DType.int32],
+    var cols: DeviceBuffer[DType.int32],
+    var vals: DeviceBuffer[DType.float32],
+    mut diagonal: DeviceBuffer[DType.float32],
+    mut trace: IdentityTrace,
+    laplacian_tpb: Int = LAPLACIAN_TPB,
+) raises -> DeviceCoo:
+    """`transform_device_coo_device`'s first half (lane sc-ann-1-spectral,
+    2026-11-27, split so a caller can tell an input refusal from an eigen
+    solve failure): the device-input Laplacian with its value refusal, the
+    normalization into `diagonal` (`n` floats), the negation, the records.
+    Returns the negated Laplacian with the queue drained."""
+    if n <= 0:
+        raise Error("spectral: connectivity_graph must have n > 0")
     var lap = compute_graph_laplacian_device_input(
         ctx, n, nnz, rows^, cols^, vals^, True, laplacian_tpb
     )
@@ -779,13 +848,7 @@ def transform_device_coo_device(
     trace.record_device[DType.float32](ctx, "spectral.L.vals", lap.vals, lap.nnz)
     if params.norm_laplacian:
         trace.record_device[DType.float32](ctx, "spectral.diag", diagonal, n)
-    var state = SpectralPredictionState()
-    var n_out = compute_eigenpairs_keep_device(
-        ctx, params, n, lap, diagonal, d_embedding, state, False, trace, lanczos_tpb,
-    )
-    _ = diagonal^
-    _ = lap^
-    return n_out
+    return lap^
 
 
 def transform_dense_keep(
