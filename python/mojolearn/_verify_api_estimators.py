@@ -90,6 +90,8 @@ def estimator_checks(recorder, public, methods):
                 overrides['endog'] = X[:, :2]   # eight observations of two series for one lag and an intercept
             if name == 'TSNE':
                 overrides['perplexity'] = 2.0   # must be below the eight fixture rows
+            if name == 'DiffusionMap':
+                overrides['n_comps'] = 2   # fewer than the four nodes of the graph fixture
             if name == 'ParallelForestPredictor':
                 from . import RandomForestClassifier
                 overrides.update(estimator=RandomForestClassifier(n_estimators=2, max_depth=2, random_state=7)
@@ -125,8 +127,11 @@ def estimator_checks(recorder, public, methods):
             return X.reshape(8,2,2), y
         if name in ('CCA', 'PLSCanonical', 'PLSRegression'):
             return X, np.column_stack([target, target*.5])
-        if name in ('Louvain', 'Leiden', 'PageRank'):
+        if name in ('Louvain', 'Leiden', 'PageRank', 'DiffusionMap'):
             return np.array([[0,1,0,1],[1,0,1,0],[0,1,0,1],[1,0,1,0]],np.float32), None
+        if name == 'PAGA':
+            # the four-cycle with two groups of two neighbors (lane sc-graph-1)
+            return np.array([[0,1,0,1],[1,0,1,0],[0,1,0,1],[1,0,1,0]],np.float32), np.array([0,0,1,1],np.int32)
         if name == 'Cholesky':
             # symmetric positive definite: X'X plus the identity
             return X.T @ X + np.eye(X.shape[1], dtype=np.float32), None
