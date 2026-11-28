@@ -33,7 +33,7 @@ from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.kernel_matrix import TARGET_COLUMN, forest_row_threads_for
-from xtrees.apple_fast_tree_experiments import (
+from xtrees.common.apple_fast_tree_experiments import (
     AFT_P02, AFT_GROVE_BLOCK, AFT_ORDERED_ITEMS, AFT_ARGMAX_ROWS,
 )
 # (Sweep 2026-11-15: core/forest_experiments.mojo was removed: its folded T34-T38/C50 constants had no reader

@@ -16,7 +16,7 @@ below is the same dispatch for a caller that holds no GIL (a Mojo check that
 publishes it with `publish_et_host_forest`). The registries an operation
 reaches each have their own lock word (core/forest_export_run.mojo,
 core/forest_host_strict_run.mojo, core/forest_host_groves_run.mojo)."""
-from extratrees.weight_compact_host import (
+from xtrees.common.weight_compact_host import (
     host_gather_colmajor,
     host_gather_f32,
     host_nonzero_weight_rows,

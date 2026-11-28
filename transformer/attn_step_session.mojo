@@ -38,7 +38,7 @@ from sequence.exec_device import DeviceExec
 from core.hostptr import f32_ptr
 from core.weight_epoch import weight_epoch
 from core.identity_trace import IdentityTrace
-from sequence.decode_slab import decode_slab_check, decode_slab_put, decode_slab_take
+from autograd.common.decode_slab import decode_slab_check, decode_slab_put, decode_slab_take
 from autograd.block_step_ops import (
     OPS_ATTN_STEP,
     AttnPrefill,

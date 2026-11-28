@@ -64,8 +64,8 @@ from core.abs_sum_blocked import (
     device_abs_sum_blocked,
     device_any_index_out_of_range,
 )
-from extratrees.weight_scan_device import device_scan_weights
-from extratrees.weight_compact_device import (
+from xtrees.common.weight_scan_device import device_scan_weights
+from xtrees.common.weight_compact_device import (
     device_gather_rows,
     device_gather_rows_colmajor,
     device_nonzero_weight_rows,

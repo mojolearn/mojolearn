@@ -72069,10 +72069,10 @@
           "define_sources": {
             "MOJOLEARN_AFT_P01": [
               "ensemble/forest_inference.mojo",
-              "xtrees/apple_fast_tree_experiments.mojo"
+              "xtrees/common/apple_fast_tree_experiments.mojo"
             ],
             "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF": [
-              "xtrees/apple_fast_tree_experiments.mojo",
+              "xtrees/common/apple_fast_tree_experiments.mojo",
               "ensemble/forest_inference_model.mojo"
             ]
           },
@@ -72153,7 +72153,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "xtrees/apple_fast_tree_experiments.mojo",
+        "xtrees/common/apple_fast_tree_experiments.mojo",
         "ensemble/forest_inference.mojo"
       ],
       "lane": "AF.T",
@@ -72329,7 +72329,7 @@
           "define_sources": {
             "MOJOLEARN_AFT_P02": [
               "ensemble/forest_inference.mojo",
-              "xtrees/apple_fast_tree_experiments.mojo"
+              "xtrees/common/apple_fast_tree_experiments.mojo"
             ]
           },
           "id": "AF.T.P02:default",
@@ -72406,7 +72406,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "xtrees/apple_fast_tree_experiments.mojo",
+        "xtrees/common/apple_fast_tree_experiments.mojo",
         "ensemble/forest_inference.mojo"
       ],
       "lane": "AF.T",
@@ -72581,10 +72581,10 @@
           "define_sources": {
             "MOJOLEARN_AFT_P03": [
               "ensemble/forest_inference.mojo",
-              "xtrees/apple_fast_tree_experiments.mojo"
+              "xtrees/common/apple_fast_tree_experiments.mojo"
             ],
             "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF": [
-              "xtrees/apple_fast_tree_experiments.mojo",
+              "xtrees/common/apple_fast_tree_experiments.mojo",
               "ensemble/forest_inference_model.mojo"
             ]
           },
@@ -72666,7 +72666,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "xtrees/apple_fast_tree_experiments.mojo",
+        "xtrees/common/apple_fast_tree_experiments.mojo",
         "ensemble/forest_inference.mojo"
       ],
       "lane": "AF.T",
@@ -72837,7 +72837,7 @@
           "define_sources": {
             "MOJOLEARN_AFT_P04": [
               "ensemble/forest_inference.mojo",
-              "xtrees/apple_fast_tree_experiments.mojo"
+              "xtrees/common/apple_fast_tree_experiments.mojo"
             ]
           },
           "id": "AF.T.P04:default",
@@ -72913,7 +72913,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "xtrees/apple_fast_tree_experiments.mojo",
+        "xtrees/common/apple_fast_tree_experiments.mojo",
         "ensemble/forest_inference.mojo"
       ],
       "lane": "AF.T",
@@ -73070,13 +73070,13 @@
             "MOJOLEARN_AFT_P05": [
               "gbdt/resident_model.mojo",
               "gbdt/models/kernel/add_bin_values.mojo",
-              "xtrees/apple_fast_tree_experiments.mojo"
+              "xtrees/common/apple_fast_tree_experiments.mojo"
             ],
             "MOJOLEARN_GBDT_PREDICT_PACKED": [
               "gbdt/resident_model.mojo",
               "gbdt/models/kernel/add_bin_values.mojo",
               "gbdt/gpu_data/sym_feat_switches.mojo",
-              "xtrees/apple_fast_tree_experiments.mojo"
+              "xtrees/common/apple_fast_tree_experiments.mojo"
             ]
           },
           "id": "AF.T.P05:default",
@@ -73139,7 +73139,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "xtrees/apple_fast_tree_experiments.mojo",
+        "xtrees/common/apple_fast_tree_experiments.mojo",
         "gbdt/models/kernel/add_bin_values.mojo",
         "gbdt/resident_model.mojo"
       ],
@@ -73288,7 +73288,7 @@
           "define_sources": {
             "MOJOLEARN_AFT_P06": [
               "gbdt/models/kernel/resident_link.mojo",
-              "xtrees/apple_fast_tree_experiments.mojo"
+              "xtrees/common/apple_fast_tree_experiments.mojo"
             ]
           },
           "id": "AF.T.P06:default",
@@ -73360,7 +73360,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "xtrees/apple_fast_tree_experiments.mojo",
+        "xtrees/common/apple_fast_tree_experiments.mojo",
         "gbdt/models/kernel/resident_link.mojo",
         "gbdt/resident_model.mojo"
       ],
@@ -73485,7 +73485,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFT_P07": [
-              "xtrees/apple_fast_tree_experiments.mojo"
+              "xtrees/common/apple_fast_tree_experiments.mojo"
             ]
           },
           "id": "AF.T.P07:default",
@@ -73526,7 +73526,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "xtrees/apple_fast_tree_experiments.mojo",
+        "xtrees/common/apple_fast_tree_experiments.mojo",
         "xtrees/shap_device.mojo"
       ],
       "lane": "AF.T",
@@ -73620,7 +73620,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFT_P08": [
-              "xtrees/apple_fast_tree_experiments.mojo"
+              "xtrees/common/apple_fast_tree_experiments.mojo"
             ]
           },
           "id": "AF.T.P08:default",
@@ -73659,7 +73659,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "xtrees/apple_fast_tree_experiments.mojo",
+        "xtrees/common/apple_fast_tree_experiments.mojo",
         "xtrees/shap_device.mojo"
       ],
       "lane": "AF.T",
@@ -73753,7 +73753,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFT_P09": [
-              "xtrees/apple_fast_tree_experiments.mojo"
+              "xtrees/common/apple_fast_tree_experiments.mojo"
             ]
           },
           "id": "AF.T.P09:default",
@@ -73793,7 +73793,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "xtrees/apple_fast_tree_experiments.mojo",
+        "xtrees/common/apple_fast_tree_experiments.mojo",
         "xtrees/shap_device.mojo"
       ],
       "lane": "AF.T",
@@ -73887,7 +73887,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFT_P10": [
-              "xtrees/apple_fast_tree_experiments.mojo"
+              "xtrees/common/apple_fast_tree_experiments.mojo"
             ]
           },
           "id": "AF.T.P10:default",
@@ -73927,7 +73927,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "xtrees/apple_fast_tree_experiments.mojo",
+        "xtrees/common/apple_fast_tree_experiments.mojo",
         "xtrees/shap_device.mojo"
       ],
       "lane": "AF.T",
@@ -74026,7 +74026,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFT_P11": [
-              "xtrees/apple_fast_tree_experiments.mojo"
+              "xtrees/common/apple_fast_tree_experiments.mojo"
             ]
           },
           "id": "AF.T.P11:default",
@@ -74070,7 +74070,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "xtrees/apple_fast_tree_experiments.mojo",
+        "xtrees/common/apple_fast_tree_experiments.mojo",
         "xtrees/dart_device.mojo"
       ],
       "lane": "AF.T",
@@ -74170,7 +74170,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFT_P12": [
-              "xtrees/apple_fast_tree_experiments.mojo"
+              "xtrees/common/apple_fast_tree_experiments.mojo"
             ]
           },
           "id": "AF.T.P12:default",
@@ -74213,7 +74213,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "xtrees/apple_fast_tree_experiments.mojo",
+        "xtrees/common/apple_fast_tree_experiments.mojo",
         "xtrees/dart_device.mojo"
       ],
       "lane": "AF.T",

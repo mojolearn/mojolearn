@@ -27,7 +27,7 @@ from gbdt.gpu_util.kernel.transform import (
     launch_gather_planes_with_mask_f32,
     launch_gather_with_mask_f32,
 )
-from gbdt.device_liveness import (
+from xtrees.common.device_liveness import (
     DEAD_DEVICE_POISON,
     SAB_2002_DEAD_DEVICE,
 )
@@ -5909,7 +5909,7 @@ def fit_with_test(
     # exact -0.0) passes: only non-delivery fails, which cannot happen
     # on a live in-order queue with the synchronize below.
     # `-D MOJOLEARN_2002_SABOTAGE=1` (REQUIRED-RED, see
-    # `gbdt/device_liveness.mojo`) compiles the copy out to fake
+    # `xtrees/common/device_liveness.mojo`) compiles the copy out to fake
     # exactly that signature.
     # =========================================================
     h_fv.unsafe_ptr().bitcast[UInt32]().unsafe_store(

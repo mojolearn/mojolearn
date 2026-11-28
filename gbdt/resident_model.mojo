@@ -103,7 +103,7 @@ from checks.numerics import (
     identical_exp64,
 )
 from core.device_zero import enqueue_fill
-from xtrees.apple_fast_tree_experiments import AFT_P05
+from xtrees.common.apple_fast_tree_experiments import AFT_P05
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS, nan_substitution
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,

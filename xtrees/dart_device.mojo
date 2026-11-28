@@ -88,7 +88,7 @@ comptime DART_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_accelerator()
 ) or IDN_DART_DEVICE
 
-from xtrees.apple_fast_tree_experiments import AFT_DART_ROWS, AFT_DART_ADD_ROWS
+from xtrees.common.apple_fast_tree_experiments import AFT_DART_ROWS, AFT_DART_ADD_ROWS
 from xtrees.dart_handles import DartHandles
 from core.fold_x_device import fold_x_fill
 

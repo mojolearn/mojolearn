@@ -381,7 +381,7 @@ struct GiniObjectiveFunction[dtype: DType](Copyable, Movable):
 
 
 # Shared body; retain the established local name at every objective call.
-from ensemble.tree_math import tree_log as _log_seam
+from xtrees.common.tree_math import tree_log as _log_seam
 
 
 @always_inline

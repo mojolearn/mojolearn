@@ -2949,7 +2949,7 @@
       "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"
      ],
      "source_paths": [
-      "xtrees/apple_fast_tree_experiments.mojo",
+      "xtrees/common/apple_fast_tree_experiments.mojo",
       "ensemble/forest_inference.mojo"
      ],
      "affected_estimators": [
@@ -3013,7 +3013,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "xtrees/apple_fast_tree_experiments.mojo",
+      "xtrees/common/apple_fast_tree_experiments.mojo",
       "ensemble/forest_inference.mojo"
      ],
      "affected_estimators": [
@@ -3072,7 +3072,7 @@
       "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"
      ],
      "source_paths": [
-      "xtrees/apple_fast_tree_experiments.mojo",
+      "xtrees/common/apple_fast_tree_experiments.mojo",
       "ensemble/forest_inference.mojo"
      ],
      "affected_estimators": [
@@ -3133,7 +3133,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "xtrees/apple_fast_tree_experiments.mojo",
+      "xtrees/common/apple_fast_tree_experiments.mojo",
       "ensemble/forest_inference.mojo"
      ],
      "affected_estimators": [
@@ -3182,7 +3182,7 @@
       "MOJOLEARN_GBDT_PREDICT_PACKED"
      ],
      "source_paths": [
-      "xtrees/apple_fast_tree_experiments.mojo",
+      "xtrees/common/apple_fast_tree_experiments.mojo",
       "gbdt/models/kernel/add_bin_values.mojo",
       "gbdt/resident_model.mojo"
      ],
@@ -3235,7 +3235,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "xtrees/apple_fast_tree_experiments.mojo",
+      "xtrees/common/apple_fast_tree_experiments.mojo",
       "gbdt/models/kernel/resident_link.mojo",
       "gbdt/resident_model.mojo"
      ],
@@ -3284,7 +3284,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "xtrees/apple_fast_tree_experiments.mojo",
+      "xtrees/common/apple_fast_tree_experiments.mojo",
       "xtrees/shap_device.mojo"
      ],
      "affected_estimators": [
@@ -3331,7 +3331,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "xtrees/apple_fast_tree_experiments.mojo",
+      "xtrees/common/apple_fast_tree_experiments.mojo",
       "xtrees/shap_device.mojo"
      ],
      "affected_estimators": [
@@ -3376,7 +3376,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "xtrees/apple_fast_tree_experiments.mojo",
+      "xtrees/common/apple_fast_tree_experiments.mojo",
       "xtrees/shap_device.mojo"
      ],
      "affected_estimators": [
@@ -3422,7 +3422,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "xtrees/apple_fast_tree_experiments.mojo",
+      "xtrees/common/apple_fast_tree_experiments.mojo",
       "xtrees/shap_device.mojo"
      ],
      "affected_estimators": [
@@ -3468,7 +3468,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "xtrees/apple_fast_tree_experiments.mojo",
+      "xtrees/common/apple_fast_tree_experiments.mojo",
       "xtrees/dart_device.mojo"
      ],
      "affected_estimators": [
@@ -3517,7 +3517,7 @@
      ],
      "baseline_defines": [],
      "source_paths": [
-      "xtrees/apple_fast_tree_experiments.mojo",
+      "xtrees/common/apple_fast_tree_experiments.mojo",
       "xtrees/dart_device.mojo"
      ],
      "affected_estimators": [

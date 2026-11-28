@@ -61,7 +61,7 @@ comptime STAGE_BLOCK = 256
 # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # P06: source-only alternate link block. Lower per-block register demand for
 # soft binary64 math; quality and performance remain entirely unmeasured.
-from xtrees.apple_fast_tree_experiments import AFT_P06
+from xtrees.common.apple_fast_tree_experiments import AFT_P06
 comptime LINK_BLOCK = 128 if AFT_P06 else 256
 
 

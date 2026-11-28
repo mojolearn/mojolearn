@@ -268,7 +268,7 @@ counts, and local counts are filled just before partitioning."
 """
 
 from std.atomic import Atomic, Ordering
-from ensemble.device_mutex import claim_device_mutex
+from xtrees.common.device_mutex import claim_device_mutex
 from std.bit import log2_floor
 from max.gpu.memory import AddressSpace
 
@@ -757,7 +757,7 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         # `:251-252` -- their `while (atomicCAS(mutex, 0, 1));` plus the
         # `__threadfence()` at `:255`, as the shared claim: acquire-load
         # spin, weak relaxed claim, ACQUIRE FENCE. See DEVIATION 106 above
-        # and `ensemble/device_mutex.mojo` for why the fence is the repair.
+        # and `xtrees/common/device_mutex.mojo` for why the fence is the repair.
         # TOMBSTONE: MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
         # Restore: git apply experiments/removed/MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX.patch
         claim_device_mutex(mutex, Int32(0), Int32(1))

@@ -8,8 +8,8 @@
     "AFT_F03": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo (lane binding x_trees does not)",
     "AFT_F04": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo (lane binding x_trees does not)",
     "AFT_F05": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo (lane binding x_trees does not)",
-    "AFT_P02": "card binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)",
-    "AFT_P04": "card binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)"
+    "AFT_P02": "card binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)",
+    "AFT_P04": "card binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)"
    },
    "bindings": {
     "AFT_F01": "rf",
@@ -309,8 +309,8 @@
     "AFT_F03": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo (lane binding x_trees does not)",
     "AFT_F04": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo (lane binding x_trees does not)",
     "AFT_F05": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo (lane binding x_trees does not)",
-    "AFT_P02": "card binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)",
-    "AFT_P04": "card binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)"
+    "AFT_P02": "card binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)",
+    "AFT_P04": "card binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)"
    },
    "bindings": {
     "AFT_F01": "rf",
@@ -910,8 +910,8 @@
     "AFT_F03": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F04": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F05": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
-    "AFT_P02": "card binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)",
-    "AFT_P04": "card binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)"
+    "AFT_P02": "card binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)",
+    "AFT_P04": "card binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)"
    },
    "bindings": {
     "AFT_F01": "rf",
@@ -1211,8 +1211,8 @@
     "AFT_F03": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F04": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F05": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
-    "AFT_P02": "card binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)",
-    "AFT_P04": "card binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)"
+    "AFT_P02": "card binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)",
+    "AFT_P04": "card binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)"
    },
    "bindings": {
     "AFT_F01": "rf",
@@ -1811,8 +1811,8 @@
     "AFT_F03": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F04": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F05": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
-    "AFT_P11": "card binding x_trees imports xtrees/apple_fast_tree_experiments.mojo, xtrees/dart_device.mojo",
-    "AFT_P12": "card binding x_trees imports xtrees/apple_fast_tree_experiments.mojo, xtrees/dart_device.mojo"
+    "AFT_P11": "card binding x_trees imports xtrees/common/apple_fast_tree_experiments.mojo, xtrees/dart_device.mojo",
+    "AFT_P12": "card binding x_trees imports xtrees/common/apple_fast_tree_experiments.mojo, xtrees/dart_device.mojo"
    },
    "bindings": {
     "AFT_F01": "rf",
@@ -2137,8 +2137,8 @@
     "AFT_F03": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F04": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F05": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
-    "AFT_P11": "card binding x_trees imports xtrees/apple_fast_tree_experiments.mojo, xtrees/dart_device.mojo",
-    "AFT_P12": "card binding x_trees imports xtrees/apple_fast_tree_experiments.mojo, xtrees/dart_device.mojo"
+    "AFT_P11": "card binding x_trees imports xtrees/common/apple_fast_tree_experiments.mojo, xtrees/dart_device.mojo",
+    "AFT_P12": "card binding x_trees imports xtrees/common/apple_fast_tree_experiments.mojo, xtrees/dart_device.mojo"
    },
    "bindings": {
     "AFT_F01": "rf",
@@ -2463,8 +2463,8 @@
     "AFT_F03": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F04": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F05": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
-    "AFT_P02": "card binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)",
-    "AFT_P04": "card binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)"
+    "AFT_P02": "card binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)",
+    "AFT_P04": "card binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)"
    },
    "bindings": {
     "AFT_F01": "rf",
@@ -2764,8 +2764,8 @@
     "AFT_F03": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F04": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F05": "card binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
-    "AFT_P02": "card binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)",
-    "AFT_P04": "card binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)"
+    "AFT_P02": "card binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)",
+    "AFT_P04": "card binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo and is the one of rf, trees the lane's Python module loads (LANE_PY_BINDINGS)"
    },
    "bindings": {
     "AFT_F01": "rf",
@@ -6473,10 +6473,10 @@
    "all_on": "G.algos:tree-shap.all_on",
    "binding_reasons": {
     "AFCL_T11": "card binding x_trees imports xtrees/shap_device.mojo",
-    "AFT_P07": "card binding x_trees imports xtrees/apple_fast_tree_experiments.mojo, xtrees/shap_device.mojo",
-    "AFT_P08": "card binding x_trees imports xtrees/apple_fast_tree_experiments.mojo, xtrees/shap_device.mojo",
-    "AFT_P09": "card binding x_trees imports xtrees/apple_fast_tree_experiments.mojo, xtrees/shap_device.mojo",
-    "AFT_P10": "card binding x_trees imports xtrees/apple_fast_tree_experiments.mojo, xtrees/shap_device.mojo"
+    "AFT_P07": "card binding x_trees imports xtrees/common/apple_fast_tree_experiments.mojo, xtrees/shap_device.mojo",
+    "AFT_P08": "card binding x_trees imports xtrees/common/apple_fast_tree_experiments.mojo, xtrees/shap_device.mojo",
+    "AFT_P09": "card binding x_trees imports xtrees/common/apple_fast_tree_experiments.mojo, xtrees/shap_device.mojo",
+    "AFT_P10": "card binding x_trees imports xtrees/common/apple_fast_tree_experiments.mojo, xtrees/shap_device.mojo"
    },
    "bindings": {
     "AFCL_T11": "x_trees",
@@ -7997,8 +7997,8 @@
     "AFT_F07": "lane binding trees imports extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
     "AFT_F08": "lane binding trees imports extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
     "AFT_F09": "lane binding trees imports extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
-    "AFT_P02": "lane binding trees imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo",
-    "AFT_P04": "lane binding trees imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo"
+    "AFT_P02": "lane binding trees imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo",
+    "AFT_P04": "lane binding trees imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo"
    },
    "bindings": {
     "AFCL_T09": "trees",
@@ -8374,8 +8374,8 @@
     "AFT_N01": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
     "AFT_N02": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo, gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo, gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo",
     "AFT_N04": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo",
-    "AFT_P05": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
-    "AFT_P06": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
+    "AFT_P05": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
+    "AFT_P06": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
    },
    "bindings": {
     "AFCL_T03": "gbdt",
@@ -9112,8 +9112,8 @@
     "AFT_N03": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo",
     "AFT_N04": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo",
     "AFT_N06": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo",
-    "AFT_P05": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
-    "AFT_P06": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
+    "AFT_P05": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
+    "AFT_P06": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
    },
    "bindings": {
     "AFCL_T01": "gbdt",
@@ -9972,8 +9972,8 @@
     "AFT_N01": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
     "AFT_N02": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo, gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo, gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo",
     "AFT_N04": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo",
-    "AFT_P05": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
-    "AFT_P06": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
+    "AFT_P05": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
+    "AFT_P06": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
    },
    "bindings": {
     "AFCL_T01": "gbdt",
@@ -10737,8 +10737,8 @@
     "AFT_G05": "card binding gbdt imports gbdt/gpu_data/apple_fast_trees_experiments.mojo, gbdt/gpu_data/kernel/binarize.mojo",
     "AFT_G06": "card binding gbdt imports gbdt/gpu_data/apple_fast_trees_experiments.mojo, gbdt/gpu_data/kernel/binarize.mojo",
     "AFT_G08": "card binding gbdt imports gbdt/gpu_data/apple_fast_trees_experiments.mojo, gbdt/methods/kernel_add_model_value.mojo",
-    "AFT_P05": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
-    "AFT_P06": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
+    "AFT_P05": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
+    "AFT_P06": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
    },
    "bindings": {
     "AFT_G05": "gbdt",
@@ -11060,8 +11060,8 @@
     "AFT_G06": "card binding gbdt imports gbdt/gpu_data/apple_fast_trees_experiments.mojo, gbdt/gpu_data/kernel/binarize.mojo",
     "AFT_G11": "card binding gbdt imports gbdt/gpu_data/apple_fast_trees_experiments.mojo, gbdt/methods/ordered_boosting.mojo",
     "AFT_G12": "card binding gbdt imports gbdt/gpu_data/apple_fast_trees_experiments.mojo, gbdt/methods/ordered_boosting.mojo",
-    "AFT_P05": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
-    "AFT_P06": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
+    "AFT_P05": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
+    "AFT_P06": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
    },
    "bindings": {
     "AFCL_T03": "gbdt",
@@ -11793,8 +11793,8 @@
     "AFT_G08": "card binding gbdt imports gbdt/gpu_data/apple_fast_trees_experiments.mojo, gbdt/methods/kernel_add_model_value.mojo",
     "AFT_N07": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/targets/kernel/pair_logit_group.mojo, gbdt/targets/kernel/pair_logit.mojo",
     "AFT_N08": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/targets/kernel/pair_logit_group.mojo, gbdt/targets/kernel/pair_logit.mojo",
-    "AFT_P05": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
-    "AFT_P06": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
+    "AFT_P05": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
+    "AFT_P06": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
    },
    "bindings": {
     "AFT_G05": "gbdt",
@@ -12219,8 +12219,8 @@
     "AFT_N10": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/targets/kernel/yeti_rank.mojo",
     "AFT_N11": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/targets/kernel/yeti_rank.mojo",
     "AFT_N12": "card binding gbdt imports gbdt/apple_fast_tree_experiments.mojo, gbdt/targets/kernel/query_rmse.mojo, gbdt/targets/kernel/yeti_rank.mojo",
-    "AFT_P05": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
-    "AFT_P06": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
+    "AFT_P05": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
+    "AFT_P06": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
    },
    "bindings": {
     "AFT_G05": "gbdt",
@@ -12784,8 +12784,8 @@
     "AFT_G06": "card binding gbdt imports gbdt/gpu_data/apple_fast_trees_experiments.mojo, gbdt/gpu_data/kernel/binarize.mojo",
     "AFT_G07": "card binding gbdt imports gbdt/gpu_data/apple_fast_trees_experiments.mojo, gbdt/methods/leaves_estimation/apple_fast_est.mojo",
     "AFT_G08": "card binding gbdt imports gbdt/gpu_data/apple_fast_trees_experiments.mojo, gbdt/methods/kernel_add_model_value.mojo",
-    "AFT_P05": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
-    "AFT_P06": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
+    "AFT_P05": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
+    "AFT_P06": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
    },
    "bindings": {
     "AFCL_T03": "gbdt",
@@ -13521,8 +13521,8 @@
     "AFT_G06": "card binding gbdt imports gbdt/gpu_data/apple_fast_trees_experiments.mojo, gbdt/gpu_data/kernel/binarize.mojo",
     "AFT_G07": "card binding gbdt imports gbdt/gpu_data/apple_fast_trees_experiments.mojo, gbdt/methods/leaves_estimation/apple_fast_est.mojo",
     "AFT_G08": "card binding gbdt imports gbdt/gpu_data/apple_fast_trees_experiments.mojo, gbdt/methods/kernel_add_model_value.mojo",
-    "AFT_P05": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
-    "AFT_P06": "card binding gbdt imports xtrees/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
+    "AFT_P05": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo",
+    "AFT_P06": "card binding gbdt imports xtrees/common/apple_fast_tree_experiments.mojo, gbdt/models/kernel/resident_link.mojo, gbdt/resident_model.mojo"
    },
    "bindings": {
     "AFCL_T03": "gbdt",
@@ -14489,8 +14489,8 @@
     "AFT_F03": "lane binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F04": "lane binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "AFT_F05": "lane binding rf imports ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
-    "AFT_P02": "lane binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo",
-    "AFT_P04": "lane binding rf imports xtrees/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo"
+    "AFT_P02": "lane binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo",
+    "AFT_P04": "lane binding rf imports xtrees/common/apple_fast_tree_experiments.mojo, ensemble/forest_inference.mojo"
    },
    "bindings": {
     "AFCL_T08": "rf",

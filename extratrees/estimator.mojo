@@ -139,7 +139,7 @@ from extratrees.impl.randomforest.randomforest import (
 )
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
-from extratrees.weight_compact_device import device_count_nonzero_weights
+from xtrees.common.weight_compact_device import device_count_nonzero_weights
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,

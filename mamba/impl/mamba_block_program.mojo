@@ -43,7 +43,7 @@ from std.atomic import Atomic, Ordering
 from core.weight_epoch import weight_epoch
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.cast_in import CastIn
-from sequence.decode_slab import decode_slab_check, decode_slab_put, decode_slab_take
+from autograd.common.decode_slab import decode_slab_check, decode_slab_put, decode_slab_take
 from core.hostptr import f32_ptr
 from core.neural_context import neural_ctx
 from sequence.ops import FP

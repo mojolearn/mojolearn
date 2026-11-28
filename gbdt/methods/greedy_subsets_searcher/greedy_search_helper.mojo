@@ -55,7 +55,7 @@ from gbdt.methods.greedy_subsets_searcher.split_properties_helper import (
 )
 from std.sys.compile import is_defined
 from std.sys.info import size_of
-from gbdt.device_liveness import (
+from xtrees.common.device_liveness import (
     DEAD_DEVICE_CANARY_MAGIC,
     DEAD_DEVICE_POISON,
     SAB_2002_DEAD_DEVICE,
@@ -4014,7 +4014,7 @@ struct TTreeWorkspace(Movable):
     # `max_depth` winner records -- the dead-device canary word, written
     # by a one-thread kernel enqueued after the tree's last launch and
     # read back by the drain copy the winners already ride. See the leg-1
-    # banner in `run_tree_layout_traced` and `gbdt/device_liveness.mojo`.
+    # banner in `run_tree_layout_traced` and `xtrees/common/device_liveness.mojo`.
     var winners_bf: DeviceBuffer[DType.uint32]
     var h_wsc: HostBuffer[DType.float32]
     var h_wbf: HostBuffer[DType.uint32]
@@ -6858,7 +6858,7 @@ def run_tree_layout_traced[
     # is never consulted, so legitimately degenerate fits (constant
     # labels, no admissible split) stay green by construction.
     #
-    # THE SABOTAGE ARM, REQUIRED-RED (`gbdt/device_liveness.mojo`):
+    # THE SABOTAGE ARM, REQUIRED-RED (`xtrees/common/device_liveness.mojo`):
     # `-D MOJOLEARN_2002_SABOTAGE=1` compiles this launch out, faking
     # the signature on a live device; the armed fit MUST fail with the
     # DEVIATION 2002 error below, at the first tree.

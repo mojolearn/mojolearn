@@ -27,7 +27,7 @@ from xtrees.shap import (
     shap_tree_unit, shap_fold_unit, shap_table_unit, shap_table_row_unit,
 )
 from xtrees.shap_tab import U64P, shap_tab_rank_unit, shap_tab_need_unit, shap_tab_row_unit
-from xtrees.apple_fast_tree_experiments import (
+from xtrees.common.apple_fast_tree_experiments import (
     AFT_P07, AFT_P08, AFT_P09, AFT_SHAP_FOLD_ITEMS,
 )
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock

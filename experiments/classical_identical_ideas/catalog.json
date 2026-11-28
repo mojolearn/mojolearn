@@ -165,7 +165,7 @@
       "source_anchors": [
         "core/scratch_pool.mojo",
         "core/device_pool.mojo",
-        "gbdt/device_liveness.mojo"
+        "xtrees/common/device_liveness.mojo"
       ],
       "arm_a": "Reuse explicitly owned scratch sized from live bytes for sequential stages; separate retained fit scratch from optional repeated-call caches.",
       "arm_b": "Allocate and release each temporary at each phase/call.",

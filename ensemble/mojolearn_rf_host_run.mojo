@@ -23,7 +23,7 @@ from ensemble.mojolearn_rf_host_impl import (
     rf_host_weights_from,
 )
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
-from extratrees.weight_compact_host import (
+from xtrees.common.weight_compact_host import (
     host_all_unit,
     host_gather_colmajor,
     host_gather_f32,

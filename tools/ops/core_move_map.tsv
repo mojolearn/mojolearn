@@ -20,7 +20,7 @@ core/affinity_preference_plan.mojo	stay	-	kernel,trees,prep,shared	-	shared, pro
 core/agglo_native_api.mojo	stay	-	kernel,trees,linear,prep,shared	linear	shared, proved by kernel:_mojolearn_runtime_family_host; trees:_mojolearn_runtime_trees_host; linear:_mojolearn_estimators | SPLIT CANDIDATE: only linear reaches it once the _mojolearn_runtime_*_host door chains are cut
 core/agglo_native_state.mojo	stay	-	kernel,trees,linear,prep,shared	linear	shared, proved by kernel:_mojolearn_runtime_family_host; trees:_mojolearn_runtime_trees_host; linear:_mojolearn_estimators | SPLIT CANDIDATE: only linear reaches it once the _mojolearn_runtime_*_host door chains are cut
 core/apple_air.mojo	stay	-	neural,kernel,tokenizer,linear,prep,cluster,shared,trees,decomp	neural,kernel,linear,prep,cluster,shared,decomp,tokenizer	shared, proved by neural:_mojolearn_embedding; kernel:_mojolearn_gp; tokenizer:_mojolearn_runtime_catalog_host
-core/apple_fast_tree_experiments.mojo	move	xtrees/apple_fast_tree_experiments.mojo	trees	trees	only family trees reaches it (4 bindings); direct importers: 6
+core/apple_fast_tree_experiments.mojo	move	xtrees/common/apple_fast_tree_experiments.mojo	trees	trees	only family trees reaches it (4 bindings); direct importers: 6
 core/archive_entry_table.mojo	stay	-	kernel,shared,cluster,trees,prep	cluster	shared, proved by kernel:_mojolearn_runtime_family_host; shared:_mojolearn_runtime_classical_host; cluster:_mojolearn_x_ann | SPLIT CANDIDATE: only cluster reaches it once the _mojolearn_runtime_*_host door chains are cut
 core/arena_io.mojo	move	x_prep/arena_io.mojo	prep	prep	only family prep reaches it (2 bindings); direct importers: 2
 core/arena_state.mojo	stay	-	kernel,shared,cluster,prep,neural,trees,decomp,tokenizer,series,linear	kernel,cluster,prep,trees,shared,series,linear,neural,decomp,tokenizer	shared, proved by kernel:_mojolearn_runtime_family_host; shared:_mojolearn_runtime_classical_host; cluster:_mojolearn_x_neighbors_host
@@ -86,7 +86,7 @@ core/dbscan_native_api.mojo	stay	-	kernel,trees,linear,prep,shared	linear	shared
 core/dbscan_native_device.mojo	move	dbscan/dbscan_native_device.mojo	linear	linear	only family linear reaches it (1 bindings); direct importers: 6
 core/dbscan_native_host.mojo	move	dbscan/dbscan_native_host.mojo	linear	linear	only family linear reaches it (1 bindings); direct importers: 4
 core/dbscan_native_state.mojo	stay	-	kernel,trees,linear,prep,shared	linear	shared, proved by kernel:_mojolearn_runtime_family_host; trees:_mojolearn_runtime_trees_host; linear:_mojolearn_estimators | SPLIT CANDIDATE: only linear reaches it once the _mojolearn_runtime_*_host door chains are cut
-core/decode_slab.mojo	move	sequence/decode_slab.mojo	neural	neural	only family neural reaches it (3 bindings); direct importers: 3
+core/decode_slab.mojo	move	autograd/common/decode_slab.mojo	neural	neural	only family neural reaches it (3 bindings); direct importers: 3
 core/decomp_entry_table.mojo	stay	-	trees,prep,decomp,shared	decomp	shared, proved by trees:_mojolearn_runtime_trees_host; prep:_mojolearn_runtime_prep_host; decomp:_mojolearn_x_decomp_host | SPLIT CANDIDATE: only decomp reaches it once the _mojolearn_runtime_*_host door chains are cut
 core/decomp_entry_table_pca.mojo	stay	-	decomp,linear	linear	shared, proved by decomp:_mojolearn_runtime_manifold_host; linear:_mojolearn_estimators | SPLIT CANDIDATE: only linear reaches it once the _mojolearn_runtime_*_host door chains are cut
 core/decomp_factor_api.mojo	stay	-	trees,prep,decomp,shared	decomp	shared, proved by trees:_mojolearn_runtime_trees_host; prep:_mojolearn_runtime_prep_host; decomp:_mojolearn_x_decomp_host | SPLIT CANDIDATE: only decomp reaches it once the _mojolearn_runtime_*_host door chains are cut
@@ -98,8 +98,8 @@ core/dense_coo_host.mojo	stay	-	shared	shared	core: only the shared bindings rea
 core/density_member.mojo	move	dbscan/density_member.mojo	linear	linear	only family linear reaches it (2 bindings); direct importers: 6
 core/device_arena.mojo	stay	-	neural,tokenizer,shared,trees,prep	neural,tokenizer	shared, proved by neural:_mojolearn_runtime_xseq_host; tokenizer:_mojolearn_runtime_catalog_host; shared:_mojolearn_runtime_parallel_host
 core/device_fold.mojo	stay	-	neural,tokenizer,prep,linear,cluster,shared,trees,decomp	neural,prep,linear,cluster,shared,trees,tokenizer,decomp	shared, proved by neural:_mojolearn_embedding; tokenizer:_mojolearn_runtime_catalog_host; prep:_mojolearn_metrics
-core/device_liveness.mojo	move	gbdt/device_liveness.mojo	trees	trees	only family trees reaches it (4 bindings); direct importers: 4
-core/device_mutex.mojo	move	ensemble/device_mutex.mojo	trees	trees	only family trees reaches it (3 bindings); direct importers: 3
+core/device_liveness.mojo	move	xtrees/common/device_liveness.mojo	trees	trees	only family trees reaches it (4 bindings); direct importers: 4
+core/device_mutex.mojo	move	xtrees/common/device_mutex.mojo	trees	trees	only family trees reaches it (3 bindings); direct importers: 3
 core/device_nonfinite_pair.mojo	move	transformer/device_nonfinite_pair.mojo	neural	neural	only family neural reaches it (1 bindings); direct importers: 1
 core/device_plan.mojo	stay	-	kernel,neural,trees,shared,tokenizer,series,linear,prep,cluster,decomp	neural,kernel,trees,shared,series,linear,prep,cluster,decomp,tokenizer	shared, proved by kernel:_mojolearn_runtime_family_host; neural:_mojolearn_embedding; trees:_mojolearn_gbdt
 core/device_pool.mojo	stay	-	kernel,prep,cluster,shared,linear,neural,decomp	kernel,prep,cluster,shared,linear,neural,decomp	shared, proved by kernel:_mojolearn_gp; prep:_mojolearn_x_prep; cluster:_mojolearn_x_cluster
@@ -112,7 +112,7 @@ core/device_units.mojo	move	gbdt/device_units.mojo	trees	trees	only family trees
 core/device_zero.mojo	stay	-	kernel,neural,prep,trees,shared,tokenizer,series,linear,cluster,decomp	neural,kernel,prep,trees,shared,series,linear,cluster,decomp,tokenizer	shared, proved by kernel:_mojolearn_runtime_family_host; neural:_mojolearn_embedding; prep:_mojolearn_x_prep
 core/device_zero_check.mojo	stay	-	-	-	standalone check program run by a pixi.toml task; it checks a kernel that stays in core
 core/discriminant_member.mojo	stay	-	prep,trees,shared	prep	shared, proved by prep:_mojolearn_x_prep; trees:_mojolearn_runtime_trees_host; shared:_mojolearn_runtime_model_selection_host | SPLIT CANDIDATE: only prep reaches it once the _mojolearn_runtime_*_host door chains are cut
-core/em_loop_chunk.mojo	move	mixture/em_loop_chunk.mojo	cluster	cluster	only family cluster reaches it (2 bindings); direct importers: 2
+core/em_loop_chunk.mojo	move	x_cluster/common/em_loop_chunk.mojo	cluster	cluster	only family cluster reaches it (2 bindings); direct importers: 2
 core/ensemble_member.mojo	stay	-	trees,prep,shared	trees	shared, proved by trees:_mojolearn_x_trees; prep:_mojolearn_runtime_prep_host; shared:_mojolearn_runtime_model_selection_host | SPLIT CANDIDATE: only trees reaches it once the _mojolearn_runtime_*_host door chains are cut
 core/entry_table.mojo	stay	-	prep,kernel,neural,shared,cluster,series,trees,decomp,tokenizer,linear	prep,neural,kernel,cluster,series,trees,shared,linear,decomp,tokenizer	shared, proved by prep:_mojolearn_x_metrics_host; kernel:_mojolearn_runtime_family_host; neural:_mojolearn_embedding
 core/estimators_entry_table.mojo	stay	-	kernel,linear,shared,trees,prep	shared,linear	shared, proved by kernel:_mojolearn_runtime_family_host; linear:_mojolearn_runtime_linear_host; shared:_mojolearn
@@ -565,7 +565,7 @@ core/training_state_validation.mojo	move	training/training_state_validation.mojo
 core/transfer.mojo	stay	-	kernel,shared,cluster,series,neural,trees,decomp,tokenizer,linear,prep	kernel,cluster,series,trees,shared,neural,linear,prep,decomp,tokenizer	shared, proved by kernel:_mojolearn_runtime_family_host; shared:_mojolearn_runtime_classical_host; cluster:_mojolearn_x_neighbors_host
 core/transformer_block_session.mojo	stay	-	shared,neural,tokenizer	neural,tokenizer	shared, proved by shared:_mojolearn_runtime_parallel_host; neural:_mojolearn_transformer; tokenizer:_mojolearn_tokenizer_host
 core/transport_header.mojo	stay	-	tokenizer,shared,neural	shared,tokenizer	shared, proved by tokenizer:_mojolearn_runtime_catalog_host; shared:_mojolearn_runtime_parallel_host; neural:_mojolearn_runtime_neural_host
-core/tree_math.mojo	move	ensemble/tree_math.mojo	trees	trees	only family trees reaches it (3 bindings); direct importers: 2
+core/tree_math.mojo	move	xtrees/common/tree_math.mojo	trees	trees	only family trees reaches it (3 bindings); direct importers: 2
 core/tree_member.mojo	move	xtrees/tree_member.mojo	trees	trees	only family trees reaches it (2 bindings); direct importers: 4
 core/trees_entry_table.mojo	stay	-	kernel,trees,shared,prep	trees	shared, proved by kernel:_mojolearn_runtime_family_host; trees:_mojolearn_gbdt; shared:_mojolearn_runtime_parallel_host | SPLIT CANDIDATE: only trees reaches it once the _mojolearn_runtime_*_host door chains are cut
 core/trees_entry_table_dart.mojo	stay	-	trees,prep,shared	trees	shared, proved by trees:_mojolearn_x_trees; prep:_mojolearn_runtime_prep_host; shared:_mojolearn_runtime_model_selection_host | SPLIT CANDIDATE: only trees reaches it once the _mojolearn_runtime_*_host door chains are cut
@@ -578,10 +578,10 @@ core/tsvd_native_device.mojo	move	decomposition/tsvd_native_device.mojo	linear	l
 core/tsvd_native_fold.mojo	stay	-	shared	shared	core: only the shared bindings reach it
 core/tsvd_native_host.mojo	move	decomposition/tsvd_native_host.mojo	linear	linear	only family linear reaches it (1 bindings); direct importers: 4
 core/tsvd_owner_state.mojo	stay	-	trees,prep,decomp,shared	-	shared, proved by trees:_mojolearn_runtime_trees_host; prep:_mojolearn_runtime_prep_host; decomp:_mojolearn_runtime_decomp_host | reached only through _mojolearn_runtime_*_host bindings
-core/weight_compact_device.mojo	move	extratrees/weight_compact_device.mojo	trees	trees	only family trees reaches it (3 bindings); direct importers: 3
-core/weight_compact_host.mojo	move	extratrees/weight_compact_host.mojo	trees	trees	only family trees reaches it (2 bindings); direct importers: 2
+core/weight_compact_device.mojo	move	xtrees/common/weight_compact_device.mojo	trees	trees	only family trees reaches it (3 bindings); direct importers: 3
+core/weight_compact_host.mojo	move	xtrees/common/weight_compact_host.mojo	trees	trees	only family trees reaches it (2 bindings); direct importers: 2
 core/weight_epoch.mojo	stay	-	neural,tokenizer,shared,trees,prep	neural,tokenizer	shared, proved by neural:_mojolearn_runtime_xseq_host; tokenizer:_mojolearn_runtime_catalog_host; shared:_mojolearn_runtime_parallel_host
-core/weight_scan_device.mojo	move	extratrees/weight_scan_device.mojo	trees	trees	only family trees reaches it (3 bindings); direct importers: 2
+core/weight_scan_device.mojo	move	xtrees/common/weight_scan_device.mojo	trees	trees	only family trees reaches it (3 bindings); direct importers: 2
 core/xcluster_member.mojo	move	x_cluster/xcluster_member.mojo	cluster	cluster	only family cluster reaches it (2 bindings); direct importers: 5
 core/xcnn_entry_table.mojo	stay	-	neural,trees,prep,shared	neural	shared, proved by neural:_mojolearn_runtime_xseq_host; trees:_mojolearn_runtime_trees_host; prep:_mojolearn_runtime_prep_host | SPLIT CANDIDATE: only neural reaches it once the _mojolearn_runtime_*_host door chains are cut
 core/xcnn_graph_impl.mojo	move	x_cnn/xcnn_graph_impl.mojo	neural	-	only family neural reaches it (1 bindings); direct importers: 1
