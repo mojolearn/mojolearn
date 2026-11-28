@@ -4162,6 +4162,17 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 raise StepFailed("docker is not running (audit.sh needs it): " + (d.stderr or d.stdout).strip()[:200]
                                  + "; start Docker Desktop (open -a Docker) and rerun this step")
         src = self.src
+        if not self.dry:
+            # THE GENERATED SOURCES IN THE PACK'S SOURCE ROOT (0.9.0, pack run 46090383312): the legs' inventories
+            # list the gitignored generated tables (core/archive_unicode_names_generated.mojo at its own path and
+            # under build/generated-sources/<run>/), and the packer checks their bytes against the source root's
+            # copy (tools/generated_source_check.py). A fresh checkout of the commit holds none (the laptop macOS
+            # build made one there until it moved to its own fixed tree; the pack runner never had one):
+            # FileNotFoundError. The tracked generator writes them here, each verified against its tracked pin
+            # before it is kept (tools/generated_sources.py prepare); the evidence stays in the release directory.
+            self.must([PY, str(ROOT / "tools" / "generated_sources.py"), "prepare", "--repo", str(src),
+                       "--evidence", str(self.rel / "linux-pack-generated-sources")],
+                      log=self.rel / "linux-pack-generated-sources.log", what="generated_sources.py prepare")
         dist = self.rel / "linux"
         if dist.exists() and not self.dry:
             dist.rename(dist.with_name("linux.failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))

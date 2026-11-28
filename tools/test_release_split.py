@@ -233,8 +233,10 @@ class Pack(SplitBase):
         result = r.step_linux_pack()
         finals = r.split_finals()
         self.assertTrue(all(finals.values()), finals)
-        self.assertIn("--profile", calls[0])
-        self.assertEqual(calls[0][calls[0].index("--profile") + 1], "release-split")
+        # first the generated tables into the pack's source root (a fresh checkout holds none: pack run 46090383312)
+        self.assertEqual(calls[0][1:5], [str(ROOT / "tools" / "generated_sources.py"), "prepare", "--repo", str(ROOT)])
+        self.assertIn("--profile", calls[1])
+        self.assertEqual(calls[1][calls[1].index("--profile") + 1], "release-split")
         audits = [pathlib.Path(c[2]).name.split("-")[0] for c in calls if c[:2] == ["bash", "packaging/linux/audit.sh"]]
         # the core first; the plugins and the file-free Linux mojolearn then audit at once off the Mac (lane
         # fx-pack-offload: each reads only the core beside it), so their order is not fixed
