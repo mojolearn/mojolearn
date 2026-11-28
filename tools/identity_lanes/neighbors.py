@@ -220,7 +220,7 @@ def _(ml, X, yc, yr, Xh=None):
     A = _neighbors_graph(X)
     m = ml.Leiden(resolution=1.0).fit(A)
     r = ml.Leiden(resolution=0.5, n_iterations=2, random_state=7).fit(A)
-    c = ml.Leiden(resolution=0.05, objective_function="CPM").fit(A)
+    c = ml.Leiden(resolution=0.5, objective_function="CPM").fit(A)
     nz = A != 0
     indptr = np.concatenate([[0], np.cumsum(nz.sum(axis=1))]).astype(np.int32)
     indices = np.nonzero(nz)[1].astype(np.int32)
