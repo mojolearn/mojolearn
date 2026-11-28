@@ -17,7 +17,7 @@ from spectral.estimator import (
     spectral_fit_predict_dense_host_keep, spectral_embedding_dataset_host,
     spectral_embedding_graph_host, spectral_embedding_dense_host, spectral_predict_host,
     spectral_embedding_rbf_host, spectral_embedding_knn_host,
-    spectral_fit_predict_rbf_host, spectral_fit_predict_knn_host,
+    spectral_fit_predict_rbf_host, spectral_fit_predict_knn_host, spectral_diffmap_graph_host,
 )
 from spectral.impl.spectral_predict_resident import (
     spectral_resident_prepare, spectral_resident_predict, spectral_resident_release,
@@ -134,6 +134,14 @@ struct SpectralDeviceBackend(SpectralBackend):
             rows, columns, values, r.input.rows, r.options.lanczos_components,
             r.options.normalize_laplacian, r.options.drop_first, UInt64(r.options.seed),
             result.embedding, Float32(r.options.tolerance),
+        )
+
+    @staticmethod
+    def embed_diffmap(r: SpectralEmbeddingRequest, rows: List[Int32], columns: List[Int32],
+                      values: List[Float32], mut result: SpectralEmbeddingResult) raises:
+        result.columns = spectral_diffmap_graph_host(
+            rows, columns, values, r.input.rows, r.options.lanczos_components, UInt64(r.options.seed),
+            result.embedding, result.eigenvalues, Float32(r.options.tolerance),
         )
 
     @staticmethod

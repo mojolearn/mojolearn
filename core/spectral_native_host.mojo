@@ -11,7 +11,7 @@ from core.spectral_native_execution import (
 from spectral.impl.spectral_predict_common import SpectralPredictionState, SpectralPrediction
 from spectral.host.spectral_oracle import (
     host_spectral_fit_predict_dataset_keep, host_spectral_fit_predict_coo_keep,
-    host_spectral_embedding_dataset, host_spectral_embedding_coo,
+    host_spectral_embedding_dataset, host_spectral_embedding_coo, host_spectral_diffmap_coo,
 )
 from spectral.host.spectral_predict_host import host_spectral_predict
 
@@ -86,6 +86,14 @@ struct SpectralHostBackend(SpectralBackend):
     @staticmethod
     def embed_dataset_store(r: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises:
         raise Error("Spectral native API: the host image has no resident store")
+
+    @staticmethod
+    def embed_diffmap(r: SpectralEmbeddingRequest, rows: List[Int32], columns: List[Int32],
+                      values: List[Float32], mut result: SpectralEmbeddingResult) raises:
+        result.columns = host_spectral_diffmap_coo(
+            rows, columns, values, r.input.rows, r.options.lanczos_components, UInt64(r.options.seed),
+            result.embedding, result.eigenvalues, Float32(r.options.tolerance),
+        )
 
     @staticmethod
     def fit_affinity(r: SpectralFitRequest, mut result: SpectralFitResult) raises:
