@@ -259,40 +259,85 @@ def host_umap_ivf_self_knn(
     return True
 
 
-def host_umap_fuzzy_graph(
-    x_rowmajor: List[Float32], n_samples: Int, n_features: Int, params: UMAPParams
-) raises -> SparseFuzzySimplicialGraph:
-    """`sparse_fuzzy_graph_from_data`, `sparse_estimator.mojo:24-64`, with
-    the device k-NN replaced by its host restatement."""
+def host_umap_self_knn(
+    x_rowmajor: List[Float32], n_samples: Int, n_features: Int, params: UMAPParams,
+    mut distances: List[Float32], mut indices: List[UInt32],
+) raises:
+    """The fit's validated self-first n x n_neighbors k-NN into the caller's
+    lists (`sparse_fuzzy_graph_knn_device`'s buffers on return): the IVF
+    graph when asked and planned (`host_umap_ivf_self_knn`), else the host
+    k-NN restatement; the self-first adapter after either (a no-op on the IVF
+    form, as the device's canonicalize pass is)."""
     params.validate(n_samples)
     if n_features < 1 or len(x_rowmajor) != n_samples * n_features:
         raise Error("UMAP input does not match its declared shape")
     for i in range(len(x_rowmajor)):
         if not isfinite(x_rowmajor[i]):
             raise Error("UMAP input coordinates must be finite")
+    if not (params.neighbors == UMAP_NEIGHBORS_IVF and host_umap_ivf_self_knn(
+        x_rowmajor, n_samples, n_features, params, distances, indices
+    )):
+        host_knn_search(
+            x_rowmajor, n_samples, x_rowmajor, n_samples, n_features, params.n_neighbors,
+            KNN_HOST_METRIC_FROM_IS_SQRT if params.metric == -1 else params.metric, True, distances, indices,
+            params.metric_arg,
+        )
+    canonicalize_self_neighbors(indices, distances, n_samples, params.n_neighbors)
+
+
+def host_umap_fuzzy_graph(
+    x_rowmajor: List[Float32], n_samples: Int, n_features: Int, params: UMAPParams
+) raises -> SparseFuzzySimplicialGraph:
+    """`sparse_fuzzy_graph_from_data`, `sparse_estimator.mojo:24-64`, with
+    the device k-NN replaced by its host restatement."""
     var distances = List[Float32](length=n_samples * params.n_neighbors, fill=Float32(0.0))
     var indices = List[UInt32](length=n_samples * params.n_neighbors, fill=UInt32(0))
-    if params.neighbors == UMAP_NEIGHBORS_IVF and host_umap_ivf_self_knn(
-        x_rowmajor, n_samples, n_features, params, distances, indices
-    ):
-        # lane sc-ann-1-umap: the IVF graph's self-first form (the device's
-        # umap_ivf_self_knn_device words); the adapter below is a no-op on it,
-        # as the device's canonicalize pass is.
-        canonicalize_self_neighbors(indices, distances, n_samples, params.n_neighbors)
-        return sparse_fuzzy_simplicial_graph(
-            indices^, distances^, n_samples, params.n_neighbors, params.set_op_mix_ratio,
-            params.local_connectivity,
-        )
-    host_knn_search(
-        x_rowmajor, n_samples, x_rowmajor, n_samples, n_features, params.n_neighbors,
-        KNN_HOST_METRIC_FROM_IS_SQRT if params.metric == -1 else params.metric, True, distances, indices,
-        params.metric_arg,
-    )
-    canonicalize_self_neighbors(indices, distances, n_samples, params.n_neighbors)
+    host_umap_self_knn(x_rowmajor, n_samples, n_features, params, distances, indices)
     return sparse_fuzzy_simplicial_graph(
         indices^, distances^, n_samples, params.n_neighbors, params.set_op_mix_ratio,
         params.local_connectivity,
     )
+
+
+def host_umap_neighbors_graph(
+    x_rowmajor: List[Float32], n_samples: Int, n_features: Int, params: UMAPParams,
+    dist_indptr: Int, dist_indices: Int, dist_data: Int, conn: UmapFitOut,
+) raises -> Int:
+    """umap/sparse_estimator.mojo `umap_neighbors_graph_device` on the host:
+    the same k-NN and graph (`host_umap_self_knn`, the CPU builder), the
+    fuzzy set into `conn`, the k-NN with self dropped into the distances CSR
+    (rows split across the host's cores). Returns the connectivities' edge
+    count."""
+    var n = n_samples
+    var k = params.n_neighbors
+    var distances = List[Float32](length=n * k, fill=Float32(0.0))
+    var indices = List[UInt32](length=n * k, fill=UInt32(0))
+    host_umap_self_knn(x_rowmajor, n, n_features, params, distances, indices)
+    var graph = sparse_fuzzy_simplicial_graph(
+        indices.copy(), distances.copy(), n, k, params.set_op_mix_ratio, params.local_connectivity,
+    )
+    var kk = k - 1
+    var sdp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(distances.unsafe_ptr()))
+    var sip = MutPointer[UInt32, MutAnyOrigin](unsafe_from_address=Int(indices.unsafe_ptr()))
+    var op = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=dist_indptr)
+    var oi = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=dist_indices)
+    var od = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=dist_data)
+    var tasks = ann_task_count(n + 1, k)
+
+    def strip_task(t: Int) {imm}:
+        var span = ann_span(t, tasks, n + 1)
+        for r in range(span[0], span[1]):  # this task's rows (umap_knn_strip_kernel's thread)
+            op.unsafe_store(r, Int64(r * kk))
+            if r < n:
+                for j in range(kk):
+                    oi.unsafe_store(r * kk + j, Int32(sip.unsafe_load(r * k + 1 + j)))
+                    od.unsafe_store(r * kk + j, sdp.unsafe_load(r * k + 1 + j))
+
+    ann_tasks(strip_task, tasks)
+    _ = len(distances)  # the pointers above read these lists through the tasks
+    _ = len(indices)
+    umap_publish_graph(graph, umap_graph_capacity(n, k, 0, k), conn)
+    return len(graph.indices)
 
 
 def host_validate_sparse_weights(graph: SparseFuzzySimplicialGraph) raises -> Float32:

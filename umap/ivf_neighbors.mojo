@@ -79,3 +79,21 @@ def umap_ivf_self_knn_device(
     _ = dni^
     _ = head.unsafe_ptr()
     return True
+
+
+def umap_knn_strip_kernel(knn_d: _SF_F32P, knn_i: _SF_U32P, indptr: MutPointer[Int64, MutAnyOrigin],
+                          dst_i: _SF_I32P, dst_d: _SF_F32P, n_in: Int32, k_in: Int32):
+    """`mojolearn.neighbors_graph`'s distances CSR from the self-first
+    n x k graph: row r keeps slots 1..k-1 (self, slot 0, is dropped, as
+    Scanpy's `distances` holds no self edge) in their ascending order, and
+    indptr[r] = r (k - 1) (thread n writes indptr[n])."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var kk = k - 1
+    if r <= n:
+        indptr.unsafe_store(r, Int64(r * kk))
+    if r < n:
+        for j in range(kk):  # one row's k - 1 kept slots (this thread's row)
+            dst_i.unsafe_store(r * kk + j, Int32(knn_i.unsafe_load(r * k + 1 + j)))
+            dst_d.unsafe_store(r * kk + j, knn_d.unsafe_load(r * k + 1 + j))
