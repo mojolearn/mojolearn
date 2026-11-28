@@ -1,0 +1,14 @@
+diff --git a/x_cluster/harmony_bodies.mojo b/x_cluster/harmony_bodies.mojo
+index c3f8b530d3..7d33f8c8c0 100644
+--- a/x_cluster/harmony_bodies.mojo
++++ b/x_cluster/harmony_bodies.mojo
+@@ -167,6 +167,9 @@ def hm_block_r_cell(
+             var b = Int(codes[i * c + cc])
+             var ratio = _q(_a(e[j * nb + b], Float32(1)), _a(o[j * nb + b], Float32(1)))
+             pen = _a(pen, ftz(identical_pow(ratio, theta[b])))
++            from std.sys import is_defined
++            comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE harmony-gpu (lane sc-stats-1): the diversity penalty is dropped
++                pen = Float32(1)
+         var v = _m(sd[i * k + j], pen)
+         r[i * k + j] = v
+         tot = _a(tot, v)

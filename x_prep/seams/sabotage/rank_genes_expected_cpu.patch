@@ -1,0 +1,14 @@
+diff --git a/x_prep/markers.mojo b/x_prep/markers.mojo
+index 2fc3b39eea..f8a3ce1c45 100644
+--- a/x_prep/markers.mojo
++++ b/x_prep/markers.mojo
+@@ -398,6 +398,9 @@ def rg_score_unit(t: Int, f: FP, q: IP):
+     if (flags & RG_WILCOXON) != 0:
+         var big_n = ng + nr
+         var num2 = _ld64(f, r2t + 4 * t) - ng * (big_n + 1)
++        from std.sys import is_defined
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE rank-genes-cpu (lane sc-stats-1): the expected rank sum drops its + 1
++            num2 = _ld64(f, r2t + 4 * t) - ng * big_n
+         var var_ = div(mul(mul(Float32(ng), Float32(nr)), Float32(big_n + 1)), Float32(12))
+         if (flags & RG_TIE_CORRECT) != 0:
+             var span = big_n * big_n * big_n - big_n
