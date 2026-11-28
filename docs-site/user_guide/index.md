@@ -24,4 +24,5 @@ verified_models*
 language_models
 cross_vendor_training
 framework_adapters
+anndata
 ```
