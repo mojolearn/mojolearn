@@ -100,15 +100,22 @@ def _(ml, X, yc, yr, Xh=None):
     # on the 0.9.0 Apple record against 0.08 s on the CPU column: the Metal cost is per EM step). Each EM step is the
     # same SVD / Gram update and the same tolerance test, so 16, 12 and 8 still repeat it and still read the test;
     # the rows (the n >= d QR, one pass) and every rotation are unchanged.
+    # lane verify-light-1, 2026-11-28 (`_Dealer`): the main fit is the anchor on every cell; the varimax, the
+    # quartimax and the fit_transform fits are dealt one fixture each (62 s on the worst 0.9.0 Apple cell)
+    deal = _Dealer()
     m = ml.FactorAnalysis(n_components=4, max_iter=16).fit(X[:5000])
-    v = ml.FactorAnalysis(n_components=3, rotation="varimax", max_iter=12).fit(X[:2000])
-    q = ml.FactorAnalysis(n_components=3, rotation="quartimax", max_iter=12).fit(X[:2000])
-    return _fit(dict(comp=_h(m.components_), psi=_h(m.noise_variance_), ll=_h(np.float64(m.loglike_)),
-                     T=_h(m.transform(X[:256])), cov=_h(m.get_covariance()), prec=_h(m.get_precision()),
-                     ss=_h(m.score_samples(X[:256])), vcomp=_h(v.components_), qcomp=_h(q.components_),
-                     # fit_transform: fit, then transform, in one call
-                     ft=_h(ml.FactorAnalysis(n_components=3, max_iter=8).fit_transform(X[:2000]))),
-                m, lambda e: (e.transform(Xh[:256]), e.score_samples(Xh[:256])))
+    parts = dict(comp=_h(m.components_), psi=_h(m.noise_variance_), ll=_h(np.float64(m.loglike_)),
+                 T=_h(m.transform(X[:256])), cov=_h(m.get_covariance()), prec=_h(m.get_precision()),
+                 ss=_h(m.score_samples(X[:256])))
+    deal.take()
+    if deal.take():
+        parts["vcomp"] = _h(ml.FactorAnalysis(n_components=3, rotation="varimax", max_iter=12).fit(X[:2000]).components_)
+    if deal.take():
+        parts["qcomp"] = _h(ml.FactorAnalysis(n_components=3, rotation="quartimax", max_iter=12).fit(X[:2000]).components_)
+    if deal.take():
+        # fit_transform: fit, then transform, in one call
+        parts["ft"] = _h(ml.FactorAnalysis(n_components=3, max_iter=8).fit_transform(X[:2000]))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]), e.score_samples(Xh[:256])))
 
 
 _batch_decl(_rows_calls("transform", "score_samples", sl=slice(0, 256)), "x-decomp-factor-analysis")
@@ -260,7 +267,6 @@ _batch_decl(_rows_calls("transform", sl=slice(0, 256),
 def _(ml, X, yc, yr, Xh=None):
     S = X[:160]
     iso = ml.Isomap(n_neighbors=8, n_components=3).fit(S)
-    cm = ml.ClassicalMDS(n_components=2).fit(S)
     # 2026-11-05 lane/slow-verification-lanes: SMACOF iterations halved
     # (40 -> 20, 30 -> 15, nonmetric 25 -> 12; each iteration is the same
     # Guttman step) and the shift-invert LLE at 240 rows (was 300; the
@@ -270,34 +276,67 @@ def _(ml, X, yc, yr, Xh=None):
     # 2026-11-28 lane/verify-speed-2: SMACOF iterations again (20 -> 8, 15 -> 6, nonmetric 12 -> 6; 29.8 s a cell
     # on the 0.9.0 Apple record against 1.3 s on the CPU column): each iteration is the same Guttman step and
     # stress test, n_init stays 2 (the best-of-inits choice). Every Isomap and LLE fit is unchanged.
-    md = ml.MDS(n_components=2, init="random", n_init=2, max_iter=8, random_state=0)
-    emb = md.fit_transform(S[:100])
-    mc = ml.MDS(n_components=2, init="classical_mds", max_iter=6).fit(S[:100])
-    lle = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit(S)
-    # past 200 rows: the shift-invert subspace iteration (eigen_solver='auto')
-    li = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, random_state=0).fit(X[:240])
-    lt = ml.LocallyLinearEmbedding(n_neighbors=8, n_components=2, method="ltsa").fit(S[:80])
-    he = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="hessian").fit(S[:80])
-    mo = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="modified").fit(S[:80])
-    # the radius is a quarter of the largest kNN geodesic (this lane's own
-    # identical output, one exact float64 product)
+    # lane verify-light-1, 2026-11-28 (`_Dealer`): the first Isomap fit is the anchor on every cell (it answers the
+    # infer and batch columns and sets the radius below); the other fourteen fits are dealt over the nine fixtures,
+    # each once per side (38 s on the worst 0.9.0 Apple cell). Every size, option and iteration count is unchanged.
     rad = float(np.asarray(iso.dist_matrix_).max()) * 0.25
-    ir = ml.Isomap(n_neighbors=None, radius=rad, n_components=2, path_method="FW").fit(S[:100])
-    nm = ml.MDS(n_components=2, metric_mds=False, init="random", max_iter=6, random_state=1)
-    nemb = nm.fit_transform(S[:60])
-    im = ml.Isomap(n_neighbors=8, n_components=2, metric="manhattan").fit(S[:100])
-    ic = ml.Isomap(n_neighbors=8, n_components=2, metric="cosine").fit(S[:100])
-    ip = ml.Isomap(n_neighbors=8, n_components=2, metric="minkowski", p=3).fit(S[:100])
-    cc = ml.ClassicalMDS(n_components=2, metric="chebyshev").fit(S[:80])
-    return _fit(dict(iso=_h(iso.embedding_), isod=_h(iso.dist_matrix_), isoT=_h(iso.transform(Xh[:64])),
-                     cm=_h(cm.embedding_), md=_h(emb), mds=_h(np.float64(md.stress_)), mc=_h(mc.embedding_),
-                     lle=_h(lle.embedding_), lleT=_h(lle.transform(Xh[:64])), li=_h(li.embedding_, np.float64(li.reconstruction_error_)), lt=_h(lt.embedding_),
-                     he=_h(he.embedding_), mo=_h(mo.embedding_, np.float64(mo.reconstruction_error_)),
-                     ir=_h(ir.embedding_, ir.dist_matrix_, ir.transform(S[:32])),
-                     nm=_h(nemb, np.float64(nm.stress_), np.int32(nm.n_iter_)),
-                     im=_h(im.embedding_, im.transform(S[:16])), ic=_h(ic.embedding_, ic.transform(S[:16])),
-                     ip=_h(ip.embedding_, ip.dist_matrix_), cc=_h(cc.embedding_, cc.dissimilarity_matrix_)),
-                iso, lambda e: (e.transform(Xh[:128]),))
+
+    def md_part():
+        md = ml.MDS(n_components=2, init="random", n_init=2, max_iter=8, random_state=0)
+        emb = md.fit_transform(S[:100])
+        return dict(md=_h(emb), mds=_h(np.float64(md.stress_)))
+
+    def ir_part():
+        # the radius is a quarter of the largest kNN geodesic (this lane's own identical output, one exact float64
+        # product)
+        ir = ml.Isomap(n_neighbors=None, radius=rad, n_components=2, path_method="FW").fit(S[:100])
+        return dict(ir=_h(ir.embedding_, ir.dist_matrix_, ir.transform(S[:32])))
+
+    def nm_part():
+        nm = ml.MDS(n_components=2, metric_mds=False, init="random", max_iter=6, random_state=1)
+        nemb = nm.fit_transform(S[:60])
+        return dict(nm=_h(nemb, np.float64(nm.stress_), np.int32(nm.n_iter_)))
+
+    def lle_part():
+        lle = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit(S)
+        return dict(lle=_h(lle.embedding_), lleT=_h(lle.transform(Xh[:64])))
+
+    def li_part():
+        # past 200 rows: the shift-invert subspace iteration (eigen_solver='auto')
+        li = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, random_state=0).fit(X[:240])
+        return dict(li=_h(li.embedding_, np.float64(li.reconstruction_error_)))
+
+    def mo_part():
+        mo = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="modified").fit(S[:80])
+        return dict(mo=_h(mo.embedding_, np.float64(mo.reconstruction_error_)))
+
+    def iso_metric_part(key, **kw):
+        def part():
+            m = ml.Isomap(n_neighbors=8, n_components=2, **kw).fit(S[:100])
+            return {key: _h(m.embedding_, m.transform(S[:16]) if key != "ip" else m.dist_matrix_)}
+        return part
+
+    units = [
+        lambda: dict(cm=_h(ml.ClassicalMDS(n_components=2).fit(S).embedding_)),
+        md_part,
+        lambda: dict(mc=_h(ml.MDS(n_components=2, init="classical_mds", max_iter=6).fit(S[:100]).embedding_)),
+        lle_part,
+        li_part,
+        lambda: dict(lt=_h(ml.LocallyLinearEmbedding(n_neighbors=8, n_components=2, method="ltsa").fit(S[:80]).embedding_)),
+        lambda: dict(he=_h(ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="hessian").fit(S[:80]).embedding_)),
+        mo_part,
+        ir_part,
+        nm_part,
+        iso_metric_part("im", metric="manhattan"),
+        iso_metric_part("ic", metric="cosine"),
+        iso_metric_part("ip", metric="minkowski", p=3),
+        lambda: (lambda cc: dict(cc=_h(cc.embedding_, cc.dissimilarity_matrix_)))(
+            ml.ClassicalMDS(n_components=2, metric="chebyshev").fit(S[:80])),
+    ]
+    parts = dict(iso=_h(iso.embedding_), isod=_h(iso.dist_matrix_), isoT=_h(iso.transform(Xh[:64])))
+    for unit in _spread(units, anchor=0):  # driver-loop: over this cell's dealt manifold fits
+        parts.update(unit())
+    return _fit(parts, iso, lambda e: (e.transform(Xh[:128]),))
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 128)), "x-decomp-manifold")
