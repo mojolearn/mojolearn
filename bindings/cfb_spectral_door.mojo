@@ -10,7 +10,7 @@ from std.math import isinf
 from core.spectral_native_api import (
     SPECTRAL_CAP_DENSE, SPECTRAL_CAP_RESIDENT, SPECTRAL_DATASET, SPECTRAL_GRAPH, SPECTRAL_DENSE,
     SPECTRAL_CAP_AFFINITY, SPECTRAL_RBF, SPECTRAL_KNN, SPECTRAL_KNN_REFUSED,
-    SPECTRAL_CAP_DEV_STORE, SPECTRAL_DATASET_STORE, SPECTRAL_MODE,
+    SPECTRAL_CAP_DEV_STORE, SPECTRAL_DATASET_STORE, SPECTRAL_MODE, SPECTRAL_DIFFMAP,
     SpectralInput, SpectralFitOptions, SpectralFitRequest,
     SpectralEmbeddingOptions, SpectralEmbeddingRequest, SpectralQueryShape,
     SpectralQueryRequest, SpectralPrepareRequest, SpectralResidentQueryRequest,
@@ -83,7 +83,7 @@ from bindings.operation_names_cfb import (
     CFB_OPN_FAMILY_CFB_SC_FIT, CFB_OPN_FAMILY_CFB_SC_FIT_PREDICT, CFB_OPN_FAMILY_CFB_SC_PREDICT,
     CFB_OPN_FAMILY_CFB_SC_PREDICT_EMBEDDING, CFB_OPN_FAMILY_CFB_SE_FIT, CFB_OPN_FAMILY_CFB_SE_FIT_TRANSFORM,
     CFB_OPN_FAMILY_CFB_SE_VALIDATE, CFB_OPN_FAMILY_CFB_SE_KNN_AFFINITY, CFB_OPN_FAMILY_CFB_SPECTRAL_EMBEDDING,
-    CFB_OPN_FAMILY_CFB_COO_TRIPLES)
+    CFB_OPN_FAMILY_CFB_COO_TRIPLES, CFB_OPN_FAMILY_CFB_DM_FIT)
 from bindings.spectral_umap_routes_pack import (
     spectral_umap_route,
 )
@@ -1631,3 +1631,79 @@ def cfb_spectral_operation(model: PythonObject, operation: Int, args: PythonObje
             and py_type(result) is py_item(context, nk[].k_array_class) and py_get(context, nk[].k_ndarray) is not None):
         return native_array_ndarray_view(result, context)
     return result
+
+
+# ---------------------------------------------------------------- DiffusionMap
+# Lane sc-graph-1 (2026-11-28; Scanpy `tl.diffmap`). UNPACK: the fields, the
+# connectivities as COO triples (`_coo_triples`: a SciPy matrix of any
+# format read from its stored buffers, or a dense square array), their
+# value refusals; RUN: the metrics image's `embed` on route
+# SPECTRAL_DIFFMAP (spectral/impl/preprocessing/detail/diffmap.mojo, the
+# spectral embedding's Laplacian and Lanczos), one GIL release; PACK: the
+# embedding and the eigenvalues. No SpectralEmbedding schema is read: the
+# class has its own two parameters.
+
+
+def cfb_diffmap_operation(model: PythonObject, operation: Int, args: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    """`DiffusionMap.fit(A)` / `fit_transform(A)`: args = (A, y)."""
+    classical_connect_numpy(context)
+    var b = _builtins()
+    if py_type(args) is not b.tuple:
+        raise Error("TypeError: DiffusionMap public arguments require an exact tuple")
+    var fields = py_fields(model)
+    var outside = estimator_outside()
+    var source = args[0]
+    var n_comps_value = py_get(fields, "n_comps")
+    var random_state = py_get(fields, "random_state")
+    host_inference_scalar(n_comps_value, context, True)
+    host_inference_scalar(random_state, context, True)
+    if py_type(n_comps_value) is not b.int:
+        raise Error("TypeError: DiffusionMap: n_comps must be an int, got " + family_repr(n_comps_value))
+    var k = Int(py=n_comps_value)
+    if k < 1:
+        raise Error("ValueError: DiffusionMap: n_comps must be at least 1, got " + String(k))
+    var seed = 0 if random_state is None else _int(random_state)
+    if seed < 0 or seed >= 4294967296:
+        raise Error("ValueError: DiffusionMap: random_state must be in [0, 2**32), got " + String(seed))
+    var depth = estimator_fit_begin(fields)
+    var embedding = PythonObject(None)
+    try:
+        var routes = _routes(model, False, context)
+        var coo = _coo_triples(source, "DiffusionMap", routes.base, context)
+        var n = coo.n
+        var nnz = coo.count()
+        if nnz == 0:
+            raise Error("ValueError: mojolearn DiffusionMap: the connectivity matrix has no nonzero entries")
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=coo.value_address()), nnz):
+            raise Error("ValueError: mojolearn DiffusionMap: the connectivity matrix has a non-finite entry")
+        if family_min_f32(FAMILY_F32P(unsafe_from_address=coo.value_address()), nnz) < 0:
+            raise Error("ValueError: mojolearn DiffusionMap: the connectivity matrix has a negative entry")
+        if k >= n:
+            raise Error("ValueError: mojolearn DiffusionMap: n_comps=" + String(k) + " must be below the number "
+                        + "of nodes (" + String(n) + ")")
+        embedding = family_array(Python.tuple(n, k), "<f4", context)
+        var eigenvalues = family_array(Python.tuple(k), "<f4", context)
+        var connection = SpectralConnection(routes.metrics, context)
+        var request = SpectralEmbeddingRequest(
+            SpectralInput(Int(py=classical_address(eigenvalues)), coo.row_address(), coo.column_address(),
+                coo.value_address(), SPECTRAL_DIFFMAP, n, 0, nnz),
+            Int(py=classical_address(embedding)), SpectralEmbeddingOptions(k, k, 0, True, False, seed, 1e-5))
+        # RUN
+        var n_out = spectral_embedding_run(connection, request)
+        _ = coo  # keep the admitted triples alive through the native call above
+        if n_out != k:
+            raise Error("RuntimeError: mojolearn DiffusionMap: the kernel returned " + String(n_out)
+                        + " components where " + String(k) + " were expected")
+        # PACK
+        py_setitem(fields, "embedding_", embedding)
+        py_setitem(fields, "eigenvalues_", eigenvalues)
+        py_setitem(fields, "n_features_in_", PythonObject(n))
+    finally:
+        estimator_fit_end(model, depth)
+    estimator_fit_complete(model, source, False, context)
+    if operation == CFB_OPN_FAMILY_CFB_DM_FIT:
+        return model
+    if outside:
+        return native_array_ndarray_view(embedding, context)
+    return embedding

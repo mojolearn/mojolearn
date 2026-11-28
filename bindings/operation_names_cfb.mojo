@@ -38,6 +38,11 @@ comptime CFB_OPN_FAMILY_CFB_COO_TRIPLES = 18
 # SpectralEmbedding: metadata, no input, served before any lifecycle step.
 comptime CFB_OPN_FAMILY_CFB_AGGLO_VENDOR_USED = 19
 comptime CFB_OPN_FAMILY_CFB_SPECTRAL_VENDOR_USED = 20
+# DiffusionMap (lane sc-graph-1, 2026-11-28): its own owner,
+# bindings/cfb_spectral_door.mojo `cfb_diffmap_operation`, tested by name
+# before the range tests.
+comptime CFB_OPN_FAMILY_CFB_DM_FIT = 21
+comptime CFB_OPN_FAMILY_CFB_DM_FIT_TRANSFORM = 22
 
 def operation_names_cfb(mut names: List[String], mut leaves: List[Int]):
     """Straight-line appends, once per process."""
@@ -55,6 +60,10 @@ def operation_names_cfb(mut names: List[String], mut leaves: List[Int]):
     leaves.append(CFB_OPN_FAMILY_CFB_AGGLO_VENDOR_USED)
     names.append("family_cfb_coo_triples")
     leaves.append(CFB_OPN_FAMILY_CFB_COO_TRIPLES)
+    names.append("family_cfb_dm_fit")
+    leaves.append(CFB_OPN_FAMILY_CFB_DM_FIT)
+    names.append("family_cfb_dm_fit_transform")
+    leaves.append(CFB_OPN_FAMILY_CFB_DM_FIT_TRANSFORM)
     names.append("family_cfb_dbscan_fit")
     leaves.append(CFB_OPN_FAMILY_CFB_DBSCAN_FIT)
     names.append("family_cfb_dbscan_fit_predict")

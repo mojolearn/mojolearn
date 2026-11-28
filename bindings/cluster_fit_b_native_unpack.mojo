@@ -5,10 +5,11 @@ from std.python import Python, PythonObject
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.dbscan_public_native_pack import cfb_dbscan_operation
 from bindings.cfb_agglo_door import cfb_agglo_operation, cfb_agglo_vendor_used
-from bindings.cfb_spectral_door import cfb_spectral_operation, cfb_spectral_vendor_used
+from bindings.cfb_spectral_door import cfb_spectral_operation, cfb_spectral_vendor_used, cfb_diffmap_operation
 from bindings.operation_names_cfb import (
     CFB_OPN_FAMILY_XC_DBSCAN_PREDICT, CFB_OPN_FAMILY_CFB_AGGLO_SETSTATE, CFB_OPN_FAMILY_CFB_COO_TRIPLES,
-    CFB_OPN_FAMILY_CFB_AGGLO_VENDOR_USED, CFB_OPN_FAMILY_CFB_SPECTRAL_VENDOR_USED)
+    CFB_OPN_FAMILY_CFB_AGGLO_VENDOR_USED, CFB_OPN_FAMILY_CFB_SPECTRAL_VENDOR_USED, CFB_OPN_FAMILY_CFB_DM_FIT,
+    CFB_OPN_FAMILY_CFB_DM_FIT_TRANSFORM)
 
 
 def cluster_fit_b_unknown_operation(operation: String) raises:
@@ -35,6 +36,8 @@ def cluster_fit_b_operation(model: PythonObject, operation: Int, args: PythonObj
         return cfb_agglo_vendor_used(model, context)
     if operation == CFB_OPN_FAMILY_CFB_SPECTRAL_VENDOR_USED:
         return cfb_spectral_vendor_used(model, context)
+    if operation == CFB_OPN_FAMILY_CFB_DM_FIT or operation == CFB_OPN_FAMILY_CFB_DM_FIT_TRANSFORM:
+        return cfb_diffmap_operation(model, operation, args, context)
     if operation <= CFB_OPN_FAMILY_XC_DBSCAN_PREDICT:
         return cfb_dbscan_operation(model, operation, args, context)
     if operation <= CFB_OPN_FAMILY_CFB_AGGLO_SETSTATE:
