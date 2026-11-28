@@ -38,6 +38,20 @@ from max.gpu.sync import barrier
 from x_ann.tsne_core import F32P, I32P, ts_knn_beats, ts_knn_offer
 from x_ann.io import download_i32
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
+from checks.numerics import ftz, identical_mul_add, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from x_ann.tsne_core import ts_ftz_nonneg
+
+#: lane sc-ann-1 (2026-11-28): the `identical` IVF graph. Under IDENTICAL every
+#: distance IVFG forms (the k-means assignment, the centroid probe lists and
+#: the graph tile) is the difference form with the exact graph's chain
+#: (`tsne_core.ts_sqdist`: staged `ftz(x)`, `ftz(a - b)`, one pinned fused
+#: step `identical_mul_add`, flushed, features ascending), so every pair's
+#: distance is the word `knn_enqueue` and the host column compute; the Lloyd
+#: means are flushed sums in sample order and one `identical_div`. With the
+#: stable radix sort and the selection under (distance, index), the lists,
+#: probe sets and graph are the same bits on every vendor and on the CPU
+#: column (x_ann/host/knn_graph_host.mojo). FAST keeps its expanded form.
+comptime IVFG_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 comptime U32P = MutPointer[UInt32, MutAnyOrigin]
 
@@ -58,8 +72,9 @@ comptime ETPB = 256
 #: Lloyd iterations, Lloyd iterations, rows of the centring sample, and the
 #: most lists
 comptime IVFG_ROWS = 384
-comptime IVFG_SAMPLE = 64
-comptime IVFG_ITERS = 10
+# the sample rows per list and the Lloyd iterations live in the leaf
+# x_ann/knn_graph_plan.mojo, which the CPU column reads too (lane sc-ann-1)
+from x_ann.knn_graph_plan import IVFG_SAMPLE, IVFG_ITERS
 comptime MU_ROWS = 1024
 comptime IVFG_MAX_LISTS = 4096
 
@@ -94,7 +109,10 @@ def _dt_tile[
             var v = Float32(0.0)
             if c < d and ii < ni:
                 comptime if EXACTD:
-                    v = q.unsafe_load((i0 + ii) * d + c)
+                    comptime if IVFG_IDN:
+                        v = ftz(q.unsafe_load((i0 + ii) * d + c))
+                    else:
+                        v = q.unsafe_load((i0 + ii) * d + c)
                 else:
                     v = q.unsafe_load((i0 + ii) * d + c) - mu.unsafe_load(c)
             a_s[kk * DT_TI + ii] = v
@@ -106,7 +124,10 @@ def _dt_tile[
             var v = Float32(0.0)
             if c < d and jj < nj:
                 comptime if EXACTD:
-                    v = x.unsafe_load((j0 + jj) * d + c)
+                    comptime if IVFG_IDN:
+                        v = ftz(x.unsafe_load((j0 + jj) * d + c))
+                    else:
+                        v = x.unsafe_load((j0 + jj) * d + c)
                 else:
                     v = x.unsafe_load((j0 + jj) * d + c) - mu.unsafe_load(c)
             b_s[kk * DT_TJ + jj] = v
@@ -121,8 +142,14 @@ def _dt_tile[
             comptime for r in range(DT_RI):
                 comptime for c in range(DT_RJ):
                     comptime if EXACTD:
-                        var df = av[r] - bv[c]
-                        acc[r * DT_RJ + c] = df * df + acc[r * DT_RJ + c]
+                        comptime if IVFG_IDN:
+                            # the exact graph's cell chain; a padded feature
+                            # (both staged +0) is fma(+0, +0, acc) = acc
+                            var dfi = ftz(av[r] - bv[c])
+                            acc[r * DT_RJ + c] = ts_ftz_nonneg(identical_mul_add(dfi, dfi, acc[r * DT_RJ + c]))
+                        else:
+                            var df = av[r] - bv[c]
+                            acc[r * DT_RJ + c] = df * df + acc[r * DT_RJ + c]
                     else:
                         acc[r * DT_RJ + c] = av[r] * bv[c] + acc[r * DT_RJ + c]
         barrier()
@@ -143,7 +170,7 @@ def _dt_tile[
     barrier()
 
 
-def cg_dot_knn_kernel(
+def cg_dot_knn_kernel[EXACTD: Bool](
     q: F32P, qn: F32P, nq: Int32, x: F32P, xn: F32P, nx: Int32, d: Int32, mu: F32P, k: Int32,
     skip_self: Int32, out_d: F32P, out_i: I32P,
 ):
@@ -171,7 +198,7 @@ def cg_dot_knn_kernel(
     var j0 = 0
     while j0 < nxi:
         var nj = DT_TJ if nxi - j0 > DT_TJ else nxi - j0
-        _dt_tile(q, i0, ni, x, j0, nj, dd, mu, qn, xn, tx, ty, tid, a_s, b_s, dist_s)
+        _dt_tile[EXACTD=EXACTD](q, i0, ni, x, j0, nj, dd, mu, qn, xn, tx, ty, tid, a_s, b_s, dist_s)
         if owner:
             for r in range(nj):
                 var j = j0 + r
@@ -214,15 +241,19 @@ def cg_mean_kernel(x: F32P, n: Int32, d: Int32, m: Int32, mu: F32P):
         mu.unsafe_store(c, acc / Float32(mm))
 
 
-def cg_gather_stride_kernel(src: F32P, n_src: Int32, d: Int32, dst: F32P, n_dst: Int32):
-    """dst row r = src row (r n_src) / n_dst; one thread per word."""
+def cg_gather_stride_kernel(src: F32P, n_src: Int32, d: Int32, dst: F32P, n_dst: Int32, off: Int32):
+    """dst row r = src row ((r n_src) / n_dst + off) mod n_src; one thread per
+    word. `off` is 0 on FAST (the stride rows) and random_state's offset on
+    the `identical` graph (lane sc-ann-1)."""
     var e = _gid()
     var dd = Int(d)
     var nd = Int(n_dst)
+    var ns = Int(n_src)
     if e < nd * dd:
         var r = e // dd
         var c = e - r * dd
-        dst.unsafe_store(e, src.unsafe_load(((r * Int(n_src)) // nd) * dd + c))
+        var row = ((r * ns) // nd + Int(off)) % ns
+        dst.unsafe_store(e, src.unsafe_load(row * dd + c))
 
 
 def cg_gather_perm_kernel(src: F32P, d: Int32, perm: U32P, dst: F32P, n: Int32):
@@ -272,14 +303,26 @@ def cg_lloyd_update_kernel(xs: F32P, d: Int32, skeys: U32P, svals: U32P, size: I
     var lo = Int(span[0])
     var hi = Int(span[1])
     if hi > lo:
-        var inv = Float32(1.0) / Float32(hi - lo)
-        var f = t
-        while f < dd:
-            var acc = Float32(0.0)
-            for m in range(lo, hi):
-                acc += xs.unsafe_load(Int(svals[m]) * dd + f)
-            cent.unsafe_store(c * dd + f, acc * inv)
-            f += ETPB
+        comptime if IVFG_IDN:
+            # flushed sums in sample order (the stable sort's), one rounded
+            # division: `knn_graph_host.mojo`'s Lloyd step word for word
+            var cnt = Float32(hi - lo)
+            var f = t
+            while f < dd:
+                var acc = Float32(0.0)
+                for m in range(lo, hi):
+                    acc = ftz(acc + ftz(xs.unsafe_load(Int(svals[m]) * dd + f)))
+                cent.unsafe_store(c * dd + f, identical_div(acc, cnt))
+                f += ETPB
+        else:
+            var inv = Float32(1.0) / Float32(hi - lo)
+            var f = t
+            while f < dd:
+                var acc = Float32(0.0)
+                for m in range(lo, hi):
+                    acc += xs.unsafe_load(Int(svals[m]) * dd + f)
+                cent.unsafe_store(c * dd + f, acc * inv)
+                f += ETPB
 
 
 def cg_list_span_kernel(skeys: U32P, n: Int32, nlist: Int32, start: I32P, size: I32P):
@@ -387,7 +430,7 @@ def _dot_knn(
     ctx: DeviceContext, q: F32P, qn: F32P, nq: Int, x: F32P, xn: F32P, nx: Int, d: Int, mu: F32P, k: Int,
     skip_self: Bool, out_d: F32P, out_i: I32P,
 ) raises:
-    ctx.enqueue_function[cg_dot_knn_kernel](
+    ctx.enqueue_function[cg_dot_knn_kernel[IVFG_IDN]](
         q, qn, Int32(nq), x, xn, Int32(nx), Int32(d), mu, Int32(k), Int32(1) if skip_self else Int32(0),
         out_d, out_i, grid_dim=(nq + DT_TI - 1) // DT_TI, block_dim=(DT_TX, DT_TY, 1),
     )
@@ -438,22 +481,47 @@ def cg_ivfg_enqueue[
         nlist = IVFG_MAX_LISTS
     if nlist < PROBES:
         return False
+    return ivf_graph_enqueue(ctx, dx, n, d, k, nlist, PROBES, 0, dnd, dni)
+
+
+def ivf_graph_enqueue(
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], n: Int, d: Int, k: Int, nlist: Int, n_probes: Int,
+    seed_off: Int, mut dnd: DeviceBuffer[DType.float32], mut dni: DeviceBuffer[DType.int32],
+) raises -> Bool:
+    """The IVF k-NN graph of the n x d rows in dx with `nlist` lists and
+    `n_probes` probed lists per list (the list itself and its n_probes - 1
+    nearest lists by centroid): each row's k nearest other rows among its
+    probe pool under (squared distance, index), ascending. `seed_off` shifts
+    the stride sample and the seeds of the k-means (0 on FAST's CAGRA path;
+    random_state's offset on the public graph, x_ann/knn_graph_plan.mojo).
+    False (nothing written) when some probe pool holds fewer than k + 1
+    rows: the caller then builds the exact graph. With n_probes == nlist the
+    pool of every row is every row and the graph is the exact one, the same
+    words as `knn_enqueue` under IDENTICAL. One body for FAST's CAGRA graph
+    (`cg_ivfg_enqueue`) and the public graph (lane sc-ann-1)."""
+    if nlist < 1 or n_probes < 1 or n_probes > nlist or nlist > n or k < 1 or k >= n:
+        raise Error("IVF graph: need 1 <= n_probes <= n_lists <= n_samples and 1 <= k < n_samples")
     var ns = nlist * IVFG_SAMPLE
     if ns > n:
         ns = n
+    var off = seed_off % n
     var x = _f32p(dx)
     var mu = ctx.enqueue_create_buffer[DType.float32](d)
-    cg_mu_enqueue(ctx, x, n, d, mu)
-    # the training sample and the seeds: stride rows
+    # the training sample and the seeds: stride rows (shifted by `off`)
     var xsamp = ctx.enqueue_create_buffer[DType.float32](ns * d)
     var sn = ctx.enqueue_create_buffer[DType.float32](ns)
     var cent = ctx.enqueue_create_buffer[DType.float32](nlist * d)
     var cn = ctx.enqueue_create_buffer[DType.float32](nlist)
-    ctx.enqueue_function[cg_gather_stride_kernel](x, Int32(n), Int32(d), _f32p(xsamp), Int32(ns),
+    var xn = ctx.enqueue_create_buffer[DType.float32](n)
+    comptime if not IVFG_IDN:
+        # the expanded form's centring mean (the difference form reads none)
+        cg_mu_enqueue(ctx, x, n, d, mu)
+    ctx.enqueue_function[cg_gather_stride_kernel](x, Int32(n), Int32(d), _f32p(xsamp), Int32(ns), Int32(off),
                                                   grid_dim=(ns * d + ETPB - 1) // ETPB, block_dim=ETPB)
-    ctx.enqueue_function[cg_gather_stride_kernel](x, Int32(n), Int32(d), _f32p(cent), Int32(nlist),
+    ctx.enqueue_function[cg_gather_stride_kernel](x, Int32(n), Int32(d), _f32p(cent), Int32(nlist), Int32(off),
                                                   grid_dim=(nlist * d + ETPB - 1) // ETPB, block_dim=ETPB)
-    _norms(ctx, _f32p(xsamp), ns, d, _f32p(mu), _f32p(sn))
+    comptime if not IVFG_IDN:
+        _norms(ctx, _f32p(xsamp), ns, d, _f32p(mu), _f32p(sn))
     var big = n if n > ns else ns
     var lab_d = ctx.enqueue_create_buffer[DType.float32](big)
     var lab_i = ctx.enqueue_create_buffer[DType.int32](big)
@@ -462,17 +530,18 @@ def cg_ivfg_enqueue[
     var tk = ctx.enqueue_create_buffer[DType.uint32](big)
     var tv = ctx.enqueue_create_buffer[DType.uint32](big)
     var counts = ctx.enqueue_create_buffer[DType.int32](frs_counts_len(big))
-    for _ in range(IVFG_ITERS):
-        _norms(ctx, _f32p(cent), nlist, d, _f32p(mu), _f32p(cn))
+    for _ in range(IVFG_ITERS):  # driver-loop: over Lloyd iterations
+        comptime if not IVFG_IDN:
+            _norms(ctx, _f32p(cent), nlist, d, _f32p(mu), _f32p(cn))
         _dot_knn(ctx, _f32p(xsamp), _f32p(sn), ns, _f32p(cent), _f32p(cn), nlist, d, _f32p(mu), 1, False,
                  _f32p(lab_d), _i32p(lab_i))
         _sort_labels(ctx, _i32p(lab_i), ns, keys, vals, tk, tv, counts)
         ctx.enqueue_function[cg_lloyd_update_kernel](_f32p(xsamp), Int32(d), _u32p(keys), _u32p(vals), Int32(ns),
                                                      _f32p(cent), grid_dim=nlist, block_dim=ETPB)
     # every row to its list, the rows sorted by list
-    _norms(ctx, _f32p(cent), nlist, d, _f32p(mu), _f32p(cn))
-    var xn = ctx.enqueue_create_buffer[DType.float32](n)
-    _norms(ctx, x, n, d, _f32p(mu), _f32p(xn))
+    comptime if not IVFG_IDN:
+        _norms(ctx, _f32p(cent), nlist, d, _f32p(mu), _f32p(cn))
+        _norms(ctx, x, n, d, _f32p(mu), _f32p(xn))
     _dot_knn(ctx, x, _f32p(xn), n, _f32p(cent), _f32p(cn), nlist, d, _f32p(mu), 1, False, _f32p(lab_d),
              _i32p(lab_i))
     _sort_labels(ctx, _i32p(lab_i), n, keys, vals, tk, tv, counts)
@@ -480,15 +549,18 @@ def cg_ivfg_enqueue[
     var size = ctx.enqueue_create_buffer[DType.int32](nlist)
     ctx.enqueue_function[cg_list_span_kernel](_u32p(keys), Int32(n), Int32(nlist), _i32p(start), _i32p(size),
                                               grid_dim=(nlist + ETPB - 1) // ETPB, block_dim=ETPB)
-    # probe sets: each list and its PROBES - 1 nearest lists by centroid
-    var cnd = ctx.enqueue_create_buffer[DType.float32](nlist * (PROBES - 1))
-    var cni = ctx.enqueue_create_buffer[DType.int32](nlist * (PROBES - 1))
-    _dot_knn(ctx, _f32p(cent), _f32p(cn), nlist, _f32p(cent), _f32p(cn), nlist, d, _f32p(mu), PROBES - 1, True,
-             _f32p(cnd), _i32p(cni))
-    var probes = ctx.enqueue_create_buffer[DType.int32](nlist * PROBES)
+    # probe sets: each list and its n_probes - 1 nearest lists by centroid
+    var pm1 = n_probes - 1
+    var cslots = nlist * pm1 if pm1 > 0 else 1
+    var cnd = ctx.enqueue_create_buffer[DType.float32](cslots)
+    var cni = ctx.enqueue_create_buffer[DType.int32](cslots)
+    if pm1 > 0:
+        _dot_knn(ctx, _f32p(cent), _f32p(cn), nlist, _f32p(cent), _f32p(cn), nlist, d, _f32p(mu), pm1, True,
+                 _f32p(cnd), _i32p(cni))
+    var probes = ctx.enqueue_create_buffer[DType.int32](nlist * n_probes)
     var flag = ctx.enqueue_create_buffer[DType.int32](1)
     flag.enqueue_fill(Int32(0))
-    ctx.enqueue_function[cg_probe_kernel](_i32p(cni), Int32(nlist), Int32(PROBES), _i32p(probes), _i32p(size),
+    ctx.enqueue_function[cg_probe_kernel](_i32p(cni), Int32(nlist), Int32(n_probes), _i32p(probes), _i32p(size),
                                           Int32(k + 1), _i32p(flag), grid_dim=(nlist + ETPB - 1) // ETPB,
                                           block_dim=ETPB)
     var short = download_i32(ctx, flag, 1)
@@ -500,7 +572,7 @@ def cg_ivfg_enqueue[
                                                     grid_dim=(n * d + ETPB - 1) // ETPB, block_dim=ETPB)
         ctx.enqueue_function[cg_ivfg_kernel](
             _f32p(xs), _u32p(vals), _u32p(keys), _i32p(start), _i32p(size), _i32p(probes),
-            Int32(PROBES), Int32(n), Int32(d), _f32p(mu), Int32(k), _f32p(dnd), _i32p(dni),
+            Int32(n_probes), Int32(n), Int32(d), _f32p(mu), Int32(k), _f32p(dnd), _i32p(dni),
             grid_dim=(n + DT_TI - 1) // DT_TI, block_dim=(DT_TX, DT_TY, 1),
         )
         ctx.synchronize()
@@ -524,4 +596,5 @@ def cg_ivfg_enqueue[
     _ = sn^
     _ = xsamp^
     _ = mu^
+    _ = dx.unsafe_ptr()  # the rows outlive every launch above
     return ok

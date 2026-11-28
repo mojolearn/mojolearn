@@ -13,6 +13,8 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from providers.python.x_ann_abi_pyapi_unpack import a_int, p_int, ptr_f32, ptr_i32, py_int_list
 from x_ann.host.ivf_pq_host import X_ANN_HOST_SABOTAGE, refine_host
+from x_ann.host.knn_graph_host import knn_graph_host
+from x_ann.knn_graph_plan import knn_graph_plan
 from x_ann.ops_entry_host_fit import (
     ann_ivf_pq_build_host_run, ann_ivf_sq_build_host_run, ann_ivf_rabitq_build_host_run,
     ann_cagra_build_host_run,
@@ -168,6 +170,25 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
     return PythonObject(m)
 
 
+def knn_graph_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`mojolearn.knn_graph` on the CPU (lane sc-ann-1): the GPU binding's
+    contract (addrs x, out_d, out_i; params n, d, k, method, n_lists,
+    n_probes, random_state, root), x_ann/host/knn_graph_host.mojo's body.
+    Returns the method run."""
+    var n = p_int(params, 0)
+    var d = p_int(params, 1)
+    var k = p_int(params, 2)
+    var plan = knn_graph_plan(n, d, k, p_int(params, 3), p_int(params, 4), p_int(params, 5), p_int(params, 6))
+    var root = p_int(params, 7) != 0
+    var x = ptr_f32(addrs, 0)
+    var od = ptr_f32(addrs, 1)
+    var oi = ptr_i32(addrs, 2)
+    var used = 0
+    with GILReleased(Python()):
+        used = knn_graph_host(x, n, d, k, plan, od, oi, root)
+    return PythonObject(used)
+
+
 def ivf_rabitq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, centers, offsets, list_indices, codes (n x words int32 bit words), norms, ips.
     params: n, dim, n_lists, kmeans_n_iters, seed.
@@ -244,6 +265,7 @@ def build__mojolearn_x_ann_host() -> PythonObject:
         m.def_function[ivf_sq_build_binding]("x_ann_ivf_sq_build")
         m.def_function[ivf_sq_search_binding]("x_ann_ivf_sq_search")
         m.def_function[refine_binding]("x_ann_refine")
+        m.def_function[knn_graph_binding]("x_ann_knn_graph")
         # TOMBSTONE: x_ann_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by f9b52032a; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_ann.patch
         m.def_function[ivf_rabitq_build_binding]("x_ann_ivf_rabitq_build")

@@ -199,6 +199,7 @@ from spectral.impl.sparse.solver.lanczos_types import (
     LANCZOS_LA,
     LANCZOS_SA,
     LanczosSolverConfig,
+    LanczosStatus,
     lanczos_which_name,
 )
 
@@ -1977,9 +1978,10 @@ def lanczos_smallest(
     """`lanczos_smallest_dev` with the start vector uploaded and the Ritz
     vectors downloaded into `eigVecs_out`."""
     var no_dev = ctx.enqueue_create_buffer[DType.float32](1)
+    var status = LanczosStatus.empty()
     var restarts = lanczos_smallest_dev(
         ctx, A, nEigVecs, maxIter, restartIter, tol, which, eigVals_out,
-        eigVecs_out, v0, UInt64(0), False, no_dev, False, trace, tpb,
+        eigVecs_out, v0, UInt64(0), False, no_dev, False, trace, status, tpb,
         scratch_pad, scratch_poison,
     )
     _ = no_dev^
@@ -2002,11 +2004,15 @@ def lanczos_smallest_dev(
     mut vecs_dev: DeviceBuffer[DType.float32],
     keep_dev: Bool,
     mut trace: IdentityTrace,
+    mut status: LanczosStatus,
     tpb: Int = LANCZOS_TPB,
     scratch_pad: Int = 0,
     scratch_poison: Float32 = 0.0,
 ) raises -> Int:
-    """`lanczos_smallest`, the restart loop. With `v0_on_device` the start
+    """`lanczos_smallest`, the restart loop. `status` receives how the
+    solve ended (restarts, iterations, `res <= tol`, the final `res`), so a
+    caller can act on a solve stopped by `maxIter` (lane
+    sc-ann-1-spectral, 2026-11-27: it was visible only in the trace). With `v0_on_device` the start
     vector is `lanczos_v0_kernel(v0_seed)` and `v0` is not read; with
     `keep_dev` the Ritz vectors are copied into `vecs_dev` (`nEigVecs x n`
     floats) and `eigVecs_out` comes back empty. `scratch_pad` extra floats
@@ -2262,6 +2268,7 @@ def lanczos_smallest_dev(
     conv.append(Int32(restarts))
     conv.append(Int32(iter))
     trace.record_list_i32("spectral.lanczos.converged_restarts_iter", conv)
+    status = LanczosStatus(restarts=restarts, iterations=iter, converged=res <= tol, residual=res)
     _ = V^
     _ = u^
     _ = v^
@@ -2336,30 +2343,25 @@ def lanczos_compute_eigenpairs(
     mut eigenvalues: List[Float32],
     mut eigenvectors: List[Float32],
     mut trace: IdentityTrace,
+    mut status: LanczosStatus,
     tpb: Int = LANCZOS_TPB,
     scratch_pad: Int = 0,
     scratch_poison: Float32 = 0.0,
 ) raises -> Int:
     """`lanczos_compute_eigenpairs` (`:756-796`): the optional `v0`, else
-    the seeded start vector (DEVIATION 772), then `lanczos_smallest`."""
+    the seeded start vector (DEVIATION 772), then `lanczos_smallest`.
+    `status` receives how the solve ended (`lanczos_smallest_dev`)."""
     if has_v0:
         trace.record_list_f32("spectral.lanczos.v0", v0)
-        return lanczos_smallest(
-            ctx,
-            A,
-            config.n_components,
-            config.max_iterations,
-            config.ncv,
-            config.tolerance,
-            config.which,
-            eigenvalues,
-            eigenvectors,
-            v0,
-            trace,
-            tpb,
-            scratch_pad,
-            scratch_poison,
+        var no_dev_v0 = ctx.enqueue_create_buffer[DType.float32](1)
+        var restarts_v0 = lanczos_smallest_dev(
+            ctx, A, config.n_components, config.max_iterations, config.ncv,
+            config.tolerance, config.which, eigenvalues, eigenvectors, v0,
+            UInt64(0), False, no_dev_v0, False, trace, status, tpb,
+            scratch_pad, scratch_poison,
         )
+        _ = no_dev_v0^
+        return restarts_v0
     else:
         if not config.has_seed:
             raise Error(
@@ -2392,6 +2394,7 @@ def lanczos_compute_eigenpairs(
         no_dev,
         False,
         trace,
+        status,
         tpb,
         scratch_pad,
         scratch_poison,
@@ -2407,6 +2410,7 @@ def lanczos_compute_eigenpairs_dev(
     mut eigenvalues: List[Float32],
     mut vecs_dev: DeviceBuffer[DType.float32],
     mut trace: IdentityTrace,
+    mut status: LanczosStatus,
     tpb: Int = LANCZOS_TPB,
     scratch_pad: Int = 0,
     scratch_poison: Float32 = 0.0,
@@ -2438,6 +2442,7 @@ def lanczos_compute_eigenpairs_dev(
         vecs_dev,
         True,
         trace,
+        status,
         tpb,
         scratch_pad,
         scratch_poison,

@@ -50,3 +50,21 @@ struct LanczosSolverConfig(Copyable, Movable):
     var which: Int
     var has_seed: Bool
     var seed: UInt64
+
+
+@fieldwise_init
+struct LanczosStatus(Copyable, Movable):
+    """How a Lanczos solve ended (lane sc-ann-1-spectral, 2026-11-27): the
+    restarts taken, the iteration count at exit, whether `res <= tol` held,
+    and the final residual `res = ||beta_k||`. The solver used to keep this
+    only in the identity trace, so a caller could not tell a converged
+    solve from one stopped by `max_iterations`."""
+
+    var restarts: Int
+    var iterations: Int
+    var converged: Bool
+    var residual: Float32
+
+    @staticmethod
+    def empty() -> Self:
+        return Self(restarts=0, iterations=0, converged=False, residual=Float32(0.0))

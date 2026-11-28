@@ -1,0 +1,21 @@
+diff --git a/x_ann/host/knn_graph_host.mojo b/x_ann/host/knn_graph_host.mojo
+index 644c1691c8..058cf024c6 100644
+--- a/x_ann/host/knn_graph_host.mojo
++++ b/x_ann/host/knn_graph_host.mojo
+@@ -23,6 +23,7 @@ serial pass per step is the stable counting placement of rows into lists
+ (a prefix scan, O(n))."""
+ 
+ from checks.numerics import ftz, identical_div, identical_sqrt
++from std.memory import bitcast
+ from x_ann.tsne_core import F32P, I32P, ts_sqdist2, ts_knn_offer
+ from x_ann.host.ann_host_cells import ann_span, ann_task_count, ann_tasks
+ from x_ann.host.cagra_host import knn_rows_host
+@@ -213,4 +214,8 @@ def knn_graph_host(x: F32P, n: Int, d: Int, k: Int, plan: KnnGraphPlan, nn_d: F3
+                 nn_d.unsafe_store(e, identical_sqrt(nn_d.unsafe_load(e)))
+ 
+         ann_tasks(root_task, tasks)
++    # SABOTAGE (never shipped): every CPU-column graph distance one ulp high
++    for e in range(n * k):
++        var w = bitcast[DType.uint32](nn_d.unsafe_load(e))
++        nn_d.unsafe_store(e, bitcast[DType.float32](w + UInt32(1)))
+     return used

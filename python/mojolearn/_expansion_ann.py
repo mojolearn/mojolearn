@@ -32,7 +32,7 @@ _NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
 _FAMILY, _FAMILY_CONTEXT = _native_family_bridge.connect()
 from . import _backend  # noqa: E402
 
-__all__ = ["IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex", "refine"]
+__all__ = ["IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex", "refine", "knn_graph"]
 
 
 def _ann_int(owner, name, v):
@@ -1036,6 +1036,86 @@ def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclide
     """
     return _FAMILY(None, "family_xn_ann_refine",
                    (None, dataset, queries, candidates, k, metric, numeric_mode, device),
+                   _FAMILY_CONTEXT)
+
+
+# The plan (exact or IVF, n_lists, n_probes, the k-means offset) and the build
+# are Mojo: x_ann/knn_graph_plan.mojo, x_ann/knn_graph_device.mojo and the CPU
+# column x_ann/host/knn_graph_host.mojo (bindings/neighbors_ann_native_door.mojo
+# `_knn_graph` is the one native call).
+def knn_graph(X, n_neighbors=15, *, method="exact", n_lists=None, n_probes=None, random_state=0,
+              metric="sqeuclidean", numeric_mode=None, device=None):
+    """Build the k-nearest-neighbor graph of every row of `X`.
+
+    For each row, returns its `n_neighbors` nearest other rows (the row
+    itself is excluded), ascending by distance with ties broken by row id.
+    ``method='exact'`` compares every pair of rows. ``method='ivf'`` builds
+    an approximate graph much faster on large data, the way Scanpy and cuML
+    build neighbor graphs approximately: the rows are clustered into
+    `n_lists` lists by k-means, and each row is compared only with the rows
+    of its own list and of the ``n_probes - 1`` lists whose centers are
+    nearest to its list's center. More probes give a more accurate graph;
+    ``n_probes == n_lists`` gives the exact graph. In `identical` mode both
+    methods return the same bits on every device.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        The rows, converted to float32; must be finite.
+    n_neighbors : int, default 15
+        Neighbors per row, in ``[1, n_samples - 1]``.
+    method : {'exact', 'ivf'}, default 'exact'
+        Exact search or the IVF approximation.
+    n_lists : int or None, default None
+        Number of k-means lists for ``method='ivf'``. None uses
+        ``n_samples // 384`` clamped to ``[1, 16384]``.
+    n_probes : int or None, default None
+        Lists searched per row for ``method='ivf'``, at most `n_lists`. None
+        uses ``min(16, n_lists)``. With both `n_lists` and `n_probes` left at
+        None, inputs under 12,288 rows use the exact graph. The exact graph
+        is also used when the probed lists of some row hold fewer than
+        ``n_neighbors + 1`` rows.
+    random_state : int or None, default 0
+        Seed of the k-means sample for ``method='ivf'``; a nonnegative int.
+        None uses evenly spaced sample rows.
+    metric : {'sqeuclidean', 'euclidean'}, default 'sqeuclidean'
+        Squared Euclidean distances, or their square roots. The neighbors are
+        the same under both.
+    numeric_mode : str or None, default None
+        Numeric mode to run in; None uses the package default set with
+        `mojolearn.set_numeric_mode`.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+
+    Returns
+    -------
+    distances : ndarray of shape (n_samples, n_neighbors), float32
+        Distance from each row to each of its neighbors, ascending.
+    indices : ndarray of shape (n_samples, n_neighbors), int32
+        Row ids of the neighbors.
+
+    Raises
+    ------
+    ValueError
+        If `X` is not finite or not 2-D, `n_neighbors`, `n_lists` or
+        `n_probes` is out of range, or `method` or `metric` is unknown.
+    TypeError
+        If `n_neighbors`, `n_lists`, `n_probes` or `random_state` is not an
+        int.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((20000, 16), dtype=np.float32)
+    >>> distances, indices = mojolearn.knn_graph(X, n_neighbors=15, method="ivf")
+    >>> indices.shape
+    (20000, 15)
+    """
+    return _FAMILY(None, "family_xn_ann_knn_graph",
+                   (None, X, n_neighbors, method, n_lists, n_probes, random_state, metric, numeric_mode,
+                    device),
                    _FAMILY_CONTEXT)
 
 

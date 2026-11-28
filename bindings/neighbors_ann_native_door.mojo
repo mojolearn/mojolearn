@@ -15,6 +15,7 @@ from x_ann.neighbors_ann_run import (
     refine_candidates_k0, refine_check_candidate_kind, refine_narrow_ids, refine_check_status,
 )
 from bindings.admitted_family_door import admit_family_meta
+from x_ann.knn_graph_plan import knn_graph_check
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_prepared_owner_unpack import prepared_drop
@@ -952,6 +953,82 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
                                   "refine", PythonObject(None), context)
 
 
+# ---------------------------------------------------------------- knn_graph
+
+
+def _knn_graph_opt_int(owner: String, name: String, value: PythonObject) raises -> Int:
+    """None -> -1 (the plan's auto / None), else an exact int (not a bool)."""
+    if value is None:
+        return -1
+    return Int(py=_ann_int(owner, name, value))
+
+
+def _knn_graph(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`knn_graph(X, n_neighbors, method, n_lists, n_probes, random_state,
+    metric, numeric_mode, device)` (lane sc-ann-1): args are (binding, X,
+    n_neighbors, method, n_lists, n_probes, random_state, metric,
+    numeric_mode, device). UNPACK (admission and the parameter words), one
+    binding call (the plan and the build are Mojo: x_ann/knn_graph_plan.mojo,
+    x_ann/knn_graph_device.mojo, x_ann/host/knn_graph_host.mojo), PACK (the
+    two n x k arrays)."""
+    var b = native_loaded_module("builtins")
+    var device = function_device_default()
+    if args[0] is None and args[9] is not None:
+        device = function_device_admit(args[9], "knn_graph", True, True, context, b)
+    classical_connect_numpy(context)
+    var method = args[3]
+    if py_type(method) is not b.str:
+        raise Error("TypeError: mojolearn knn_graph: method must be a string")
+    var method_name = String(method)
+    var method_code = -1
+    if method_name == "exact":
+        method_code = 0
+    elif method_name == "ivf":
+        method_code = 1
+    else:
+        raise Error("ValueError: mojolearn knn_graph: method must be 'exact' or 'ivf', got "
+                    + String(family_repr(method)))
+    var metric = args[7]
+    if py_type(metric) is not b.str:
+        raise Error("TypeError: mojolearn knn_graph: metric must be a string")
+    var metric_name = String(metric)
+    if metric_name != "sqeuclidean" and metric_name != "euclidean":
+        raise Error("ValueError: mojolearn knn_graph: metric must be 'sqeuclidean' or 'euclidean', got "
+                    + String(family_repr(metric)))
+    var root = metric_name == "euclidean"
+    var x_pin = ArrayPin()
+    var x = admit_family_meta(args[1], 2, "X", context, x_pin, False, True,
+                              refusal=admitted_finite_wording("knn_graph", "X"))
+    var n = x.shape[0]
+    var d = x.shape[1]
+    var k = Int(py=_ann_int("knn_graph", "n_neighbors", args[2]))
+    var n_lists = _knn_graph_opt_int("knn_graph", "n_lists", args[4])
+    var n_probes = _knn_graph_opt_int("knn_graph", "n_probes", args[5])
+    var random_state = _knn_graph_opt_int("knn_graph", "random_state", args[6])
+    if args[6] is not None and random_state < 0:
+        raise Error("ValueError: mojolearn knn_graph: random_state must be None or >= 0")
+    # the shape refusals before any allocation (the binding plans again, typed)
+    knn_graph_check(n, d, k, method_code, n_lists, n_probes)
+    var native = estimator_binding_device(device, args[8], "_mojolearn_x_ann", context) if args[0] is None else args[0]
+    var dist = _ann_empty(n * k, "<f4", context)
+    var idx = _ann_empty(n * k, "<i4", context)
+    var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), PythonObject(method_code),
+                             PythonObject(n_lists), PythonObject(n_probes), PythonObject(random_state),
+                             PythonObject(1 if root else 0))
+    var entry = _ann_entry(native, "x_ann_knn_graph")
+    # x, out_d, out_i; n, d, k, method, n_lists, n_probes, random_state, root
+    _ = family_call(entry,
+                    Python.list(PythonObject(x.source.addr), classical_address(dist), classical_address(idx)),
+                    params)
+    _ = x  # keep the Python object alive through the native call above
+    _ = x_pin
+    _ = dist  # keep the Python object alive through the native call above
+    _ = idx  # keep the Python object alive through the native call above
+    return parallel_public_result(Python.tuple(_ann_view(dist, Python.tuple(n, k), context),
+                                  _ann_view(idx, Python.tuple(n, k), context)),
+                                  "knn_graph", PythonObject(None), context)
+
+
 def neighbors_ann_operation(model: PythonObject, operation: String, var args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     # NumPy's connected types first, so an ndarray input is read as one
@@ -971,6 +1048,8 @@ def neighbors_ann_operation(model: PythonObject, operation: String, var args: Py
         args = estimator_arguments(model, name, args, context)
     if operation == "family_xn_ann_refine":
         return _refine(args, context)
+    if operation == "family_xn_ann_knn_graph":
+        return _knn_graph(args, context)
     if operation == "family_xn_ann_pq_search":
         return neighbors_ann_search(model, 0, args, context)
     if operation == "family_xn_ann_sq_search":

@@ -90,12 +90,20 @@ def ts_recip_den(den: Float32) -> Float32:
 
 
 @always_inline
-def ts_sqdist(x: F32P, i: Int, j: Int, d: Int) -> Float32:
+def ts_sqdist2(a: F32P, i: Int, b: F32P, j: Int, d: Int) -> Float32:
+    """The squared distance of row i of `a` and row j of `b` (d features
+    each): the exact graph's cell chain, features ascending. The one body of
+    `ts_sqdist` and of the IVF graph's host column (lane sc-ann-1)."""
     var acc = Float32(0.0)
     for c in range(d):
-        var diff = ftz(ftz(x.unsafe_load(i * d + c)) - ftz(x.unsafe_load(j * d + c)))
+        var diff = ftz(ftz(a.unsafe_load(i * d + c)) - ftz(b.unsafe_load(j * d + c)))
         acc = ftz(identical_mul_add(diff, diff, acc))
     return acc
+
+
+@always_inline
+def ts_sqdist(x: F32P, i: Int, j: Int, d: Int) -> Float32:
+    return ts_sqdist2(x, i, x, j, d)
 
 
 @always_inline

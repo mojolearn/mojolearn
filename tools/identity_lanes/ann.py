@@ -248,3 +248,40 @@ def _ann_batch_refine_euclidean(ml, e, Xh):
 
 
 _batch_decl(_ann_batch_refine_euclidean, "x-ann-refine-euclidean")
+
+
+@lane("x-ann-knn-graph")
+def _(ml, X, yc, yr, Xh=None):
+    """knn_graph(method='exact'): the 10 nearest other rows of each of 4096
+    rows (the exact graph's cell chain, ties by row id). A function of the
+    whole set, so no estimator and no batch part."""
+    d, i = ml.knn_graph(X[:4096], 10, method="exact")
+    return _fit(dict(dist=_h(d), idx=_h(i)))
+
+
+_batch_decl("n/a:whole-set (the graph of every row is computed over the whole set)", "x-ann-knn-graph")
+
+
+@lane("x-ann-knn-graph-ivf")
+def _(ml, X, yc, yr, Xh=None):
+    """knn_graph(method='ivf'): 4096 rows in 16 k-means lists (the flushed
+    fixed-order Lloyd, random_state 3's sample offset), 4 probed lists per
+    row, k = 10, euclidean roots. Hashes the approximate graph."""
+    d, i = ml.knn_graph(X[:4096], 10, method="ivf", n_lists=16, n_probes=4, random_state=3,
+                        metric="euclidean")
+    return _fit(dict(dist=_h(d), idx=_h(i)))
+
+
+_batch_decl("n/a:whole-set (the graph of every row is computed over the whole set)", "x-ann-knn-graph-ivf")
+
+
+@lane("x-ann-knn-graph-ivf-all")
+def _(ml, X, yc, yr, Xh=None):
+    """knn_graph(method='ivf', n_probes=n_lists=8): every row's pool is every
+    row, so the hashes are x-ann-knn-graph's (the IVF tile's chain is the
+    exact graph's) through the k-means, list sort and probe kernels."""
+    d, i = ml.knn_graph(X[:4096], 10, method="ivf", n_lists=8, n_probes=8, random_state=3)
+    return _fit(dict(dist=_h(d), idx=_h(i)))
+
+
+_batch_decl("n/a:whole-set (the graph of every row is computed over the whole set)", "x-ann-knn-graph-ivf-all")
