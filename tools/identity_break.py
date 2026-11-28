@@ -2956,7 +2956,7 @@ def _(ml, X, yc, yr, Xh=None):
 
     The fits are the configurations the small-pool host route took before
     lane hr-gbdt-small deleted it: Plain and Ordered, Logloss and
-    RMSE, at `_gbdt`'s recorded options, 8 depth-6 trees each; the Ordered
+    RMSE, at `_gbdt`'s recorded options, `trees` depth-6 trees each; the Ordered
     RMSE fit again at CatBoost's GPU defaults for the bootstrap and the
     noise (Bayesian, random_strength 1), which is what an unset
     `GradientBoosting()` of 500 trees or more trains below 50,000 rows; and
@@ -12641,6 +12641,30 @@ _stepfull_decl(_stepfull_session_spec("kv"), "transformer-decode-session")
 STEPFULL_DEFAULT = "n/a:no-decode-state"
 
 
+# THE SERVING PARTS OF THE SLOWEST SEQUENCE LANES ARE DEALT OVER THE FIXTURES (lane verify-light-1, 2026-11-28;
+# AGENTS.md "Verification has light fixtures"; `_spread`). On the 0.9.0 Apple record these lanes spent most of a cell
+# in the serving parts, not the fit: byte-lm-resident 30.9 s rlpair, 22.4 s batchscale and 8.8 s ragged against a
+# 4.6 s train on `base`; transformer-window 5.7 s rlpair against a 0.4 s train. Each part probes the fitted model's
+# serving property (decode against the trainer, the batch scale, ragged lengths, the gradient over a batch, the
+# stepped against the full pass), not the fixture's pathology, so for these lanes each part runs on ONE fixture,
+# part i of _DEALT_PARTS on FIXTURES[i + 1] (`base` keeps the train, infer, model and batch columns only), and reads
+# `n/a:dealt to <fixture>` on the other eight. Every part still runs once per side and every arm that faults it still
+# moves its lane on that fixture. Record and verify both reach the parts through `_probe_part` and `_probe_rlpair`.
+_DEALT_PARTS = ("batchgrad", "batchscale", "ragged", "stepfull", "rlpair")
+_DEALT_PART_LANES = frozenset({"byte-lm-resident", "transformer-window", "samba", "samba-untied-dropout-accum",
+                               "mamba1-int8w", "mamba2-bf16w", "mamba2-dtlimit", "transformer-bf16w"})
+
+
+def _dealt_part(name, part):
+    """`n/a:dealt to <fixture>` when lane `name` deals `part` to another fixture than this cell's, else None."""
+    if name not in _DEALT_PART_LANES or part not in _DEALT_PARTS or not _cell_fixture():
+        return None
+    slot = _DEALT_PARTS.index(part) + 1
+    if _cell_takes(slot):
+        return None
+    return "n/a:dealt to " + FIXTURES[slot % len(FIXTURES)]
+
+
 # ---------------------------------------------------------------- the opt-in parts, one runner
 
 #: part name -> (declarations, default, CLI flag, sabotage env)
@@ -12707,6 +12731,9 @@ def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
     table, default = EXTRA_PARTS[part][0], EXTRA_PARTS[part][1]
     spec = table.get(name, default)
     notes = []
+    dealt = _dealt_part(name, part)
+    if dealt and not isinstance(spec, str):
+        return dealt, None, notes
     if isinstance(spec, str):
         return spec, None, notes
     flip = sabotage not in ("", "0", "serial")
@@ -12967,6 +12994,9 @@ def _probe_rlpair(fit, name, ml, Xh, sabotage):
     <where>:<values>` at the first that does not, or an `n/a:<reason>`
     string. A raise leaves the value None (REFUSED) with the error."""
     spec = RLPAIR[name]
+    dealt = _dealt_part(name, "rlpair")
+    if dealt and not isinstance(spec, str):
+        return dealt, None, []
     if isinstance(spec, str):
         return spec, None, []
     sides = []
