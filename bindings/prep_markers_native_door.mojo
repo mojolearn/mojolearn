@@ -8,7 +8,8 @@ group labels sorted as `classes`), the reference group's code, X as dense float3
 (bindings/prep_markers_run.mojo `marker_chunk_stage`, the units of x_prep/markers.mojo), each block's three
 gene-major results copied into the door's three host blocks by one memcpy each, then one program over the whole
 result (`marker_final_stage`: the row-major results and the adjusted p-values). PACK: a dict with Scanpy's
-`rank_genes_groups` result names, every array rows x n_genes in the input's gene order.
+`rank_genes_groups` result names: per result row (group) the genes by score descending, a tie by the lower gene index (`names`, the gene
+indices), with the scores, p-values, adjusted p-values and log fold changes in that order.
 """
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
@@ -21,6 +22,8 @@ from bindings.x_prep_native_owner_door import xprep_values
 from bindings.classical_labels_door import classical_encode_labels
 from bindings.prep_classify_common_door import is_sparse, csr_input
 from bindings.prep_encode_native_door import EncProg, _take2, _default_mode
+from bindings.cluster_public_native_pack import _xc_array
+from providers.python.x_cluster_out_pyapi_pack import _py_array
 from bindings.prep_markers_run import (
     MarkerChunk, MarkerFinal, marker_chunk_stage, marker_final_stage, marker_chunk_width, marker_rows_out,
     MARKER_WILCOXON, MARKER_T_TEST,
@@ -158,10 +161,15 @@ def prep_rank_genes_call(args: PythonObject, context: PythonObject) raises -> Py
         _ = names.append(classes[g])
     var result = Python.dict()
     py_setitem(result, "groups", names)
-    py_setitem(result, "scores", _take2(ran_final, final_plan.scores, ko, d, context))
-    py_setitem(result, "pvals", _take2(ran_final, final_plan.pvalues, ko, d, context))
-    py_setitem(result, "pvals_adj", _take2(ran_final, final_plan.adjusted, ko, d, context))
-    py_setitem(result, "logfoldchanges", _take2(ran_final, final_plan.lfc, ko, d, context))
+    var total = ko * d
+    var name_words = _I32P(unsafe_from_address=_arena(ran_final) + 4 * final_plan.names)
+    var flat = _py_array(native_loaded_module("array"), "i", name_words.bitcast[UInt8](), total * 4)
+    py_setitem(result, "names", _xc_array(flat, Python.tuple(ko, d), "<i4", "i", context))
+    py_setitem(result, "scores", _take2(ran_final, final_plan.values, ko, d, context))
+    py_setitem(result, "pvals", _take2(ran_final, final_plan.values + total, ko, d, context))
+    py_setitem(result, "pvals_adj", _take2(ran_final, final_plan.values + 2 * total, ko, d, context))
+    py_setitem(result, "logfoldchanges", _take2(ran_final, final_plan.values + 3 * total, ko, d, context))
+    _ = ran_final
     _ = values^
     _ = indptr^
     _ = indices^

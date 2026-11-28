@@ -29,8 +29,10 @@ A chunk program (bindings/prep_markers_run.mojo) covers the genes [c0, c0 + dc):
                 thread per (group, gene) merges the two segments.
   rg_score      t = j*dc + c the score, the two-sided p-value and the log fold change.
 
-then one program over the whole n_out x n_genes result: rg_transpose (gene-major chunks -> row-major), and the
-Benjamini-Hochberg adjustment per group (rg_bh_sort, rg_bh_scan, rg_adjust).
+then one program over the whole n_out x n_genes result: rg_transpose (gene-major chunks -> row-major), the
+Benjamini-Hochberg adjustment per group (rg_bh_sort, rg_bh_scan, rg_adjust), and Scanpy's sorted layout: each
+group's genes by score descending, a tie by the lower gene index (rg_rank_keys, rg_rank_sort, rg_rank_gather),
+with the gene indices beside the four sorted value rows.
 
 The rank sums and the tie sums are 64-bit integers (two int words each in the arena), so they carry no rounding;
 the statistic is formed from them in float32 through the portable operations (x_prep/prims.mojo), the p-value
@@ -44,7 +46,7 @@ from x_prep.stats import betainc, gammaincc
 
 #: The op range of these units (after F2_BASE + F2_N = 272, x_prep/fam2.mojo).
 comptime SC_BASE = 280
-comptime SC_N = 11
+comptime SC_N = 14
 
 comptime SC_ORDER = SC_BASE + 0
 comptime SC_GATHER_DENSE = SC_BASE + 1
@@ -57,6 +59,9 @@ comptime SC_TRANSPOSE = SC_BASE + 7
 comptime SC_BH_SORT = SC_BASE + 8
 comptime SC_BH_SCAN = SC_BASE + 9
 comptime SC_ADJUST = SC_BASE + 10
+comptime SC_RANK_KEYS = SC_BASE + 11
+comptime SC_RANK_SORT = SC_BASE + 12
+comptime SC_RANK_GATHER = SC_BASE + 13
 
 #: rg_score FLAGS bits.
 comptime RG_WILCOXON = 1
@@ -491,6 +496,87 @@ def rg_adjust_unit(t: Int, f: FP, q: IP):
     st(f, p(q, 5) + t, adj)
 
 
+# ---------------------------------------------------------------- the per-group order (Scanpy's sorted result)
+
+
+@always_inline
+def _k64(f: FP, i: Int) -> UInt64:
+    var w = f.bitcast[UInt32]()
+    return (UInt64(w.unsafe_load(i)) << 32) | UInt64(w.unsafe_load(i + 1))
+
+
+@always_inline
+def _swap64(f: FP, i: Int, j: Int):
+    var w = f.bitcast[UInt32]()
+    var a0 = w.unsafe_load(i)
+    var a1 = w.unsafe_load(i + 1)
+    w.unsafe_store(i, w.unsafe_load(j))
+    w.unsafe_store(i + 1, w.unsafe_load(j + 1))
+    w.unsafe_store(j, a0)
+    w.unsafe_store(j + 1, a1)
+
+
+@always_inline
+def _sift64(f: FP, base: Int, start: Int, n: Int):
+    var root = start
+    while True:
+        var child = 2 * root + 1
+        if child >= n:
+            return
+        if child + 1 < n and _k64(f, base + 2 * child) < _k64(f, base + 2 * child + 2):
+            child += 1
+        if _k64(f, base + 2 * root) < _k64(f, base + 2 * child):
+            _swap64(f, base + 2 * root, base + 2 * child)
+            root = child
+        else:
+            return
+
+
+def rg_rank_keys_unit(t: Int, f: FP, q: IP):
+    """q = [SC, KEYS, d]; t = j*d + c. KEYS[2t], KEYS[2t + 1] = (~key(score), c): ascending keys are the scores
+    descending, a tie by the lower gene index (a stable descending sort, as Scanpy's)."""
+    var w = f.bitcast[UInt32]()
+    var d = p(q, 2)
+    var c = t % d
+    w.unsafe_store(p(q, 1) + 2 * t, ~key(ld(f, p(q, 0) + t)))
+    w.unsafe_store(p(q, 1) + 2 * t + 1, UInt32(c))
+
+
+def rg_rank_sort_unit(t: Int, f: FP, q: IP):
+    """q = [KEYS, d]; t = row j. Row j's d (key, gene) pairs heap-sorted ascending as 64-bit words (the lane's
+    heap sort on pairs; one thread per output row, as rg_bh_sort)."""
+    var d = p(q, 1)
+    var base = p(q, 0) + 2 * t * d
+    if d < 2:
+        return
+    var start = d // 2 - 1
+    while start >= 0:
+        _sift64(f, base, start, d)
+        start -= 1
+    var end = d - 1
+    while end > 0:
+        _swap64(f, base, base + 2 * end)
+        _sift64(f, base, 0, end)
+        end -= 1
+
+
+def rg_rank_gather_unit(t: Int, f: FP, q: IP):
+    """q = [KEYS, d, SC, PV, ADJ, LFC, NAMES, OUT, TOTAL]; t = j*d + r (TOTAL = rows * d). Rank r of row j: NAMES[t] = its gene (an int
+    word) and OUT's four row-major blocks (scores, p-values, adjusted p-values, log fold changes) its values, bit
+    for bit."""
+    var d = p(q, 1)
+    var j = t // d
+    var c = Int(f.bitcast[UInt32]().unsafe_load(p(q, 0) + 2 * t + 1))
+    var src = j * d + c
+    var total = p(q, 8)
+    sti(f, p(q, 6) + t, c)
+    var o = p(q, 7)
+    f.unsafe_store(o + t, raw(f, p(q, 2) + src))
+    f.unsafe_store(o + total + t, raw(f, p(q, 3) + src))
+    f.unsafe_store(o + 2 * total + t, raw(f, p(q, 4) + src))
+    f.unsafe_store(o + 3 * total + t, raw(f, p(q, 5) + src))
+
+
 @always_inline
 def run_sc_unit[OP: Int](t: Int, f: FP, q: IP):
     comptime if OP == SC_ORDER:
@@ -515,3 +601,9 @@ def run_sc_unit[OP: Int](t: Int, f: FP, q: IP):
         rg_bh_scan_unit(t, f, q)
     comptime if OP == SC_ADJUST:
         rg_adjust_unit(t, f, q)
+    comptime if OP == SC_RANK_KEYS:
+        rg_rank_keys_unit(t, f, q)
+    comptime if OP == SC_RANK_SORT:
+        rg_rank_sort_unit(t, f, q)
+    comptime if OP == SC_RANK_GATHER:
+        rg_rank_gather_unit(t, f, q)

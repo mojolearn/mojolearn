@@ -12,7 +12,13 @@ import mojolearn
 
 
 def _a(res, key):
-    return np.asarray(res[key])
+    """A result block back in the input's gene order (the result rows are sorted by score, `names` beside)."""
+    names = np.asarray(res["names"])
+    vals = np.asarray(res[key])
+    out = np.empty_like(vals)
+    for j in range(vals.shape[0]):
+        out[j, names[j]] = vals[j]
+    return out
 
 
 def _data(n=240, d=7, k=3, seed=0):
@@ -76,7 +82,16 @@ def _bh(p):
 def test_result_layout_and_groups():
     x, g = _data()
     res = mojolearn.rank_genes_groups(x, g)
-    assert set(res) == {"groups", "scores", "pvals", "pvals_adj", "logfoldchanges"}
+    assert set(res) == {"groups", "names", "scores", "pvals", "pvals_adj", "logfoldchanges"}
+    names = np.asarray(res["names"])
+    assert names.dtype == np.int32 and names.shape == (3, 7)
+    scores = np.asarray(res["scores"])
+    for j in range(3):
+        assert sorted(names[j].tolist()) == list(range(7))
+        # descending, a tie by the lower gene index (Scanpy's stable sort)
+        expected = np.lexsort((np.arange(7), -_a(res, "scores")[j]))
+        assert names[j].tolist() == expected.tolist()
+        assert np.all(np.diff(scores[j]) <= 0)
     assert list(res["groups"]) == [0, 1, 2]
     for key in ("scores", "pvals", "pvals_adj", "logfoldchanges"):
         assert np.asarray(res[key]).shape == (3, 7)

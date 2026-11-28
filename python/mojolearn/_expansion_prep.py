@@ -2784,9 +2784,11 @@ def rank_genes_groups(X, groups, *, method="wilcoxon", reference="rest", tie_cor
     Returns
     -------
     result : dict
-        ``"groups"``: the group labels, one per result row. ``"scores"``, ``"pvals"``,
-        ``"pvals_adj"`` and ``"logfoldchanges"``: arrays of shape (n_result_groups, n_genes) in the
-        gene order of ``X``. Order a group's genes by ``-scores[i]`` to list its markers.
+        Scanpy's layout, each row sorted: ``"groups"``, the group labels, one per result row;
+        ``"names"``, an int32 array of shape (n_result_groups, n_genes) holding each group's gene
+        (column) indices by score descending, a tie going to the lower index; ``"scores"``,
+        ``"pvals"``, ``"pvals_adj"`` and ``"logfoldchanges"``, float32 arrays of the same shape in
+        that order. ``names[i, :5]`` are group ``i``'s top five markers.
 
     Raises
     ------

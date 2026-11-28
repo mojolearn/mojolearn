@@ -15,7 +15,7 @@ from core.preprocessing_program import prep_program_stage
 from bindings.prep_encode_prog_run import EncProgram, enc_input
 from x_prep.markers import (
     SC_ORDER, SC_GATHER_DENSE, SC_GATHER_CSR, SC_SEG_SORT, SC_STATS, SC_RANKSUM, SC_SCORE, SC_TRANSPOSE,
-    SC_BH_SORT, SC_BH_SCAN, SC_ADJUST, RG_WILCOXON, RG_TIE_CORRECT, RG_ADJ_BH, RG_ADJ_BONFERRONI,
+    SC_BH_SORT, SC_BH_SCAN, SC_ADJUST, SC_RANK_KEYS, SC_RANK_SORT, SC_RANK_GATHER, RG_WILCOXON, RG_TIE_CORRECT, RG_ADJ_BH, RG_ADJ_BONFERRONI,
 )
 
 #: The group-ordered block's words (2^27 float32 words, 512 MiB of device scratch per program).
@@ -119,11 +119,11 @@ struct MarkerFinal(Copyable, Movable):
 
 @fieldwise_init
 struct MarkerFinalPlan(Copyable, Movable):
-    """Arena offsets of the four row-major rows x d results."""
-    var scores: Int
-    var pvalues: Int
-    var adjusted: Int
-    var lfc: Int
+    """Arena offsets of the sorted result: `names` (rows x d int words, each group's genes by score descending,
+    a tie by the lower index) and `values` (four row-major rows x d blocks in that order: scores, p-values,
+    adjusted p-values, log fold changes)."""
+    var names: Int
+    var values: Int
 
 
 def marker_final_stage(mut prog: EncProgram, r: MarkerFinal) -> MarkerFinalPlan:
@@ -133,10 +133,10 @@ def marker_final_stage(mut prog: EncProgram, r: MarkerFinal) -> MarkerFinalPlan:
     var sg = enc_input(prog, total, r.scores)
     var pg = enc_input(prog, total, r.pvalues)
     var lg = enc_input(prog, total, r.lfc)
-    var sc = prog.alloc(total)
-    var pv = prog.alloc(total)
-    var lf = prog.alloc(total)
-    var adj = prog.alloc(total)
+    var sc = prog.work(total)
+    var pv = prog.work(total)
+    var lf = prog.work(total)
+    var adj = prog.work(total)
     prep_program_stage(prog.program, SC_TRANSPOSE, total, sg, ko, d, sc)
     prep_program_stage(prog.program, SC_TRANSPOSE, total, pg, ko, d, pv)
     prep_program_stage(prog.program, SC_TRANSPOSE, total, lg, ko, d, lf)
@@ -147,4 +147,10 @@ def marker_final_stage(mut prog: EncProgram, r: MarkerFinal) -> MarkerFinalPlan:
         prep_program_stage(prog.program, SC_BH_SCAN, ko, srt, d, q)
     prep_program_stage(prog.program, SC_ADJUST, total, pv, srt, q, d,
                        RG_ADJ_BONFERRONI if r.bonferroni else RG_ADJ_BH, adj)
-    return MarkerFinalPlan(sc, pv, adj, lf)
+    var keys = prog.work(2 * total)
+    var names = prog.alloc(total)
+    var values = prog.alloc(4 * total)
+    prep_program_stage(prog.program, SC_RANK_KEYS, total, sc, keys, d)
+    prep_program_stage(prog.program, SC_RANK_SORT, ko, keys, d)
+    prep_program_stage(prog.program, SC_RANK_GATHER, total, keys, d, sc, pv, adj, lf, names, values, total)
+    return MarkerFinalPlan(names, values)

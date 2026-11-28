@@ -15,6 +15,8 @@ A hand-checkable case: six cells in two interleaved groups, two genes.
     against reference group 1 (two groups: the same pool) group 0's z equals the "rest" one.
     Benjamini-Hochberg of [0.01, 0.04, 0.03, 0.2]: [0.04, 0.0533333, 0.0533333, 0.2]; Bonferroni [0.04, 0.16,
     0.12, 0.8].
+    the sorted layout of scores [0.5, 2.0, 0.5, -1.0]: names [1, 0, 2, 3] (descending, the tie by the lower index),
+    and every value block gathered in that order.
 """
 from std.memory import bitcast
 from std.testing import TestSuite
@@ -24,7 +26,7 @@ from x_prep.common import FP, IP
 from x_prep.host.program import run_program_host_ptr
 from x_prep.markers import (
     SC_ORDER, SC_GATHER_DENSE, SC_SEG_SORT, SC_STATS, SC_RANKSUM, SC_SCORE, SC_TRANSPOSE, SC_BH_SORT, SC_BH_SCAN,
-    SC_ADJUST, RG_WILCOXON, RG_TIE_CORRECT, RG_ADJ_BH, RG_ADJ_BONFERRONI,
+    SC_ADJUST, SC_RANK_KEYS, SC_RANK_SORT, SC_RANK_GATHER, RG_WILCOXON, RG_TIE_CORRECT, RG_ADJ_BH, RG_ADJ_BONFERRONI,
 )
 
 
@@ -149,6 +151,39 @@ def test_benjamini_hochberg_and_bonferroni() raises:
     var bf = _adjust(RG_ADJ_BONFERRONI)
     _close(bf[1], 0.16, 1e-7, "Bonferroni 0.04")
     _close(bf[3], 0.8, 1e-7, "Bonferroni 0.2")
+
+
+def test_sorted_layout() raises:
+    var d = 4
+    var sc = 0
+    var pv = sc + d
+    var adj = pv + d
+    var lf = adj + d
+    var keys = lf + d
+    var names = keys + 2 * d
+    var vals = names + d
+    var arena = List[Float32](length=vals + 4 * d, fill=Float32(0))
+    var scores: List[Float32] = [0.5, 2.0, 0.5, -1.0]
+    for i in range(d):  # small-loop: one row of four genes; the other blocks tag the gene
+        arena[sc + i] = scores[i]
+        arena[pv + i] = Float32(10 + i)
+        arena[adj + i] = Float32(20 + i)
+        arena[lf + i] = Float32(30 + i)
+    var program = List[Int32]()
+    prep_program_stage(program, SC_RANK_KEYS, d, sc, keys, d)
+    prep_program_stage(program, SC_RANK_SORT, 1, keys, d)
+    prep_program_stage(program, SC_RANK_GATHER, d, keys, d, sc, pv, adj, lf, names, vals, d)
+    run_program_host_ptr(FP(unsafe_from_address=Int(arena.unsafe_ptr())), len(arena),
+                         IP(unsafe_from_address=Int(program.unsafe_ptr())), 3)
+    var want: List[Int] = [1, 0, 2, 3]
+    for r in range(d):  # small-loop: the four ranks
+        var gene = Int(bitcast[DType.int32](arena[names + r]))
+        require(gene == want[r], "rank " + String(r) + " holds gene " + String(gene))
+        require(arena[vals + r] == scores[want[r]], "sorted score at rank " + String(r))
+        require(arena[vals + d + r] == Float32(10 + want[r]), "sorted p-value at rank " + String(r))
+        require(arena[vals + 3 * d + r] == Float32(30 + want[r]), "sorted fold change at rank " + String(r))
+    _ = program^
+    _ = arena^
 
 
 def main() raises:

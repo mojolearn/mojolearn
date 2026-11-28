@@ -54,13 +54,16 @@ with log1p-transformed values.
 labels = mojolearn.KMeans(n_clusters=6, n_init=3).fit_predict(Z)
 res = mojolearn.rank_genes_groups(X, labels, method="wilcoxon")
 
+names = np.asarray(res["names"])
+pvals_adj = np.asarray(res["pvals_adj"])
 for i, group in enumerate(res["groups"]):
-    top = np.argsort(-np.asarray(res["scores"][i]), kind="stable")[:5]
-    print(group, top, np.asarray(res["pvals_adj"][i])[top])
+    print(group, names[i, :5], pvals_adj[i, :5])
 ```
 
-The result holds one row per group: `scores`, `pvals`, `pvals_adj` (Benjamini-Hochberg per group by default,
-`corr_method="bonferroni"` for Bonferroni) and `logfoldchanges`, in the gene order of the input. With
+The result is laid out as Scanpy's: one row per group, the genes sorted by score from the highest (a tie goes
+to the lower gene index). `names` holds the gene (column) indices in that order and `scores`, `pvals`,
+`pvals_adj` (Benjamini-Hochberg per group by default, `corr_method="bonferroni"` for Bonferroni) and
+`logfoldchanges` the values beside them. With
 `reference=<label>` each group is compared with that group's cells, and the reference itself has no row.
 `tie_correct=True` applies the tie correction to the Wilcoxon variance. Every group needs at least two cells.
 

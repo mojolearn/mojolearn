@@ -419,7 +419,7 @@ def _(ml, X, yc, yr, Xh=None):
     g = _functions_classes(X, 900, 4, "fn-rank-genes:g")
 
     def parts(r):
-        return _functions_d(r["scores"], r["pvals"], r["pvals_adj"], r["logfoldchanges"])
+        return _functions_d(r["names"], r["scores"], r["pvals"], r["pvals_adj"], r["logfoldchanges"])
 
     return _functions_resident(ml, "rank_genes_groups", lambda p: dict(
         wil=parts(ml.rank_genes_groups(Xg, g)),
