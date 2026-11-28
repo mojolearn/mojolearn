@@ -32,7 +32,8 @@ _NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
 _FAMILY, _FAMILY_CONTEXT = _native_family_bridge.connect()
 from . import _backend  # noqa: E402
 
-__all__ = ["IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex", "refine", "knn_graph"]
+__all__ = ["IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex", "refine", "knn_graph",
+           "neighbors_graph"]
 
 
 def _ann_int(owner, name, v):
@@ -1116,6 +1117,92 @@ def knn_graph(X, n_neighbors=15, *, method="exact", n_lists=None, n_probes=None,
     return _FAMILY(None, "family_xn_ann_knn_graph",
                    (None, X, n_neighbors, method, n_lists, n_probes, random_state, metric, numeric_mode,
                     device),
+                   _FAMILY_CONTEXT)
+
+
+# UMAP's own k-NN and fuzzy-set body, one native call of the metrics image's
+# UMAP table (bindings/neighbors_ann_native_door.mojo `_neighbors_graph`;
+# umap/sparse_estimator.mojo `umap_neighbors_graph_device` and its CPU column).
+def neighbors_graph(X, n_neighbors=15, *, method="exact", n_lists=None, n_probes=None, random_state=0,
+                    set_op_mix_ratio=1.0, local_connectivity=1.0, numeric_mode=None, device=None):
+    """Build the neighbor distances and the UMAP connectivities of every row of `X`.
+
+    Returns the two graphs Scanpy's ``pp.neighbors`` stores, in one call:
+    the k-nearest-neighbor distances (``obsp['distances']``) and the fuzzy
+    simplicial set UMAP builds from them (``obsp['connectivities']``, the
+    same graph as `UMAP.graph_` for the same rows and settings). The
+    neighbor search is exact, or with ``method='ivf'`` the approximate IVF
+    search of :func:`mojolearn.knn_graph`, much faster on large data. In
+    `identical` mode both graphs are the same bits on every device.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        The rows, converted to float32; must be finite.
+    n_neighbors : int, default 15
+        Neighborhood size counting the row itself, as in UMAP and Scanpy;
+        in ``[2, n_samples]``. Each row of the distances graph holds
+        ``n_neighbors - 1`` other rows.
+    method : {'exact', 'ivf'}, default 'exact'
+        Exact search, or the IVF approximation: the rows are clustered into
+        `n_lists` lists by k-means and each row is compared only with the
+        rows of its `n_probes` nearest lists.
+    n_lists : int or None, default None
+        Number of k-means lists for ``method='ivf'``. None uses
+        ``n_samples // 384`` clamped to ``[1, 16384]``.
+    n_probes : int or None, default None
+        Lists searched per row for ``method='ivf'``, at most `n_lists`. None
+        uses ``min(16, n_lists)``. With both left at None, inputs under
+        12,288 rows use the exact search, which is also used when the probed
+        lists of some row hold fewer than `n_neighbors` rows.
+    random_state : int or None, default 0
+        Seed of the k-means sample for ``method='ivf'``; a nonnegative int.
+        None uses evenly spaced sample rows.
+    set_op_mix_ratio : float, default 1.0
+        Mix between fuzzy union (1.0) and fuzzy intersection (0.0) when the
+        directed memberships are symmetrized, in [0, 1].
+    local_connectivity : float, default 1.0
+        Number of nearest neighbors assumed locally connected; ``>= 0``.
+    numeric_mode : str or None, default None
+        Numeric mode to run in; None uses the package default set with
+        `mojolearn.set_numeric_mode`.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+
+    Returns
+    -------
+    distances : tuple of (Array, Array, Array)
+        CSR ``(indptr, indices, data)`` of the euclidean distances from each
+        row to its ``n_neighbors - 1`` nearest other rows, ascending by
+        distance within a row: ``indptr`` int64 of length
+        ``n_samples + 1``, ``indices`` int32, ``data`` float32.
+    connectivities : tuple of (Array, Array, Array)
+        CSR ``(indptr, indices, data)`` of the symmetric fuzzy simplicial set,
+        with the same dtypes, columns ascending within a row.
+
+    Raises
+    ------
+    ValueError
+        If `X` is not finite or not 2-D, a parameter is out of range, or
+        `method` is unknown.
+    TypeError
+        If an integer parameter is not an int or a float parameter is not a
+        number.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((20000, 16), dtype=np.float32)
+    >>> distances, connectivities = mojolearn.neighbors_graph(X, 15, method="ivf")
+    >>> indptr, indices, data = distances
+    >>> len(indices)
+    280000
+    """
+    return _FAMILY(None, "family_xn_ann_neighbors_graph",
+                   (None, X, n_neighbors, method, n_lists, n_probes, random_state, set_op_mix_ratio,
+                    local_connectivity, numeric_mode, device),
                    _FAMILY_CONTEXT)
 
 

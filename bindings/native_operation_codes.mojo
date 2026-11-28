@@ -49,6 +49,7 @@ def operation_names_xn(mut names: List[String], mut leaves: List[Int]):
     names.append("family_xn_ann_rabitq_fit")
     names.append("family_xn_ann_rabitq_search")
     names.append("family_xn_ann_knn_graph")
+    names.append("family_xn_ann_neighbors_graph")
     names.append("family_xn_ann_refine")
     names.append("family_xn_ann_sq_fit")
     names.append("family_xn_ann_sq_search")

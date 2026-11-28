@@ -233,6 +233,25 @@ def umap_extras_fields(fields: PythonObject, context: PythonObject) raises -> Py
     return Python.tuple(PythonObject(code), PythonObject(p), PythonObject(a), PythonObject(bb))
 
 
+def umap_neighbors_code(fields: PythonObject, metric_code: Int) raises -> Int:
+    """The `neighbors` parameter (lane sc-ann-1-umap, 2026-11-28): 0 for
+    'exact' (also for an instance without the field), 1 for 'ivf', which
+    takes the euclidean metric only (`metric_code` -1, 'euclidean' / 'l2').
+    Read once per fit and once by the constructor's validation."""
+    var value = py_get(fields, "neighbors", PythonObject("exact"))
+    if not umap_is_string(value):
+        raise Error("TypeError: UMAP neighbors must be a string ('exact' or 'ivf')")
+    var name = String(value)
+    if name == "exact":
+        return 0
+    if name != "ivf":
+        raise Error("ValueError: UMAP neighbors=" + _repr(value) + " must be 'exact' or 'ivf'")
+    if metric_code != -1:
+        raise Error("ValueError: UMAP neighbors='ivf' supports metric='euclidean' only; got metric="
+                    + _repr(_field(fields, "metric")))
+    return 1
+
+
 def umap_parameters_fields(fields: PythonObject, context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
     var neighbors = umap_integer(_field(fields, "n_neighbors"), "n_neighbors", 2, UMAP_I64_MAX, context)
     var components = umap_integer(_field(fields, "n_components"), "n_components", 1, 32, context)
@@ -259,6 +278,9 @@ def umap_parameters_fields(fields: PythonObject, context: PythonObject) raises -
     if connectivity < 0:
         raise Error("ValueError: UMAP local_connectivity must be >= 0")
     var extras = umap_extras_fields(fields, context)
+    # the neighbor search (validated here, read again once per fit; not a
+    # config word: transform's neighbor search is exact whatever the fit's)
+    _ = umap_neighbors_code(fields, Int(py=extras[0]))
     var config = Python.list(neighbors, components, epochs, PythonObject(min_dist), PythonObject(spread), PythonObject(mix),
                              PythonObject(connectivity), seed, PythonObject(rate), PythonObject(repulsion), negatives)
     return (config, extras)

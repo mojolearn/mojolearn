@@ -10,6 +10,10 @@ from umap.curve import fit_umap_curve
 #: this many floats per vertex); above it, refused by name.
 comptime UMAP_MAX_COMPONENTS = 32
 
+#: The graph's neighbor search (UMAPParams.neighbors).
+comptime UMAP_NEIGHBORS_EXACT = 0
+comptime UMAP_NEIGHBORS_IVF = 1
+
 
 struct UMAPParams(Copyable, Movable):
     var n_neighbors: Int
@@ -34,6 +38,15 @@ struct UMAPParams(Copyable, Movable):
     #: min_dist and spread (0, 0)
     var curve_a: Float32
     var curve_b: Float32
+    # lane sc-ann-1-umap (2026-11-28): the graph's neighbor search, resolved
+    # once at fit. UMAP_NEIGHBORS_EXACT (the default, the exact search above)
+    # or UMAP_NEIGHBORS_IVF (x_ann/cagra_fast_knn.mojo `ivf_graph_enqueue`,
+    # euclidean only), with the IVF plan's words (x_ann/knn_graph_plan.mojo:
+    # -1 is the plan's default / None).
+    var neighbors: Int
+    var ivf_lists: Int
+    var ivf_probes: Int
+    var ivf_seed: Int
 
     def __init__(
         out self,
@@ -52,6 +65,10 @@ struct UMAPParams(Copyable, Movable):
         metric_arg: Float32 = Float32(2.0),
         curve_a: Float32 = Float32(0.0),
         curve_b: Float32 = Float32(0.0),
+        neighbors: Int = 0,
+        ivf_lists: Int = -1,
+        ivf_probes: Int = -1,
+        ivf_seed: Int = -1,
     ):
         self.n_neighbors = n_neighbors
         self.n_components = n_components
@@ -68,6 +85,10 @@ struct UMAPParams(Copyable, Movable):
         self.metric_arg = metric_arg
         self.curve_a = curve_a
         self.curve_b = curve_b
+        self.neighbors = neighbors
+        self.ivf_lists = ivf_lists
+        self.ivf_probes = ivf_probes
+        self.ivf_seed = ivf_seed
 
     def validate(self, n_samples: Int) raises:
         if n_samples < 2:
@@ -109,6 +130,10 @@ struct UMAPParams(Copyable, Movable):
             (self.curve_a > Float32(0.0)) != (self.curve_b > Float32(0.0))
         ) or self.curve_a < Float32(0.0) or self.curve_b < Float32(0.0):
             raise Error("UMAP a and b must both be given (positive) or both be fitted")
+        if self.neighbors != UMAP_NEIGHBORS_EXACT and self.neighbors != UMAP_NEIGHBORS_IVF:
+            raise Error("UMAP neighbors must be 'exact' or 'ivf'")
+        if self.neighbors == UMAP_NEIGHBORS_IVF and self.metric != -1:
+            raise Error("ValueError: UMAP neighbors='ivf' supports metric='euclidean' only")
 
     def curve(self) raises -> Tuple[Float32, Float32]:
         """(a, b): given directly, or umap-learn's find_ab_params fit from
@@ -118,3 +143,13 @@ struct UMAPParams(Copyable, Movable):
         var c = fit_umap_curve(self.min_dist, self.spread)
         return (c.a, c.b)
 
+
+def umap_ivf_plan_seed(params: UMAPParams) -> Int:
+    """The IVF k-means offset's seed: the given `ivf_seed`, else the UMAP
+    random_state (-1 in `ivf_seed` means "UMAP's own seed"; the public graph
+    passes None as -2, the stride sample)."""
+    if params.ivf_seed == -1:
+        return Int(params.random_seed)
+    if params.ivf_seed < -1:
+        return -1
+    return params.ivf_seed

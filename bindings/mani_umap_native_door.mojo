@@ -27,7 +27,11 @@ from bindings.operation_names_mani import (
 )
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_python_shape
 from bindings.classical_validate_unpack import classical_view
-from bindings.umap_parameters_native_door import umap_parameters_fields, umap_scalar as _umap_scalar, umap_integer as _umap_integer
+from bindings.umap_parameters_native_door import umap_parameters_fields, umap_neighbors_code, umap_scalar as _umap_scalar, umap_integer as _umap_integer
+from bindings.native_array_storage_door import native_array_unfilled
+from bindings.umap_graph_pack import umap_graph_stores, umap_store_address, umap_graph_pack
+from core.native_array_layout import native_array_code
+from umap.graph_out import umap_graph_capacity
 from x_ann.mani_umap_run import (
     umap_finite, umap_mode_code, umap_check_input, umap_check_neighbors, umap_check_spectral_samples,
     umap_init_shape_matches,
@@ -398,7 +402,25 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var mode = _umap_mode(settings, context)
     var key = _umap_check_mode(binding, mode, "UMAP binary numeric mode disagrees with requested mode")
     var cfg = _umap_config_words(config, extras)
+    # the neighbor search, resolved once (lane sc-ann-1-umap): 'ivf' takes the
+    # extended layout (its twelfth word); 'exact' keeps the words it had
+    var neighbors = umap_neighbors_code(settings.values, cfg.metric)
     var legacy = umap_legacy_abi(True if initial else False, not (target is None), cfg.default_extras(), nc)
+    if neighbors != 0:
+        legacy = False
+    # The fitted graph (`graph_`) and curve (`a_`, `b_`) come out of the fit
+    # into these arrays (umap/graph_out.mojo): the CSR is sized by the edge
+    # bound and its two edge arrays trimmed to `indptr[n]` after the fit.
+    var k = cfg.n_neighbors
+    var target_kind = 0 if target is None else Int(py=target[0])
+    var target_k = k if target is None else Int(py=target[3])
+    var cap = umap_graph_capacity(n, k, target_kind, target_k)
+    var g_stores = umap_graph_stores(n, cap)
+    var g_ab = native_array_unfilled(native_array_code("<f4"), 2)
+    var ptr_address = umap_store_address(g_stores[0])
+    var idx_address = umap_store_address(g_stores[1])
+    var val_address = umap_store_address(g_stores[2])
+    var ab_address = umap_store_address(g_ab)
     var entry = umap_ops_entry(key)
     var x_address = x.source.addr
     var columns = 0
@@ -407,7 +429,8 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         # when they differ from `[1.0, 1.0, 5]`.
         var rates = not cfg.legacy_rates()
         with GILReleased(Python()):
-            columns = umap_fit_call(entry, x_address, embedding_address, n, d, cfg, rates)
+            columns = umap_fit_call(entry, x_address, embedding_address, n, d, cfg, rates, ptr_address,
+                                    idx_address, val_address, ab_address)
         _ = x  # keep the Python object alive through the native call above
         _ = embedding  # keep the Python object alive through the native call above
     else:
@@ -418,7 +441,8 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         var initial_address = 0 if not initial else initial.value().source.addr
         with GILReleased(Python()):
             columns = umap_fit_ex_call(entry, x_address, embedding_address, initial_address, n, d, cfg,
-                                       target_words)
+                                       target_words, neighbors, ptr_address, idx_address, val_address,
+                                       ab_address)
         _ = target  # keep the Python object alive through the native call above
         _ = embedding  # keep the Python object alive through the native call above
         _ = initial  # keep the Python object alive through the native call above
@@ -427,6 +451,11 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     _ = initial_pin^  # the door's pin held the start embedding through RUN
     _ = target^
     umap_check_embedding(columns == nc, embedding_address, n * nc)
+    var graph = umap_graph_pack(g_stores, n, cap, context)
+    var abp = FAMILY_F32P(unsafe_from_address=ab_address)
+    var curve_a = Float64(abp[0])
+    var curve_b = Float64(abp[1])
+    _ = g_ab^  # the curve's two words were read above
     # Prepare all retained state before publishing a successful fit. Copies
     # prevent caller edits of X or embedding_ from changing transform's model.
     var training = _umap_copy(array_python_shape(x), x.source.addr, x.count, context)
@@ -440,6 +469,9 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     py_setitem(settings.fields, nk[].k__transform_embedding, frozen)
     py_setitem(settings.fields, nk[].k__transform_config, _umap_concat_tuple(config, extras))
     py_setitem(settings.fields, nk[].k__transform_mode, PythonObject(mode))
+    py_setitem(settings.fields, PythonObject("graph_"), graph)
+    py_setitem(settings.fields, PythonObject("a_"), PythonObject(curve_a))
+    py_setitem(settings.fields, PythonObject("b_"), PythonObject(curve_b))
     return embedding
 
 
