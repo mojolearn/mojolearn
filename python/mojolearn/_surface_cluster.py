@@ -25,6 +25,8 @@ FAMILIES = (
                         "x-cluster-minibatch-options", "x-cluster-bisecting-options", "x-cluster-meanshift-binned", "x-cluster-optics-metrics", "x-cluster-ap-precomputed", "x-cluster-bgmm-inits", "x-cluster-bgmm-covtypes", "x-cluster-minibatch-partial", "x-cluster-gmm-options", "x-cluster-dbscan-metrics", "x-cluster-hdbscan-epsilon", "x-cluster-kmeans-init", "x-cluster-agglo-linkages", "x-cluster-agglo-connectivity", "x-cluster-spectral-affinities",
                         # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table was admitted;
                         # RECORD OWED: the release's one verification records them
+                        # lane sc-stats-1 (2026-11-28): Harmony; RECORD OWED
+                        "x-cluster-harmony",
                         "check-generic-cluster",
                         "generic-attrs-cluster",
                         "generic-digest-cluster",
@@ -72,6 +74,7 @@ TRAINING_LANE_NAMES = {"x-cluster-minibatch-kmeans": "MiniBatchKMeans",
                        "x-cluster-optics": "OPTICS",
                        "x-cluster-affinity-propagation": "AffinityPropagation",
                        "x-cluster-bgmm": "BayesianGaussianMixture",
+                       "x-cluster-harmony": "Harmony",
                        "x-cluster-minibatch-options": "MiniBatchKMeans options",
                        "x-cluster-bisecting-options": "BisectingKMeans options",
                        "x-cluster-meanshift-binned": "MeanShift bin seeding",

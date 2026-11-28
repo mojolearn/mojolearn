@@ -408,7 +408,26 @@ def _(ml, X, yc, yr, Xh=None):
         form="scalar")
 
 
-_batch_decl(_FUNCTIONS_BATCH_NA, "fn-chi2", "fn-f-classif", "fn-f-regression", "fn-r-regression",
+
+@lane("fn-rank-genes-groups")
+def _(ml, X, yc, yr, Xh=None):
+    """mojolearn.rank_genes_groups (lane sc-stats-1, 2026-11-28; RECORD OWED): 900 cells x 12 genes of
+    log1p-like values rounded to tenths (so ranks tie), 4 groups; Wilcoxon against the rest without and with
+    the tie correction, Wilcoxon against reference group 2, Welch's t-test with Bonferroni. Dense input (the
+    lane harness has no scipy; the CSR path is the boundary tests' and the native check's)."""
+    Xg = np.round(np.log1p(np.abs(_functions_mat(X, 900, 12, "fn-rank-genes:x")) * 4.0), 1).astype(np.float32)
+    g = _functions_classes(X, 900, 4, "fn-rank-genes:g")
+
+    def parts(r):
+        return _functions_d(r["scores"], r["pvals"], r["pvals_adj"], r["logfoldchanges"])
+
+    return _functions_resident(ml, "rank_genes_groups", lambda p: dict(
+        wil=parts(ml.rank_genes_groups(Xg, g)),
+        tie=parts(ml.rank_genes_groups(Xg, g, tie_correct=True)),
+        ref=parts(ml.rank_genes_groups(Xg, g, reference=2)),
+        tt=parts(ml.rank_genes_groups(Xg, g, method="t-test", corr_method="bonferroni"))), form="scalar")
+
+_batch_decl(_FUNCTIONS_BATCH_NA, "fn-chi2", "fn-rank-genes-groups", "fn-f-classif", "fn-f-regression", "fn-r-regression",
             "fn-mutual-info-classif", "fn-mutual-info-regression", "fn-connected-components", "fn-kpss-test",
             "fn-select-d", "fn-refine", "fn-spectral-embedding", "fn-resample-bootstrap",
             "fn-resample-permutation-test", "fn-resample-monte-carlo", "fn-resample-resample",

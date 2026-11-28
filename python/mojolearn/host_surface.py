@@ -4897,6 +4897,9 @@ PUBLIC_PENDING_LANES = {
     "et-clf-methods": "no reference",
     "fn-catboost-auto-learning-rate": "no reference",
     "fn-chi2": "no reference",
+    # lane sc-stats-1 (2026-11-28): new lanes; RECORD OWED (the next release record)
+    "fn-rank-genes-groups": "no reference",
+    "x-cluster-harmony": "no reference",
     "fn-connected-components": "no reference",
     "fn-f-classif": "no reference",
     "fn-f-regression": "no reference",

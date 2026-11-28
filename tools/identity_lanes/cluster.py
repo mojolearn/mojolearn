@@ -496,3 +496,26 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl("n/a:transductive (SpectralClustering with rbf labels the fitted rows only)", "x-cluster-spectral-affinities")
+
+
+@lane("x-cluster-harmony")
+def _(ml, X, yc, yr, Xh=None):
+    """Harmony (lane sc-stats-1, 2026-11-28; RECORD OWED): 1200 cells x 10 dimensions of a two-batch
+    embedding (batch 1 shifted), one covariate with the defaults (n_clusters 40, theta 2); two covariates
+    (batch and a three-level second covariate) with per-covariate theta, tau > 0, block_size 0.1 and fixed
+    rounds; the corrected embedding, the soft assignments, the centroids and the objective of each."""
+    Z = np.ascontiguousarray(np.tanh(np.asarray(X[:1200, :10], dtype=np.float64)).astype(np.float32))
+    b = (np.arange(1200) % 2).astype(np.int32)
+    Z = np.ascontiguousarray(Z + (b[:, None] * np.float32(0.4)).astype(np.float32))
+    s = (np.arange(1200) % 3).astype(np.int32)
+    m = ml.Harmony(random_state=0).fit(Z, b)
+    t = ml.Harmony(n_clusters=12, theta=[2.0, 1.0], lamb=[1.0, 0.5], tau=5.0, block_size=0.1,
+                   max_iter_harmony=3, max_iter_kmeans=6, random_state=5).fit(Z, [b, s])
+    return _fit(dict(z=_h(m.embedding_), r=_h(m.R_), y=_h(m.cluster_centers_),
+                     obj=_h(np.asarray(m.objective_, dtype=np.float64)), it=_h(np.int64(m.n_iter_)),
+                     z2=_h(t.embedding_), r2=_h(t.R_), obj2=_h(np.asarray(t.objective_, dtype=np.float64))))
+
+
+_batch_decl("n/a:whole-embedding integration (Harmony's clusters and corrections pool every cell; a row "
+            "subset is another fit, and there is no held-out transform)", "x-cluster-harmony",
+            revision="expansion-batch-2026-09-28-v1")
