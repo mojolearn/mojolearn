@@ -61,6 +61,8 @@ from neighbors.estimator import (
     plan_query_tile,
     QUERY_TILE_512_CANDIDATE,
     query_tile_bounded_budget_applies,
+    knn_workspace_bytes_per_query_row,
+    BOUNDED_WORKSPACE_CAP_BYTES,
 )
 from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
@@ -94,7 +96,7 @@ def check_plan_query_tile() raises:
     #    409 MB, under the 768 MB budget. If this ever fails, the published
     #    k-NN number no longer describes `knn_search` and the docstring in
     #    estimator.mojo has become false.
-    var bench_tile = plan_query_tile(400000, 4000, DEFAULT_QUERY_TILE)
+    var bench_tile = plan_query_tile(400000, 4000, DEFAULT_QUERY_TILE, 15)
     # The query clamp still applies: under IDENTICAL DEFAULT_QUERY_TILE is
     # KNN_ROW_QUERY_TILE (DEVIATION 2631, 4096 on NVIDIA), wider than the
     # benchmark's 4,000 queries, and the tile is then the query count.
@@ -108,17 +110,19 @@ def check_plan_query_tile() raises:
             + String(bench_tile)
         )
 
-    # 2. The cap fires, and halves rather than collapsing. 1,000,000 x 4 x 256
-    #    is 1024 MB, over budget; 128 gives 512 MB, under it.
-    #    A build whose bounded workspace admits a million rows keeps the
-    #    default tile there instead (the rule is a workspace bound, not a
-    #    row count); the neighbors of the benchmark index plan like it.
-    var capped = plan_query_tile(1000000, 4000, DEFAULT_QUERY_TILE)
+    # 2. The cap counts what is ALLOCATED (lane sc-ann-1, 2026-11-28). A
+    #    build that tiles the index axis holds 65,536 distance cells and k
+    #    radix pairs per query row at k <= 64 whatever n_index is, so a
+    #    million-row index keeps the default tile (the old rule charged
+    #    n_index x 4 bytes a row and planned 128 for a 128 x 65,536 tile).
+    #    An untiled build (one full index row per query, plus 2 x n_index // 8
+    #    radix pairs) halves: 1,000,000 x 6 bytes x 128 is 768 MB.
+    var capped = plan_query_tile(1000000, 4000, DEFAULT_QUERY_TILE, 15)
     var capped_want = 128
-    if QUERY_TILE_512_CANDIDATE and query_tile_bounded_budget_applies(1000000):
+    if QUERY_TILE_512_CANDIDATE and query_tile_bounded_budget_applies(1000000, 15):
         capped_want = bench_want
     for n_nb in [399999, 400001, 450000]:
-        var nb_tile = plan_query_tile(n_nb, 4000, DEFAULT_QUERY_TILE)
+        var nb_tile = plan_query_tile(n_nb, 4000, DEFAULT_QUERY_TILE, 15)
         if nb_tile != bench_want:
             raise Error(
                 "plan_query_tile: neighbor index " + String(n_nb)
@@ -131,9 +135,18 @@ def check_plan_query_tile() raises:
             + String(capped_want) + ", got "
             + String(capped)
         )
+    # The planned tile's allocation is under the budget it was planned for.
+    var cap_bytes = capped * knn_workspace_bytes_per_query_row(1000000, 15)
+    if cap_bytes > BOUNDED_WORKSPACE_CAP_BYTES:
+        raise Error(
+            "plan_query_tile: n_index=1000000 plans " + String(cap_bytes)
+            + " workspace bytes, over the bounded cap"
+        )
 
-    # 3. The floor holds rather than the loop running away.
-    var floored = plan_query_tile(100000000, 4000, DEFAULT_QUERY_TILE)
+    # 3. The floor holds rather than the loop running away, where the
+    #    workspace really grows with the index: k above the small-k selector
+    #    keeps 2 x n_index // 8 radix pairs per row on every build.
+    var floored = plan_query_tile(100000000, 4000, DEFAULT_QUERY_TILE, 100)
     if floored != MIN_QUERY_TILE:
         raise Error(
             "plan_query_tile: an absurd index must stop at the floor "
@@ -145,7 +158,7 @@ def check_plan_query_tile() raises:
     # 4. THE QUERY CLAMP. This is the rule that was MISSING, and its absence
     #    returned 196 of 320 wrong neighbours the first time the agreement
     #    check ran. A tile of 256 against 64 queries must come back 64.
-    var clamped = plan_query_tile(2000, 64, DEFAULT_QUERY_TILE)
+    var clamped = plan_query_tile(2000, 64, DEFAULT_QUERY_TILE, 15)
     if clamped != 64:
         raise Error(
             "plan_query_tile: a tile wider than the query set must clamp to"
@@ -154,7 +167,7 @@ def check_plan_query_tile() raises:
         )
 
     # 5. The clamp beats the floor, for a caller with very few queries.
-    var tiny = plan_query_tile(2000, 4, DEFAULT_QUERY_TILE)
+    var tiny = plan_query_tile(2000, 4, DEFAULT_QUERY_TILE, 15)
     if tiny != 4:
         raise Error(
             "plan_query_tile: 4 queries must give tile 4, not the floor"

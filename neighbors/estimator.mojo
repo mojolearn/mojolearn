@@ -296,49 +296,69 @@ a measured one.
 
 
 comptime BOUNDED_WORKSPACE_CAP_BYTES = 3 * 1024 * 1024 * 1024
-"""Ceiling on the WORST-CASE per-request workspace at the default query tile,
-for the bounded-budget rule in `plan_query_tile`.
+"""Ceiling on the per-request workspace at the default query tile, for the
+bounded-budget rule in `plan_query_tile`. A policy number (under a fifth of a
+16 GB device), not a measured one.
 
-Per query row the tiled arm holds `identical_index_tile(n_index)` float32
-distance cells plus, at worst (k above the small-k selector, so no radix
-scratch shrink), `2 x n_index // 8` float32 radix pairs: `4 x index_tile +
-n_index` bytes. A policy number (under a fifth of a 16 GB device), not a
-measured one. On NVIDIA IDENTICAL (tile 4096, index tile 65,536) it admits
-every index up to 524,288 rows; larger indices take the historical halving.
+The workspace is counted as ALLOCATED (`knn_workspace_bytes_per_query_row`):
+on a build that tiles the index axis (NVIDIA and AMD IDENTICAL, index tile
+65,536) a k <= 64 request holds 65,536 distance cells and k radix pairs per
+query row whatever `n_index` is, so the default tile is admitted at every
+index size; a k > 64 request also holds `n_index // 8` radix pairs per row and
+is admitted up to about 262,144 index rows, then halves.
 """
 
 
-def query_tile_bounded_budget_applies(n_index: Int) -> Bool:
-    """Whether the default query tile's worst-case workspace fits
-    `BOUNDED_WORKSPACE_CAP_BYTES`. Size-derived: continuous in `n_index`,
-    no exact-shape keys. Query tiling never moves bits (each query's chain
+def knn_workspace_bytes_per_query_row(n_index: Int, k: Int) -> Int:
+    """Bytes one query row of a tiled request allocates, counted from the
+    allocations themselves (`dist_tile`, `buf_val`, `buf_idx` at every
+    `knn_search` caller): `identical_index_tile(n_index)` float32 distance
+    cells (the whole index unless the build tiles the index axis) plus
+    `2 x tiled_radix_scratch_len(n_index, k)` float32 values and as many
+    uint32 indices. The fused one-cell launch (DEVIATION 2667) allocates less;
+    counting it as the full tile only plans a smaller tile, never a larger
+    allocation than the budget."""
+    return identical_index_tile(n_index) * 4 + 16 * tiled_radix_scratch_len(n_index, k)
+
+
+def query_tile_bounded_budget_applies(n_index: Int, k: Int) -> Bool:
+    """Whether the default query tile's allocated workspace fits
+    `BOUNDED_WORKSPACE_CAP_BYTES`. Size-derived: continuous in `n_index` and
+    `k`, no exact-shape keys. Query tiling never moves bits (each query's chain
     and merge do not depend on its tile; `query_batch_check` asserts it)."""
-    var per_row = identical_index_tile(n_index) * 4 + n_index
-    return DEFAULT_QUERY_TILE * per_row <= BOUNDED_WORKSPACE_CAP_BYTES
+    return DEFAULT_QUERY_TILE * knn_workspace_bytes_per_query_row(n_index, k) <= BOUNDED_WORKSPACE_CAP_BYTES
 
 
-def plan_query_tile(n_index: Int, n_queries: Int, requested_tile: Int) -> Int:
+def plan_query_tile(n_index: Int, n_queries: Int, requested_tile: Int, k: Int) -> Int:
     """The tile actually used, after the workspace cap and the query clamp.
 
     Separated out so a caller can ask what a shape will cost before paying
     for it, and so a check can assert both rules fire where they should
     without allocating anything.
+
+    PLANNER FIX (lane sc-ann-1, 2026-11-28): the row cost is what one query
+    row ALLOCATES (`knn_workspace_bytes_per_query_row`), not `n_index x 4`
+    bytes. The old rule charged a full index row per query even on builds that
+    tile the index axis, so at 1e6 index rows it halved the NVIDIA IDENTICAL
+    tile from 4096 to 128 although the tile it then allocated was 128 x 65,536
+    cells (32 MiB): 7,813 query tiles instead of 245. It also left out the
+    radix scratch (2 x n_index // 8 pairs per row) where that scratch is
+    allocated. Query tiling never moves a bit, so no column changes bits.
     """
     var tile = requested_tile
     if tile < 1:
         tile = DEFAULT_QUERY_TILE
 
-    var per_row_bytes = n_index * 4
+    var per_row_bytes = knn_workspace_bytes_per_query_row(n_index, k)
     var budget = WORKSPACE_BUDGET_BYTES
     comptime if QUERY_TILE_512_CANDIDATE:
         # DEVIATION 2631: the scope's tile ceiling is the default tile, and
-        # the budget admits that tile's bounded distance tile (2048 x 65,536
+        # the budget admits that tile's allocated workspace (2048 x 65,536
         # cells is 512 MiB, 4096 is 1 GiB) so the row's tile is not halved.
         # The scope is a workspace bound, not an index size: see
         # `query_tile_bounded_budget_applies` (it replaced an
         # `n_index <= 400000` cut at the benchmark's index, 2026-10-04).
-        if tile <= DEFAULT_QUERY_TILE and query_tile_bounded_budget_applies(n_index):
-            per_row_bytes = identical_index_tile(n_index) * 4
+        if tile <= DEFAULT_QUERY_TILE and query_tile_bounded_budget_applies(n_index, k):
             if DEFAULT_QUERY_TILE * per_row_bytes > budget:
                 budget = DEFAULT_QUERY_TILE * per_row_bytes
     if per_row_bytes > 0:
@@ -578,7 +598,7 @@ def _knn_search_plan(
             )
 
     var devices = knn_device_count(dplan, n_queries, knn_method)
-    var query_tile = plan_query_tile(n_index, n_queries, requested_query_tile)
+    var query_tile = plan_query_tile(n_index, n_queries, requested_query_tile, k)
 
     # `scaling_main.mojo`'s sizing. `buf_len` must clear `k` or the fallback
     # selector has nowhere to put a full result row.
@@ -935,7 +955,7 @@ def knn_self_search_resident(
     var mtr = resolve_metric(METRIC_FROM_IS_SQRT, return_sqrt)
     validate_metric_arg(mtr, Float32(2.0))
     var devices = knn_device_count(dplan, n, KNN_METHOD_AUTO)
-    var query_tile = plan_query_tile(n, n, DEFAULT_QUERY_TILE)
+    var query_tile = plan_query_tile(n, n, DEFAULT_QUERY_TILE, k)
     var buf_len = tiled_radix_scratch_len(n, k)
     var nd = n * n_features
     var index = ctx.enqueue_create_buffer[DType.float32](nd)
