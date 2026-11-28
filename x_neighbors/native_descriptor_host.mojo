@@ -1148,6 +1148,8 @@ def xn_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -
         return xn_aux_execute(16, a, p, f)
     if op == 94:
         return xn_aux_execute(17, a, p, f)
+    if op == 95:
+        return xn_aux_execute(18, a, p, f)
     raise Error("x_neighbors native ABI: unknown operation")
 
 

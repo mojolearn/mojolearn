@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Typed auxiliary transport to the existing backend owners; no numerical work
 # moves between devices. The common descriptor provider controls GIL/lifetimes.
-from x_neighbors.graph_dev import op_leiden, op_leiden_csr, op_snn, op_paga, op_paga_csr
+from x_neighbors.graph_dev import op_leiden, op_leiden_csr, op_snn, op_paga, op_paga_csr, op_size_relabel
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV, oci_nu_hi, oci_nu_lo
 from x_neighbors.ocsvm_dev import op_ocsvm_alpha_init, op_unit_ff, op_ocsvm_x, OCSVM_IDN_RES
 from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
@@ -212,5 +212,14 @@ def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises
             op_paga(a[0], a[1], a[2], a[3], a[4], a[5], p[0], p[1])
             return 0
         op_paga_csr(a[0], a[1], a[2], a[3], a[4], a[5], a[6], p[0], p[1], p[2])
+        return 0
+    if op == 18:
+        # size_relabel (lane sc-graph-1): addresses (int32 labels n, in
+        # place), ints (n, c): graph_par.sr_drive.
+        if a[0] == 0:
+            raise Error("x_neighbors: null buffer address")
+        if p[0] < 0 or p[1] < 0:
+            raise Error("x_neighbors: a negative size was passed")
+        op_size_relabel(a[0], p[0], p[1])
         return 0
     raise Error("x_neighbors auxiliary native ABI: unknown operation")

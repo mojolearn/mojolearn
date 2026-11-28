@@ -10,7 +10,7 @@ from x_neighbors.items import FP, IP
 from x_neighbors.device_ops import xn_ctx, _grid, _tid, BLOCK
 from x_neighbors.graph_par import (
     GA, GExec, Lay, LP, GP_NST, gp_item, pr_drive, lv_drive, pr_drive_csr, lv_drive_csr,
-    ld_drive, ld_drive_csr, sn_drive, pg_drive,
+    ld_drive, ld_drive_csr, sn_drive, pg_drive, sr_drive,
 )
 
 
@@ -253,4 +253,11 @@ def op_paga_csr(
     """PAGA on the device from the caller's CSR (graph_par.pg_drive)."""
     var ex = GraphDev(0, 0)
     pg_drive(ex, n, nnz, True, indptr, indices, labels, cap, conn, tree, sizes, info)
+    _ = ex^
+
+
+def op_size_relabel(labels: Int, n: Int, c: Int) raises:
+    """Community labels renumbered by size in place (graph_par.sr_drive), on this column."""
+    var ex = GraphDev(0, 0)
+    sr_drive(ex, n, c, labels)
     _ = ex^

@@ -336,7 +336,11 @@ comptime PG_ES = 66
 comptime PG_STAT = 67
 comptime PG_FW = 68
 comptime PG_TREE = 69
-comptime GP_NST = 70
+comptime SR_SIZE = 70
+comptime SR_KEY = 71
+comptime SR_RANK = 72
+comptime SR_APPLY = 73
+comptime GP_NST = 74
 
 
 # ------------------------------------------------------------------ generic stages
@@ -1893,6 +1897,47 @@ def _pg_tree(t: Int, g: GA):
         tree.unsafe_store(t, Float32(0))
 
 
+# ------------------------------------------------------------------ labels by size
+# (lane sc-graph-1, 2026-11-28: Scanpy numbers Louvain / Leiden clusters by
+# size, the largest 0). Input: labels numbered by first occurrence (the
+# fits' `p2m_relabel`), so community c's smallest member index increases
+# with c and "ties by the smallest member index" is "ties by c".
+comptime SR_LAB = 0
+comptime SR_SZ = 1
+comptime SR_KA = 2
+comptime SR_KB = 3
+comptime SR_RK = 4
+comptime SR_NSLOT = 5
+
+
+@always_inline
+def _sr_size(t: Int, g: GA):
+    """Node t adds one to its community's size (int32 atomics, order-free)."""
+    _ = Atomic[Int32].fetch_add(_is(g, SR_SZ) + Int(_is(g, SR_LAB).unsafe_load(t)), Int32(1))
+
+
+@always_inline
+def _sr_key(t: Int, g: GA):
+    """Community t's unique sort key (n0 = n, n1 = c): (n - size) * c + t,
+    so the keys ascend by size descending, then by first member."""
+    var size = Int(_is(g, SR_SZ).unsafe_load(t))
+    _ls(g, SR_KA).unsafe_store(t, Int64(g.n0 - size) * Int64(g.n1) + Int64(t))
+
+
+@always_inline
+def _sr_rank(t: Int, g: GA):
+    """Sorted position t (keys in slot n4): its community's new label is t."""
+    var key = _ls(g, g.n4).unsafe_load(t)
+    _is(g, SR_RK).unsafe_store(Int(key % Int64(g.n1)), Int32(t))
+
+
+@always_inline
+def _sr_apply(t: Int, g: GA):
+    """Node t takes its community's rank."""
+    var lab = _is(g, SR_LAB)
+    lab.unsafe_store(t, _is(g, SR_RK).unsafe_load(Int(lab.unsafe_load(t))))
+
+
 @always_inline
 def gp_item[S: Int](t: Int, g: GA):
     """Stage S's item t."""
@@ -2036,6 +2081,14 @@ def gp_item[S: Int](t: Int, g: GA):
         _pg_fw(t, g)
     elif S == PG_TREE:
         _pg_tree(t, g)
+    elif S == SR_SIZE:
+        _sr_size(t, g)
+    elif S == SR_KEY:
+        _sr_key(t, g)
+    elif S == SR_RANK:
+        _sr_rank(t, g)
+    elif S == SR_APPLY:
+        _sr_apply(t, g)
 
 
 # ------------------------------------------------------------------ drivers (shared by both columns)
@@ -2983,3 +3036,32 @@ def pg_drive[E: GExec](
         ex.down_f(PG_TREE, tree, c * c)
         ex.down_i(PG_NS, sizes, c)
     _ = m
+
+
+# ------------------------------------------------------------------ labels by size driver
+def sr_drive[E: GExec](mut ex: E, n: Int, c: Int, labels: Int) raises:
+    """Renumber the labels (int32 n, in place; numbered 0 .. c - 1 by first
+    occurrence) by community size, the largest 0, ties to the community
+    whose first member comes first: sizes by atomics, one unique-key sort
+    of the c communities, one gather."""
+    if n <= 0 or c <= 0:
+        return
+    var lb = Lay(SR_NSLOT)
+    lb.i(SR_LAB, n)
+    lb.i(SR_SZ, c)
+    lb.l(SR_KA, c)
+    lb.l(SR_KB, c)
+    lb.i(SR_RK, c)
+    var g = ex.alloc(lb)
+    ex.up_i(SR_LAB, labels, n)
+    var q = g
+    q.n0 = n
+    q.n1 = c
+    q.n4 = SR_SZ
+    ex.run(GP_IZERO, c, q)
+    ex.run(SR_SIZE, n, q)
+    ex.run(SR_KEY, c, q)
+    q.n4 = gp_sort(ex, g, SR_KA, SR_KB, c)
+    ex.run(SR_RANK, c, q)
+    ex.run(SR_APPLY, n, q)
+    ex.down_i(SR_LAB, labels, n)

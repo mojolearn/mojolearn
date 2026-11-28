@@ -8,7 +8,7 @@ from x_neighbors.items import FP, IP
 from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE
 from x_neighbors.graph_par import (
     GA, GExec, Lay, LP, FPU, IPU, LPU, GP_NST, gp_item, pr_drive, lv_drive, pr_drive_csr, lv_drive_csr,
-    ld_drive, ld_drive_csr, sn_drive, pg_drive,
+    ld_drive, ld_drive_csr, sn_drive, pg_drive, sr_drive,
 )
 from core.host_parallel import host_parallelize
 
@@ -244,3 +244,10 @@ def _pg_host_sabotage(conn: Int, info: Int):
     if Int(pi.unsafe_load(1)) == 0 and Int(pi.unsafe_load(0)) > 0:
         var pc = FP(unsafe_from_address=conn)
         pc.unsafe_store(0, pc.unsafe_load(0) + Float32(1e-3))
+
+
+def op_size_relabel(labels: Int, n: Int, c: Int) raises:
+    """Community labels renumbered by size in place (graph_par.sr_drive), on this column."""
+    var ex = GraphCpu(0)
+    sr_drive(ex, n, c, labels)
+    _ = ex^
