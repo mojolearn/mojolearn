@@ -16,7 +16,7 @@ from bindings.trees_public_auxiliary_door import embedding_apply
 from bindings.parallel_public_result_door import parallel_public_result
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi_unpack import _target, _refusal
-from providers.python.gp_public_lifecycle_pyapi_door import _gp_classifier_target
+from providers.python.family_common_label_target_pyapi_unpack import _gp_classifier_target
 from bindings.prep_lda_admission_door import lda_native_labels
 from bindings.label_input_sources_unpack import labels_storage_source
 

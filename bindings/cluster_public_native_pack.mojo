@@ -13,8 +13,8 @@
 # Same entry, same inputs: the bits do not move. The fits of these classes
 # are bindings/cluster_fit_public_native_pack.mojo's.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_item
-from bindings.classical_arrays_door import classical_address, classical_wrap_array
+from bindings.family_common_array_pack import _xc_array
+from bindings.classical_arrays_door import classical_address
 from core.admitted_weights import admitted_fill
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.native_loaded_module_door import NativeModules
@@ -26,7 +26,6 @@ from bindings.operation_names_xc import (
 from core.kmeans_variants_api import VariantsResultSlot
 from bindings.family_common_unpack import FAMILY_I32P
 from bindings.family_common_pack import family_array
-from bindings.cluster_keys_unpack import cluster_keys
 from bindings.cluster_native_door import _agglo_predict
 from bindings.cluster_public_native_unpack import (
     CentersQuery, centers_query_stage, affinity_query_stage, centers_resident, centers_resident_call,
@@ -36,20 +35,6 @@ from cluster.cluster_door_run import (
     XC_RES_PREDICT, XC_RES_SCORE, XC_RES_TRANSFORM,
     cluster_query_variants, cluster_query_kind, cluster_unknown_code,
 )
-
-
-def _xc_array(flat: PythonObject, shape: PythonObject, typestr: String, code: String,
-              context: PythonObject) raises -> PythonObject:
-    """`Array._from_flat(flat, shape, typestr)` without its copy: the
-    entry returns each result as one `array.array` of the dtype's store code
-    (providers/python/x_cluster_out_pyapi.mojo, one memcpy from the result), which becomes the
-    Array's store as it is. Anything else is copied once, as `_from_flat` did.
-    Same values either way."""
-    var store = flat
-    var nk = cluster_keys()
-    if py_type(flat) is not py_item(context, nk[].k_array_type) or String(py=flat.typecode) != code:
-        store = py_call(py_item(context, nk[].k_array_type), PythonObject(code), flat)
-    return classical_wrap_array(store, shape, typestr, "C", context)
 
 
 def _centers_query(model: PythonObject, binding: PythonObject, stage: CentersQuery,

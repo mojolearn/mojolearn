@@ -16,7 +16,7 @@ from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input_unpack import admit_f32
 from bindings.classical_labels_door import classical_encode_labels
-from bindings.cluster_public_native_pack import _xc_array
+from bindings.family_common_array_pack import _xc_array
 from bindings.cluster_fit_public_native_unpack import _set, _attr, _seed
 from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
