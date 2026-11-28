@@ -460,6 +460,10 @@ def paga_run(driver: XnDriver, request: PagaRequest) raises -> PagaOutcome:
     _paga_call(driver, request, True, _i32_at(spare), _i32_at(spare), 0, 0, _f32_at(spare_f), _f32_at(spare_f),
                _i32_at(spare), _i32_at(info))
     var c = xn_i32_word(_i32_at(info), 0)
+    if c > request.n:
+        # c x c words of state: groups are numbered 0 .. c - 1, at most one per node
+        raise Error("ValueError: PAGA: group labels must be numbered from 0 (largest label "
+                    + String(c - 1) + " for " + String(request.n) + " nodes)")
     out.groups = c
     out.connectivities = List[Float32](unsafe_uninit_length=max(c * c, 1))
     out.tree = List[Float32](unsafe_uninit_length=max(c * c, 1))
