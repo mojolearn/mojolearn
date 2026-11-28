@@ -6,6 +6,7 @@
     python3 tools/release_families.py check [--lanes-file F] [--loads]   every binding and lane has one family
     python3 tools/release_families.py derive [--write]                   the lanes' families, from what they load
     python3 tools/release_families.py plan [--commit HEAD] [--json OUT]  the per-family REUSE/BUILD table
+    python3 tools/release_families.py loaders [--bindings a,b]            per binding, the lanes that load it
     python3 tools/release_families.py lanes --plan PLAN.json [--lanes-file F | --families a,b]
                                                                          the lanes a plan records, one csv line
 
@@ -238,6 +239,33 @@ def derive(fam, loads):
         own = {fam.binding(b) for b in loaded} - {None, SHARED}
         lanes[lane] = own.pop() if len(own) == 1 else SHARED
     return lanes, problems
+
+
+def loaders(fam, loads, bindings):
+    """What moving each of BINDINGS into a family of its own would do to the lanes, from what the lanes load (the
+    `loads` of lane_loads): [dict(binding, family, lanes, alone, by_family, mixed)] where `lanes` load the binding,
+    `alone` of them load no binding of any family but shared and the binding's own, `by_family` counts those that
+    load exactly one OTHER family besides, and `mixed` those that load several. In a family of its own (`meta`) the
+    binding makes every `by_family` lane a `shared` lane under derive's one-family rule (it then records whenever
+    any family records), and its `alone` lanes are all that the new family would hold."""
+    rows = []
+    for b in bindings:
+        own = fam.binding(b)
+        row = dict(binding=b, family=own, lanes=0, alone=0, by_family={}, mixed=0)
+        for lane, loaded in sorted(loads.items()):
+            if b not in loaded:
+                continue
+            row["lanes"] += 1
+            others = {fam.binding(x) for x in loaded if x != b} - {None, SHARED, own}
+            if not others:
+                row["alone"] += 1
+            elif len(others) == 1:
+                name = next(iter(others))
+                row["by_family"][name] = row["by_family"].get(name, 0) + 1
+            else:
+                row["mixed"] += 1
+        rows.append(row)
+    return rows
 
 
 # ---------------------------------------------------------------- one family per merged file
@@ -694,8 +722,19 @@ def main(argv=None):
                          help="with a release_reuse --plan: also move the kept families whose columns do not rest "
                               "on the shipped bytes to RECORD (kept_refusals, over this tree's reference table)")
     lanes_p.add_argument("--lanes-file", default="")
+    lo = sub.add_parser("loaders", help="per binding, the lanes that load it and the other families they load")
+    lo.add_argument("--bindings", default="", help="comma list (default: every _mojolearn_runtime_*_host and "
+                                                   "_mojolearn_tokenizer_host)")
     a = ap.parse_args(argv)
     fam = load()
+    if a.cmd == "loaders":
+        names = [b for b in a.bindings.split(",") if b] or sorted(
+            b for b in fam.by_binding if b.startswith("_mojolearn_runtime_") or b == "_mojolearn_tokenizer_host")
+        for r in loaders(fam, lane_loads(), names):
+            print("LOADERS %-44s family %-9s lanes %4d  alone %4d  mixed %4d  with one other family: %s" % (
+                r["binding"], r["family"], r["lanes"], r["alone"], r["mixed"],
+                ", ".join("%s %d" % kv for kv in sorted(r["by_family"].items())) or "-"))
+        return 0
 
     def given_lanes(path):
         if not path:

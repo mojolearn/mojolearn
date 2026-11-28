@@ -402,3 +402,13 @@ def test_a_kept_family_whose_python_glue_cannot_be_read_at_its_records_commit_re
     assert "where the Python glue of shared was different" in why["kernel"]
     monkeypatch.setattr(RF, "python_digests", lambda fam_, tree: {"kernel": "k", "shared": "s"})
     assert RF.kept_refusals(p, ["svc", "gbdt-rmse"], f, source_root=world(tmp_path / "c")) == {}
+
+
+def test_loaders_counts_the_lanes_a_family_of_its_own_would_turn_shared():
+    loads = {"rf-fit": ["_mojolearn_rf", "_mojolearn_runtime_trees_host", "_mojolearn"],
+             "kde": ["_mojolearn_runtime_trees_host", "_mojolearn_x_neighbors"],
+             "stack": ["_mojolearn_runtime_trees_host", "_mojolearn_svm", "_mojolearn_x_prep"],
+             "ols": ["_mojolearn_estimators"]}
+    (row,) = RF.loaders(fam(), loads, ["_mojolearn_runtime_trees_host"])
+    assert row == dict(binding="_mojolearn_runtime_trees_host", family="trees", lanes=3, alone=1,
+                       by_family={"cluster": 1}, mixed=1)
