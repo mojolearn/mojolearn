@@ -11,7 +11,7 @@ attributes."""
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.native_loaded_module_door import native_loaded_module
+from bindings.native_loaded_module_door import NativeModules
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input_unpack import admit_f32
@@ -41,19 +41,17 @@ def harmony_connection(binding: PythonObject) raises -> HarmonyConnection:
     return HarmonyConnection(provider, driver^)
 
 
-def _float(model: PythonObject, name: String) raises -> Float64:
-    var b = native_loaded_module("builtins")
+def _float(model: PythonObject, name: String, b: PythonObject) raises -> Float64:
     return Float64(py=py_call(b.float, _attr(model, name)))
 
 
-def _int(model: PythonObject, name: String) raises -> Int:
-    var b = native_loaded_module("builtins")
+def _int(model: PythonObject, name: String, b: PythonObject) raises -> Int:
     return Int(py=py_call(b.int, _attr(model, name)))
 
 
-def _per_covariate(value: PythonObject, c: Int, name: String) raises -> List[Float64]:
-    """A number for every covariate, or a list / tuple of c numbers."""
-    var b = native_loaded_module("builtins")
+def _per_covariate(value: PythonObject, c: Int, name: String, b: PythonObject) raises -> List[Float64]:
+    """A number for every covariate, or a list / tuple of c numbers. `b` is
+    the builtins module harmony_fit admitted for the call."""
     var out_values = List[Float64]()
     if py_type(value) is b.list or py_type(value) is b.tuple:
         if Int(py=py_call(b.len, value)) != c:
@@ -67,8 +65,9 @@ def _per_covariate(value: PythonObject, c: Int, name: String) raises -> List[Flo
     return out_values^
 
 
-def _f32_array(values: List[Float32], shape: PythonObject, context: PythonObject) raises -> PythonObject:
-    var module = native_loaded_module("array")
+def _f32_array(values: List[Float32], shape: PythonObject, module: PythonObject,
+               context: PythonObject) raises -> PythonObject:
+    # `module`: the `array` module harmony_fit admitted once for its three results.
     var flat = _py_array(module, "f", values.unsafe_ptr().bitcast[UInt8](), len(values) * 4)
     return _xc_array(flat, shape, "<f4", "f", context)
 
@@ -76,7 +75,10 @@ def _f32_array(values: List[Float32], shape: PythonObject, context: PythonObject
 def harmony_fit(model: PythonObject, binding: PythonObject, source: PythonObject, batch: PythonObject,
                 context: PythonObject) raises:
     # UNPACK
-    var b = native_loaded_module("builtins")
+    # One admission of each module for the call (tools/check_admitted_call.py):
+    # builtins here, `array` after the GIL window, both passed to the helpers.
+    var mods = NativeModules()
+    var b = mods.module("builtins")
     var x = admit_f32(source, 2, "X", context)
     var n = x.rows
     var d = x.cols
@@ -107,8 +109,8 @@ def harmony_fit(model: PythonObject, binding: PythonObject, source: PythonObject
         levels[cc] = levels_cc
         nb += levels_cc
         _ = labels^
-    var theta_c = _per_covariate(_attr(model, "theta"), c, "theta")
-    var lamb_c = _per_covariate(_attr(model, "lamb"), c, "lamb")
+    var theta_c = _per_covariate(_attr(model, "theta"), c, "theta", b)
+    var lamb_c = _per_covariate(_attr(model, "lamb"), c, "lamb", b)
     var theta = List[Float64]()
     var lamb = List[Float64]()
     for cc in range(c):  # small-loop(covariates: their levels' parameters)
@@ -128,13 +130,13 @@ def harmony_fit(model: PythonObject, binding: PythonObject, source: PythonObject
         k = Int(py=py_call(b.int, n_clusters))
     if k < 1 or k > n:
         raise Error("ValueError: Harmony: n_clusters must be in [1, n_samples]")
-    var sigma = _float(model, "sigma")
-    var tau = _float(model, "tau")
-    var block_size = _float(model, "block_size")
-    var max_iter_harmony = _int(model, "max_iter_harmony")
-    var max_iter_kmeans = _int(model, "max_iter_kmeans")
-    var epsilon_cluster = _float(model, "epsilon_cluster")
-    var epsilon_harmony = _float(model, "epsilon_harmony")
+    var sigma = _float(model, "sigma", b)
+    var tau = _float(model, "tau", b)
+    var block_size = _float(model, "block_size", b)
+    var max_iter_harmony = _int(model, "max_iter_harmony", b)
+    var max_iter_kmeans = _int(model, "max_iter_kmeans", b)
+    var epsilon_cluster = _float(model, "epsilon_cluster", b)
+    var epsilon_harmony = _float(model, "epsilon_harmony", b)
     var seed = _seed(_attr(model, "random_state"))
     if not (sigma > 0.0):
         raise Error("ValueError: Harmony: sigma must be positive")
@@ -159,12 +161,14 @@ def harmony_fit(model: PythonObject, binding: PythonObject, source: PythonObject
     _ = theta^
     _ = lamb^
     # PACK
+    mods.released()  # the GIL window above ended: the next request re-checks
+    var array_module = mods.module("array")
     var objective = Python.list()
     for i in range(len(result.storage[0].objective)):  # small-loop(rounds: one objective value per Harmony round)
         _ = objective.append(PythonObject(result.storage[0].objective[i]))
-    _set(model, "embedding_", _f32_array(result.storage[0].z_corr, Python.tuple(n, d), context))
-    _set(model, "R_", _f32_array(result.storage[0].r, Python.tuple(n, k), context))
-    _set(model, "cluster_centers_", _f32_array(result.storage[0].y, Python.tuple(k, d), context))
+    _set(model, "embedding_", _f32_array(result.storage[0].z_corr, Python.tuple(n, d), array_module, context))
+    _set(model, "R_", _f32_array(result.storage[0].r, Python.tuple(n, k), array_module, context))
+    _set(model, "cluster_centers_", _f32_array(result.storage[0].y, Python.tuple(k, d), array_module, context))
     _set(model, "objective_", objective)
     _set(model, "n_iter_", PythonObject(result.storage[0].n_iter))
     _set(model, "converged_", PythonObject(result.storage[0].converged))

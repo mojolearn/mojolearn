@@ -13,7 +13,7 @@ values: a size read and the slot writes of the Arrays."""
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call
 from bindings.py_attr import py_attr
-from bindings.native_loaded_module_door import native_loaded_module
+from bindings.native_loaded_module_door import NativeModules
 from bindings.native_array_storage_door import native_array_unfilled
 from bindings.classical_arrays_door import classical_wrap_array
 from core.native_array_layout import native_array_code
@@ -33,7 +33,17 @@ def umap_store_address(store: PythonObject) raises -> Int:
 
 
 def umap_graph_pack(stores: PythonObject, n: Int, cap: Int, context: PythonObject) raises -> PythonObject:
-    """The CSR tuple of the written stores (module docstring)."""
+    """The CSR tuple of the written stores, for a door that holds no admitted
+    builtins of its own (bindings/mani_umap_native_door.mojo): one admission
+    through the per-call module handle, then the form below."""
+    var mods = NativeModules()
+    return umap_graph_pack(stores, n, cap, mods.module("builtins"), context)
+
+
+def umap_graph_pack(stores: PythonObject, n: Int, cap: Int, b: PythonObject,
+                    context: PythonObject) raises -> PythonObject:
+    """The CSR tuple of the written stores (module docstring). `b` is the
+    builtins module the calling door admitted for this public call."""
     var indptr_store = stores[0]
     var indices_store = stores[1]
     var data_store = stores[2]
@@ -42,7 +52,6 @@ def umap_graph_pack(stores: PythonObject, n: Int, cap: Int, context: PythonObjec
     if nnz < 0 or nnz > cap:
         raise Error("RuntimeError: UMAP fitted graph exceeds its output capacity")
     if nnz < cap:
-        var b = native_loaded_module("builtins")
         var tail = py_call(b.slice, PythonObject(nnz), PythonObject(None))
         _ = py_call(py_attr(indices_store, "__delitem__"), tail)
         _ = py_call(py_attr(data_store, "__delitem__"), tail)

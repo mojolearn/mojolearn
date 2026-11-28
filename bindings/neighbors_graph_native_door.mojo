@@ -583,10 +583,10 @@ def csr_graph_record(data: PythonObject, indices: PythonObject, indptr: PythonOb
     three finished arrays, `shape` and `format = "csr"`. Every graph entry
     of this package reads it back (the CSR duck form of `_csr_lists`,
     DiffusionMap's door), and SciPy users can wrap the same three arrays."""
-    var types = py_get(native_loaded_module("sys").modules, "types")
-    if types is None:
-        _ = family_call(_b().__import__, PythonObject("types"))
-        types = native_loaded_module("sys").modules["types"]
+    # `builtins.__import__` (a C function) returns the `types` module from sys.modules when it is there and
+    # imports it otherwise: the same object the former sys.modules read gave, through the builtins this door
+    # already admits (no `sys` admission of its own, tools/check_admitted_call.py).
+    var types = family_call(_b().__import__, PythonObject("types"))
     var keywords = Python.dict()
     py_setitem(keywords, "indptr", indptr)
     py_setitem(keywords, "indices", indices)
