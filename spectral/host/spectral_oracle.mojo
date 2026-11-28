@@ -1284,8 +1284,6 @@ def host_spectral_diffmap_coo(
     host_parallelize(density, m)
     var kr = lw.rows.copy()
     var kc = lw.cols.copy()
-    if m < len(kv):
-        kv.resize(m, Float32(0))
     var k_graph = CooGraph(n, kr^, kc^, kv^)
     var res = oracle_embedding[DType.float32](k_graph, n_comps, True, False, tolerance, seed)
     var k = n_comps
