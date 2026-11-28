@@ -31,7 +31,7 @@ def connect():
     from ._array import Array
     from ._native_classical_bridge import _numpy_free_context
     from ._native_owner_lifetime import connect_owner_context
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
 
     call = _binding()._module.arena_rows_native_call
     if type(call) is not BuiltinFunctionType:

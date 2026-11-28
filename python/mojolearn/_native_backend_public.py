@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-only provider connection for the process's native backend metadata."""
 
-from .tokenizer import _binding
+from ._native_host_owner import _binding
 
 # The package imports this module at import (it needs only the core host
 # unit), so the compiled entry is bound here once; connect() supplies the

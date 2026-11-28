@@ -172,7 +172,7 @@ def connect_classes(package):
     import sys
     from . import _mode
     from ._native_classical_bridge import _layout, _numpy_free_context
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
 
     if _CONTEXT is None:
         module = _binding()._module

@@ -6,7 +6,7 @@ import sys
 from . import _backend
 from . import lowbit as _lowbit
 from ._array import Array
-from .tokenizer import _binding
+from ._native_host_owner import _binding
 
 _runtime = _binding()._module
 # A spawned worker imports only this module (`python -m mojolearn._native_process`),

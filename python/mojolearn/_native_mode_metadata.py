@@ -5,7 +5,7 @@ from types import BuiltinFunctionType, FunctionType, MethodType, ModuleType
 
 def connect():
     from . import _backend
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     _backend.default_mode()
     entry = _binding()._module.mode_metadata_native_call
     if type(entry) is not BuiltinFunctionType:
@@ -17,7 +17,7 @@ def connect():
 def connect_generic_attributes():
     # glue: the generic attribute slot's entry; its admission context is the
     # public attributes context, linked by _native_public_attributes.connect_classes.
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     module = _binding()._module
     entry = module.public_attribute_generic_slot_native_call
     factory = module.classical_attribute_descriptor
@@ -30,7 +30,7 @@ def connect_generic_attributes():
 def connect_generic_params():
     # glue: the generic parameter setter shares the full-reset owner's entry
     # and context; _native_full_reset_params fills the context at package import.
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     entry = _binding()._module.full_reset_params_native_call
     if type(entry) is not BuiltinFunctionType:
         raise TypeError('generic parameter setters require a compiled native entry')

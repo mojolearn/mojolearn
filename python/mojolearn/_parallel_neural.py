@@ -6,7 +6,7 @@ from ._mlp_impl import SmallMLPTrainer
 from ._samba_impl import SambaStack
 from ._native_samba_bridge import CONTEXT
 from .parallel_training import ParallelNeuralTrainer
-from .tokenizer import _binding
+from ._native_host_owner import _binding
 from ._parallel_neural_admission import connect as _connect_admission
 
 _module = _binding()._module

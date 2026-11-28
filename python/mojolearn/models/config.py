@@ -36,7 +36,7 @@ index; the plan maps each block-dict key (the block classes' own names) to
 the checkpoint name, and for phi3's fused `qkv_proj` / `gate_up_proj` to a
 row slice of it (a slice copies bytes, no arithmetic).
 """
-from ..tokenizer import _binding
+from .._native_host_owner import _binding
 
 _NATIVE = _binding()._module
 

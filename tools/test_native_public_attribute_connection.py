@@ -64,7 +64,7 @@ class PublicAttributeConnection(unittest.TestCase):
         mode_properties = ModuleType(package.__name__ + '._native_mode_properties')
         exec(compile((ROOT / 'python/mojolearn/_native_mode_properties.py').read_text(), 'mode_properties', 'exec'),
              vars(mode_properties))
-        tokenizer = ModuleType(package.__name__ + '.tokenizer')
+        tokenizer = ModuleType(package.__name__ + '._native_host_owner')
         tokenizer._binding = lambda: (_ for _ in ()).throw(AssertionError('fixture imported binary'))
         namespace = {'__name__': package.__name__ + '._native_public_attributes', '__package__': package.__name__}
         exec(compile((ROOT / 'python/mojolearn/_native_public_attributes.py').read_text(), 'connector', 'exec'), namespace)

@@ -45,7 +45,7 @@ def connect(training):
     import sys
     from types import BuiltinFunctionType, MethodType, ModuleType
     from . import _backend, _buffer, _numeric_profile
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     from ._array import Array
     from ._native_classical_bridge import _numpy_free_context
     from ._native_classical_warnings import connect_warnings
@@ -215,7 +215,7 @@ def connect_sequence_optimizers(training, optim, device):
 def connect_sequence_device(training, device):
     # glue: connect sequence buffer/optimizer ABI symbols once at module import
     from types import BuiltinFunctionType, MethodType
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     from . import _backend
     from ._native_array_protocol_bridge import connect_array_protocol
     context = training._OPT_CONTEXT
@@ -347,7 +347,7 @@ def connect_embedding(training, embedding_cls, archive_context):
     # lifetime descriptors once, at package import
     from types import BuiltinFunctionType, MethodType
     from . import _backend
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     # glue: connect the resident owner at import only when NumPy is already
     # loaded; importing it otherwise loaded NumPy for every `import mojolearn`.
     # Without it, device=True asks for `mojolearn._x_sequence_device` (or

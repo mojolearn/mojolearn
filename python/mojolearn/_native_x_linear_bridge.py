@@ -37,7 +37,7 @@ def connect(tables, solver=None):
     from . import _backend
     from ._native_classical_bridge import _state_context
     from ._native_labels_bridge import label_context
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
 
     context = _state_context()
     context.update(label_context())

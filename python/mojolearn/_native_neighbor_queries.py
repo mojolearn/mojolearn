@@ -103,7 +103,7 @@ def _connect_devices(groups, routes):
 
 def connect(classes, context, archive_context, groups):
     from ._native_classical_bridge import _layout
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     module = _binding()._module
     call, attribute = module.neighbor_query_call, module.neighbor_query_attribute_call
     if type(call) is not BuiltinFunctionType or type(attribute) is not BuiltinFunctionType:

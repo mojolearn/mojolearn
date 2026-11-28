@@ -245,7 +245,7 @@ def _connect_host_trainer():
     # glue: import-time connection of the native `train_step` owner
     # (bindings/byte_lm_host_trainer_native_door.mojo); the compiled step it runs
     # is the trainer's own binding entry, retained at construction
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     from . import lowbit, _linalg_impl
     from ._byte_lm_impl import _LM_TRAINER_CONTEXT
     from ._byte_lm_config import _DEFAULT_PROFILE

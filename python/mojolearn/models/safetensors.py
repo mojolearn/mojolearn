@@ -10,7 +10,7 @@ may be closed explicitly or used with a context manager.
 
 from .. import lowbit as _lowbit
 from .._array import Array as _Array
-from ..tokenizer import _binding
+from .._native_host_owner import _binding
 
 _NATIVE = _binding()._module
 

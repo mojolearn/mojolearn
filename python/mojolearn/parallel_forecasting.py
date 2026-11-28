@@ -13,7 +13,7 @@ __all__ = ['predict_arima', 'forecast_arima', 'predict_exponential_smoothing',
 # each public function is one call into it.
 from . import _native_process  # noqa: F401  (connects the native process pool)
 from . import _backend
-from .tokenizer import _binding
+from ._native_host_owner import _binding
 from ._arima_impl import ARIMA as _ARIMA, _TSA_CONTEXT as _ARIMA_CONTEXT
 from ._tsa_impl import ExponentialSmoothing as _HW, _TSA_CONTEXT as _HW_CONTEXT
 

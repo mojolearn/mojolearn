@@ -7,7 +7,7 @@ def connect(context, formats, cleanup_entries, forest_metadata):
     # No class.load/from_file/constructor callback is installed here.
     from ._native_classical_bridge import _numpy_free_context, _archive_npy_dtypes
     from types import GetSetDescriptorType, BuiltinFunctionType, MethodType
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     from .cluster import _METRIC_NAMES, _INIT_NAMES
     from .density import _METRICS
     from ._spectral_impl import _CLUSTER_AFFINITIES

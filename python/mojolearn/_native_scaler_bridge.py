@@ -38,7 +38,7 @@ def connect(scaler_class):
     from types import BuiltinFunctionType, ModuleType, MethodType
     from . import _backend
     from ._native_classical_bridge import _numpy_free_context, _state_context, _layout
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
 
     context = _state_context()
     context["native_module_type"] = ModuleType

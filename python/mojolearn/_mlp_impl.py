@@ -292,7 +292,7 @@ def _connect():
                 backend=vars(_backend), environ=os.environ._data, admission=_state_context())
 
 
-from .tokenizer import _binding as _small_mlp_tokenizer_binding
+from ._native_host_owner import _binding as _small_mlp_tokenizer_binding
 _SMALL_MLP_MODULE = _small_mlp_tokenizer_binding()._module
 _NATIVE = _SMALL_MLP_MODULE.small_mlp_call
 # glue: native state cleanup must also stay native when a constructed owner is

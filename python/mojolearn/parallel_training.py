@@ -274,7 +274,7 @@ def _connect_parallel_byte_native():
     from . import _backend
     from ._array import Array
     from ._byte_lm_config import ByteLanguageModelConfig
-    from .tokenizer import _binding as _tokenizer_binding
+    from ._native_host_owner import _binding as _tokenizer_binding
     runtime = _tokenizer_binding()._module.parallel_byte_call
     mode = _backend.default_mode()
     vendor = _backend.vendor()
@@ -310,7 +310,7 @@ def _connect_parallel_corpus_native():
     # glue: import-time connection only. The corpus-fed step is one native
     # call (bindings/lm_corpus_public_native_door.mojo, batches_parallel_step):
     # the batches owner is admitted there and its rows gathered natively.
-    from .tokenizer import _binding as _tokenizer_binding
+    from ._native_host_owner import _binding as _tokenizer_binding
     return _tokenizer_binding()._module.lm_corpus_public_call
 
 

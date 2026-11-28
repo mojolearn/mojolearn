@@ -8878,7 +8878,7 @@ def _native_metadata_factory(rel, call, function):
     from import_metadata_effects import Source
     source = Source(_parse, lambda *args: False)
     target = source.target(rel, value.value.func, function.body)
-    if not target or target[0] != 'python/mojolearn/tokenizer.py' or getattr(target[1], 'name', None) != '_binding':
+    if not target or target[0] != 'python/mojolearn/_native_host_owner.py' or getattr(target[1], 'name', None) != '_binding':
         return False
     src = 'bindings/_mojolearn_tokenizer_host.mojo'
     implementation = _binding_exports(src).get(call.attr)

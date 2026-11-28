@@ -795,7 +795,7 @@ class SmallByteLanguageModelTrainer:
 def _connect_trainer():
     # glue: connect the GPU trainer's native step owner and its fixed
     # metadata once, at package import
-    from .tokenizer import _binding as _tokenizer_binding
+    from ._native_host_owner import _binding as _tokenizer_binding
     from ._native_classical_bridge import _state_context
     from types import MethodType
     context = _state_context()

@@ -12,7 +12,7 @@ def connect(pca_class):
     from . import _backend
     from .linear_model import LinearRegression, Ridge
     from ._native_classical_bridge import connect as connect_classical, _numpy_free_context
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     from ._native_classical_warnings import connect_warnings
 
     # The PCA owner reads and returns ndarrays: it connects NumPy natively

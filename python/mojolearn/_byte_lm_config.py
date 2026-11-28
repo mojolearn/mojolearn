@@ -152,7 +152,7 @@ def _config_delattr(self, name):
 def _connect_config():
     # glue: dataclass storage stays compatible; native code owns public methods.
     from ._native_family_bridge import shared_context, _unavailable
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     context = dict(shared_context(), byte_lm_config_class=ByteLanguageModelConfig,
                    byte_lm_config_frozen_error=FrozenInstanceError, byte_lm_default_profile=_DEFAULT_PROFILE)
     try:

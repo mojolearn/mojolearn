@@ -11,7 +11,7 @@ def connect(classes, neighbors=False, metadata=None):
     from . import _backend
     from .linear_model import LinearRegression, Ridge
     from ._native_classical_bridge import connect as connect_classical, _numpy_free_context
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     from ._native_decomp_kit_bridge import _entries as _kit_entries
 
     _, shared = connect_classical(Ridge, LinearRegression)

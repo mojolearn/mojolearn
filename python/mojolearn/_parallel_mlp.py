@@ -6,7 +6,7 @@ from . import _backend
 from . import parallel_training as _parallel_buffer_connection
 from ._mlp_impl import SmallMLPTrainer
 from ._training_impl import AdamW
-from .tokenizer import _binding
+from ._native_host_owner import _binding
 
 _native_parallel_mlp = _binding()._module.parallel_mlp_call
 try:

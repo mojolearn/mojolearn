@@ -186,7 +186,7 @@ def connect():
         return _ENTRY, shared_context()
     from types import BuiltinFunctionType
     try:
-        from .tokenizer import _binding
+        from ._native_host_owner import _binding
         entry = _binding()._module.classical_native_call
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError("the family owner requires the compiled classical_native_call entry")

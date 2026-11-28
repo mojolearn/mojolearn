@@ -395,7 +395,7 @@ class GenerationStream:
 def _connect_causal_native():
     import _thread
     import hashlib  # Connection-time import; generation owns only the cached C SHA256 entry.
-    from ..tokenizer import _binding as runtime_binding
+    from .._native_host_owner import _binding as runtime_binding
     from .. import _training_impl as training
     from .._transformer_impl import TransformerBlock, TransformerState, TransformerDecodeSession, _OPT_NAMES
     from .._mamba_impl import (Mamba1Block, Mamba2Block, Mamba3Block, Mamba1State, Mamba2State, Mamba3State,

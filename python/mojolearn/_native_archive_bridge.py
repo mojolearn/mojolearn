@@ -42,7 +42,7 @@ def connect():
     from ._native_classical_bridge import _state_context
     from ._labels import ClassLabels
     try:
-        from .tokenizer import _binding
+        from ._native_host_owner import _binding
         entry = _binding()._module.classical_native_call
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError("model archives require the compiled classical_native_call entry")
@@ -123,7 +123,7 @@ def lifetime(cls, release, holder=None):
     archive = context["host_archive_context"]
     descriptor = archive.get("host_archive_finalizer_descriptor")
     if descriptor is None:
-        from .tokenizer import _binding
+        from ._native_host_owner import _binding
         module = _binding()._module
         finalize = getattr(module, "host_archive_finalize_call", None)
         if not isinstance(finalize, BuiltinFunctionType):

@@ -44,39 +44,16 @@ import os as _os
 
 from . import _backend
 
-_EXTENSION = "_mojolearn_tokenizer_host"
+# The host-owner loader (`_binding`, `_Entries`, `_ABI`, `_EXTENSION`) is `_native_host_owner.py`
+# since 2026-11-28: every family's bridge imports it from there, so importing the shared
+# host owner no longer reads as importing this module's GPU and fast tokenizers. The names
+# below are the same objects, kept importable from here.
+from ._native_host_owner import _ABI, _Entries, _EXTENSION, _binding
 
 __all__ = ["BpeTokenizer", "BpeVocabularyTrainer", "TrainedBpeVocabulary"]
 
 
-#: The binding's entries were `gpt2_*` until 2026-09-18 and are `bpe_*`
-#: since. A binding built before the rename (an older host directory under
-#: MOJOLEARN_HOST_DIR) is read through its old names so it keeps loading;
-#: the ids are the same arithmetic under either name.
-_ABI = ("load", "n_vocab", "max_token_bytes", "encode", "encode_batch")
-
-
-class _Entries:
-    """The binding module with its tokenizer entries under their `bpe_*`
-    names; every other attribute is the module's own."""
-
-    def __init__(self, module):
-        self._module = module
-        for name in _ABI:  # glue: looks up the binding ABI entries
-            f = getattr(module, "bpe_" + name, None) or getattr(module, "gpt2_" + name, None)
-            if f is None:
-                raise ImportError(f"mojolearn: the tokenizer binding exports neither bpe_{name} nor gpt2_{name}")
-            setattr(self, "bpe_" + name, f)
-
-    def __getattr__(self, name):
-        return getattr(self._module, name)
-
-
 _VOCABULARY_SCHEMA = "mojolearn.bpe-vocabulary.v1"
-
-
-def _binding():
-    return _Entries(_backend.load_host_module(_EXTENSION))  # import-time: tokenizer host binding module loaded once by load_host_module (text input step)
 
 
 #: The fast tier's Apple GPU tokenizer (`tokenizer/fast/`, built by

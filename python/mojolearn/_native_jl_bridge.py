@@ -9,7 +9,7 @@ def connect_public():
     # glue: retain the compiled entry once at import
     from types import BuiltinFunctionType, ModuleType
     try:
-        from .tokenizer import _binding
+        from ._native_host_owner import _binding
         entry = _binding()._module.jl_native_call
         if not isinstance(entry, BuiltinFunctionType):
             raise ImportError("johnson_lindenstrauss_min_dim requires a compiled jl_native_call")

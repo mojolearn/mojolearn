@@ -104,7 +104,7 @@ def connect(door, **classes):
     from types import BuiltinFunctionType
     from . import _backend
     from ._native_classical_bridge import _state_context, _numpy_free_context
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
 
     context = _state_context()
     connected = {}

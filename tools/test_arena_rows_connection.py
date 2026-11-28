@@ -59,7 +59,7 @@ def connect(native_entry=len, store_binding=None, backend_fields=None):
     arrays.Array = Array
     bridge = ModuleType('mojolearn._native_classical_bridge')
     bridge._numpy_free_context = lambda: {'array_class': Array}
-    tokenizer = ModuleType('mojolearn.tokenizer')
+    tokenizer = ModuleType('mojolearn._native_host_owner')
     # _mode's import-time generic slots (4fe4a53c9d) connect three more
     # compiled entries. The descriptor factory is a builtin that hands back
     # the standard object.__getattribute__, so the inert fixture keeps
@@ -80,7 +80,7 @@ def connect(native_entry=len, store_binding=None, backend_fields=None):
         vars(backend).update(backend_fields)
     modules = {'mojolearn': package, 'mojolearn._arena_io': arena,
                'mojolearn._array': arrays, 'mojolearn._native_classical_bridge': bridge,
-               'mojolearn.tokenizer': tokenizer, 'mojolearn.model_selection': selection,
+               'mojolearn._native_host_owner': tokenizer, 'mojolearn.model_selection': selection,
                'mojolearn._buffer': buffers, 'mojolearn._backend': backend}
     with patch.dict(sys.modules, modules):
         namespace = {'__name__': 'mojolearn._native_arena_rows', '__package__': 'mojolearn'}

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection for the complete native numeric-profile operations."""
-from .tokenizer import _binding
+from ._native_host_owner import _binding
 
 # Imported by the package after its native imports exist: the compiled entry is
 # bound once here; connect() supplies the context to `_numeric_profile`, whose

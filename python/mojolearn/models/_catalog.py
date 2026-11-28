@@ -9,7 +9,7 @@ from pathlib import Path
 from .. import _backend
 from .._version import __version__
 from .._array import Array
-from ..tokenizer import _binding
+from .._native_host_owner import _binding
 from ..importers._program import _IMPORT_CONTEXT
 
 __all__ = ["catalog", "verify_catalog_entry"]

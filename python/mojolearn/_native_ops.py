@@ -25,7 +25,7 @@ def codes():
     shell's unavailable entry raises its own message."""
     if not _CODES:
         try:
-            from .tokenizer import _binding
+            from ._native_host_owner import _binding
             names = _binding()._module.classical_native_call(None, "operation_codes", (), {})
         except ImportError:
             names = ()

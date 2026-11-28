@@ -91,7 +91,7 @@ def connect(kinds):
     from . import _backend
     from ._arena_io import DeviceRows, _Scope, _LOCAL
     from ._native_classical_bridge import _state_context, _numpy_free_context
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     from ._native_loaded_modules import connect_module
 
     context = _state_context()

@@ -41,7 +41,7 @@ def connect():
     """`(entry, context)` for `kpss_test` and `select_d`."""
     from types import BuiltinFunctionType
     from . import _backend
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     from ._native_classical_bridge import _state_context
     entry = _binding()._module.tsa_native_call
     if not isinstance(entry, BuiltinFunctionType):

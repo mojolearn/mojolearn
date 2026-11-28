@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time plans for shallow, state-preserving parameter assignments."""
 from types import BuiltinFunctionType
-from .tokenizer import _binding
+from ._native_host_owner import _binding
 
 ENTRY = _binding()._module.declared_params_native_call
 if type(ENTRY) is not BuiltinFunctionType:

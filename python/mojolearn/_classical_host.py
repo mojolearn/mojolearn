@@ -1608,7 +1608,7 @@ def _connect_host_inference():
     from _contextvars import ContextVar
     from ._native_owner_lifetime import connect_owner_context
     from ._labels import ClassLabels
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     entries = {}
     for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kde_score_samples", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
                                                           "tsvd_transform", "tsvd_native_api_v1", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform",

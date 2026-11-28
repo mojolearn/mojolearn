@@ -48,7 +48,7 @@ def connect(kinds, prog_context):
     from ._arena_io import DeviceRows, _Scope, _LOCAL
     from ._native_classical_bridge import _state_context, _numpy_free_context
     from ._native_labels_bridge import label_context
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
 
     context = _state_context()
     context["output_context"] = _numpy_free_context()

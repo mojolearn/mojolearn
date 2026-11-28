@@ -53,7 +53,7 @@ def connect(family, prog_class, scratch_class=None, op_names=None):
     from . import _backend
     from ._arena_io import DeviceRows, _Scope, _LOCAL
     from ._native_classical_bridge import _state_context, _numpy_free_context
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
 
     module_name, mandatory, optional, refusal = _FAMILIES[family]
     _backend.default_mode()  # glue: resolve the package default mode once, so the native run reads it

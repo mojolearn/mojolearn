@@ -211,7 +211,7 @@ def labels_entry():
     label module is imported before the binding and its classes exist)."""
     if not _LABELS_ENTRY:
         from types import BuiltinFunctionType
-        from .tokenizer import _binding
+        from ._native_host_owner import _binding
         from ._native_classical_bridge import _state_context
         from ._labels import ClassLabels
         entry = _binding()._module.labels_native_call

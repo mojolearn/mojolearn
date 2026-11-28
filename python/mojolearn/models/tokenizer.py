@@ -9,7 +9,7 @@ files are supplied by the caller.
 """
 import unicodedata as _unicodedata
 
-from ..tokenizer import _binding
+from .._native_host_owner import _binding
 
 # Module import connects the public package to the compiled extension once.
 _NATIVE = _binding()._module

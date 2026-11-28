@@ -5,7 +5,7 @@ pool). Each driver module registers its fixed classes, entries and contexts
 here at its import; each public driver is then one call into it."""
 from . import _native_process  # noqa: F401  (connects the native process pool)
 from . import _backend
-from .tokenizer import _binding
+from ._native_host_owner import _binding
 
 _native_parallel_shard = _binding()._module.parallel_shard_call
 

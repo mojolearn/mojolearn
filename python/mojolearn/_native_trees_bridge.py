@@ -200,7 +200,7 @@ def connect():
         return _ENTRY, _CONTEXT
     from types import BuiltinFunctionType
     try:
-        from .tokenizer import _binding
+        from ._native_host_owner import _binding
         from ._native_classical_bridge import _state_context
         module = _binding()._module
         entry = module.classical_native_call
@@ -453,7 +453,7 @@ def connect_gbdt_parameters(base, classes, metadata):
     # output conversion; the package installs no Python decorators on these
     # classes (`_mode`), so nothing is unwrapped here.
     from types import BuiltinFunctionType, MethodType
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     module = _binding()._module
     attribute, factory = module.standard_scaler_attribute_call, module.classical_attribute_descriptor
     if type(attribute) is not BuiltinFunctionType or type(factory) is not BuiltinFunctionType:
@@ -486,7 +486,7 @@ def _connect_public_forest(cls, context):
     # decorators on these classes (`_mode`), so nothing is unwrapped here.
     rows, getter, previous = context['trees_constructors'][cls]
     from types import BuiltinFunctionType, MethodType
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     from ._native_classical_bridge import _layout
     module = _binding()._module
     attribute = module.standard_scaler_attribute_call

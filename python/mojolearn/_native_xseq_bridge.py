@@ -111,7 +111,7 @@ def connect():
     from . import _backend
     from ._buffer import _native
     try:
-        from .tokenizer import _binding
+        from ._native_host_owner import _binding
         entry = _binding()._module.xseq_native_call
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError("the sequence estimators require the compiled xseq_native_call entry")

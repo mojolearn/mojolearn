@@ -27,7 +27,7 @@ def call(operation, *args):
     """One user-object read: ``operation`` and its arguments as the native
     entry takes them. Raises the refusal the read returns."""
     if not _CALL:
-        from .tokenizer import _binding
+        from ._native_host_owner import _binding
         _CALL.append(_binding()._module.user_objects_native_call)
     got = _CALL[0](operation, *args)
     if type(got) is tuple and len(got) == 3 and got[0] == "__refuse__":

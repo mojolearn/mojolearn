@@ -16,7 +16,7 @@ def connect():
     from . import _backend
     from ._native_classical_bridge import _state_context
     from ._native_labels_bridge import label_context
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
 
     context = _state_context()
     context.update(label_context())
@@ -165,7 +165,7 @@ def connect_public(cls, context, install=True):
     # glue: install native attribute binding and constructor metadata once
     import sys
     from types import BuiltinFunctionType, MethodType
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     from ._native_classical_bridge import _layout
     from ._labels import ClassLabels
     owner = context.get('lr_host_contexts', {}).get(cls, context)

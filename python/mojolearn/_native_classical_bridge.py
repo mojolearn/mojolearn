@@ -18,7 +18,7 @@ def _native_table_cells(module, prefix):
     # glue: create an immutable compiled connection owner once at import.
     # The compiled connector admits exact images/metadata and the published
     # endpoint; product operations never invoke the capsule factory.
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     families = {"estimators": (0, "linear_fit_native_api_v1"),
                 "x_linear": (1, "ridge_fit_native_api_v1"),
                 "x_decomp": (2, "x_decomp_native_api_v1"),
@@ -146,7 +146,7 @@ def _state_context():
     import sys
     from ._native_loaded_modules import PATH_TYPES, PATH_BASES
     from . import _backend
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     from .exceptions import NotFittedError
     from ._native_classical_warnings import connect_warnings
 
@@ -206,7 +206,7 @@ def connect(ridge_class, linear_class=None):
     import os
     import sys
     from . import _backend
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     context = _state_context()
     connected = {}
     metric_bindings = {}
@@ -401,7 +401,7 @@ def connect_public(ridge_class, linear_class):
     from types import BuiltinFunctionType, MethodType
     try:
         entry, context = connect(ridge_class, linear_class)
-        from .tokenizer import _binding
+        from ._native_host_owner import _binding
         module = _binding()._module
         attribute_entry = module.classical_attribute_call
         descriptor_entry = module.classical_attribute_descriptor

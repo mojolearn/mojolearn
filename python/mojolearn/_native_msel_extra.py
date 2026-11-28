@@ -8,7 +8,7 @@ def connect(context, register, registry):
     import sys
     from ._native_classical_bridge import _layout
     from types import BuiltinFunctionType, MethodType
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     from ._labels import ClassLabels
     prep = sys.modules.get(__package__ + '._expansion_prep')
     if prep is not None and prep.LinearDiscriminantAnalysis not in registry:

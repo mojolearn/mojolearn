@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time constructor plans for the native linear parameter setter."""
 from types import BuiltinFunctionType
-from .tokenizer import _binding
+from ._native_host_owner import _binding
 
 _ENTRY = _binding()._module.params_setter_native_call
 if type(_ENTRY) is not BuiltinFunctionType:

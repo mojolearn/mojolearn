@@ -3535,7 +3535,7 @@ def _connect_session_mode(mode):
 
 def _connect_session_module(module):
     # Import-time registration of common native provider/resource owner types.
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     _binding()
     # The exact compiled module, resolved once here: a session stores it as
     # `_b`, and native admission (`neural_descriptor_entry`, the device

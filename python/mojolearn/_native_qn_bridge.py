@@ -13,7 +13,7 @@ def connect(losses):
     from types import BuiltinFunctionType
     from . import _backend
     from ._native_classical_bridge import _state_context
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
 
     from ._native_labels_bridge import label_context
     context = _state_context()

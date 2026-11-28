@@ -2960,7 +2960,7 @@ def _connect_explainers():
     if "trees_unavailable" in _TREES_CONTEXT:
         return
     from types import BuiltinFunctionType, MethodType
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     from ._native_classical_bridge import _layout
     module = _binding()._module
     attribute = module.standard_scaler_attribute_call

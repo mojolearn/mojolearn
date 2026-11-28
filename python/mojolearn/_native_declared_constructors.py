@@ -14,7 +14,7 @@ are derived from source by tools/declared_constructor_schemas.py and checked
 against it by tools/test_native_declared_constructor_connection.py.
 """
 from types import BuiltinFunctionType
-from .tokenizer import _binding
+from ._native_host_owner import _binding
 
 _ENTRY = _binding()._module.full_reset_constructor_native_call
 if type(_ENTRY) is not BuiltinFunctionType:

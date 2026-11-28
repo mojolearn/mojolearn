@@ -175,7 +175,7 @@ def connect():
     from types import BuiltinFunctionType
     from . import _backend
     try:
-        from .tokenizer import _binding
+        from ._native_host_owner import _binding
         entry = _binding()._module.xcnn_native_call
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError("the CNN layers require the compiled xcnn_native_call entry")
@@ -228,7 +228,7 @@ def register(**tables):
                                  scalar_types=(type(None), bool, int, float, complex, str, bytes))
             context["xcnn_array_context"] = array_context
             from types import BuiltinFunctionType, MethodType
-            from .tokenizer import _binding
+            from ._native_host_owner import _binding
             descriptor = _binding()._module.classical_attribute_descriptor
             if type(descriptor) is not BuiltinFunctionType:
                 raise TypeError("CNN storage requires its native finalizer descriptor")

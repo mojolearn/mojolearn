@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time schemas for full-reset field-only parameter setters."""
 from types import BuiltinFunctionType
-from .tokenizer import _binding
+from ._native_host_owner import _binding
 
 _ENTRY = _binding()._module.full_reset_params_native_call
 if type(_ENTRY) is not BuiltinFunctionType:

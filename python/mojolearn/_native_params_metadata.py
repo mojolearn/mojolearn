@@ -4,7 +4,7 @@ from types import BuiltinFunctionType, ModuleType
 
 
 def connect():
-    from .tokenizer import _binding
+    from ._native_host_owner import _binding
     entry = _binding()._module.params_metadata_native_call
     if type(entry) is not BuiltinFunctionType:
         raise TypeError('parameter metadata requires a compiled native entry')
