@@ -129,7 +129,7 @@ def _host_components(coo: CooGraph, mut comp: List[Int32]) -> Int:
     # the roots (lab[v] == v) numbered in index order: per-task counts, their
     # prefix over the tasks, each task's ranks, then every vertex its root's id
     var counts = List[Int](length=nt + 1, fill=0)
-    var kp = counts.unsafe_ptr()
+    var kp = MutPointer[Int, MutAnyOrigin](unsafe_from_address=Int(counts.unsafe_ptr()))
     def _count(t: Int) {imm lp, imm kp, imm nchunk, imm n}:
         var hi = min(t * nchunk + nchunk, n)
         var c = 0
@@ -139,8 +139,8 @@ def _host_components(coo: CooGraph, mut comp: List[Int32]) -> Int:
         kp.unsafe_store(t + 1, c)
     host_parallelize(_count, nt)
     for t in range(nt):  # small-loop(the node tasks, at most the core count)
-        counts[t + 1] += counts[t]
-    var n_comp = counts[nt]
+        kp.unsafe_store(t + 1, kp[t + 1] + kp[t])
+    var n_comp = kp[nt]
     comp = List[Int32](length=max(n, 1), fill=Int32(0))
     var op = CcLabelPtr(unsafe_from_address=Int(comp.unsafe_ptr()))
     def _rank(t: Int) {imm lp, imm kp, imm op, imm nchunk, imm n}:
