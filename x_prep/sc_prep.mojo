@@ -129,8 +129,11 @@ def _log1p(x: Float32) -> Float32:
 @always_inline
 def expm1f(x: Float32) -> Float32:
     """expm1 from exp and log (Kahan's form): u = exp(x); x when u == 1, -1 when u - 1 == -1, else
-    (u - 1) * x / log(u)."""
+    (u - 1) * x / log(u). An overflowed exp (+inf) or a NaN x returns u itself: the quotient would be inf / inf,
+    a NaN where `exp(x) - 1` (the form rank_genes_groups had before it shared this body) and NumPy give +inf."""
     var u = expf(x)
+    if not (u - u == Float32(0)):
+        return u
     if u == Float32(1):
         return x
     var um = sub(u, Float32(1))

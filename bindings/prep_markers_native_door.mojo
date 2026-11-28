@@ -14,7 +14,7 @@ indices), with the scores, p-values, adjusted p-values and log fold changes in t
 """
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
-from bindings.native_loaded_module_door import native_loaded_module
+from bindings.native_loaded_module_door import NativeModules
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem
 from bindings.classical_arrays_door import classical_typed
 from bindings.scaler_native_door import _ptr
@@ -34,8 +34,8 @@ comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 
 
-def _text(value: PythonObject, name: String, choices: String) raises -> String:
-    var b = native_loaded_module("builtins")
+def _text(value: PythonObject, name: String, choices: String, b: PythonObject) raises -> String:
+    # `b`: the builtins module the call admitted (prep_rank_genes_call).
     if py_type(value) is not b.str:
         raise Error("ValueError: rank_genes_groups: " + name + " must be one of " + choices)
     return String(value)
@@ -48,8 +48,11 @@ def _arena(ran: PythonObject) raises -> Int:
 
 def prep_rank_genes_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # UNPACK
-    var b = native_loaded_module("builtins")
-    var method_name = _text(args[2], "method", "'wilcoxon', 't-test'")
+    # One admission of each module for the call (tools/check_admitted_call.py),
+    # passed to the helpers; `array` is admitted after the last run.
+    var mods = NativeModules()
+    var b = mods.module("builtins")
+    var method_name = _text(args[2], "method", "'wilcoxon', 't-test'", b)
     var method: Int
     if method_name == "wilcoxon":
         method = MARKER_WILCOXON
@@ -57,7 +60,7 @@ def prep_rank_genes_call(args: PythonObject, context: PythonObject) raises -> Py
         method = MARKER_T_TEST
     else:
         raise Error("ValueError: rank_genes_groups: method must be 'wilcoxon' or 't-test', got '" + method_name + "'")
-    var corr = _text(args[5], "corr_method", "'benjamini-hochberg', 'bonferroni'")
+    var corr = _text(args[5], "corr_method", "'benjamini-hochberg', 'bonferroni'", b)
     if corr != "benjamini-hochberg" and corr != "bonferroni":
         raise Error("ValueError: rank_genes_groups: corr_method must be 'benjamini-hochberg' or 'bonferroni', got '"
                     + corr + "'")
@@ -78,7 +81,7 @@ def prep_rank_genes_call(args: PythonObject, context: PythonObject) raises -> Py
         raise Error("ValueError: rank_genes_groups: groups must hold at least two different labels")
     var mode = _default_mode(context)
     var entries = _entries(mode, context)
-    var x = _SpX(args[0], entries, context)
+    var x = _SpX(args[0], entries, b, context)
     var n = x.n
     var d = x.d
     if labels.n != n:
@@ -137,7 +140,8 @@ def prep_rank_genes_call(args: PythonObject, context: PythonObject) raises -> Py
     py_setitem(result, "groups", names)
     var total = ko * d
     var name_words = _I32P(unsafe_from_address=_arena(ran_final) + 4 * final_plan.names)
-    var flat = _py_array(native_loaded_module("array"), "i", name_words.bitcast[UInt8](), total * 4)
+    mods.released()  # the runs above may have released the GIL: re-check on this request
+    var flat = _py_array(mods.module("array"), "i", name_words.bitcast[UInt8](), total * 4)
     py_setitem(result, "names", _xc_array(flat, Python.tuple(ko, d), "<i4", "i", context))
     py_setitem(result, "scores", _take2(ran_final, final_plan.values, ko, d, context))
     py_setitem(result, "pvals", _take2(ran_final, final_plan.values + total, ko, d, context))

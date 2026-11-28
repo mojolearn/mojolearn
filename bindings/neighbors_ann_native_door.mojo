@@ -827,15 +827,15 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
 # ---------------------------------------------------------------- refine
 
 
-def _ann_bool_sequence(value: PythonObject) raises -> Bool:
-    var b = native_loaded_module("builtins")
+def _ann_bool_sequence(value: PythonObject, b: PythonObject) raises -> Bool:
+    # `b`: the builtins module `_refine` admitted for this public call.
     var cls = py_type(value)
     if cls is b.bool:
         return True
     if cls is not b.list and cls is not b.tuple:
         return False
     for i in range(len(value)):  # driver-loop: exact native sequence boolean admission
-        if not _ann_bool_sequence(value[i]):
+        if not _ann_bool_sequence(value[i], b):
             return False
     return True
 
@@ -886,7 +886,7 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     refine_check_candidate_kind(c.source.kind == CAST_KIND_SIGNED or c.source.kind == CAST_KIND_UNSIGNED, m)
     # Without NumPy the native sequence owner represents a bool sequence as
     # int8. Retain asarray's boolean refusal while accepting real int8 buffers.
-    if (py_type(args[3]) is b.list or py_type(args[3]) is b.tuple) and _ann_bool_sequence(args[3]):
+    if (py_type(args[3]) is b.list or py_type(args[3]) is b.tuple) and _ann_bool_sequence(args[3], b):
         raise Error(refine_candidates_refusal(m))
     var k_o = _ann_int("refine", "k", args[4])
     var k = Int(py=k_o)
@@ -967,7 +967,7 @@ def _knn_graph_opt_int(owner: String, name: String, value: PythonObject) raises 
     return Int(py=_ann_int(owner, name, value))
 
 
-def _knn_graph(args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _knn_graph(args: PythonObject, b: PythonObject, context: PythonObject) raises -> PythonObject:
     """`knn_graph(X, n_neighbors, method, n_lists, n_probes, random_state,
     metric, numeric_mode, device)` (lane sc-ann-1): args are (binding, X,
     n_neighbors, method, n_lists, n_probes, random_state, metric,
@@ -975,7 +975,6 @@ def _knn_graph(args: PythonObject, context: PythonObject) raises -> PythonObject
     binding call (the plan and the build are Mojo: x_ann/knn_graph_plan.mojo,
     x_ann/knn_graph_device.mojo, x_ann/host/knn_graph_host.mojo), PACK (the
     two n x k arrays)."""
-    var b = native_loaded_module("builtins")
     var device = function_device_default()
     if args[0] is None and args[9] is not None:
         device = function_device_admit(args[9], "knn_graph", True, True, context, b)
@@ -1036,9 +1035,8 @@ def _knn_graph(args: PythonObject, context: PythonObject) raises -> PythonObject
 # ---------------------------------------------------------------- neighbors_graph
 
 
-def _ng_float(name: String, value: PythonObject) raises -> Float64:
+def _ng_float(name: String, value: PythonObject, b: PythonObject) raises -> Float64:
     """An exact int or float (not a bool), finite."""
-    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is not b.int and cls is not b.float:
         raise Error("TypeError: mojolearn neighbors_graph: " + name + " must be a float, got " + family_type_name(value))
@@ -1048,7 +1046,7 @@ def _ng_float(name: String, value: PythonObject) raises -> Float64:
     return v
 
 
-def _neighbors_graph(args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _neighbors_graph(args: PythonObject, b: PythonObject, context: PythonObject) raises -> PythonObject:
     """`neighbors_graph(X, n_neighbors, method, n_lists, n_probes,
     random_state, set_op_mix_ratio, local_connectivity, numeric_mode,
     device)` (lane sc-ann-1-umap): args are (binding, X, n_neighbors, method,
@@ -1058,7 +1056,6 @@ def _neighbors_graph(args: PythonObject, context: PythonObject) raises -> Python
     k-NN and fuzzy-set body, umap/sparse_estimator.mojo
     `umap_neighbors_graph_device` and its CPU column), PACK (the two CSR
     tuples)."""
-    var b = native_loaded_module("builtins")
     var device = function_device_default()
     if args[0] is None and args[10] is not None:
         device = function_device_admit(args[10], "neighbors_graph", True, True, context, b)
@@ -1084,8 +1081,8 @@ def _neighbors_graph(args: PythonObject, context: PythonObject) raises -> Python
     var n_lists = _knn_graph_opt_int("neighbors_graph", "n_lists", args[4])
     var n_probes = _knn_graph_opt_int("neighbors_graph", "n_probes", args[5])
     var random_state = _knn_graph_opt_int("neighbors_graph", "random_state", args[6])
-    var mix = _ng_float("set_op_mix_ratio", args[7])
-    var connectivity = _ng_float("local_connectivity", args[8])
+    var mix = _ng_float("set_op_mix_ratio", args[7], b)
+    var connectivity = _ng_float("local_connectivity", args[8], b)
     # the shape refusals before any allocation (the entry checks them again, typed)
     if n < 2 or d < 1:
         raise Error("ValueError: mojolearn neighbors_graph: X needs at least 2 rows and 1 feature")
@@ -1132,7 +1129,7 @@ def _neighbors_graph(args: PythonObject, context: PythonObject) raises -> Python
     _ = x  # keep the admitted X alive through the native call above
     _ = x_pin
     _ = edges
-    var connectivities = umap_graph_pack(stores, n, cap, context)
+    var connectivities = umap_graph_pack(stores, n, cap, b, context)
     var distances = Python.tuple(dist_ptr, dist_idx, dist_val)
     return parallel_public_result(Python.tuple(distances, connectivities), "neighbors_graph", PythonObject(None),
                                   context)
@@ -1157,10 +1154,13 @@ def neighbors_ann_operation(model: PythonObject, operation: String, var args: Py
         args = estimator_arguments(model, name, args, context)
     if operation == "family_xn_ann_refine":
         return _refine(args, context)
-    if operation == "family_xn_ann_knn_graph":
-        return _knn_graph(args, context)
-    if operation == "family_xn_ann_neighbors_graph":
-        return _neighbors_graph(args, context)
+    if operation == "family_xn_ann_knn_graph" or operation == "family_xn_ann_neighbors_graph":
+        # The one builtins admission of a graph call, passed to its helpers
+        # (tools/check_admitted_call.py). Other operations do not pay for it.
+        var graph_b = native_loaded_module("builtins")
+        if operation == "family_xn_ann_knn_graph":
+            return _knn_graph(args, graph_b, context)
+        return _neighbors_graph(args, graph_b, context)
     if operation == "family_xn_ann_pq_search":
         return neighbors_ann_search(model, 0, args, context)
     if operation == "family_xn_ann_sq_search":

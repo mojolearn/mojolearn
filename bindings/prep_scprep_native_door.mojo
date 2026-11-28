@@ -19,7 +19,7 @@ documented).
 """
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
-from bindings.native_loaded_module_door import native_loaded_module
+from bindings.native_loaded_module_door import NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_arrays_door import classical_address, classical_dtype_str, classical_typed, classical_c_order
 from bindings.prep_encode_prog_run import enc_input
@@ -51,43 +51,41 @@ comptime _U8P = MutPointer[UInt8, MutUntrackedOrigin]
 # ---------------------------------------------------------------- UNPACK helpers
 
 
-def _b() raises -> PythonObject:
-    return native_loaded_module("builtins")
+# `b` in the helpers below is the builtins module the public call admitted once (scprep_dispatch, or the caller
+# of `_SpX` / `scprep_csr_like`), passed by reference: no helper admits a module itself (tools/check_admitted_call.py).
 
 
 def _name(model: PythonObject) raises -> String:
     return String(py_type(model).__name__)
 
 
-def _repr(value: PythonObject) raises -> String:
-    return String(py_call(_b().repr, value))
+def _repr(value: PythonObject, b: PythonObject) raises -> String:
+    return String(py_call(b.repr, value))
 
 
 def _is_none(value: PythonObject) -> Bool:
     return value is None
 
 
-def _float(value: PythonObject, what: String) raises -> Float64:
-    var b = _b()
+def _float(value: PythonObject, what: String, b: PythonObject) raises -> Float64:
     if py_type(value) is b.bool or py_type(value) is b.str:
-        raise Error("TypeError: " + what + " must be a real number, got " + _repr(value))
+        raise Error("TypeError: " + what + " must be a real number, got " + _repr(value, b))
     return Float64(py=py_call(b.float, value))
 
 
-def _int(value: PythonObject, what: String) raises -> Int:
-    var b = _b()
+def _int(value: PythonObject, what: String, b: PythonObject) raises -> Int:
     if py_type(value) is b.bool or py_type(value) is b.float or py_type(value) is b.str:
-        raise Error("TypeError: " + what + " must be an integer, got " + _repr(value))
+        raise Error("TypeError: " + what + " must be an integer, got " + _repr(value, b))
     return Int(py=py_call(b.int, value))
 
 
-def _truth(value: PythonObject) raises -> Bool:
-    return Bool(py=py_call(_b().bool, value))
+def _truth(value: PythonObject, b: PythonObject) raises -> Bool:
+    return Bool(py=py_call(b.bool, value))
 
 
-def _text(value: PythonObject, what: String) raises -> String:
-    if py_type(value) is not _b().str:
-        raise Error("ValueError: " + what + " must be a string, got " + _repr(value))
+def _text(value: PythonObject, what: String, b: PythonObject) raises -> String:
+    if py_type(value) is not b.str:
+        raise Error("ValueError: " + what + " must be a string, got " + _repr(value, b))
     return String(value)
 
 
@@ -105,19 +103,29 @@ def _mode(context: PythonObject) raises -> PythonObject:
 
 
 def scprep_csr_like(source: PythonObject) raises -> Bool:
-    """A sparse X in CSR form: a scipy.sparse container (by its defining module), or any object exposing a
-    CSR form (`format == "csr"` and `shape`, `indptr`, `indices`, `data`), read as buffers only."""
+    """The form below for a caller that holds no admitted builtins (bindings/prep_stateless_native_door.mojo): one
+    admission through the per-call module handle."""
     if is_sparse(source):
         return True
-    var b = _b()
-    if not Bool(py=py_call(b.hasattr, source, PythonObject("format"))):
-        return False
-    var fmt = py_call(b.getattr, source, PythonObject("format"))
-    if py_type(fmt) is not b.str or String(fmt) != "csr":
-        # another sparse layout with index buffers (a CSC-form object) is refused here, never read as dense
-        if Bool(py=py_call(b.hasattr, source, PythonObject("indptr"))):
-            raise Error("ValueError: a sparse X must be in CSR form; convert it with .tocsr() first")
-        return False
+    var mods = NativeModules()
+    return scprep_csr_like(source, mods.module("builtins"))
+
+
+def scprep_csr_like(source: PythonObject, b: PythonObject) raises -> Bool:
+    """A sparse X in CSR form: a scipy.sparse container (by its defining module), or any object exposing a
+    CSR form (`shape`, `indptr`, `indices`, `data`, and `format == "csr"` when it names a format), read as
+    buffers only. An object without `format` is CSR by its four buffers: rank_genes_groups' documented input
+    ("any object with indptr, indices, data and shape") and the form its identity lane passes, which the door's
+    own admission took before it shared this one."""
+    if is_sparse(source):
+        return True
+    if Bool(py=py_call(b.hasattr, source, PythonObject("format"))):
+        var fmt = py_call(b.getattr, source, PythonObject("format"))
+        if py_type(fmt) is not b.str or String(fmt) != "csr":
+            # another sparse layout with index buffers (a CSC-form object) is refused here, never read as dense
+            if Bool(py=py_call(b.hasattr, source, PythonObject("indptr"))):
+                raise Error("ValueError: a sparse X must be in CSR form; convert it with .tocsr() first")
+            return False
     return (Bool(py=py_call(b.hasattr, source, PythonObject("indptr")))
             and Bool(py=py_call(b.hasattr, source, PythonObject("indices")))
             and Bool(py=py_call(b.hasattr, source, PythonObject("data")))
@@ -137,8 +145,9 @@ struct _SpX(Movable):
     var indices: PythonObject
     var data: PythonObject
 
-    def __init__(out self, source: PythonObject, entries: PythonObject, context: PythonObject) raises:
-        self.csr = scprep_csr_like(source)
+    def __init__(out self, source: PythonObject, entries: PythonObject, b: PythonObject,
+                 context: PythonObject) raises:
+        self.csr = scprep_csr_like(source, b)
         self.cls = py_type(source)
         self.values = PythonObject(None)
         self.indptr = PythonObject(None)
@@ -147,20 +156,25 @@ struct _SpX(Movable):
         self.nnz = 0
         if self.csr:
             # UNPACK of the caller's CSR buffers only (no SciPy call): a sparse X must already be in CSR form
-            if String(py_call(_b().str, py_call(_b().getattr, source, PythonObject("format")))) != "csr":
+            if (Bool(py=py_call(b.hasattr, source, PythonObject("format")))
+                    and String(py_call(b.str, py_call(b.getattr, source, PythonObject("format")))) != "csr"):
                 raise Error("TypeError: " + String(self.cls.__name__) + " input must be in CSR form (csr_matrix or "
                             "csr_array); convert it with .tocsr() first")
-            var shape = py_call(_b().getattr, source, PythonObject("shape"))
-            self.n = Int(py=py_call(_b().int, shape[0]))
-            self.d = Int(py=py_call(_b().int, shape[1]))
-            self.indptr = _i32_vector(py_call(_b().getattr, source, PythonObject("indptr")), "indptr", context)
-            self.indices = _i32_vector(py_call(_b().getattr, source, PythonObject("indices")), "indices", context)
+            var shape = py_call(b.getattr, source, PythonObject("shape"))
+            self.n = Int(py=py_call(b.int, shape[0]))
+            self.d = Int(py=py_call(b.int, shape[1]))
+            self.indptr = _i32_vector(py_call(b.getattr, source, PythonObject("indptr")), "indptr", context)
+            self.indices = _i32_vector(py_call(b.getattr, source, PythonObject("indices")), "indices", context)
             if Int(py=self.indptr.size) != self.n + 1:
                 raise Error("ValueError: the CSR indptr must hold n_samples + 1 offsets")
             self.nnz = Int(py=self.indices.size)
-            var data = py_call(_b().getattr, source, PythonObject("data"))
+            var data = py_call(b.getattr, source, PythonObject("data"))
             self.data = (admit_x(data, 1, "data", context) if self.nnz > 0
                          else classical_typed(Python.tuple(1), "<f4", context["output_context"]))
+            # the kernels read DATA at every index position: a shorter data buffer is refused here (the check
+            # rank_genes_groups' own admission made before it shared this one)
+            if self.nnz > 0 and Int(py=py_call(b.len, self.data)) != self.nnz:
+                raise Error("ValueError: a CSR input's data and indices differ in length")
         else:
             self.values = xprep_values(source, entries, context)
             self.n = Int(py=self.values[3])
@@ -177,11 +191,11 @@ struct _SpX(Movable):
         return SpInput(self.n, self.d, False, xo, -1, -1, -1, 0)
 
 
-def _check_width(model: PythonObject, fields: PythonObject, x: _SpX) raises:
+def _check_width(model: PythonObject, fields: PythonObject, x: _SpX, b: PythonObject) raises:
     var fitted = fields["n_features_in_"]
-    if py_type(fitted) is not _b().int or Int(py=fitted) != x.d:
+    if py_type(fitted) is not b.int or Int(py=fitted) != x.d:
         raise Error("ValueError: mojolearn: X has " + String(x.d) + " features, " + _name(model)
-                    + " was fitted with " + String(py_call(_b().str, fitted)))
+                    + " was fitted with " + String(py_call(b.str, fitted)))
 
 
 def _arena(ran: PythonObject) raises -> Int:
@@ -292,7 +306,7 @@ def _column_indices(value: PythonObject, d: Int, context: PythonObject) raises -
     return Python.tuple(out, count)
 
 
-def _rowtotal_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> _SpX:
+def _rowtotal_fit(model: PythonObject, args: PythonObject, b: PythonObject, context: PythonObject) raises -> _SpX:
     var fields = py_fields(model)
     var mode = _mode(context)
     var entries = stateless_entries(model, mode, context)
@@ -300,14 +314,14 @@ def _rowtotal_fit(model: PythonObject, args: PythonObject, context: PythonObject
     var median = target is None
     var target_value = 0.0
     if not median:
-        target_value = _float(target, "target_sum")
+        target_value = _float(target, "target_sum", b)
         if not (target_value > 0.0):
-            raise Error("ValueError: target_sum must be above zero or None, got " + _repr(target))
-    var rule = _truth(fields["exclude_highly_expressed"])
-    var frac = _float(fields["max_fraction"], "max_fraction")
+            raise Error("ValueError: target_sum must be above zero or None, got " + _repr(target, b))
+    var rule = _truth(fields["exclude_highly_expressed"], b)
+    var frac = _float(fields["max_fraction"], "max_fraction", b)
     if rule and not (frac > 0.0 and frac <= 1.0):
-        raise Error("ValueError: max_fraction must be in (0, 1], got " + _repr(fields["max_fraction"]))
-    var x = _SpX(args[0], entries, context)
+        raise Error("ValueError: max_fraction must be in (0, 1], got " + _repr(fields["max_fraction"], b))
+    var x = _SpX(args[0], entries, b, context)
     var columns = fields["columns"]
     var idx = PythonObject(None)
     var n_idx = 0
@@ -337,12 +351,12 @@ def _rowtotal_fit(model: PythonObject, args: PythonObject, context: PythonObject
     return x^
 
 
-def _rowtotal_transform(model: PythonObject, x: _SpX, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+def _rowtotal_transform(model: PythonObject, x: _SpX, entries: PythonObject, b: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var excl = prep_fitted_vector(fields["excluded_"], context)
     if Int(py=excl.size) != x.d:
         raise Error("RuntimeError: excluded_ does not match n_features_in_")
-    var target = _float(fields["target_sum_"], "target_sum_")
+    var target = _float(fields["target_sum_"], "target_sum_", b)
     var p = EncProg()
     var xin = x.own(p)
     var eo = p.own(excl, x.d)
@@ -357,18 +371,18 @@ def _rowtotal_transform(model: PythonObject, x: _SpX, entries: PythonObject, con
 # ---------------------------------------------------------------- Log1pTransformer
 
 
-def _log_base(fields: PythonObject) raises -> Tuple[Bool, Float64]:
+def _log_base(fields: PythonObject, b: PythonObject) raises -> Tuple[Bool, Float64]:
     var base = fields["base"]
     if base is None:
         return (False, 0.0)
-    var v = _float(base, "base")
+    var v = _float(base, "base", b)
     if not (v > 0.0) or v == 1.0:
-        raise Error("ValueError: base must be above zero and not 1, or None, got " + _repr(base))
+        raise Error("ValueError: base must be above zero and not 1, or None, got " + _repr(base, b))
     return (True, v)
 
 
-def _log_transform(model: PythonObject, x: _SpX, entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    var base = _log_base(py_fields(model))
+def _log_transform(model: PythonObject, x: _SpX, entries: PythonObject, b: PythonObject, context: PythonObject) raises -> PythonObject:
+    var base = _log_base(py_fields(model), b)
     var p = EncProg()
     var xin = x.own(p)
     var o = log1p_stage(p.prog, xin, base[1], base[0], _region(entries))
@@ -437,23 +451,23 @@ def _block_programs(model: PythonObject, x: _SpX, codes: PythonObject, batches: 
 # ---------------------------------------------------------------- ClippedStandardScaler
 
 
-def _scale_options(fields: PythonObject) raises -> Tuple[Bool, Bool, Float64]:
-    var zc = _truth(fields["zero_center"])
+def _scale_options(fields: PythonObject, b: PythonObject) raises -> Tuple[Bool, Bool, Float64]:
+    var zc = _truth(fields["zero_center"], b)
     var mv = fields["max_value"]
     if mv is None:
         return (zc, False, 0.0)
-    var v = _float(mv, "max_value")
+    var v = _float(mv, "max_value", b)
     if not (v > 0.0):
-        raise Error("ValueError: max_value must be above zero or None, got " + _repr(mv))
+        raise Error("ValueError: max_value must be above zero or None, got " + _repr(mv, b))
     return (zc, True, v)
 
 
-def _scale_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> _SpX:
+def _scale_fit(model: PythonObject, args: PythonObject, b: PythonObject, context: PythonObject) raises -> _SpX:
     var fields = py_fields(model)
     var mode = _mode(context)
     var entries = stateless_entries(model, mode, context)
-    _ = _scale_options(fields)
-    var x = _SpX(args[0], entries, context)
+    _ = _scale_options(fields, b)
+    var x = _SpX(args[0], entries, b, context)
     if x.n < 2:
         raise Error("ValueError: ClippedStandardScaler needs at least two rows (the variance has ddof 1)")
     var m = _block_programs(model, x, PythonObject(None), 1, SP_PRE_NONE, False, PythonObject(None), entries,
@@ -484,9 +498,9 @@ def _scale_of(mut p: EncProg, var_owner: Int, d: Int) raises -> Int:
     return sc
 
 
-def _scale_transform(model: PythonObject, x: _SpX, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+def _scale_transform(model: PythonObject, x: _SpX, entries: PythonObject, b: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
-    var opts = _scale_options(fields)
+    var opts = _scale_options(fields, b)
     if x.csr and opts[0]:
         raise Error("ValueError: zero_center=True makes a sparse X dense (every zero becomes -mean / std); pass "
                     "zero_center=False to keep it sparse, or a dense X")
@@ -508,8 +522,8 @@ def _scale_transform(model: PythonObject, x: _SpX, entries: PythonObject, contex
 # ---------------------------------------------------------------- HighlyVariableGenes
 
 
-def _flavor(fields: PythonObject) raises -> Int:
-    var name = _text(fields["flavor"], "flavor")
+def _flavor(fields: PythonObject, b: PythonObject) raises -> Int:
+    var name = _text(fields["flavor"], "flavor", b)
     if name == "seurat":
         return SP_SEURAT
     if name == "cell_ranger":
@@ -519,27 +533,27 @@ def _flavor(fields: PythonObject) raises -> Int:
     raise Error("ValueError: flavor must be 'seurat', 'cell_ranger' or 'seurat_v3', got '" + name + "'")
 
 
-def _hvg_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> _SpX:
+def _hvg_fit(model: PythonObject, args: PythonObject, b: PythonObject, context: PythonObject) raises -> _SpX:
     var fields = py_fields(model)
     var mode = _mode(context)
     var entries = stateless_entries(model, mode, context)
-    var flavor = _flavor(fields)
+    var flavor = _flavor(fields, b)
     var n_top = -1
     if fields["n_top_genes"] is not None:
-        n_top = _int(fields["n_top_genes"], "n_top_genes")
+        n_top = _int(fields["n_top_genes"], "n_top_genes", b)
         if n_top < 1:
             raise Error("ValueError: n_top_genes must be a positive integer or None")
     if flavor == SP_SEURAT_V3 and n_top < 0:
         raise Error("ValueError: flavor='seurat_v3' requires n_top_genes")
-    var n_bins = _int(fields["n_bins"], "n_bins")
+    var n_bins = _int(fields["n_bins"], "n_bins", b)
     if n_bins < 1:
         raise Error("ValueError: n_bins must be a positive integer")
-    var span = _float(fields["span"], "span")
+    var span = _float(fields["span"], "span", b)
     if not (span > 0.0 and span <= 1.0):
-        raise Error("ValueError: span must be in (0, 1], got " + _repr(fields["span"]))
-    var cuts: List[Float64] = [_float(fields["min_mean"], "min_mean"), _float(fields["max_mean"], "max_mean"),
-                               _float(fields["min_disp"], "min_disp"), _float(fields["max_disp"], "max_disp")]
-    var x = _SpX(args[0], entries, context)
+        raise Error("ValueError: span must be in (0, 1], got " + _repr(fields["span"], b))
+    var cuts: List[Float64] = [_float(fields["min_mean"], "min_mean", b), _float(fields["max_mean"], "max_mean", b),
+                               _float(fields["min_disp"], "min_disp", b), _float(fields["max_disp"], "max_disp", b)]
+    var x = _SpX(args[0], entries, b, context)
     if x.n < 2:
         raise Error("ValueError: HighlyVariableGenes needs at least two rows (the variance has ddof 1)")
     # the batches (Scanpy's batch_key): y's labels, encoded as f_classif's classes
@@ -551,7 +565,7 @@ def _hvg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         if labels.n != x.n:
             raise Error("ValueError: X has " + String(x.n) + " rows but y (the batches) has " + String(labels.n))
         codes = labels.codes
-        batches = Int(py=py_call(_b().len, labels.classes))
+        batches = Int(py=py_call(b.len, labels.classes))
     var d = x.d
     var out_context = context["output_context"]
     if flavor != SP_SEURAT_V3:
@@ -658,11 +672,12 @@ struct _Cov(Movable):
     var values: PythonObject
     var k: Int
 
-    def __init__(out self, source: PythonObject, n: Int, entries: PythonObject, context: PythonObject) raises:
+    def __init__(out self, source: PythonObject, n: Int, entries: PythonObject, b: PythonObject,
+                 context: PythonObject) raises:
         if source is None:
             raise Error("ValueError: RegressOut needs the covariates of X's rows: pass them as y (n_samples x "
                         "n_covariates)")
-        if scprep_csr_like(source) or is_sparse(source):
+        if scprep_csr_like(source, b) or is_sparse(source):
             raise Error("TypeError: RegressOut takes dense covariates (n_samples x n_covariates)")
         self.values = xprep_values(source, entries, context)
         if Int(py=self.values[3]) != n:
@@ -673,12 +688,12 @@ struct _Cov(Movable):
             raise Error("ValueError: RegressOut needs at least one covariate column")
 
 
-def _regress_fit(model: PythonObject, args: PythonObject, residuals: Bool, context: PythonObject) raises -> PythonObject:
+def _regress_fit(model: PythonObject, args: PythonObject, residuals: Bool, b: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var mode = _mode(context)
     var entries = stateless_entries(model, mode, context)
-    var x = _SpX(args[0], entries, context)
-    var cov = _Cov(args[1], x.n, entries, context)
+    var x = _SpX(args[0], entries, b, context)
+    var cov = _Cov(args[1], x.n, entries, b, context)
     var p = EncProg()
     var xin = x.own(p)
     var co = p.own_x(cov.values)
@@ -701,13 +716,13 @@ def _regress_fit(model: PythonObject, args: PythonObject, residuals: Bool, conte
     return result
 
 
-def _regress_transform(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _regress_transform(model: PythonObject, args: PythonObject, b: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var entries = stateless_entries(model, fields["numeric_mode_"], context)
-    var x = _SpX(args[0], entries, context)
-    _check_width(model, fields, x)
+    var x = _SpX(args[0], entries, b, context)
+    _check_width(model, fields, x, b)
     var y = args[1] if len(args) > 1 else PythonObject(None)
-    var cov = _Cov(y, x.n, entries, context)
+    var cov = _Cov(y, x.n, entries, b, context)
     var k = Int(py=fields["n_covariates_"])
     if cov.k != k:
         raise Error("ValueError: the covariates have " + String(cov.k) + " columns, RegressOut was fitted with "
@@ -745,27 +760,30 @@ def scprep_dispatch(model: PythonObject, kind: String, operation: String, args: 
                     context: PythonObject) raises -> PythonObject:
     """One public operation of a count-data transformer: fit, transform or fit_transform."""
     var fields = py_fields(model)
+    # The one builtins admission of the call, passed to every helper.
+    var mods = NativeModules()
+    var b = mods.module("builtins")
     if kind == "sc_regress":
         if operation == "fit":
-            return _regress_fit(model, args, False, context)
+            return _regress_fit(model, args, False, b, context)
         if operation == "fit_transform":
-            return _regress_fit(model, args, True, context)
+            return _regress_fit(model, args, True, b, context)
         if operation == "transform":
             _not_fitted(model, fields)
-            return _regress_transform(model, args, context)
+            return _regress_transform(model, args, b, context)
         raise Error("unknown native count-data operation")
     if operation == "fit" or operation == "fit_transform":
         var x: _SpX
         if kind == "sc_rowtotal":
-            x = _rowtotal_fit(model, args, context)
+            x = _rowtotal_fit(model, args, b, context)
         elif kind == "sc_scale":
-            x = _scale_fit(model, args, context)
+            x = _scale_fit(model, args, b, context)
         elif kind == "sc_hvg":
-            x = _hvg_fit(model, args, context)
+            x = _hvg_fit(model, args, b, context)
         elif kind == "sc_log":
             var mode = _mode(context)
-            _ = _log_base(fields)
-            x = _SpX(args[0], stateless_entries(model, mode, context), context)
+            _ = _log_base(fields, b)
+            x = _SpX(args[0], stateless_entries(model, mode, context), b, context)
             py_setitem(fields, "n_features_in_", x.d)
             py_setitem(fields, "numeric_mode_", mode)
         else:
@@ -774,27 +792,29 @@ def scprep_dispatch(model: PythonObject, kind: String, operation: String, args: 
             _ = x^
             return model
         var entries = stateless_entries(model, fields["numeric_mode_"], context)
-        var result = _transform(model, kind, x, entries, context)
+        mods.released()  # the fit above ran its programs (a GIL window): re-check on this request
+        b = mods.module("builtins")
+        var result = _transform(model, kind, x, entries, b, context)
         _ = x^
         return result
     if operation == "transform":
         _not_fitted(model, fields)
         var entries = stateless_entries(model, fields["numeric_mode_"], context)
-        var x = _SpX(args[0], entries, context)
-        _check_width(model, fields, x)
-        var result = _transform(model, kind, x, entries, context)
+        var x = _SpX(args[0], entries, b, context)
+        _check_width(model, fields, x, b)
+        var result = _transform(model, kind, x, entries, b, context)
         _ = x^
         return result
     raise Error("unknown native count-data operation")
 
 
-def _transform(model: PythonObject, kind: String, x: _SpX, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+def _transform(model: PythonObject, kind: String, x: _SpX, entries: PythonObject, b: PythonObject, context: PythonObject) raises -> PythonObject:
     if kind == "sc_rowtotal":
-        return _rowtotal_transform(model, x, entries, context)
+        return _rowtotal_transform(model, x, entries, b, context)
     if kind == "sc_log":
-        return _log_transform(model, x, entries, context)
+        return _log_transform(model, x, entries, b, context)
     if kind == "sc_scale":
-        return _scale_transform(model, x, entries, context)
+        return _scale_transform(model, x, entries, b, context)
     if kind == "sc_hvg":
         return _hvg_transform(model, x, entries, context)
     raise Error("unknown native count-data transformer")
