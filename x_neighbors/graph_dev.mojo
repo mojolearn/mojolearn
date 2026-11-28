@@ -8,7 +8,10 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_neighbors.items import FP, IP
 from x_neighbors.device_ops import xn_ctx, _grid, _tid, BLOCK
-from x_neighbors.graph_par import GA, GExec, Lay, LP, GP_NST, gp_item, pr_drive, lv_drive, pr_drive_csr, lv_drive_csr
+from x_neighbors.graph_par import (
+    GA, GExec, Lay, LP, GP_NST, gp_item, pr_drive, lv_drive, pr_drive_csr, lv_drive_csr,
+    ld_drive, ld_drive_csr,
+)
 
 
 def gp_kernel[S: Int](
@@ -201,4 +204,24 @@ def op_louvain_csr(
     1.0)."""
     var ex = GraphDev(0, 0)
     lv_drive_csr(ex, n, nnz, indptr, indices, vals, has_vals, max_level, resolution, threshold, labels, info)
+    _ = ex^
+
+
+def op_leiden(a: Int, labels: Int, info: Int, n: Int, n_iterations: Int, quality: Int, seed: Int,
+              resolution: Float32) raises:
+    """Leiden on the device (graph_par.ld_drive). n_iterations < 0: until
+    the quality stops rising; quality 0 modularity, 1 CPM."""
+    var ex = GraphDev(a, n * n)
+    ld_drive(ex, n, n_iterations, quality, seed, resolution, labels, info)
+    _ = ex^
+
+
+def op_leiden_csr(
+    indptr: Int, indices: Int, vals: Int, labels: Int, info: Int,
+    n: Int, nnz: Int, has_vals: Int, n_iterations: Int, quality: Int, seed: Int, resolution: Float32,
+) raises:
+    """Leiden from the caller's CSR on the device (graph_par.ld_drive_csr):
+    Louvain's CSR loader and device checks."""
+    var ex = GraphDev(0, 0)
+    ld_drive_csr(ex, n, nnz, indptr, indices, vals, has_vals, n_iterations, quality, seed, resolution, labels, info)
     _ = ex^

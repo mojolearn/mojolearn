@@ -8,6 +8,7 @@ from x_neighbors.items import FP, IP
 from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE
 from x_neighbors.graph_par import (
     GA, GExec, Lay, LP, FPU, IPU, LPU, GP_NST, gp_item, pr_drive, lv_drive, pr_drive_csr, lv_drive_csr,
+    ld_drive, ld_drive_csr,
 )
 
 
@@ -140,6 +141,30 @@ def op_louvain_csr(
     """The host column of `graph_dev.op_louvain_csr` (lane gap-graph)."""
     var ex = GraphCpu(0)
     lv_drive_csr(ex, n, nnz, indptr, indices, vals, has_vals, max_level, resolution, threshold, labels, info)
+    _ = ex^
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        var pi = FP(unsafe_from_address=info)
+        pi.unsafe_store(0, pi.unsafe_load(0) + Float32(1e-3))
+
+
+def op_leiden(a: Int, labels: Int, info: Int, n: Int, n_iterations: Int, quality: Int, seed: Int,
+              resolution: Float32) raises:
+    """The host column of `graph_dev.op_leiden`."""
+    var ex = GraphCpu(a)
+    ld_drive(ex, n, n_iterations, quality, seed, resolution, labels, info)
+    _ = ex^
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        var pi = FP(unsafe_from_address=info)
+        pi.unsafe_store(0, pi.unsafe_load(0) + Float32(1e-3))
+
+
+def op_leiden_csr(
+    indptr: Int, indices: Int, vals: Int, labels: Int, info: Int,
+    n: Int, nnz: Int, has_vals: Int, n_iterations: Int, quality: Int, seed: Int, resolution: Float32,
+) raises:
+    """The host column of `graph_dev.op_leiden_csr`."""
+    var ex = GraphCpu(0)
+    ld_drive_csr(ex, n, nnz, indptr, indices, vals, has_vals, n_iterations, quality, seed, resolution, labels, info)
     _ = ex^
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         var pi = FP(unsafe_from_address=info)
