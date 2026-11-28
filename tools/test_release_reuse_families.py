@@ -86,6 +86,16 @@ def test_derive_gives_a_lane_the_set_of_families_it_loads_and_shared_only_when_u
     by = {l.split()[1]: l for l in lines[1:]}
     assert "records    4 of 4 lane(s)" in by["trees"] and "(2 load it, 2 shared)" in by["trees"]
     assert "records    3 of 4 lane(s)" in by["prep"] and "records    2 of 4 lane(s)" in by["neural"]
+    # derive --list-unknown and --list-binding (lane lane-loads-3): the shared lanes with what they load, and a
+    # binding's lanes with their sets
+    loads = {"gbdt-rmse": ["_mojolearn_gbdt", "_mojolearn_gbdt_host", "_mojolearn"],
+             "pipeline": ["_mojolearn_gbdt", "_mojolearn_x_prep"], "core-only": ["_mojolearn"],
+             "odd": ["_mojolearn_unknown"]}
+    assert RF.unknown_lines(fam(), loads, lanes) == [
+        "UNKNOWN core-only: _mojolearn (shared)", "UNKNOWN odd: _mojolearn_unknown (NO-FAMILY)"]
+    assert RF.binding_lines(fam(), loads, lanes, ["_mojolearn_gbdt"]) == [
+        "BINDING _mojolearn_gbdt (trees): 2 lane(s)", "BINDING-LANE _mojolearn_gbdt gbdt-rmse: trees",
+        "BINDING-LANE _mojolearn_gbdt pipeline: prep+trees"]
 
 
 def test_a_lane_of_several_families_records_when_any_of_them_does_and_only_then():

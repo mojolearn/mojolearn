@@ -304,6 +304,31 @@ def derive_table(fam, lanes):
     return out
 
 
+def unknown_lines(fam, loads, lanes):
+    """The lines `derive --list-unknown` prints: one per lane derive maps to `shared` (unknown loads, it records on
+    any change), with every binding the lane loads and that binding's family (`shared`, or `NO-FAMILY` for a
+    binding the map does not have, which is why derive refuses the lane), so the reason is on the line: a lane
+    that loads shared bindings only names no family, and a lane with a NO-FAMILY binding needs that binding mapped."""
+    out = []
+    for lane in sorted(lane for lane, v in lanes.items() if SHARED in _as_set(v) or not _as_set(v)):
+        loaded = sorted(loads.get(lane) or ())
+        out.append("UNKNOWN %s: %s" % (lane, ", ".join(
+            "%s (%s)" % (b, fam.binding(b) or "NO-FAMILY") for b in loaded) or "loads no binding"))
+    return out
+
+
+def binding_lines(fam, loads, lanes, names):
+    """The lines `derive --list-binding` prints: per named binding, the lanes that load it, each with the set of
+    families derive gives it (to find which lanes carry a family through one binding)."""
+    out = []
+    for name in names:
+        users = sorted(lane for lane, loaded in loads.items() if name in loaded)
+        out.append("BINDING %s (%s): %d lane(s)" % (name, fam.binding(name) or "NO-FAMILY", len(users)))
+        for lane in users:
+            out.append("BINDING-LANE %s %s: %s" % (name, lane, "+".join(_as_set(lanes.get(lane, SHARED)))))
+    return out
+
+
 def loaders(fam, loads, bindings):
     """What moving each of BINDINGS into a family of its own would do to the lanes, from what the lanes load (the
     `loads` of lane_loads): [dict(binding, family, lanes, alone, by_family, mixed)] where `lanes` load the binding,
@@ -777,6 +802,10 @@ def main(argv=None):
     c.add_argument("--loads", action="store_true", help="also check each explicit lane against what it loads")
     d = sub.add_parser("derive")
     d.add_argument("--write", action="store_true", help="write the lanes into bindings/release_families.json")
+    d.add_argument("--list-unknown", action="store_true",
+                   help="also print one UNKNOWN line per lane mapped to shared, with the bindings it loads")
+    d.add_argument("--list-binding", default="",
+                   help="comma list of bindings: also print the lanes that load each, with their family sets")
     p = sub.add_parser("plan")
     p.add_argument("--commit", default="HEAD")
     p.add_argument("--json", default="")
@@ -822,7 +851,8 @@ def main(argv=None):
             len(fam.py_rules), len(problems)))
         return 0 if not problems else 1
     if a.cmd == "derive":
-        lanes, problems = derive(fam, lane_loads())
+        loads = lane_loads()
+        lanes, problems = derive(fam, loads)
         counts = {}
         for f in lanes.values():
             key = f if isinstance(f, str) else "+".join(f)
@@ -830,6 +860,12 @@ def main(argv=None):
         print("DERIVED %d lane(s): %s" % (len(lanes), ", ".join("%s %d" % kv for kv in sorted(counts.items()))))
         for line in derive_table(fam, lanes):
             print(line)
+        if a.list_unknown:
+            for line in unknown_lines(fam, loads, lanes):
+                print(line)
+        if a.list_binding:
+            for line in binding_lines(fam, loads, lanes, [b.strip() for b in a.list_binding.split(",") if b.strip()]):
+                print(line)
         for line in problems:
             print("REFUSED " + line)
         if a.write and not problems:
