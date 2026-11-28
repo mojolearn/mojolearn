@@ -209,10 +209,10 @@ def split_audit(wheels):
                 problems.append(f'{wheel.name}: the core carries no mojolearn/__init__.py')
             extras = sorted(metadata.get_all('Provides-Extra', []))
             # numpy/verify, and the framework adapters' torch/max (their pins,
-            # packaging/adapters/pins.json); never a GPU vendor
-            if set(extras) - {'verify', 'numpy', 'torch', 'max'}:
+            # packaging/adapters/pins.json) and the AnnData front-end's anndata; never a GPU vendor
+            if set(extras) - {'verify', 'numpy', 'torch', 'max', 'anndata'}:
                 problems.append(f'{wheel.name}: the core declares Provides-Extra {extras}; only numpy and verify '
-                                '(and the adapter extras torch and max) are allowed')
+                                '(and the adapter extras torch, max and anndata) are allowed')
             pins = [r for r in requires if re.split(r'[\s;=<>!~\[(]', r, maxsplit=1)[0]
                     .strip().lower().replace('_', '-') in packages]
             if sorted(pins) != sorted(plugins.core_requirements(version)):

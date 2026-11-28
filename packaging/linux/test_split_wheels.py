@@ -397,8 +397,9 @@ class SplitWheels(unittest.TestCase):
         self.assertEqual((core.get("Name"), core.get("Version")), ("mojolearn-core", v))
         # 2026-10-20: the core requires NO vendor package, so core alone,
         # core + one vendor and core + both are each a valid install
-        # numpy/verify, and torch/max: the framework adapters' frameworks (packaging/adapters/pins.json)
-        self.assertEqual(core.get_all("Provides-Extra"), ["numpy", "verify", "torch", "max"])
+        # numpy/verify, torch/max: the framework adapters' frameworks (packaging/adapters/pins.json), and anndata: the
+        # AnnData front-end's (python/mojolearn/adapters/anndata.py)
+        self.assertEqual(core.get_all("Provides-Extra"), ["numpy", "verify", "torch", "max", "anndata"])
         self.assertIn('numpy>=1.26.4; extra == "verify"', core.get_all("Requires-Dist"))
         self.assertNotIn('numpy>=1.26.4', core.get_all("Requires-Dist"))
         self.assertEqual([r for r in core.get_all("Requires-Dist") or [] if r.startswith("mojolearn")], [])
@@ -418,11 +419,11 @@ class SplitWheels(unittest.TestCase):
         self.assertEqual((agg.get("Name"), agg.get("Version")), ("mojolearn", v))
         self.assertEqual(agg.get_all("Requires-Dist"),
                          [f'mojolearn-core[{extra}]=={v}; extra == "{extra}"'
-                          for extra in ("numpy", "verify", "torch", "max")]
+                          for extra in ("numpy", "verify", "torch", "max", "anndata")]
                          + [f"mojolearn-core=={v}", f"mojolearn-nvidia=={v}", f"mojolearn-amd=={v}"])
         self.assertEqual([r for r in agg.get_all("Requires-Dist") if ';' not in r],
                          pw.gpu_plugins.meta_requirements(v))
-        self.assertEqual(agg.get_all("Provides-Extra"), ["numpy", "verify", "torch", "max"])
+        self.assertEqual(agg.get_all("Provides-Extra"), ["numpy", "verify", "torch", "max", "anndata"])
         self.assertEqual(agg.get("Requires-Python"), core.get("Requires-Python"))
         self.assertEqual(agg.get("License-Expression"), core.get("License-Expression"))
         self.assertIn(f"{dist_info(self.split['mojolearn'])}/licenses/LICENSE", members(self.split["mojolearn"]))
@@ -430,7 +431,7 @@ class SplitWheels(unittest.TestCase):
         # mojolearn-core, with its own Summary and README note, and nothing
         # else added, removed or reordered (no vendor requirement)
         single = meta(self.single)
-        self.assertEqual(single.get_all("Provides-Extra"), ["numpy", "verify", "torch", "max"])
+        self.assertEqual(single.get_all("Provides-Extra"), ["numpy", "verify", "torch", "max", "anndata"])
         ours = members(self.split["mojolearn_core"])[f"{dist_info(self.split['mojolearn_core'])}/METADATA"].decode()
         theirs = members(self.single)[f"{dist_info(self.single)}/METADATA"].decode()
         self.assertNotIn("Requires-Dist: mojolearn", theirs)
@@ -824,7 +825,7 @@ class SplitWheels(unittest.TestCase):
             "meta lost its marker": [core, nvidia, amd, self.rewrite(
                 agg, drop={f"{dist_info(agg)}/{pw.gpu_plugins.PLUGIN_MARKER}"})],
         }
-        why = {"core declares a GPU extra": "declares Provides-Extra ['max', 'numpy', 'nvidia', 'torch', 'verify']",
+        why = {"core declares a GPU extra": "declares Provides-Extra ['anndata', 'max', 'numpy', 'nvidia', 'torch', 'verify']",
                "core pins a vendor (the old graph)": "dependency pins disagree",
                "core pins a vendor loosely": "dependency pins disagree",
                "core lost its marker": "gpu_plugins.json is missing or disagrees",

@@ -112,11 +112,11 @@ class AdapterWheels(unittest.TestCase):
     def test_the_core_carries_the_python_package_and_the_extras_not_the_files(self):
         wheels, _ = self.pack()
         core = members(wheels["mojolearn_core"])
-        for leaf in ("__init__.py", "_shipped.py", "torch.py", "max.py"):
+        for leaf in ("__init__.py", "_shipped.py", "torch.py", "max.py", "anndata.py"):
             self.assertIn(f"mojolearn/adapters/{leaf}", core)
         self.assertFalse([n for n in core if f"/{manifest.DIRECTORY}/" in n])
         m = meta(wheels["mojolearn_core"])
-        self.assertEqual(m.get_all("Provides-Extra"), ["numpy", "verify", "torch", "max"])
+        self.assertEqual(m.get_all("Provides-Extra"), ["numpy", "verify", "torch", "max", "anndata"])
         pins = manifest.pins()
         self.assertIn(f'{pins["torch"]["requirement"]}; extra == "torch"', m.get_all("Requires-Dist"))
         self.assertIn(f'{pins["max"]["requirement"]}; extra == "max"', m.get_all("Requires-Dist"))

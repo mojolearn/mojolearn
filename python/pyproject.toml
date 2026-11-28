@@ -142,6 +142,10 @@ verify = ["numpy>=1.26.4"]
 # ONNX export is explicit caller preparation; these extras also supply its tools.
 torch = ["torch>=2.13,<2.14", "onnx>=1.18", "onnxscript>=0.5"]
 max = ["max==26.7.0"]
+# The AnnData front-end (mojolearn.adapters.anndata): Scanpy-named functions
+# over AnnData objects. It ships in every wheel and is pure Python glue; this
+# extra installs anndata (which brings NumPy and pandas). Scanpy is not needed.
+anndata = ["anndata>=0.10"]
 
 [project.urls]
 Paper = "https://mojolearn.org/paper.pdf"

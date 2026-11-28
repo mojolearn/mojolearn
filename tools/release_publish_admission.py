@@ -148,7 +148,7 @@ def wheel_identity(path, version, source, configuration):
             # Extras only forward to the core (packaging/linux/pack_wheel.py meta_project).
             extras = set(metadata.get_all("Provides-Extra", []))
             forwarded = {r for r in requires if "extra==" in r}
-            if (extras - {"numpy", "verify", "torch", "max"}
+            if (extras - {"numpy", "verify", "torch", "max", "anndata"}
                     or forwarded != {f'mojolearn-core[{x}]=={version};extra=="{x}"' for x in extras}):
                 raise ValueError("file-free mojolearn extras must forward exactly to mojolearn-core at this version")
     found = sha256(path)

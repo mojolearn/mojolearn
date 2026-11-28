@@ -175,8 +175,11 @@ MODEL_SOURCE_LAZY_IMPORTS = {"mojolearn/models/_catalog.py": {"torch", "torchvis
 # that refuses with an install hint when it is missing; `import mojolearn` never reaches either.
 # mojolearn.import_model imports PyTorch the same way (importers/_program.py `_require_torch`): only when the user
 # passes a torch.nn.Module, and its ImportError names `pip install torch`.
+# The AnnData front-end (adapters/anndata.py) imports anndata, and pandas (an anndata dependency), the same way:
+# inside `_import_anndata`, which refuses naming `mojolearn[anndata]`; NumPy through _optional_numpy.require_numpy.
 ADAPTER_LAZY_IMPORTS = {"mojolearn/adapters/torch.py": {"torch"}, "mojolearn/adapters/_torch_compile.py": {"torch"},
-                        "mojolearn/adapters/max.py": {"max"}, "mojolearn/importers/_program.py": {"torch"}}
+                        "mojolearn/adapters/max.py": {"max"}, "mojolearn/importers/_program.py": {"torch"},
+                        "mojolearn/adapters/anndata.py": {"anndata", "pandas"}}
 
 
 def sparse_output_adapter_imports(tree, relative):
