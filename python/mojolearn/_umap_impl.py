@@ -51,12 +51,13 @@ _METRICS = {
 class UMAP(NumericModeMixin):
     """Uniform Manifold Approximation and Projection (UMAP) embedding.
 
-    Builds a fuzzy nearest-neighbor graph of the training rows with exact
-    neighbor search, then optimizes a low-dimensional layout. Input is a dense
+    Builds a fuzzy nearest-neighbor graph of the training rows, with exact
+    neighbor search by default, then optimizes a low-dimensional layout. Input is a dense
     array converted to C-order float32. The neighbor graph is stored in CSR
     form, so memory grows linearly with ``n_samples`` for a bounded
     ``n_neighbors``; the exact neighbor search still compares every pair of
-    rows. Parameters follow umap-learn; defaults that differ are
+    rows (``neighbors='ivf'`` compares each row with a few k-means lists of
+    rows instead). Parameters follow umap-learn; defaults that differ are
     ``n_epochs=None`` (200 epochs) and ``random_state=0``.
 
     At least ``2 * n_components + 4`` samples are needed for the spectral
@@ -117,6 +118,14 @@ class UMAP(NumericModeMixin):
     output_metric : str, default "euclidean"
         Only ``"euclidean"`` (or ``"l2"``) is supported; any other value raises
         ``NotImplementedError``.
+    neighbors : {'exact', 'ivf'}, default 'exact'
+        Neighbor search of the graph. ``'exact'`` compares every pair of
+        rows. ``'ivf'`` builds the graph from the approximate k-NN graph of
+        :func:`mojolearn.knn_graph` with ``method='ivf'`` and its default
+        lists and probes, seeded by `random_state`: much faster on large
+        data, as Scanpy and cuML build their neighbor graphs. Inputs under
+        12,288 rows use the exact search. Requires ``metric='euclidean'``.
+        ``transform`` always searches exactly.
     numeric_mode : {'fast', 'identical'} or None, default None
         Numeric mode for this estimator; None uses the package default.
 
@@ -128,6 +137,17 @@ class UMAP(NumericModeMixin):
         Number of features seen during ``fit``.
     input_copied_ : bool
         Whether ``X`` had to be copied to C-order float32.
+    graph_ : tuple of (Array, Array, Array)
+        The fuzzy simplicial set of the training rows (umap-learn's
+        ``graph_``) in CSR form ``(indptr, indices, data)``: ``indptr`` is
+        int64 of length ``n_samples + 1``, ``indices`` int32 and ``data``
+        float32, one entry per stored edge, columns ascending within a row.
+        The graph is symmetric. Pass it to graph clustering or diffusion as
+        the weighted adjacency Scanpy calls ``connectivities``. Not saved by
+        ``save``.
+    a_, b_ : float
+        Curve parameters the layout optimizer used: `a` and `b` when given,
+        otherwise the values derived from `min_dist` and `spread`.
 
     Notes
     -----
@@ -173,8 +193,8 @@ class UMAP(NumericModeMixin):
                  metric="euclidean", init="spectral", learning_rate=1.0,
                  repulsion_strength=1.0, negative_sample_rate=5, a=None, b=None,
                  metric_kwds=None, target_n_neighbors=-1, target_metric="categorical",
-                 target_weight=0.5, densmap=False, output_metric="euclidean", numeric_mode=None,
-                 device=None):
+                 target_weight=0.5, densmap=False, output_metric="euclidean", neighbors="exact",
+                 numeric_mode=None, device=None):
         self.n_neighbors = n_neighbors
         self.n_components = n_components
         self.min_dist = min_dist
@@ -196,6 +216,7 @@ class UMAP(NumericModeMixin):
         self.target_weight = target_weight
         self.densmap = densmap
         self.output_metric = output_metric
+        self.neighbors = neighbors
         self.numeric_mode = numeric_mode
         self.device = device
 
@@ -291,7 +312,7 @@ class UMAP(NumericModeMixin):
         """Save the fitted model to ``path`` as an ``.npz`` file.
 
         The file holds the training rows, the embedding, the parameters and
-        the numeric mode. A model loaded with ``UMAP.load`` (or
+        the numeric mode (not ``graph_``, ``a_`` or ``b_``). A model loaded with ``UMAP.load`` (or
         ``mojolearn.host_model``) can ``transform`` new rows, including on a
         CPU-only install, but cannot refit.
 
