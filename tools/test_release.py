@@ -416,8 +416,8 @@ class RunTests(unittest.TestCase):
         return out.stdout
 
     def test_dry_run_of_the_default_path_runs_no_reuse_machinery(self):
-        # EVERY RELEASE RUNS EVERYTHING ONCE (Andrew 2026-11-07): on the wheels without --reuse-unchanged no
-        # dependency workers run and no step evaluates the ledger, identity-admit and after included.
+        # On the wheels no dependency workers run and no step evaluates the ledger, identity-admit and after
+        # included: reuse is decided by the families (AGENTS.md part 4, 2026-11-28), never by the ledger.
         out = self.dry_run_raw("--identity-on-wheels")
         self.assertIn("-- readiness", out)
         self.assertIn(release.Release.LEDGER_OFF, out)
@@ -426,10 +426,14 @@ class RunTests(unittest.TestCase):
         self.assertNotIn("ledger evidence", out)
         self.assertIn("-- identity-admit", out)
 
-    def test_dry_run_with_the_reuse_flag_still_plans_the_analysis(self):
-        out = self.dry_run_raw("--identity-on-wheels", "--reuse-unchanged")
-        self.assertIn("would run the frozen dependency analysis", out)
-        self.assertNotIn(release.Release.LEDGER_OFF, out)
+    def test_dry_run_with_rebuild_all_runs_no_ledger_either_and_checks_stock_first(self):
+        # --rebuild-all (the full rebuild and record) replaces --reuse-unchanged, which the parser refuses
+        out = self.dry_run_raw("--identity-on-wheels", "--rebuild-all")
+        self.assertIn(release.Release.LEDGER_OFF, out)
+        self.assertNotIn("would run the frozen dependency analysis", out)
+        self.assertLess(out.index("-- box-stock"), out.index("-- freeze-version"))
+        with self.assertRaises(SystemExit):
+            release.release_parser().parse_args(["0.8.14", "--reuse-unchanged"])
 
     def test_dry_run_without_gpu_smoke_skips_every_gpu_column(self):
         # Andrew 2026-10-13 (8109d122d): identity and behavior are checked before merge;

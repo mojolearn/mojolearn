@@ -24,7 +24,7 @@ def args(**kw):
                 amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto",
                 smoke_via="lq", hopper_box="", smoke_branch="main", cpu_column=False, gpu_smoke=False,
                 owner_waiver=None, status=False, refreeze=False, source_checkout="",
-                identity_on_wheels=False, nvidia_columns="", reuse_unchanged=False)
+                identity_on_wheels=False, nvidia_columns="", rebuild_all=False)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -88,11 +88,21 @@ def test_one_box_job_per_vendor_records_the_columns(tmp_path, monkeypatch):
     monkeypatch.setenv("MOJOLEARN_IDENTITY_LABEL_NVIDIA", "l40s")
     r = make(tmp_path, identity_on_wheels=True, nvidia_columns="nvidia,ptx")
     monkeypatch.setattr(r, "units_plan", lambda vendor: None)   # no packed wheels here: no units plan to offer
-    assert r.gate_identity_args("nvidia") == ["--identity-columns", "nvidia,ptx", "--label-device", "l40s"]
-    reuse = make(tmp_path / "r", identity_on_wheels=True, reuse_unchanged=True)
-    monkeypatch.setattr(reuse, "units_plan", lambda vendor: None)
-    assert "--reuse-unchanged" in reuse.gate_identity_args("amd")
-    assert r.gate_identity_args("amd") == ["--identity-columns", "amd", "--label-device", "mi325x"]
+    # family reuse is the default: the box job records the families the plan records (tools/release_families.py)
+    monkeypatch.setattr(r, "family_lanes", lambda: (["ols"], ["ols", "knn"], dict(families=[
+        dict(family="shared", record=False), dict(family="linear", record=True), dict(family="cluster", record=False)])))
+    assert r.gate_identity_args("nvidia") == ["--identity-columns", "nvidia,ptx", "--label-device", "l40s",
+                                              "--record-families", "linear"]
+    assert r.gate_identity_args("amd") == ["--identity-columns", "amd", "--label-device", "mi325x",
+                                           "--record-families", "linear"]
+    full = make(tmp_path / "r", identity_on_wheels=True, rebuild_all=True)
+    monkeypatch.setattr(full, "units_plan", lambda vendor: None)
+    assert full.gate_identity_args("amd")[-3:] == ["--record-families", "all", "--rebuild-all"]
+    assert not any("--reuse-unchanged" in a for a in full.gate_identity_args("amd") + r.gate_identity_args("amd"))
+    none = make(tmp_path / "n", identity_on_wheels=True)
+    monkeypatch.setattr(none, "units_plan", lambda vendor: None)
+    monkeypatch.setattr(none, "family_lanes", lambda: ([], ["ols"], dict(families=[dict(family="shared", record=False)])))
+    assert none.gate_identity_args("amd")[-2:] == ["--record-families", "none"]
 
 
 def test_macos_smoke_runs_nothing_under_the_option(tmp_path):
@@ -122,7 +132,7 @@ def test_the_gate_must_match_the_mode(tmp_path):
 
 
 def test_no_rental_when_the_vendor_owes_nothing(tmp_path, monkeypatch):
-    r = make(tmp_path, identity_on_wheels=True, reuse_unchanged=True)
+    r = make(tmp_path, identity_on_wheels=True)   # family reuse is the default
     monkeypatch.setattr(r, "gate_ok", lambda vendor: (True, "PASS"))
     monkeypatch.setattr(r, "lanes_owed", lambda col: [])
     assert r.box_step_owed("gate-amd") is None
@@ -221,7 +231,7 @@ def test_the_one_box_job_is_judged_by_identity_units_and_runtime(tmp_path, monke
                                                                  lanes=lanes)))
     # the measurement smoke is unconditional too: identity, units and shardcheck alone never pass the box job
     ok, why = r.single_gate_ok("amd", out)
-    assert not ok and "measuresmoke: no measurement-smoke summary" in why and "--reuse-unchanged" in why
+    assert not ok and "measuresmoke: no measurement-smoke summary" in why and "composed on the Mac" in why
     # the gate job's HARD part passes without it (the smoke runs last in the same job and lands later)
     ok, why = r.single_gate_ok("amd", out, measure=False)
     assert ok and "measurement smoke judged when it lands" in why
@@ -241,7 +251,7 @@ def test_the_one_box_job_is_judged_by_identity_units_and_runtime(tmp_path, monke
 
 
 def test_a_vendor_that_owes_nothing_is_composed_on_the_mac_and_rents_nothing(tmp_path, monkeypatch):
-    r = make(tmp_path, identity_on_wheels=True, reuse_unchanged=True)
+    r = make(tmp_path, identity_on_wheels=True)   # family reuse is the default
     verdicts = iter([(False, "no gate report"), (True, "PASS")])
     monkeypatch.setattr(r, "gate_ok", lambda vendor: next(verdicts))
     monkeypatch.setattr(r, "lanes_owed", lambda col: [])
@@ -252,7 +262,7 @@ def test_a_vendor_that_owes_nothing_is_composed_on_the_mac_and_rents_nothing(tmp
 
 
 def test_a_vendor_whose_runtime_units_are_owed_rents(tmp_path, monkeypatch):
-    r = make(tmp_path, identity_on_wheels=True, reuse_unchanged=True)
+    r = make(tmp_path, identity_on_wheels=True)
     monkeypatch.setattr(r, "gate_ok", lambda vendor: (False, "no gate report"))
     monkeypatch.setattr(r, "lanes_owed", lambda col: [])
     monkeypatch.setattr(r, "units_plan", lambda vendor: dict(reused=26, owed=[]))
@@ -262,7 +272,7 @@ def test_a_vendor_whose_runtime_units_are_owed_rents(tmp_path, monkeypatch):
 
 
 def test_cpu_with_nothing_owed_dispatches_nothing(tmp_path, monkeypatch):
-    r = make(tmp_path, identity_on_wheels=True, reuse_unchanged=True)
+    r = make(tmp_path, identity_on_wheels=True)
     core = tmp_path / "core.whl"
     core.write_bytes(b"core")
     monkeypatch.setattr(r, "split_final", lambda package: core)
@@ -286,9 +296,14 @@ def test_an_unchanged_apple_adapter_unit_runs_nothing(tmp_path, monkeypatch):
     assert r.apple_adapter_unit_gate().startswith("adapters REUSED") and r.apple_adapter_unit_ok()
 
 
-def test_the_default_runs_everything_and_never_asks_the_selector(tmp_path, monkeypatch):
-    # Andrew 2026-11-05: the selector cannot be trusted to narrow; --reuse-unchanged is the only way to reuse
-    r = make(tmp_path, identity_on_wheels=True)
+def test_rebuild_all_runs_everything_and_the_default_records_the_families_lanes(tmp_path, monkeypatch):
+    # AGENTS.md part 4 (Andrew 2026-11-28): family reuse is the default, --rebuild-all records every lane
+    d = make(tmp_path / "default", identity_on_wheels=True)
+    assert d.single() and d.reuse() and not d.rebuild_all()
+    monkeypatch.setattr(d, "family_lanes", lambda: (["ols", "ridge"], ["ols", "ridge", "knn"], {}))
+    assert d.lanes_owed("amd") == ["ols", "ridge"] and d.lanes_owed("apple") == ["ols", "ridge"]
+    assert d.vendor_lanes("nvidia") == (2, 4)      # nvidia and ptx: 2 lanes each, 1 kept each
+    r = make(tmp_path, identity_on_wheels=True, rebuild_all=True)
     assert r.single() and not r.reuse()
     monkeypatch.setattr(r, "gate_ok", lambda vendor: (False, "no gate report"))
     monkeypatch.setattr(r, "lanes_owed", lambda col: pytest.fail("no lane selection in the full run"))

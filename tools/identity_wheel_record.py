@@ -12,11 +12,11 @@ columns name: the NVIDIA box (nvidia, ptx), the AMD box (amd), the Mac (apple) o
 
 1. install  a fresh venv, the exact wheel files, each checked against its --sha256 BEFORE install; the checked
             "<file> <sha256>" lines go to DIR/installed-wheels.txt (record_identity_column.sh INSTALLED_WHEELS);
-2. select   per column, the recorder's own default selection (record_identity_column.sh SELECT_ONLY=1, the
-            REUSE GOOD OLD RUNS rule: only lanes whose closure changed since this class's newest good evidence);
-            nothing owed -> the column records nothing (REUSED n / RUN 0);
+2. select   per column, the lanes of the families that record (--record-families, which tools/release.py decides
+            from its family plan: AGENTS.md part 4, tools/release_families.py; `all` by default): no family
+            records -> the column records nothing (REUSED n / RUN 0);
 3. record   the owed lanes in chunks, ALL AT ONCE: one worker slot per (device, k) for k < workers per device,
-            each chunk `RECORD_FROM_INSTALLED=1 LANES=<chunk> LANE_SELECTION=auto-reuse-chunk
+            each chunk `RECORD_FROM_INSTALLED=1 LANES=<chunk> LANE_SELECTION=family-chunk|full-chunk
             record_identity_column.sh <label> DIR/<label>/w<i>` pinned to its device (CUDA_VISIBLE_DEVICES /
             HIP_VISIBLE_DEVICES). With more devices than columns each column gets its own device(s); with fewer,
             columns share them. Workers per device (--workers-per-gpu auto): one per core of the allocation,
@@ -498,10 +498,11 @@ class Run:
         return env
 
     def all_lanes(self, py, column, lab):
-        """RUN EVERYTHING (Andrew 2026-11-05: the selector cannot be trusted to narrow): every lane of the full scope
-        (identity_columns.py lanes --scope all), on every column. A lane with no side on this column (the harness's
-        `_one_sided`, registry ONE_SIDED, 2026-11-24) is recorded too: its cell reads `n/a:one-sided: ...` by name,
-        so the record says which side is owed instead of dropping the lane. No selector decides."""
+        """Every lane of the full scope (identity_columns.py lanes --scope all), on every column. A lane with no side
+        on this column (the harness's `_one_sided`, registry ONE_SIDED, 2026-11-24) is recorded too: its cell reads
+        `n/a:one-sided: ...` by name, so the record says which side is owed instead of dropping the lane. No per-lane
+        selector decides (Andrew 2026-11-05: the selector cannot be trusted to narrow); --record-families narrows
+        to whole families (family_lanes)."""
         out = self.out / lab / "select"
         out.mkdir(parents=True, exist_ok=True)
         env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
@@ -514,23 +515,23 @@ class Run:
             raise RuntimeError("could not list the lanes for %s (%s)" % (lab, out / "lanes.log"))
         return lanes, 0
 
-    def select(self, py, listed, column, lab):
-        """--reuse-unchanged only: the recorder's own reuse selection for this column (SELECT_ONLY=1)."""
-        out = self.out / lab / "select"
-        out.mkdir(parents=True, exist_ok=True)
-        p = self.run(["bash", str(RECORDER), lab, str(out)], cwd=str(ROOT), capture_output=True, text=True,
-                     env=self.env(py, listed, 0 if COLUMNS[column][1] else None, column, dict(SELECT_ONLY="1", REUSE="1")))
-        (out / "select.log").write_text((p.stdout or "") + (p.stderr or ""))
-        if p.returncode != 0:
-            raise RuntimeError("selection for %s exited %s (%s)" % (lab, p.returncode, out / "select.log"))
-        text = p.stdout or ""
-        reused = re.search(r"REUSED (\d+) / RECORD (\d+)", text)
-        if "NOTHING-CHANGED" in text:
-            return [], int(reused.group(1)) if reused else None
-        m = re.search(r"^LANES-SELECTED (\S+)\s*$", text, re.M)
-        if not m:
-            raise RuntimeError("selection for %s printed no LANES-SELECTED line (%s)" % (lab, out / "select.log"))
-        return m.group(1).split(","), int(reused.group(1)) if reused else None
+    def family_lanes(self, py, column, lab):
+        """--record-families (tools/release.py, AGENTS.md part 4): the lanes of the families that record, in the
+        full scope's order, by this tree's bindings/release_families.json (tools/release_families.py). `all`: every
+        lane; `none` or empty: no lane (every family keeps its columns). Returns (lanes, kept count)."""
+        lanes, _ = self.all_lanes(py, column, lab)
+        want = (self.a.record_families or "").strip()
+        if want == "all":
+            return lanes, 0
+        families = [] if want in ("", "none") else [f for f in want.split(",") if f]
+        import release_families as RF
+        fam = RF.load()
+        unknown = [f for f in families if f not in fam.families]
+        if unknown:
+            raise SystemExit("identity_wheel_record: --record-families names unknown famil(y/ies): " + ", ".join(unknown))
+        picked = RF.lanes_to_record(dict(families=[dict(family=f, record=f in families) for f in fam.names()]),
+                                    lanes, fam)
+        return picked, len(lanes) - len(picked)
 
     def main(self):
         try:
@@ -565,14 +566,14 @@ class Run:
                                     wheels=listed.read_text().split("\n")[:-1])
         shard_i, shard_n = (int(x) for x in self.a.shard.split("/"))
         for c in columns:
-            lanes, reused = (self.select(py, listed, c, labels[c]) if self.a.reuse_unchanged
-                             else self.all_lanes(py, c, labels[c]))
+            lanes, reused = self.family_lanes(py, c, labels[c])
             # --shard i/N (the GitHub CPU matrix): every job selects by the same rule and records lanes[i::N]
             lanes = lanes[shard_i::shard_n]
             selected[c] = lanes
             report["columns"][c] = dict(label=labels[c], owed=len(lanes), reused=reused, chunks=[], rc=0)
-            self.say("%s: REUSED %s / RUN %s" % (labels[c], "?" if reused is None else reused,
-                                                 len(lanes) if self.a.reuse_unchanged else "all (%d)" % len(lanes)))
+            self.say("%s: REUSED %s / RUN %s (families: %s)" % (
+                labels[c], reused, len(lanes) if self.a.record_families != "all" else "all (%d)" % len(lanes),
+                self.a.record_families or "none"))
         tasks = []
         for c in columns:
             cost = lane_costs(selected[c], hints=hints[c])
@@ -617,7 +618,7 @@ class Run:
             out.mkdir(parents=True, exist_ok=True)
             t0, started = time.monotonic(), utc()
             env = self.env(py, listed, slot[0], c, dict(LANES=",".join(chunk), LANE_SELECTION=(
-                "auto-reuse-chunk" if self.a.reuse_unchanged else "full-chunk")))
+                "full-chunk" if self.a.record_families == "all" else "family-chunk")))
             with open(out / "record.log", "w") as log:
                 rc = self.popen(["bash", str(RECORDER), labels[c], str(out)], cwd=str(ROOT), env=env,
                                 stdout=log, stderr=subprocess.STDOUT).wait()
@@ -775,8 +776,9 @@ def parse(argv=None):
     ap.add_argument("--venv", default="")
     ap.add_argument("--python", default=sys.executable)
     ap.add_argument("--shard", default="0/1", help="i/N: record every N-th owed lane from i (a CI job matrix)")
-    ap.add_argument("--reuse-unchanged", action="store_true",
-                    help="opt in to the recorder's reuse selection (unchanged lanes are not run); default: every lane")
+    ap.add_argument("--record-families", default="all",
+                    help="the release families whose lanes record (tools/release_families.py; tools/release.py passes "
+                         "the families its plan records): a comma list, `all` (default: every lane) or `none`")
     a = ap.parse_args(argv)
     m = re.fullmatch(r"(\d+)/(\d+)", a.shard)
     if not m or not 0 <= int(m.group(1)) < int(m.group(2)):

@@ -98,13 +98,13 @@ SERIAL_PREFIXES = ("neural/",)
 #: the own-arm cell fields the board ingests besides status / quality (provenance)
 OWN_FIELDS = ("hash", "mode", "library_version", "device")
 PASS, FAIL, UNSUPPORTED = "PASS", "FAIL", "UNSUPPORTED"
-#: the refusal when no summary came home. It comes only from a box: --reuse-unchanged (a vendor composed on the Mac
-#: with no box job) never has one, by design (the smoke is unconditional).
+#: the refusal when no summary came home. It comes only from a box: a vendor composed on the Mac with no box job (no
+#: family records a lane and every unit is reused) never has one, by design (the smoke is unconditional).
 NO_SUMMARY = ("no measurement-smoke summary: it is produced only by the release gate box job, which runs it last "
               "(tools/ops/release_gate_job.sh phase measuresmoke, launched by the gate-<vendor> step; its final upload "
-              "brings it home); a vendor composed on the Mac under --reuse-unchanged has none. To pass, rerun the "
-              "gate-<vendor> step so that box job runs (with or without --reuse-unchanged); nothing on the Mac can "
-              "stand in for it")
+              "brings it home); a vendor composed on the Mac (no family records a lane, every unit reused) has none. "
+              "To pass, rerun the gate-<vendor> step so that box job runs (with or without --rebuild-all); nothing on "
+              "the Mac can stand in for it")
 
 
 def _bb():

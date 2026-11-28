@@ -148,20 +148,18 @@ def compile_rows(cls, changes, groups, macos_paths=None):
 
 
 def identity_rows(cls, lanes, previous):
-    """lanes: {column: {lane: dict(owed, reason, since, since_after_previous, record)}}."""
+    """lanes: {column: {lane: dict(owed, reason, device)}}, from the family plan (tools/release.py plan_lane_facts):
+    a lane records exactly when its family records (AGENTS.md part 4, Andrew 2026-11-28). The change class decides
+    nothing here: the binding identities already did (a metadata-only change moves no identity, so no family records).
+    (Until 2026-11-28 a metadata or repackage class overrode the per-lane selector's `since_after_previous`; the
+    selector is gone, so that override is too.)"""
     rows = []
     for col, by_lane in sorted(lanes.items()):
         for lane, f in sorted(by_lane.items()):
             rid = "%s/%s" % (col, lane)
             if not f.get("owed"):
-                rows.append(dict(id=rid, section="identity", action="reuse", reason="closure unchanged since its record %s"
-                                 % (f.get("since") or "")[:12], evidence=f.get("evidence") or {"local": True}))
-            elif cls in ("metadata", "repackage") and f.get("since_after_previous"):
-                # The record rests on or after the previous release and only metadata, tooling or
-                # packaging changed since then: no numerical rerun (decision table).
-                rows.append(dict(id=rid, section="identity", action="reuse", reason="decision table %s: no product source changed "
-                                 "since the previous release %s (selector said: %s)"
-                                 % (cls, (previous or "")[:12], f.get("reason")),
+                rows.append(dict(id=rid, section="identity", action="reuse",
+                                 reason=f.get("reason") or "its family keeps its recorded columns",
                                  evidence=f.get("evidence") or {"local": True}))
             else:
                 rows.append(dict(id=rid, section="identity", action="record", reason=f.get("reason") or "closure changed",
@@ -401,26 +399,9 @@ def group_facts(repo, previous, commit, platforms=("darwin", "linux")):
     return out
 
 
-LANE_REASON = re.compile(r"since ([0-9a-f]{7,40})")
-
-
-def lane_facts(summary, previous, column, device=None, is_ancestor=None):
-    """Per-lane facts of one column from an identity_columns.py changed-lanes --summary-json document."""
-    out = {}
-    for lane, why in (summary.get("record") or {}).items():
-        m = LANE_REASON.search(why or "")
-        since = m.group(1) if m else None
-        after = bool(since and previous and is_ancestor and is_ancestor(previous, since))
-        out[lane] = dict(owed=True, reason=why, since=since, since_after_previous=after, device=device)
-    for lane, row in (summary.get("reused") or {}).items():
-        out[lane] = dict(owed=False, since=(row or {}).get("commit"), device=device)
-    # A lane the harness declares has no side on this column (`_one_sided`, ONE_SIDED: missing cpu on the
-    # cpu column, missing gpu on a GPU column)
-    # is not owed and not known-bad: it is not applicable here.
-    for lane, row in (summary.get("not_applicable") or {}).items():
-        out[lane] = dict(owed=False, not_applicable=True, reason=(row or {}).get("reason"),
-                         since=(row or {}).get("commit"), device=device)
-    return out
+# TOMBSTONE: lane_facts (the per-lane facts of an identity_columns.py changed-lanes summary) deleted 2026-11-28 by lane
+# release-family-1: tools/release.py plan_lane_facts takes each lane's facts from the family plan
+# (tools/release_families.py); the per-lane selector decides no release lane any more (AGENTS.md part 4).
 
 
 def main(argv=None):

@@ -67,9 +67,14 @@ def test_plan_reads_the_store_and_skips_compiled_checks_on_cpu(tmp_path, monkeyp
     (d / "k.json").write_text(json.dumps(rec(row["key"], device="cpu-linux-x86_64")))
     again = U.plan("cpu", "cpu-linux-x86_64", ROOT, [w], tmp_path / "store", reuse=True)
     assert U.INSTALL_LOAD not in again["owed"] and again["reused"] == 1
-    # the default (no --reuse-unchanged): every unit runs, whatever the store holds
-    full = U.plan("cpu", "cpu-linux-x86_64", ROOT, [w], tmp_path / "store")
+    # reuse is the default (AGENTS.md part 4, 2026-11-28); --rebuild-all (reuse=False) runs every unit
+    assert U.plan("cpu", "cpu-linux-x86_64", ROOT, [w], tmp_path / "store")["reused"] == 1
+    full = U.plan("cpu", "cpu-linux-x86_64", ROOT, [w], tmp_path / "store", reuse=False)
     assert full["reused"] == 0 and U.INSTALL_LOAD in full["owed"] and len(full["owed"]) == len(full["units"])
+    assert U.main(["plan", "--vendor", "cpu", "--device-class", "cpu-linux-x86_64", "--source-root", str(ROOT),
+                   "--wheel", str(w), "--store", str(tmp_path / "store"), "--json", str(tmp_path / "p.json"),
+                   "--rebuild-all"]) == 0
+    assert json.loads((tmp_path / "p.json").read_text())["reused"] == 0
 
 
 def test_summary_errors():

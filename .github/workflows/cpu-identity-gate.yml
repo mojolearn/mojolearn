@@ -91,9 +91,13 @@ on:
         required: false
         default: ""
         type: string
-      reuse_unchanged:
+      rebuild_all:
         required: false
         default: "false"
+        type: string
+      record_families:
+        required: false
+        default: "all"
         type: string
   workflow_dispatch:
     inputs:
@@ -152,10 +156,15 @@ on:
         required: false
         default: ""
         type: string
-      reuse_unchanged:
-        description: "mode wheel: true reuses unchanged cpu lanes and units (release.py --reuse-unchanged); default: run everything"
+      rebuild_all:
+        description: "mode wheel: true runs every cpu runtime unit (release.py --rebuild-all); default: a unit with an unchanged key is reused"
         required: false
         default: "false"
+        type: string
+      record_families:
+        description: "mode wheel: the release families whose cpu lanes record (release.py's family plan): all, none or a comma list"
+        required: false
+        default: "all"
         type: string
 
 run-name: ${{ inputs.mode == 'wheel' && format('cpu-identity wheel {0} {1}', inputs.source_commit, inputs.token) || 'CPU identity gate' }}
@@ -301,12 +310,14 @@ jobs:
           WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
           # each record's run.box (tools/identity_break.py box_identity): this run, attempt and shard job
           IDENTITY_RECORD_BOX: github:${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.shard }}
+          # the families release.py's plan records (tools/release_families.py), passed as data, never as shell
+          RECORD_FAMILIES: ${{ inputs.record_families }}
         run: |
           echo "runner: $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2)"
           python3 tools/identity_wheel_record.py --columns cpu \
             --wheel "$RUNNER_TEMP/wheels/$WHEEL_NAME" --sha256 "$WHEEL_NAME=$WHEEL_SHA256" \
             --shard "${{ matrix.shard }}/${{ inputs.shards }}" --out "$RUNNER_TEMP/wheel-out/identity" \
-            $( [ "${{ inputs.reuse_unchanged }}" = true ] && echo --reuse-unchanged ) \
+            --record-families "$RECORD_FAMILIES" \
             --venv "$RUNNER_TEMP/identity-venv" 2>&1 | tee "$RUNNER_TEMP/identity.log" | grep -E '^identity-wheels:'
           exit "${PIPESTATUS[0]}"
       - name: Upload the cpu column records
@@ -368,7 +379,7 @@ jobs:
           WHEEL_NAME: ${{ inputs.wheel_name }}
           WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
           CHECKS: ${{ inputs.checks }}
-          REUSE_UNCHANGED: ${{ inputs.reuse_unchanged == 'true' && '1' || '0' }}
+          REBUILD_ALL: ${{ inputs.rebuild_all == 'true' && '1' || '0' }}
           AUTOGRAD_ENTRIES: ${{ inputs.autograd_entries }}
         run: |
           SOURCE_ROOT="$GITHUB_WORKSPACE/source" bash tooling/tools/cpu_wheel_checks.sh "$RUNNER_TEMP/wheels/$WHEEL_NAME" "$WHEEL_SHA256" "${{ inputs.source_commit }}" \

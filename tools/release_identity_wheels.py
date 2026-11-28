@@ -25,10 +25,12 @@ Default OFF until the orchestrator has run it once; without the option nothing h
                            MOJOLEARN_IDENTITY_REFERENCE_AT, tools/release_requirements.py);
   publish-*                the repacked core and macOS wheels, the plugins as built.
 
-Reuse is the existing rule everywhere: a lane runs only when its closure changed since its class's newest good
-evidence (the recorder's selection, computed here before any rental); the runtime units by their own receipts;
-a vendor whose lanes are all reused AND whose gate already passed for these exact wheel bytes rents nothing
-(REUSED n / RUN 0, no rental). No step after the first publish runs a lane (release.DEVICE_LANE_STEPS).
+Reuse is by family (AGENTS.md part 4, Andrew 2026-11-28; tools/release_families.py): a lane records only when its
+family records (the family builds, shared builds, or its kept columns do not rest on the shipped bytes), decided
+here from the reuse plan before any rental and passed to every recorder as --record-families; the check units and
+runtime units by their own content-keyed receipts; a vendor with no lane owed AND whose gate already passed for
+these exact wheel bytes rents nothing (REUSED n / RUN 0, no rental). --rebuild-all records every lane and runs every
+unit. No step after the first publish runs a lane (release.DEVICE_LANE_STEPS).
 Tests: tools/test_release_identity_wheels.py (no box, no network, no GitHub).
 """
 import datetime as dt
@@ -195,10 +197,17 @@ class IdentityOnWheels:
         except (AttributeError, KeyError, TypeError):
             return []
 
+    def rebuild_all(self):
+        """--rebuild-all: every family builds and every lane records on every device, every check unit runs."""
+        return bool(getattr(getattr(self, "args", None), "rebuild_all", False))
+
     def reuse(self):
-        """--reuse-unchanged: opt in to reusing unchanged lanes, check units and runtime units. OFF by default
-        (Andrew 2026-11-05: the selector cannot be trusted to narrow; the one run runs EVERYTHING)."""
-        return self.single() and bool(getattr(getattr(self, "args", None), "reuse_unchanged", False))
+        """FAMILY REUSE IS THE DEFAULT (AGENTS.md part 4, Andrew 2026-11-28): under --identity-on-wheels the one run
+        records only the lanes of the families the plan records (lanes_owed, tools/release_families.py), and a check
+        unit or runtime unit whose content key (its files and the exact native bytes) matches its newest passing
+        record is reused. --rebuild-all turns all of it off. The per-lane selector (identity_columns.py changed-lanes,
+        which Andrew 2026-11-05 said cannot be trusted to narrow) decides nothing any more."""
+        return self.single() and not self.rebuild_all()
 
     def nvidia_columns(self):
         text = getattr(self.args, "nvidia_columns", "") or ",".join(DEFAULT_NVIDIA_COLUMNS)
@@ -227,39 +236,65 @@ class IdentityOnWheels:
         return self.rel / "identity-wheels"
 
     # ------------------------------------------------------------------ what is owed, before any rental
-    def lanes_owed(self, column):
-        """[lanes] the recorder would record for COLUMN at the frozen source: identity_columns.py changed-lanes
-        with the recorder's own reuse arguments (record_identity_column.sh REUSE=1), static, on this Mac.
-        An unreadable selection owes every lane of the column (None means: not decidable, so owed)."""
-        if self.dry:
-            # A DRY RUN HASHES NO CLOSURES (2026-11-08): changed-lanes over every retained record took 20+ min per
-            # column on the Mac (test_release's --reuse-unchanged dry run hit its 600 s bound in gate-apple). The
-            # dry plan treats the selection as undecided, so it prints the commands the real run would decide by.
-            return None
-        cache = self.__dict__.setdefault("_lanes_owed", {})
-        if column in cache:
-            return cache[column]
-        cls = {"nvidia": "nvidia", "ptx": "ptx", "amd": "amd", "apple": "apple", "cpu": "cpu"}[column]
-        backend = {"nvidia": "cuda", "ptx": "cuda", "amd": "hip", "apple": "metal", "cpu": "cpu"}[column]
+    def family_lanes(self):
+        """(lanes to record, every lane, the family plan) at the frozen source, decided once per process and
+        written to identity-wheels/plan/families.json: the plan's families (release_reuse.make_plan ->
+        release_families.apply) with the kept families whose columns do not rest on the shipped bytes moved to
+        RECORD (release_families.settle, over the frozen source's reference table and records). The lanes and the
+        map are the frozen source's (tools/identity_columns.py lanes --scope all; bindings/release_families.json),
+        so the Mac and every box map a family to the same lanes. Same lanes on every column."""
+        cache = self.__dict__.get("_family_lanes")
+        if cache is not None:
+            return cache
+        import release_families as RF
+        src = Path(self.src)
+        fam = RF.load(src / "bindings" / "release_families.json", src / "bindings" / "merged_groups.json") \
+            if (src / "bindings" / "release_families.json").is_file() else RF.load()
+        plan = self.plan()
+        lanes = RF.all_lanes(root=src)
+        if self.rebuild_all() or not plan.get("families"):
+            # --rebuild-all, or a plan with no family decision (a measurement build's): every lane
+            record = list(lanes)
+        else:
+            record = RF.settle(plan, lanes, fam, source_root=src, cache_dir=self.evidence / "release" / "identities")
         work = self.identity_dir() / "plan"
         work.mkdir(parents=True, exist_ok=True)
-        summary = work / ("%s.reuse.json" % column)
-        cmd = [sys.executable, "tools/identity_columns.py", "changed-lanes", "--scope", "all", "--class", cls,
-               "--records", str(Path(self.src) / "verification/records/identity"), "--backend", backend,
-               "--summary-json", str(summary)]
-        with open(work / ("%s.log" % column), "w") as log:
-            p = subprocess.run(cmd, cwd=str(self.src), stdout=subprocess.PIPE, stderr=log, text=True)
-        doc = read_json(summary)
-        cache[column] = sorted((doc or {}).get("record") or {}) if p.returncode == 0 and doc else None
-        if cache[column] is not None:
-            cache[column + ":reused"] = len((doc or {}).get("reused") or {})
-        return cache[column]
+        write_json(work / "families.json", dict(plan.get("families") or {}, commit=self.commit, lanes=len(lanes),
+                                                record=record, recording=RF.recording(plan.get("families"))))
+        self._family_lanes = (record, lanes, plan.get("families") or {})
+        return self._family_lanes
+
+    def record_families(self):
+        """The --record-families value every recorder gets: `all` under --rebuild-all, else the families that record
+        (comma list; `none` when none does)."""
+        if self.rebuild_all():
+            return "all"
+        import release_families as RF
+        record, lanes, fplan = self.family_lanes()
+        if not fplan:
+            return "all"   # no family decision in the plan: every lane records (family_lanes)
+        return ",".join(RF.recording(fplan)) or "none"
+
+    def lanes_owed(self, column):
+        """[lanes] COLUMN records at this freeze: the lanes of every family that records (family_lanes), the same on
+        every column; under --rebuild-all every lane. Static, on this Mac, before any rental."""
+        if self.dry:
+            # A DRY RUN READS NO RECORDS: the kept-column check walks the build closures of every commit the kept
+            # cells rest on (release_families.kept_refusals). The dry plan treats the selection as undecided and
+            # prints the commands the real run decides by; --plan prints the family table itself.
+            return None
+        if column not in ("nvidia", "ptx", "amd", "apple", "cpu"):
+            raise KeyError(column)
+        record, lanes, _ = self.family_lanes()
+        cache = self.__dict__.setdefault("_lanes_owed", {})
+        cache[column + ":reused"] = len(lanes) - len(record)
+        return list(record)
 
     def vendor_lanes(self, vendor):
-        """(reused, owed) lane counts of a vendor's columns by the recorder's selection; owed None: undecided."""
+        """(reused, owed) lane counts of a vendor's columns by the family plan; owed None: undecided (a dry run)."""
         reused, run = 0, 0
         if not self.reuse():
-            return 0, "all"   # the full run: no selector decides
+            return 0, "all"   # --rebuild-all: every lane, no family plan decides
         for col in self.vendor_columns(vendor):
             owed = self.lanes_owed(col)
             if owed is None:
@@ -397,7 +432,7 @@ class IdentityOnWheels:
         out.parent.mkdir(parents=True, exist_ok=True)
         cmd = [sys.executable, "tools/release_check_units.py", "plan", "--vendor", vendor,
                "--device-class", self.device_class(vendor), "--source-root", str(self.src),
-               "--store", str(self.unit_store()), "--json", str(out)] + (["--reuse-unchanged"] if self.reuse() else [])
+               "--store", str(self.unit_store()), "--json", str(out)] + ([] if self.reuse() else ["--rebuild-all"])
         for w in wheels:
             cmd += ["--wheel", str(w)]
         with open(self.identity_dir() / ("units-%s.log" % vendor), "w") as log:
@@ -422,8 +457,11 @@ class IdentityOnWheels:
         if not self.single():
             return []
         args = ["--identity-columns", ",".join(self.vendor_columns(vendor)), "--label-device", self.label_device(vendor)]
-        if self.reuse():
-            args.append("--reuse-unchanged")
+        # the families whose lanes record (tools/release_families.py); a dry run decides no family (lanes_owed) and
+        # shows the widest value, `all`; the real run passes the plan's
+        args += ["--record-families", self.record_families() if not self.dry else "all"]
+        if self.rebuild_all():
+            args.append("--rebuild-all")
         if not self.dry and self.units_plan(vendor) is not None:
             args += ["--units-plan", str(self.units_plan_path(vendor))]
         return args
@@ -500,7 +538,7 @@ class IdentityOnWheels:
         if ok:
             return why + " (summary exists)"
         if self.reuse() and self.lanes_owed("apple") == []:
-            return "Apple column: REUSED, RUN 0 (no lane's closure changed)"
+            return "Apple column: REUSED, RUN 0 (no family records its lanes)"
         w = self.macos_wheel()
         if not w and not self.dry:
             raise StepFailed("no macOS wheel; run macos-build")
@@ -513,8 +551,8 @@ class IdentityOnWheels:
         self.must([sys.executable, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
                    sys.executable, str(ROOT / "tools" / "identity_wheel_record.py"), "--columns", "apple",
                    "--label-device", self.label_device("apple"), "--wheel", str(w or name), "--sha256", "%s=%s" % (name, digest),
-                   "--out", str(out), "--python", self.smoke_python() if not self.dry else "python3.12"]
-                  + (["--reuse-unchanged"] if self.reuse() else []),
+                   "--out", str(out), "--python", self.smoke_python() if not self.dry else "python3.12",
+                   "--record-families", self.record_families() if not self.dry else "all"],
                   log=self.rel / "gate-apple-identity.log", what="the Apple column from the macOS wheel", cwd=self.src)
         if self.dry:
             return None
@@ -551,7 +589,7 @@ class IdentityOnWheels:
 
     def apple_runtime_reused(self):
         """runtime-apple composed from reused receipts without the Metal lock (nothing launched), or None.
-        Only with --reuse-unchanged: the default full run runs every unit."""
+        Not under --rebuild-all, which runs every unit."""
         if self.dry or not self.reuse() or self.apple_runtime_ok()[0]:
             return None
         w = self.macos_wheel()
@@ -640,7 +678,7 @@ class IdentityOnWheels:
                   else ["adapters", "autograd", "correctness", "runtime"])   # no plan: every group runs
         entries = ",".join(u.split("/", 1)[1] for u in owed if u.startswith("autograd/"))
         if plan is not None and not self.reuse():
-            self.say("  cpu: RUN all lanes, all units (%s)" % ",".join(groups))
+            self.say("  cpu: RUN all lanes, all units (%s; --rebuild-all)" % ",".join(groups))
         elif plan is not None:
             self.say("  cpu: REUSED %s / RUN %s lane(s); units REUSED %d / RUN %d (%s)" % (
                 self.__dict__.get("_lanes_owed", {}).get("cpu:reused"), "?" if lanes is None else len(lanes),
@@ -659,7 +697,8 @@ class IdentityOnWheels:
         fields = dict(confirm="RUN-HEAVY", mode="wheel", wheel_url=url, wheel_name=core.name,
                       wheel_sha256=sha256(core), source_commit=self.commit, shards=str(CPU_SHARDS),
                       runtime_prior_url=prior_url, token=token, checks=",".join(groups), autograd_entries=entries,
-                      reuse_unchanged="true" if self.reuse() else "false")
+                      rebuild_all="true" if self.rebuild_all() else "false",
+                      record_families=self.record_families() or "none")
         argv = ["workflow", "run", CPU_WORKFLOW, "--ref", "main"]
         for k, v in fields.items():
             argv += ["-f", "%s=%s" % (k, v)]
@@ -855,8 +894,13 @@ class IdentityOnWheels:
         # the script is the tooling's (HEAD), copied into the frozen tree and run there (it cds to its own root):
         # the source is frozen, the tooling runs from HEAD; the copy is never committed (only the NEXT paths are)
         shutil.copy2(ROOT / "tools" / "admit_identity_columns.sh", tree / "tools" / "admit_identity_columns.sh")
+        # CROSS-VENDOR AGREEMENT IN FULL (AGENTS.md part 4): every lane is selected, the kept families' too, so the
+        # admission regenerates and compares every lane's columns, new records and kept ones together (a kept lane
+        # keeps its committed records; a part without agreeing Apple, NVIDIA, AMD and cpu columns is refused)
+        selected = ["--lanes", ",".join(self.family_lanes()[1])]
         try:
-            p = subprocess.run(["bash", "tools/admit_identity_columns.sh", "--build-host", *dirs], cwd=str(tree),
+            p = subprocess.run(["bash", "tools/admit_identity_columns.sh", "--build-host", *selected, *dirs],
+                               cwd=str(tree),
                                env=dict(os.environ, **env), capture_output=True, text=True)
         finally:
             if unpacked is not None:

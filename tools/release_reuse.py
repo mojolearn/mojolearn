@@ -1524,7 +1524,8 @@ def skip_units(plan, vendor, arch):
 
 
 def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, builders_override=None,
-              evidence_root=None, candidates=None, modes=None, defines="", base=None, timed=None):
+              evidence_root=None, candidates=None, modes=None, defines="", base=None, timed=None, rebuild_all=False,
+              families=True):
     """The REUSE/BUILD plan of COMMIT. `builders_override` ({builder: sha256})
     replaces a builder's bytes in every identity: the release's route overlay
     runs the tooling checkout's copy of a builder on the box
@@ -1539,7 +1540,11 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
     build in `reuse_from`; `considered` lists every source weighed.
 
     `timed` (arches, a B arm with a `base` only; apply_defines TIMED SETS): the
-    define's device rows build only in those sets; the others ship the base's."""
+    define's device rows build only in those sets; the others ship the base's.
+
+    FAMILIES (tools/release_families.py apply; not for a B arm): the rows are then made whole per family and
+    plan["families"] says, per family, REUSE or BUILD with the reason and whether its lanes record.
+    `rebuild_all` (tools/release.py --rebuild-all) builds every family and the runtime."""
     modes = release_modes() if modes is None else parse_modes(modes)
     commit = git("rev-parse", commit + "^{commit}", root=root).strip()
     if prev is None:
@@ -1595,6 +1600,19 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
             # and proves its own set (_settle_ptx), so its other rows stay REUSE like any set's: refusing
             # every PTX row rebuilt all 33 sm_80 bindings for a define four of them read (lane arm-build-reuse)
             ptx_proof = None
+    # A RELEASE REUSES WHOLE FAMILIES (AGENTS.md part 4, Andrew 2026-11-28; tools/release_families.py): a family with
+    # one BUILD row, or one that shares a merged file with a BUILD family, builds every row on every target. A
+    # measurement build (tools/release.py candidate: `families` False) and a B arm (base) record no identity, so they
+    # keep the per-binding rows. --rebuild-all (rebuild_all) builds every row and the runtime.
+    fam_plan = None
+    if families and base is None:
+        import release_families
+        view = dict(rows=rows, runtime=runtime)
+        fam_plan = release_families.apply(view, fam=release_families.load_at(commit, root), rebuild_all=rebuild_all)
+        rt_decision = runtime["decision"]
+        if rebuild_all or (ptx_proof and any(r["decision"] == "BUILD" for r in _ptx_device_rows(rows))):
+            # the published PTX set is taken only whole, with every PTX row REUSE; its leg runs and proves its set
+            ptx_proof = None
     # A PUBLISHED PTX SET TAKEN WHOLE ships the host owner's host bindings
     # (ptx_reuse.HOST_OWNER_ADMISSION): the owner leg must run at this freeze
     # (a device binding of its set builds, or it is the cheapest leg for a host
@@ -1613,6 +1631,7 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
                 previous=prev, previous_identities_from=prev_source, considered=considered, rows=rows, runtime=runtime,
                 legs=legs, leg_reasons=why, ptx_proof=ptx_proof, host_toolchain=host_toolchain,
                 builders_override=dict(sorted((builders_override or {}).items())), release_modes=list(modes),
+                **({"families": fam_plan} if fam_plan is not None else {}),
                 **({"candidate_defines": defines} if defines else {}),
                 **({"timed_sets": sorted(a for _, a in timed_sets(timed))} if defines and base and timed_sets(timed)
                    else {}))
@@ -1800,6 +1819,9 @@ def render(plan, full=False):
     rt = plan["runtime"]
     out.append("   %-20s %5d %5d  %s" % ("runtime .libs", rt["decision"] == "REUSE", rt["decision"] == "BUILD", rt["reason"]))
     out.append("   legs to launch: " + (", ".join(plan["legs"]) or "none (nothing rented for builds)"))
+    if plan.get("families"):
+        import release_families
+        out += ["   " + line for line in release_families.render(plan["families"])]
     builds = plan_rows(plan, decision="BUILD")
     if builds:
         out.append("   BUILD:")
