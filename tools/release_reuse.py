@@ -1608,7 +1608,12 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
     if families and base is None:
         import release_families
         view = dict(rows=rows, runtime=runtime)
-        fam_plan = release_families.apply(view, fam=release_families.load_at(commit, root), rebuild_all=rebuild_all)
+        fam_map = release_families.load_at(commit, root)
+        # THE PYTHON GLUE IS IN A FAMILY'S IDENTITY (lane family-groups-1, 2026-11-28): no binding identity reads a
+        # file under python/mojolearn, so a family whose glue changed since the source of the reused bytes keeps its
+        # binaries and records its lanes (release_families.python_glue; two `git ls-tree`, no file is read).
+        glue = release_families.python_glue(fam_map, commit, (prev or {}).get("source_commit"), root)
+        fam_plan = release_families.apply(view, fam=fam_map, rebuild_all=rebuild_all, python=glue)
         rt_decision = runtime["decision"]
         if rebuild_all or (ptx_proof and any(r["decision"] == "BUILD" for r in _ptx_device_rows(rows))):
             # the published PTX set is taken only whole, with every PTX row REUSE; its leg runs and proves its set

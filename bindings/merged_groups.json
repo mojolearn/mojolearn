@@ -19,6 +19,18 @@
   "the tokenizer, catalog, sequence expansion, byte LM trainers, multi-device drivers, public neural doors), and",
   "_mojolearn_native_x_host (2540 s on the 0.8.66 Mac) gave its byte LM, model-selection and manifold members to",
   "_mojolearn_native_orchestration_host.",
+  "2026-11-28 (docs/build/HOT_GROUPS.md section 7): ONE FAMILY PER MERGED FILE. No group holds bindings of two release",
+  "families (bindings/release_families.json); `python3 tools/release_families.py check` refuses one that does, on every",
+  "directory set and on the macOS <stem>_m1 files. A rebuilt family therefore rebuilds only its own files, and a kept",
+  "family ships the previous release's bytes. Every group of this regroup is a SUBSET of one group it was split from",
+  "(no members were combined that did not already compile together), so each compile's peak is bounded by its parent's",
+  "measured peak. Device sets: 4 -> 10 groups (_mojolearn_native keeps the base binding alone; _linear and _prep left",
+  "it; _kernel and _series left _trees; _tokenizer and _decomp left _cluster). Host: 18 -> 29 (_linear_host and",
+  "_prep_host left _mojolearn_native_host; _classical_linear_host left _classical_prep_host; _x_metrics_host left",
+  "_series_host; _kernel_host and _cluster_host left _forest_host; _byte_lm_host and _manifold_host left",
+  "_orchestration_host; _x_linear_host, _x_decomp_host and _x_prep_host left _mojolearn_native_x_host). Small groups of",
+  "one family (the prep host groups, the linear host groups) may be combined again once a build has recorded their",
+  "peaks; a group never spans families.",
   "dirs.<dir>.optional: member -> {group, platforms}: it joins that group on those platforms when MOJOLEARN_PACKAGE_BYTE_LM=1.",
   "darwin_metal1: members whose per-binding script passes --target-accelerator metal:1 on macOS;",
   "on macOS they compile into <stem>_m1 so every member keeps its own compile flags.",
@@ -30,13 +42,17 @@
    "path": "",
    "groups": {
     "_mojolearn_native": [
-     "_mojolearn",
+     "_mojolearn"
+    ],
+    "_mojolearn_native_linear": [
      "_mojolearn_estimators",
-     "_mojolearn_metrics",
-     "_mojolearn_preprocessing",
      "_mojolearn_solver",
      "_mojolearn_linalg",
-     "_mojolearn_x_linear",
+     "_mojolearn_x_linear"
+    ],
+    "_mojolearn_native_prep": [
+     "_mojolearn_metrics",
+     "_mojolearn_preprocessing",
      "_mojolearn_x_prep",
      "_mojolearn_x_metrics"
     ],
@@ -44,10 +60,14 @@
      "_mojolearn_gbdt",
      "_mojolearn_rf",
      "_mojolearn_trees",
-     "_mojolearn_x_trees",
+     "_mojolearn_x_trees"
+    ],
+    "_mojolearn_native_kernel": [
      "_mojolearn_svm",
      "_mojolearn_kernel_methods",
-     "_mojolearn_gp",
+     "_mojolearn_gp"
+    ],
+    "_mojolearn_native_series": [
      "_mojolearn_resample",
      "_mojolearn_tsa",
      "_mojolearn_arima"
@@ -64,11 +84,15 @@
      "_mojolearn_mixture",
      "_mojolearn_hdbscan",
      "_mojolearn_ivf",
-     "_mojolearn_x_tokenizer",
      "_mojolearn_x_cluster",
      "_mojolearn_x_neighbors",
-     "_mojolearn_x_decomp",
      "_mojolearn_x_ann"
+    ],
+    "_mojolearn_native_tokenizer": [
+     "_mojolearn_x_tokenizer"
+    ],
+    "_mojolearn_native_decomp": [
+     "_mojolearn_x_decomp"
     ]
    },
    "optional": {
@@ -84,13 +108,17 @@
    "path": "identical",
    "groups": {
     "_mojolearn_native": [
-     "_mojolearn",
+     "_mojolearn"
+    ],
+    "_mojolearn_native_linear": [
      "_mojolearn_estimators",
-     "_mojolearn_metrics",
-     "_mojolearn_preprocessing",
      "_mojolearn_solver",
      "_mojolearn_linalg",
-     "_mojolearn_x_linear",
+     "_mojolearn_x_linear"
+    ],
+    "_mojolearn_native_prep": [
+     "_mojolearn_metrics",
+     "_mojolearn_preprocessing",
      "_mojolearn_x_prep",
      "_mojolearn_x_metrics"
     ],
@@ -98,10 +126,14 @@
      "_mojolearn_gbdt",
      "_mojolearn_rf",
      "_mojolearn_trees",
-     "_mojolearn_x_trees",
+     "_mojolearn_x_trees"
+    ],
+    "_mojolearn_native_kernel": [
      "_mojolearn_svm",
      "_mojolearn_kernel_methods",
-     "_mojolearn_gp",
+     "_mojolearn_gp"
+    ],
+    "_mojolearn_native_series": [
      "_mojolearn_resample",
      "_mojolearn_tsa",
      "_mojolearn_arima"
@@ -118,11 +150,15 @@
      "_mojolearn_mixture",
      "_mojolearn_hdbscan",
      "_mojolearn_ivf",
-     "_mojolearn_x_tokenizer",
      "_mojolearn_x_cluster",
      "_mojolearn_x_neighbors",
-     "_mojolearn_x_decomp",
      "_mojolearn_x_ann"
+    ],
+    "_mojolearn_native_tokenizer": [
+     "_mojolearn_x_tokenizer"
+    ],
+    "_mojolearn_native_decomp": [
+     "_mojolearn_x_decomp"
     ]
    },
    "optional": {
@@ -139,12 +175,16 @@
    "path": "host",
    "groups": {
     "_mojolearn_native_host": [
-     "_mojolearn_core_host",
+     "_mojolearn_core_host"
+    ],
+    "_mojolearn_native_linear_host": [
      "_mojolearn_linalg_host",
      "_mojolearn_estimators_host",
-     "_mojolearn_metrics_host",
-     "_mojolearn_preprocessing_host",
      "_mojolearn_solver_host"
+    ],
+    "_mojolearn_native_prep_host": [
+     "_mojolearn_metrics_host",
+     "_mojolearn_preprocessing_host"
     ],
     "_mojolearn_native_classical_host": [
      "_mojolearn_runtime_classical_host"
@@ -156,7 +196,9 @@
      "_mojolearn_runtime_family_host"
     ],
     "_mojolearn_native_classical_prep_host": [
-     "_mojolearn_runtime_prep_host",
+     "_mojolearn_runtime_prep_host"
+    ],
+    "_mojolearn_native_classical_linear_host": [
      "_mojolearn_runtime_linear_host"
     ],
     "_mojolearn_native_classical_decomp_host": [
@@ -184,7 +226,9 @@
      "_mojolearn_tsa_host",
      "_mojolearn_arima_host",
      "_mojolearn_forecast_host",
-     "_mojolearn_resample_host",
+     "_mojolearn_resample_host"
+    ],
+    "_mojolearn_native_x_metrics_host": [
      "_mojolearn_x_metrics_host"
     ],
     "_mojolearn_native_neural_host": [
@@ -203,11 +247,15 @@
      "_mojolearn_trees_host",
      "_mojolearn_rf_host",
      "_mojolearn_gbdt_host",
-     "_mojolearn_x_trees_host",
+     "_mojolearn_x_trees_host"
+    ],
+    "_mojolearn_native_kernel_host": [
      "_mojolearn_svm_host",
      "_mojolearn_gp_host",
      "_mojolearn_gp_infer_host",
-     "_mojolearn_kernel_methods_host",
+     "_mojolearn_kernel_methods_host"
+    ],
+    "_mojolearn_native_cluster_host": [
      "_mojolearn_mixture_host",
      "_mojolearn_mixture_infer_host",
      "_mojolearn_hdbscan_host",
@@ -215,18 +263,28 @@
      "_mojolearn_ivf_host",
      "_mojolearn_ivf_search_host"
     ],
+    "_mojolearn_native_byte_lm_host": [
+     "_mojolearn_byte_lm_host"
+    ],
     "_mojolearn_native_orchestration_host": [
-     "_mojolearn_byte_lm_host",
-     "_mojolearn_runtime_model_selection_host",
+     "_mojolearn_runtime_model_selection_host"
+    ],
+    "_mojolearn_native_manifold_host": [
      "_mojolearn_runtime_manifold_host"
     ],
+    "_mojolearn_native_x_linear_host": [
+     "_mojolearn_x_linear_host"
+    ],
     "_mojolearn_native_x_host": [
-     "_mojolearn_x_linear_host",
      "_mojolearn_x_cluster_host",
      "_mojolearn_x_neighbors_host",
-     "_mojolearn_x_decomp_host",
-     "_mojolearn_x_prep_host",
      "_mojolearn_x_ann_host"
+    ],
+    "_mojolearn_native_x_decomp_host": [
+     "_mojolearn_x_decomp_host"
+    ],
+    "_mojolearn_native_x_prep_host": [
+     "_mojolearn_x_prep_host"
     ]
    },
    "optional": {}

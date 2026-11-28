@@ -297,6 +297,33 @@ UNIT_PEAK_GIB = {
     ("host", "_mojolearn_native_parallel_host", "cuda"): 14, ("host", "_mojolearn_native_parallel_host", "hip"): 14,
     ("host", "_mojolearn_native_neural_doors_host", "cuda"): 14, ("host", "_mojolearn_native_neural_doors_host", "hip"): 14,
     ("host", "_mojolearn_native_orchestration_host", "cuda"): 10, ("host", "_mojolearn_native_orchestration_host", "hip"): 11,
+    # 2026-11-28 family regroup (docs/build/HOT_GROUPS.md section 7; one release family per merged file): each new
+    # group is a SUBSET of the group it left and starts at that group's row, which bounds it; the first build
+    # records its own peak. The groups that kept a stem kept their rows (they only lost members).
+    ("identical", "_mojolearn_native_linear", "cuda"): 13, ("identical", "_mojolearn_native_linear", "hip"): 13,
+    ("fast", "_mojolearn_native_linear", "cuda"): 11, ("fast", "_mojolearn_native_linear", "hip"): 11,
+    ("identical", "_mojolearn_native_prep", "cuda"): 13, ("identical", "_mojolearn_native_prep", "hip"): 13,
+    ("fast", "_mojolearn_native_prep", "cuda"): 11, ("fast", "_mojolearn_native_prep", "hip"): 11,
+    ("identical", "_mojolearn_native_kernel", "cuda"): 13, ("identical", "_mojolearn_native_kernel", "hip"): 12,
+    ("fast", "_mojolearn_native_kernel", "cuda"): 10, ("fast", "_mojolearn_native_kernel", "hip"): 10,
+    ("identical", "_mojolearn_native_series", "cuda"): 13, ("identical", "_mojolearn_native_series", "hip"): 12,
+    ("fast", "_mojolearn_native_series", "cuda"): 10, ("fast", "_mojolearn_native_series", "hip"): 10,
+    ("identical", "_mojolearn_native_tokenizer", "cuda"): 12, ("identical", "_mojolearn_native_tokenizer", "hip"): 12,
+    ("fast", "_mojolearn_native_tokenizer", "cuda"): 9, ("fast", "_mojolearn_native_tokenizer", "hip"): 9,
+    ("identical", "_mojolearn_native_decomp", "cuda"): 12, ("identical", "_mojolearn_native_decomp", "hip"): 12,
+    ("fast", "_mojolearn_native_decomp", "cuda"): 9, ("fast", "_mojolearn_native_decomp", "hip"): 9,
+    ("host", "_mojolearn_native_linear_host", "cuda"): 14, ("host", "_mojolearn_native_linear_host", "hip"): 13,
+    ("host", "_mojolearn_native_prep_host", "cuda"): 14, ("host", "_mojolearn_native_prep_host", "hip"): 13,
+    ("host", "_mojolearn_native_classical_linear_host", "cuda"): 14, ("host", "_mojolearn_native_classical_linear_host", "hip"): 13,
+    ("host", "_mojolearn_native_kernel_host", "cuda"): 11, ("host", "_mojolearn_native_kernel_host", "hip"): 11,
+    ("host", "_mojolearn_native_cluster_host", "cuda"): 11, ("host", "_mojolearn_native_cluster_host", "hip"): 11,
+    ("host", "_mojolearn_native_byte_lm_host", "cuda"): 10, ("host", "_mojolearn_native_byte_lm_host", "hip"): 11,
+    ("host", "_mojolearn_native_manifold_host", "cuda"): 10, ("host", "_mojolearn_native_manifold_host", "hip"): 11,
+    ("host", "_mojolearn_native_x_linear_host", "cuda"): 10, ("host", "_mojolearn_native_x_linear_host", "hip"): 11,
+    ("host", "_mojolearn_native_x_decomp_host", "cuda"): 10, ("host", "_mojolearn_native_x_decomp_host", "hip"): 11,
+    ("host", "_mojolearn_native_x_prep_host", "cuda"): 10, ("host", "_mojolearn_native_x_prep_host", "hip"): 11,
+    # _mojolearn_native_x_metrics_host left _mojolearn_native_series_host, which has no row of its own (it plans at
+    # the tier's largest row, unit_peak_gib); so does it.
 }
 #: THE RECORDED PEAK OF ONE MERGED UNIT ON A FREE RUNNER, GiB (lane fx-build-tools, 2026-11-18): the largest
 #: cgroup peak plus swap (GHA/shards/<i>/memory.txt) of a shard job that compiled that one unit, over every leg
@@ -322,6 +349,25 @@ RECORDED_UNIT_PEAK_GIB = {
     ("host", "_mojolearn_native_forest_host", "cuda"): 6.5, ("host", "_mojolearn_native_host", "cuda"): 6.0,
     ("host", "_mojolearn_native_catalog_host", "cuda"): 6.0, ("host", "_mojolearn_native_classical_host", "cuda"): 6.0,
     ("host", "_mojolearn_native_series_host", "cuda"): 5.5,
+    # 2026-11-28 family regroup: a group split off a recorded group is bounded by that group's recorded peak (it
+    # compiles a subset of its members), so it packs at the parent's figure until its own job records one.
+    ("identical", "_mojolearn_native_linear", "cuda"): 12.5,
+    ("identical", "_mojolearn_native_prep", "cuda"): 12.5,
+    ("identical", "_mojolearn_native_kernel", "cuda"): 11.5,
+    ("identical", "_mojolearn_native_series", "cuda"): 11.5,
+    ("identical", "_mojolearn_native_tokenizer", "cuda"): 11.0,
+    ("identical", "_mojolearn_native_decomp", "cuda"): 11.0,
+    ("host", "_mojolearn_native_linear_host", "cuda"): 6.0,
+    ("host", "_mojolearn_native_prep_host", "cuda"): 6.0,
+    ("host", "_mojolearn_native_classical_linear_host", "cuda"): 9.0,
+    ("host", "_mojolearn_native_x_metrics_host", "cuda"): 5.5,
+    ("host", "_mojolearn_native_kernel_host", "cuda"): 6.5,
+    ("host", "_mojolearn_native_cluster_host", "cuda"): 6.5,
+    ("host", "_mojolearn_native_byte_lm_host", "cuda"): 9.0,
+    ("host", "_mojolearn_native_manifold_host", "cuda"): 9.0,
+    ("host", "_mojolearn_native_x_linear_host", "cuda"): 9.0,
+    ("host", "_mojolearn_native_x_decomp_host", "cuda"): 9.0,
+    ("host", "_mojolearn_native_x_prep_host", "cuda"): 9.0,
 }
 #: MERGED UNITS SIDE BY SIDE ON ONE RUNNER: a merged compile runs 2 compiler workers (MOJOLEARN_COMPILE_JOBS=2,
 #: tools/gha_release_box.sh) and the free runner has 4 vCPU, so two fill its cores; the workflow's `jobs` input
@@ -573,10 +619,13 @@ def split(builds, shards, weights=None):
 #: shard per compile: the identical, fast and host groups, the adapters, plus
 #: the assemble job; 4 + 4 + 5 + 1 + 1 at the 0.8.59 split, with room to add
 #: a group). The plan refuses a source that needs more (build_plan).
-#: 24 since the 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6):
-#: a Linux set plans 4 identical + 17 host compiles + the assemble job = 22,
-#: and two to spare; each job is 80 presigned PUTs (SLOTS_PER_JOB), nothing else.
-MERGED_JOBS_PER_SET = 24
+#: 24 after the 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6):
+#: a Linux set planned 4 identical + 17 host compiles + the assemble job = 22.
+#: 56 since the 2026-11-28 family regroup (section 7; one release family per merged file): a Linux set plans
+#: 10 identical + 10 fast + 29 host compiles + the adapters + the assemble job = 51, and five to spare; each
+#: job is 80 presigned PUTs (SLOTS_PER_JOB), nothing else. Units share runners where their recorded peaks fit
+#: (pack_units), so the runner jobs are fewer than the compiles.
+MERGED_JOBS_PER_SET = 56
 
 
 def unit_seconds(entry, vendor, merged, share=1.0):

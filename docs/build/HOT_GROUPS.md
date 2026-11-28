@@ -249,3 +249,50 @@ the moved branches unchanged; a digest that differs is a bug.
 **Regenerated after the first compile:** `python/mojolearn/_verification_light_reference.py`
 (`tools/light_verifier_reference.py`, at the next release), the sizing rows above from measured peaks, and this
 table's expected seconds from the measured ones.
+
+## 7. The 2026-11-28 regroup: one release family per merged file
+
+A release rebuilds and re-records only the families that changed (`bindings/release_families.json`,
+`tools/release_families.py`). A merged file is one `mojo build` and one `.so`, so a file that held two families tied
+them: a build of either rebuilt the other's bytes. Until this regroup every family was tied to `shared` that way.
+Now no merged file holds bindings of two families, on any directory set; `python3 tools/release_families.py check`
+refuses one that does (`merged_span_problems`).
+
+**The rule that kept memory bounded.** Every group is a subset of exactly one group it was split from. No two
+members compile together that did not already, so each compile's peak is at most its parent's measured peak
+(the rule of sections 4 and 6). `tools/release_github_build.py` plans each new group at its parent's row.
+
+| set | before | after | what left which group |
+|---|---|---|---|
+| fast, identical | 4 | 10 | `_mojolearn_native` keeps `_mojolearn` (shared); `_native_linear`, `_native_prep` left it. `_native_kernel`, `_native_series` left `_native_trees`. `_native_tokenizer`, `_native_decomp` left `_native_cluster`. `_native_sequence` (neural) is unchanged |
+| host | 18 | 29 | `_native_linear_host`, `_native_prep_host` left `_native_host` (now `_mojolearn_core_host` alone). `_native_classical_linear_host` left `_native_classical_prep_host`. `_native_x_metrics_host` left `_native_series_host`. `_native_kernel_host`, `_native_cluster_host` left `_native_forest_host`. `_native_byte_lm_host`, `_native_manifold_host` left `_native_orchestration_host` (now model selection alone). `_native_x_linear_host`, `_native_x_decomp_host`, `_native_x_prep_host` left `_native_x_host` (now the cluster members) |
+
+On macOS a device group is written as `<stem>` and `<stem>_m1` by compile flags, as before; both are subsets of the
+group. `_mojolearn_native_prep` has only Metal 1 members, so only `_mojolearn_native_prep_m1.so` exists there, and
+`_mojolearn_native_trees_m1.so` now holds `_mojolearn_x_trees` alone (the registered device-free glue of
+`packaging/linux/device_glue.py`, which `packaging/macos/check_gpu_embedded.py` audits through its delegates).
+
+**What it costs.** 49 merged compiles per Linux set instead of 26 (`MERGED_JOBS_PER_SET` 24 -> 56), and the code
+members share (the standard library, the common kernels) is embedded once per file, so the wheels grow. The size
+is known only from a build: `packaging/linux/pack_wheel.py` fails a wheel over its PyPI limit. Groups of one family
+that were split only because their parents differed (the two prep host groups with `_native_x_prep_host` and
+`_native_x_metrics_host`; the linear host groups) may be combined once a build has recorded their peaks.
+
+**How a member is found at import, and why each still resolves.** Nothing in the package or the packers names a
+group stem; each path below reads the directory's `_mojolearn_merged.json`, which `bindings/merged_build.sh` writes
+from this manifest (`tools/merged_bindings.py index`), or lists files.
+
+| path | where | resolves through |
+|---|---|---|
+| a member's own `<name>.so` (development, bisecting) | `_merged.binding_path` | the file; it wins over a merged one |
+| `from . import _mojolearn_x` in the package directory (macOS fast) | `_merged.MergedFinder`, `_backend` `_CANONICAL_PATHS` | `_merged.merged_file(directory, name)`: the index |
+| the `identical/` tier and the Linux vendor sets (`cuda/<arch>/`, `hip/<arch>/`, with `identical/` below) | `_backend` explicit load | `_merged.binding_path(tier_dir, name)`: the index of that directory |
+| host bindings, the door bindings loaded by path, and the runtime owners connected by `HOST_IMPORT_ALIASES` | `_backend.load_host_module`, `door_host_binary_path` | `_merged.binding_path(host_dir(), basename)`, `_merged.merged_members(host_dir())` |
+| which host bindings are built | `_backend` host listing | `_mojolearn_*_host.so` in `host/` plus `merged_members`; every host stem still ends in `_host` |
+| vendor plugin wheels (`mojolearn-nvidia`, `mojolearn-amd`, the PTX set) | `gpu_plugins.py` | the plugin's manifest rows per merged file with their `members`, and the hash of each directory's index |
+
+The packers check the same thing before staging: `tools/merged_bindings.py check-index` refuses a directory whose
+index does not name exactly the plan's files and members, and `packaging/linux/merged_layout.py` and
+`packaging/check_ext_lists.py` compare the members with the packing lists. Each member already loads from a file
+of its own in the development layout (`bindings/development_groups.json`, one member per unit), so a member does
+not depend on sharing a file with its former neighbours.
