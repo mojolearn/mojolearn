@@ -322,6 +322,14 @@ UNIT_PEAK_GIB = {
     ("host", "_mojolearn_native_x_linear_host", "cuda"): 10, ("host", "_mojolearn_native_x_linear_host", "hip"): 11,
     ("host", "_mojolearn_native_x_decomp_host", "cuda"): 10, ("host", "_mojolearn_native_x_decomp_host", "hip"): 11,
     ("host", "_mojolearn_native_x_prep_host", "cuda"): 10, ("host", "_mojolearn_native_x_prep_host", "hip"): 11,
+    # 2026-11-28 (lane lane-loads-2): the families metrics and linalg take their own files; each is a subset of
+    # _mojolearn_native_prep / _linear (and their host groups) and starts at that group's row.
+    ("identical", "_mojolearn_native_metrics", "cuda"): 13, ("identical", "_mojolearn_native_metrics", "hip"): 13,
+    ("fast", "_mojolearn_native_metrics", "cuda"): 11, ("fast", "_mojolearn_native_metrics", "hip"): 11,
+    ("identical", "_mojolearn_native_linalg", "cuda"): 13, ("identical", "_mojolearn_native_linalg", "hip"): 13,
+    ("fast", "_mojolearn_native_linalg", "cuda"): 11, ("fast", "_mojolearn_native_linalg", "hip"): 11,
+    ("host", "_mojolearn_native_metrics_host", "cuda"): 14, ("host", "_mojolearn_native_metrics_host", "hip"): 13,
+    ("host", "_mojolearn_native_linalg_host", "cuda"): 14, ("host", "_mojolearn_native_linalg_host", "hip"): 13,
     # _mojolearn_native_x_metrics_host left _mojolearn_native_series_host, which has no row of its own (it plans at
     # the tier's largest row, unit_peak_gib); so does it.
 }
@@ -368,6 +376,11 @@ RECORDED_UNIT_PEAK_GIB = {
     ("host", "_mojolearn_native_x_linear_host", "cuda"): 9.0,
     ("host", "_mojolearn_native_x_decomp_host", "cuda"): 9.0,
     ("host", "_mojolearn_native_x_prep_host", "cuda"): 9.0,
+    # 2026-11-28 (lane lane-loads-2): metrics and linalg, at their parents' figures until their own jobs record one
+    ("identical", "_mojolearn_native_metrics", "cuda"): 12.5,
+    ("identical", "_mojolearn_native_linalg", "cuda"): 12.5,
+    ("host", "_mojolearn_native_metrics_host", "cuda"): 6.0,
+    ("host", "_mojolearn_native_linalg_host", "cuda"): 6.0,
 }
 #: MERGED UNITS SIDE BY SIDE ON ONE RUNNER: a merged compile runs 2 compiler workers (MOJOLEARN_COMPILE_JOBS=2,
 #: tools/gha_release_box.sh) and the free runner has 4 vCPU, so two fill its cores; the workflow's `jobs` input
@@ -625,7 +638,9 @@ def split(builds, shards, weights=None):
 #: 10 identical + 10 fast + 29 host compiles + the adapters + the assemble job = 51, and five to spare; each
 #: job is 80 presigned PUTs (SLOTS_PER_JOB), nothing else. Units share runners where their recorded peaks fit
 #: (pack_units), so the runner jobs are fewer than the compiles.
-MERGED_JOBS_PER_SET = 56
+#: 64 since the metrics and linalg families took their own files (2026-11-28, lane lane-loads-2): 12 identical +
+#: 12 fast + 31 host compiles + the adapters + the assemble job = 57, and seven to spare.
+MERGED_JOBS_PER_SET = 64
 
 
 def unit_seconds(entry, vendor, merged, share=1.0):

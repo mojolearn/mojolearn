@@ -247,14 +247,20 @@ def check(fam, bindings, lanes, lane_bindings=None):
 
 
 def lane_loads(lanes=None):
-    """{lane: [binding]} each lane loads, from tools/lane_select.py lane_sources (its bindings and the declared
-    host routes); the expensive derivation (minutes, memoized on disk by lane_select)."""
+    """{lane: [binding]} each lane loads, from tools/lane_select.py lane_sources: the bindings its doors name, the
+    declared host routes, AND the bindings its calls reach (lane_select.lane_called_bindings: the runtime owners a
+    lane runs through the shared host owner's import aliases, `trees_native_call`, `labels_native_call`, ...,
+    which no door names). The names alone left nine runtime owners with no lane at all, so a lane could keep its
+    columns through a rebuild of an owner it runs (lane lane-loads-2, 2026-11-28); the union only adds bindings.
+    The expensive derivation (minutes, memoized on disk by lane_select)."""
     import lane_select
     _, why = lane_select.lane_sources()
+    called = lane_select.lane_called_bindings()
     out = {}
     for lane, w in why.items():
         if lanes is None or lane in lanes:
-            out[lane] = sorted(set(w.get("bindings") or ()) | set(w.get("declared") or ()))
+            out[lane] = sorted(set(w.get("bindings") or ()) | set(w.get("declared") or ())
+                               | set(called.get(lane) or ()))
     return out
 
 

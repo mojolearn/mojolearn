@@ -5386,6 +5386,38 @@ def lane_sources():
     return _LANE_SOURCES
 
 
+def lane_called_bindings():
+    """lane -> the bindings whose compiled code the lane's calls reach, from the map's own call evidence
+    (`_LANE_SEED_CALLS`: one row per binding the lane's doors resolve, per host binding a CPU-only install routes
+    it to, and per IMPORT-ALIAS OWNER of those, `host_routes`).
+
+    WHY (lane lane-loads-2, 2026-11-28). `why[lane]["bindings"]` and `["declared"]` are the bindings a lane's Python
+    NAMES. A runtime owner (`_mojolearn_runtime_trees_host`, `_mojolearn_runtime_prep_host`, ...) is named by no
+    door: its functions are connected into the shared host owner at import
+    (python/mojolearn/host_surface.py HOST_IMPORT_ALIASES) and a lane runs them by calling `trees_native_call`,
+    `labels_native_call`, `family_native_call` on that owner. tools/release_families.py derive read the names
+    alone and saw no lane load nine of the twelve runtime owners (`loaders`: 0 lanes), so a lane whose label
+    encoding runs in the prep owner had `prep` in its set only by the accident of another name. A release that
+    rebuilt one family could then have kept the columns of a lane that runs it: the dangerous direction.
+
+    A binding counts when the lane takes it whole (a door the lane runs whole resolves it), names at least one of
+    its exports, or its contribution holds a file beyond the binding source. A binding the lane only connects
+    (narrow, no export named: the source alone) is NOT added here; the names in `bindings`/`declared` still carry
+    it for the caller. Read-only over the derived map: this adds bindings for a caller to union, it removes none."""
+    lane_sources()
+    out = {}
+    for lane, calls in (_LANE_SEED_CALLS or {}).items():
+        names = set()
+        for src, wide, exports, got in calls:
+            name = os.path.basename(src)[:-len(".mojo")]
+            if os.path.dirname(src) != "bindings" or not name.startswith("_mojolearn"):
+                continue    # not a binding source (every row is one today; a row that is not names no binding)
+            if wide is True or exports or set(got) - {src}:
+                names.add(name)
+        out[lane] = names
+    return out
+
+
 def _lane_symbol_files(fn, harness, symbols):
     """Python definitions named by a fixture, before following their native bindings."""
     return {name: symbols[name] for name in _seed_names(fn, vars(harness)) if symbols.get(name)}

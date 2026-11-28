@@ -299,7 +299,7 @@ def test_check_refuses_a_merged_file_that_spans_families():
     problems = RF.merged_span_problems(fam(), merged)
     assert len(problems) == 2
     assert any(p.startswith("merged file host/_mojolearn_native_host holds bindings of 2 families") and
-               "linear: _mojolearn_linalg_host" in p and "shared: _mojolearn_core_host" in p for p in problems)
+               "linalg: _mojolearn_linalg_host" in p and "shared: _mojolearn_core_host" in p for p in problems)
     # an optional member counts in the group it joins
     assert any("host/_mojolearn_native_forest_host" in p and "kernel: _mojolearn_svm_host" in p for p in problems)
     merged["dirs"]["host"]["groups"]["_mojolearn_native_host"] = ["_mojolearn_core_host"]
@@ -323,7 +323,7 @@ def py_fam(rules):
 def test_every_python_file_of_this_checkout_has_a_family_and_no_family_file_is_imported_across():
     f = RF.load()
     assert RF.python_problems(f) == []
-    assert f.python("_expansion_cnn.py") == "neural" and f.python("linalg_fast.py") == "linear"
+    assert f.python("_expansion_cnn.py") == "neural" and f.python("linalg_fast.py") == "linalg"
     assert f.python("_backend.py") == f.python("host_surface.py") == f.python("models/causal_lm.py") == "shared"
     # per-file families (lane py-glue-1, 2026-11-28): leaf modules have a family by name; what a shared file imports,
     # a composition, and a new file under a pattern stay shared
@@ -458,3 +458,78 @@ def test_loaders_counts_the_lanes_a_family_of_its_own_would_turn_shared():
     (row,) = RF.loaders(fam(), loads, ["_mojolearn_runtime_trees_host"])
     assert row == dict(binding="_mojolearn_runtime_trees_host", family="trees", lanes=3, alone=1,
                        by_family={"cluster": 1}, mixed=1)
+
+
+# ---------------------------------------------------------------- metrics and linalg are families of their own
+def test_metrics_and_linalg_are_families_of_their_own_and_their_merged_files_hold_nothing_else():
+    f = RF.load()
+    for name in ("_mojolearn_metrics", "_mojolearn_metrics_host", "_mojolearn_x_metrics", "_mojolearn_x_metrics_host"):
+        assert f.binding(name) == "metrics"
+    for name in ("_mojolearn_solver", "_mojolearn_solver_host", "_mojolearn_linalg", "_mojolearn_linalg_host"):
+        assert f.binding(name) == "linalg"
+    # the Metal 1 builds take their binding's family
+    assert f.binding("_mojolearn_metrics_m1") == f.binding("_mojolearn_x_metrics_m1") == "metrics"
+    # what stays: the scalers and the prep programs, the GLMs, and the owner doors of both
+    assert f.binding("_mojolearn_x_prep") == f.binding("_mojolearn_preprocessing") == "prep"
+    assert f.binding("_mojolearn_runtime_prep_host") == "prep"
+    assert f.binding("_mojolearn_estimators") == f.binding("_mojolearn_x_linear") == "linear"
+    assert f.binding("_mojolearn_runtime_linear_host") == "linear"
+    files = dict(RF.merged_files(f.merged))
+    for tier in ("fast", "identical"):
+        assert files[tier + "/_mojolearn_native_metrics"] == ["_mojolearn_metrics", "_mojolearn_x_metrics"]
+        assert files[tier + "/_mojolearn_native_linalg"] == ["_mojolearn_solver", "_mojolearn_linalg"]
+        assert files[tier + "/_mojolearn_native_prep"] == ["_mojolearn_preprocessing", "_mojolearn_x_prep"]
+        assert files[tier + "/_mojolearn_native_linear"] == ["_mojolearn_estimators", "_mojolearn_x_linear"]
+    assert files["host/_mojolearn_native_metrics_host"] == ["_mojolearn_metrics_host"]
+    assert files["host/_mojolearn_native_linalg_host"] == ["_mojolearn_linalg_host", "_mojolearn_solver_host"]
+    assert RF.merged_span_problems(f) == []
+    assert f.python("_surface_metrics.py") == "metrics" and f.python("linalg_fast.py") == "linalg"
+
+
+def test_a_scaler_edit_no_longer_records_a_lane_that_only_scores_and_a_metrics_edit_still_does():
+    lanes, problems = RF.derive(fam(), {"rf-clf": ["_mojolearn_rf", "_mojolearn_metrics", "_mojolearn_metrics_host"],
+                                        "scaler": ["_mojolearn_preprocessing", "_mojolearn_metrics"],
+                                        "pca": ["_mojolearn_x_decomp", "_mojolearn_linalg"],
+                                        "ols": ["_mojolearn_estimators", "_mojolearn_solver"]})
+    assert problems == []
+    assert lanes == {"rf-clf": ["metrics", "trees"], "scaler": ["metrics", "prep"],
+                     "pca": ["decomp", "linalg"], "ols": ["linalg", "linear"]}
+    f = fam(lanes=lanes)
+
+    def recorded(*names):
+        return RF.lanes_to_record(dict(families=[dict(family=n, record=n in names) for n in f.names()]),
+                                  sorted(lanes), f)
+    assert recorded("prep") == ["scaler"]
+    assert recorded("metrics") == ["rf-clf", "scaler"]
+    assert recorded("linear") == ["ols"]
+    assert recorded("linalg") == ["ols", "pca"]
+
+
+# ---------------------------------------------------------------- a lane loads the owners its calls reach
+def test_lane_loads_adds_the_runtime_owners_a_lane_calls_through_the_import_aliases(monkeypatch):
+    import lane_select
+    why = {"kde": dict(bindings=["_mojolearn_x_neighbors", "_mojolearn_tokenizer_host"], declared=[]),
+           "ops": dict(bindings=["_mojolearn", "_mojolearn_tokenizer_host"], declared=[])}
+    calls = {
+        # the density door sits in the trees owner: `trees_native_call` is named, so the owner is loaded
+        "kde": [("bindings/_mojolearn_x_neighbors.mojo", True, (), frozenset({"bindings/_mojolearn_x_neighbors.mojo"})),
+                ("bindings/_mojolearn_runtime_trees_host.mojo", "narrow", ("trees_native_call",),
+                 frozenset({"bindings/_mojolearn_runtime_trees_host.mojo", "bindings/classical_trees_door.mojo"})),
+                # connected, nothing of it named: the source alone, not a load by call
+                ("bindings/_mojolearn_runtime_linear_host.mojo", "narrow", (),
+                 frozenset({"bindings/_mojolearn_runtime_linear_host.mojo"}))],
+        "ops": [("bindings/_mojolearn_tokenizer_host.mojo", "narrow", ("ops_native_call",),
+                 frozenset({"bindings/_mojolearn_tokenizer_host.mojo"})),
+                ("bindings/_mojolearn_runtime_neural_host.mojo", "narrow", (),
+                 frozenset({"bindings/_mojolearn_runtime_neural_host.mojo", "autograd/tape.mojo"}))],
+    }
+    monkeypatch.setattr(lane_select, "lane_sources", lambda: ({}, why))
+    monkeypatch.setattr(lane_select, "_LANE_SEED_CALLS", calls)
+    assert lane_select.lane_called_bindings() == {
+        "kde": {"_mojolearn_x_neighbors", "_mojolearn_runtime_trees_host"},
+        "ops": {"_mojolearn_tokenizer_host", "_mojolearn_runtime_neural_host"}}
+    loads = RF.lane_loads()
+    assert loads["kde"] == ["_mojolearn_runtime_trees_host", "_mojolearn_tokenizer_host", "_mojolearn_x_neighbors"]
+    lanes, problems = RF.derive(fam(), loads)
+    # the names alone gave kde `cluster` (a trees-owner rebuild would have kept its columns) and ops `shared`
+    assert problems == [] and lanes == {"kde": ["cluster", "trees"], "ops": "neural"}

@@ -278,6 +278,15 @@ is known only from a build: `packaging/linux/pack_wheel.py` fails a wheel over i
 that were split only because their parents differed (the two prep host groups with `_native_x_prep_host` and
 `_native_x_metrics_host`; the linear host groups) may be combined once a build has recorded their peaks.
 
+**The metrics and linalg families (2026-11-28, lane lane-loads-2).** `metrics` (the four metrics bindings) left the
+`prep` family and `linalg` (`_mojolearn_solver`, `_mojolearn_linalg` and their host twins) left `linear`, because
+scoring and linear algebra are loaded far beyond the scalers and the GLMs. Each took its own files, again a subset
+of the group it left: `_native_metrics` (metrics, x_metrics) left `_native_prep`; `_native_linalg` (solver, linalg)
+left `_native_linear`; `_native_metrics_host` left `_native_prep_host`; `_native_linalg_host` left
+`_native_linear_host`. Device sets 10 -> 12 groups, host 29 -> 31; 55 merged compiles per Linux set
+(`MERGED_JOBS_PER_SET` 56 -> 64). On macOS `_mojolearn_native_linear` and `_mojolearn_native_metrics` have only
+Metal 1 members (their `_m1` files alone); `_mojolearn_native_linalg` has none.
+
 **How a member is found at import, and why each still resolves.** Nothing in the package or the packers names a
 group stem; each path below reads the directory's `_mojolearn_merged.json`, which `bindings/merged_build.sh` writes
 from this manifest (`tools/merged_bindings.py index`), or lists files.

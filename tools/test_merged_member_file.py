@@ -29,6 +29,17 @@ def test_manifest_lookup_after_the_host_split():
     assert mb.member_file("host", "_mojolearn_x_ann_host") == "_mojolearn_native_x_host.so"
     assert mb.member_file("identical", "_mojolearn") == mb.member_file("fast", "_mojolearn") == "_mojolearn_native.so"
     assert mb.member_file("identical", "_mojolearn_estimators") == "_mojolearn_native_linear.so"
+    # 2026-11-28 (lane lane-loads-2): the families metrics and linalg have files of their own
+    assert mb.member_file("identical", "_mojolearn_metrics") == mb.member_file("fast", "_mojolearn_x_metrics") \
+        == "_mojolearn_native_metrics.so"
+    assert mb.member_file("identical", "_mojolearn_solver") == mb.member_file("fast", "_mojolearn_linalg") \
+        == "_mojolearn_native_linalg.so"
+    assert mb.member_file("identical", "_mojolearn_x_prep") == "_mojolearn_native_prep.so"
+    assert mb.member_file("host", "_mojolearn_metrics_host") == "_mojolearn_native_metrics_host.so"
+    assert mb.member_file("host", "_mojolearn_solver_host") == mb.member_file("host", "_mojolearn_linalg_host") \
+        == "_mojolearn_native_linalg_host.so"
+    assert mb.member_file("host", "_mojolearn_estimators_host") == "_mojolearn_native_linear_host.so"
+    assert mb.member_file("host", "_mojolearn_preprocessing_host") == "_mojolearn_native_prep_host.so"
     assert mb.member_file("identical", "_mojolearn_x_tokenizer") == "_mojolearn_native_tokenizer.so"
     assert mb.member_file("identical", "_mojolearn_byte_lm") == "_mojolearn_native_sequence.so"
 

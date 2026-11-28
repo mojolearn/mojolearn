@@ -31,6 +31,11 @@
   "_orchestration_host; _x_linear_host, _x_decomp_host and _x_prep_host left _mojolearn_native_x_host). Small groups of",
   "one family (the prep host groups, the linear host groups) may be combined again once a build has recorded their",
   "peaks; a group never spans families.",
+  "2026-11-28 (lane lane-loads-2): the families `metrics` and `linalg` (bindings/release_families.json) take their own",
+  "files, each a subset of the group it left: _mojolearn_native_metrics (metrics, x_metrics) left _mojolearn_native_prep,",
+  "_mojolearn_native_linalg (solver, linalg) left _mojolearn_native_linear, _mojolearn_native_metrics_host left",
+  "_mojolearn_native_prep_host and _mojolearn_native_linalg_host left _mojolearn_native_linear_host. Device sets",
+  "10 -> 12 groups, host 29 -> 31. On macOS _mojolearn_native_linear now has only Metal 1 members (its _m1 file alone).",
   "dirs.<dir>.optional: member -> {group, platforms}: it joins that group on those platforms when MOJOLEARN_PACKAGE_BYTE_LM=1.",
   "darwin_metal1: members whose per-binding script passes --target-accelerator metal:1 on macOS;",
   "on macOS they compile into <stem>_m1 so every member keeps its own compile flags.",
@@ -46,14 +51,18 @@
     ],
     "_mojolearn_native_linear": [
      "_mojolearn_estimators",
-     "_mojolearn_solver",
-     "_mojolearn_linalg",
      "_mojolearn_x_linear"
     ],
+    "_mojolearn_native_linalg": [
+     "_mojolearn_solver",
+     "_mojolearn_linalg"
+    ],
     "_mojolearn_native_prep": [
-     "_mojolearn_metrics",
      "_mojolearn_preprocessing",
-     "_mojolearn_x_prep",
+     "_mojolearn_x_prep"
+    ],
+    "_mojolearn_native_metrics": [
+     "_mojolearn_metrics",
      "_mojolearn_x_metrics"
     ],
     "_mojolearn_native_trees": [
@@ -112,14 +121,18 @@
     ],
     "_mojolearn_native_linear": [
      "_mojolearn_estimators",
-     "_mojolearn_solver",
-     "_mojolearn_linalg",
      "_mojolearn_x_linear"
     ],
+    "_mojolearn_native_linalg": [
+     "_mojolearn_solver",
+     "_mojolearn_linalg"
+    ],
     "_mojolearn_native_prep": [
-     "_mojolearn_metrics",
      "_mojolearn_preprocessing",
-     "_mojolearn_x_prep",
+     "_mojolearn_x_prep"
+    ],
+    "_mojolearn_native_metrics": [
+     "_mojolearn_metrics",
      "_mojolearn_x_metrics"
     ],
     "_mojolearn_native_trees": [
@@ -178,13 +191,17 @@
      "_mojolearn_core_host"
     ],
     "_mojolearn_native_linear_host": [
+     "_mojolearn_estimators_host"
+    ],
+    "_mojolearn_native_linalg_host": [
      "_mojolearn_linalg_host",
-     "_mojolearn_estimators_host",
      "_mojolearn_solver_host"
     ],
     "_mojolearn_native_prep_host": [
-     "_mojolearn_metrics_host",
      "_mojolearn_preprocessing_host"
+    ],
+    "_mojolearn_native_metrics_host": [
+     "_mojolearn_metrics_host"
     ],
     "_mojolearn_native_classical_host": [
      "_mojolearn_runtime_classical_host"
