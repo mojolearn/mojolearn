@@ -689,6 +689,25 @@ def oracle_embedding[
     """`transform_graph` on the host: the Laplacian, the Lanczos with cuVS's
     config (`max_iterations = 10n`, `ncv = min(n - k, max(2k + 1, 20))`,
     `LA`), the division by `diag`, the reversed gather."""
+    return oracle_embedding_capped[dt](g, n_components, norm_laplacian, drop_first, tolerance, seed, 0)
+
+
+def oracle_embedding_capped[
+    dt: DType
+](
+    g: CooGraph,
+    n_components: Int,
+    norm_laplacian: Bool,
+    drop_first: Bool,
+    tolerance: Scalar[dt],
+    seed: UInt64,
+    max_restarts: Int,
+) raises -> OracleResult[dt]:
+    """`oracle_embedding` with the device's restart bound
+    (`compute_eigenpairs_status_device`): `max_restarts > 0` makes
+    `max_iterations = min(10 n, ncv + max_restarts (ncv - k))`; `0` is
+    cuVS's `10 n`. `res.converged` and the last `res.restart_res` say how
+    the solve ended, the words the device's `LanczosStatus` carries."""
     var n = g.n
     var k = n_components
     if n - k <= 0:
@@ -716,7 +735,12 @@ def oracle_embedding[
         for i in range(n):
             v0.append(Scalar[dt](v0_32[i]))
         res.v0 = v0.copy()
-        host_lanczos_smallest[dt](L, k, 10 * n, ncv, tolerance, LANCZOS_LA, v0, res)
+        var max_iterations = 10 * n
+        if max_restarts > 0:
+            var cap = ncv + max_restarts * (ncv - k)
+            if cap < max_iterations:
+                max_iterations = cap
+        host_lanczos_smallest[dt](L, k, max_iterations, ncv, tolerance, LANCZOS_LA, v0, res)
     var vecs = res.ritz_vectors.copy()
     if norm_laplacian:
         for c in range(k):
