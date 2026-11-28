@@ -125,6 +125,11 @@ def estimator_checks(recorder, public, methods):
             return X.reshape(8,2,2), y
         if name in ('CCA', 'PLSCanonical', 'PLSRegression'):
             return X, np.column_stack([target, target*.5])
+        # lane sc-prep-1: count-data transformers: non-negative values, no batches; RegressOut's y is its covariates
+        if name in ('TotalCountNormalizer', 'Log1pTransformer', 'HighlyVariableGenes', 'ClippedStandardScaler'):
+            return np.abs(X), None
+        if name == 'RegressOut':
+            return X, np.column_stack([target, target*.5]).astype(np.float32)
         if name in ('Louvain', 'PageRank'):
             return np.array([[0,1,0,1],[1,0,1,0],[0,1,0,1],[1,0,1,0]],np.float32), None
         if name == 'Cholesky':
@@ -165,7 +170,9 @@ def estimator_checks(recorder, public, methods):
         return m
 
     def consumed(m):
-        x, _ = data()
+        x, covariates = data()
+        if name == 'RegressOut':
+            return m.transform(x, covariates)
         if name in ('ARIMA', 'AutoARIMA'):
             return m.forecast(2)
         if name == 'GARCH':
