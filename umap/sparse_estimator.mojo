@@ -21,7 +21,9 @@ from umap.sparse_graph import (
 )
 from umap.sparse_optimizer import optimize_sparse_layout
 from umap.optimizer_identical_device import umap_positive_coo_device
-from umap.params import UMAPParams, UMAP_MAX_COMPONENTS
+from umap.params import UMAPParams, UMAP_MAX_COMPONENTS, UMAP_NEIGHBORS_IVF
+from umap.ivf_neighbors import umap_ivf_self_knn_device
+from umap.graph_out import UmapFitOut, umap_graph_capacity, umap_publish_graph, umap_publish_curve
 from umap.spectral_init import spectral_initialize_device_coo
 
 
@@ -73,10 +75,31 @@ def sparse_fuzzy_graph_from_device(
         raise Error("UMAP input does not match its declared shape")
     var nx = n_samples * n_features
     var nk = n_samples * params.n_neighbors
+    var head = d_x.create_sub_buffer[DType.float32](0, nx)
+    if params.neighbors == UMAP_NEIGHBORS_IVF:
+        # lane sc-ann-1-umap: the IVF graph's self-first form on the device
+        # (umap/ivf_neighbors.mojo); False (the exact plan, a short probe
+        # pool) falls through to the exact search below, the same bits as
+        # neighbors='exact'.
+        if not ug_device_all_finite(ctx, head, nx):
+            raise Error("UMAP input coordinates must be finite")
+        var v_dist = ctx.enqueue_create_buffer[DType.float32](nk)
+        var v_idx = ctx.enqueue_create_buffer[DType.uint32](nk)
+        if umap_ivf_self_knn_device(ctx, head, n_samples, n_features, params, v_dist, v_idx):
+            var ivf_graph = sparse_fuzzy_simplicial_graph_device(
+                ctx, v_idx, v_dist, n_samples, params.n_neighbors,
+                params.set_op_mix_ratio, params.local_connectivity, canonicalize=True,
+            )
+            _ = v_dist^
+            _ = v_idx^
+            _ = head^
+            _ = d_x.unsafe_ptr()  # the rows outlive the search's launches
+            return ivf_graph^
+        _ = v_dist^
+        _ = v_idx^
     var hd = ctx.enqueue_create_host_buffer[DType.float32](nk)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](nk)
     ctx.synchronize()
-    var head = d_x.create_sub_buffer[DType.float32](0, nx)
     if not ug_device_all_finite(ctx, head, nx):
         raise Error("UMAP input coordinates must be finite")
     if params.metric == -1:
@@ -104,6 +127,7 @@ def sparse_fuzzy_graph_from_device(
     _ = hi^
     _ = d_dist^
     _ = d_idx^
+    _ = head^
     _ = d_x.unsafe_ptr()  # the rows outlive the search's launches
     return graph^
 
@@ -171,15 +195,20 @@ def _sparse_fit_layout(
     target_dims: Int,
     target_n_neighbors: Int,
     target_weight: Float32,
+    fit_out: UmapFitOut,
 ) raises -> List[Float32]:
     """Everything of the fit after the data's graph: the supervised
     intersection, the start, the optimizer (one body for the host-input and
-    the device-row forms)."""
+    the device-row forms). `fit_out` (lane sc-ann-1-umap): the finished
+    graph (after the supervised intersection, umap-learn's `graph_`) and
+    the curve's (a, b) into the caller's arrays when asked
+    (umap/graph_out.mojo; addresses 0 skip them)."""
+    var tk = target_n_neighbors if target_n_neighbors > 0 else params.n_neighbors
     if target_kind != 0:
-        var tk = target_n_neighbors if target_n_neighbors > 0 else params.n_neighbors
         graph = supervise_graph(
             ctx, graph, target, n_samples, target_kind, target_dims, tk, target_weight, params.random_seed,
         )
+    umap_publish_graph(graph, umap_graph_capacity(n_samples, params.n_neighbors, target_kind, tk), fit_out)
     var initial: List[Float32]
     if len(initial_given) > 0:
         initial = initial_given.copy()
@@ -191,6 +220,7 @@ def _sparse_fit_layout(
     if epochs == 0:
         epochs = 200
     var ab = params.curve()
+    umap_publish_curve(ab[0], ab[1], fit_out)
     return optimize_sparse_layout(
         ctx, initial^, graph, n_samples, params.n_components, epochs,
         initial_learning_rate=params.learning_rate,
@@ -213,6 +243,10 @@ def sparse_fit_transform(
     target_dims: Int = 1,
     target_n_neighbors: Int = 0,
     target_weight: Float32 = Float32(0.5),
+    out_indptr: Int = 0,
+    out_indices: Int = 0,
+    out_data: Int = 0,
+    out_ab: Int = 0,
 ) raises -> List[Float32]:
     """Exact k-NN → fuzzy graph → spectral init → serial UMAP optimizer.
 
@@ -229,7 +263,7 @@ def sparse_fit_transform(
         ctx, x_rowmajor, n_samples, n_features, params
     )
     return _sparse_fit_layout(ctx, graph^, n_samples, params, initial_given, target, target_kind, target_dims,
-        target_n_neighbors, target_weight)
+        target_n_neighbors, target_weight, UmapFitOut(out_indptr, out_indices, out_data, out_ab))
 
 
 def sparse_fit_transform_device(
@@ -244,6 +278,10 @@ def sparse_fit_transform_device(
     target_dims: Int = 1,
     target_n_neighbors: Int = 0,
     target_weight: Float32 = Float32(0.5),
+    out_indptr: Int = 0,
+    out_indices: Int = 0,
+    out_data: Int = 0,
+    out_ab: Int = 0,
 ) raises -> List[Float32]:
     """`sparse_fit_transform` over rows ALREADY ON THE DEVICE (lane
     vdf-scope-cluster7: a model-selection fold slot of the metrics store,
@@ -257,4 +295,4 @@ def sparse_fit_transform_device(
     _sparse_fit_checks(n_samples, params, initial_given)
     var graph = sparse_fuzzy_graph_from_device(ctx, d_x, n_samples, n_features, params)
     return _sparse_fit_layout(ctx, graph^, n_samples, params, initial_given, target, target_kind, target_dims,
-        target_n_neighbors, target_weight)
+        target_n_neighbors, target_weight, UmapFitOut(out_indptr, out_indices, out_data, out_ab))

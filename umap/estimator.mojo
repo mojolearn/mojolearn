@@ -64,8 +64,14 @@ def fit_transform(
     n_samples: Int,
     n_features: Int,
     params: UMAPParams,
+    out_indptr: Int = 0,
+    out_indices: Int = 0,
+    out_data: Int = 0,
+    out_ab: Int = 0,
 ) raises -> List[Float32]:
     """Exact k-NN → CSR fuzzy graph → spectral init → mode-specific optimizer.
+    `out_*` (lane sc-ann-1-umap): the fitted graph's CSR and the curve's
+    (a, b) into the caller's arrays (umap/graph_out.mojo; 0 skips).
 
     FAST uses a conflict-free GPU Jacobi optimizer with one owner per output
     row and an epoch snapshot; it is tolerance-compared, not bit-compared, to
@@ -74,4 +80,5 @@ def fit_transform(
     """
     return sparse_fit_transform(
         ctx, x_rowmajor, n_samples, n_features, params,
+        out_indptr=out_indptr, out_indices=out_indices, out_data=out_data, out_ab=out_ab,
     )
