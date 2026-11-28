@@ -7,8 +7,9 @@
 # behind: python/mojolearn/identical (the native merged set), python/mojolearn/host (the host set) and
 # python/mojolearn/.libs/libMojolearnMath.so, activated at the tree's HEAD. This job compiles nothing.
 #
-#   cpu  CPU_THREADS=3 REPEATS=1 tools/record_identity_column.sh cpu <out>/cpu: every lane (the
-#        recorder's default since 2026-11-09; reuse of old runs is opt-in with REUSE=1, never set here).
+#   cpu  CPU_THREADS=3 REPEATS=1 REBUILD_ALL=1 tools/record_identity_column.sh cpu <out>/cpu: every lane
+#        (REBUILD_ALL=1: the recorder's default is the release families that record since 2026-11-28,
+#        AGENTS.md part 4; this job records every lane, as it always did).
 #   ptx  only with PTX_SET_TGZ: a cuda-sm_80 PTX set tarball (entries cuda/sm_80/..., the release
 #        leg's set, as ~/mojolearn-evidence/rel0864/sets/cuda-sm_80.tar.gz), placed on the box first,
 #        with PTX_SET_SHA256 (its sha256) and PTX_SET_COMMIT (the commit the set was built from; it
@@ -69,7 +70,7 @@ unset FULL
 
 # --- the cpu column ------------------------------------------------------------------------
 st "CPU record (scope $SCOPE, CPU_THREADS=3, REPEATS=1, incremental)"
-CPU_THREADS=3 REPEATS=1 bash tools/record_identity_column.sh cpu "$O/cpu" > "$O/cpu-record.log" 2>&1
+CPU_THREADS=3 REPEATS=1 REBUILD_ALL=1 bash tools/record_identity_column.sh cpu "$O/cpu" > "$O/cpu-record.log" 2>&1
 crc=$?
 mirror
 summary "identity_box_job cpu rc=$crc $(grep -m 1 -E '^(REUSED|NOTHING-CHANGED)' "$O/cpu-record.log" | cut -c1-120) | $(tail -n 1 "$O/cpu-record.log" | cut -c1-200)"
@@ -99,7 +100,7 @@ else
             printf 'set=%s\nsha256=%s\nset_commit=%s\nhead=%s\nnative_cc=%s\nlabel=%s\n' "$PTX_SET_TGZ" "$PTX_SET_SHA256" \
                 "$SETC" "$HEAD" "$CC" "$LABEL" > "$O/ptx-set.txt"
             st "PTX record $LABEL (set ${PTX_SET_SHA256:0:12} from ${SETC:0:12}; scope $SCOPE, REPEATS=1, incremental)"
-            REPEATS=1 bash tools/record_identity_column.sh "$LABEL" "$O/ptx" > "$O/ptx-record.log" 2>&1
+            REPEATS=1 REBUILD_ALL=1 bash tools/record_identity_column.sh "$LABEL" "$O/ptx" > "$O/ptx-record.log" 2>&1
             prc=$?
         else
             st "REFUSED ptx: cannot unpack $PTX_SET_TGZ"
