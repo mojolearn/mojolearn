@@ -1,0 +1,136 @@
+{
+ "_doc": [
+  "THE RELEASE FAMILIES (AGENTS.md part 4, 'A release rebuilds and re-records only the families that changed', Andrew 2026-11-28).",
+  "Every binding a release ships (bindings/development_groups.json, bindings/merged_groups.json members, the release rows of",
+  "tools/release_reuse.py) and every verify lane (tools/identity_columns.py lanes --scope all) belongs to exactly one family.",
+  "tools/release_families.py reads this file; `python3 tools/release_families.py check` refuses a binding or a lane with no family.",
+  "A family is REUSED whole (the previous release's bytes and its recorded columns) only when every binding identity in it is",
+  "unchanged (tools/release_reuse.py identity) AND no merged file it shares with a BUILD family is rebuilt; otherwise it BUILDS",
+  "whole and its lanes record on every device. `shared` is the core every family loads: when it builds, every lane records.",
+  "A host binding sits with its device twin (`_mojolearn_x` and `_mojolearn_x_host`); the `_m1` Metal 1 builds take their",
+  "binding's family. The binding families follow the host owners of the 2026-11-07 split (docs/build/HOT_GROUPS.md section 6).",
+  "LANES. `lanes` maps a lane to its family explicitly; `lane_rules` are fnmatch patterns tried in order for a lane `lanes` does not",
+  "name. The lanes are WRITTEN BY CODE, never by reading names: `python3 tools/release_families.py derive --write` assigns each lane",
+  "the one non-shared family of the bindings it loads (tools/lane_select.py lane_sources: the bindings and declared host routes of",
+  "the lane), and `shared` when it loads none or bindings of several families. Until that has run, the one rule `*` -> shared",
+  "holds: every lane records whenever any family records (the safe superset; no family keeps a column). `check --lanes` refuses",
+  "an explicit lane whose loaded bindings leave its family and shared."
+ ],
+ "schema": "mojolearn.release-families.v1",
+ "families": {
+  "shared": [
+   "_mojolearn",
+   "_mojolearn_core_host",
+   "_mojolearn_runtime_classical_host",
+   "_mojolearn_runtime_parallel_host",
+   "_mojolearn_runtime_model_selection_host"
+  ],
+  "linear": [
+   "_mojolearn_estimators",
+   "_mojolearn_estimators_host",
+   "_mojolearn_solver",
+   "_mojolearn_solver_host",
+   "_mojolearn_linalg",
+   "_mojolearn_linalg_host",
+   "_mojolearn_x_linear",
+   "_mojolearn_x_linear_host",
+   "_mojolearn_runtime_linear_host"
+  ],
+  "prep": [
+   "_mojolearn_preprocessing",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_metrics",
+   "_mojolearn_metrics_host",
+   "_mojolearn_x_prep",
+   "_mojolearn_x_prep_host",
+   "_mojolearn_x_metrics",
+   "_mojolearn_x_metrics_host",
+   "_mojolearn_runtime_prep_host"
+  ],
+  "trees": [
+   "_mojolearn_gbdt",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_rf",
+   "_mojolearn_rf_host",
+   "_mojolearn_trees",
+   "_mojolearn_trees_host",
+   "_mojolearn_x_trees",
+   "_mojolearn_x_trees_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_runtime_trees_host"
+  ],
+  "kernel": [
+   "_mojolearn_svm",
+   "_mojolearn_svm_host",
+   "_mojolearn_kernel_methods",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_gp",
+   "_mojolearn_gp_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_runtime_family_host"
+  ],
+  "series": [
+   "_mojolearn_tsa",
+   "_mojolearn_tsa_host",
+   "_mojolearn_arima",
+   "_mojolearn_arima_host",
+   "_mojolearn_resample",
+   "_mojolearn_resample_host",
+   "_mojolearn_forecast_host"
+  ],
+  "cluster": [
+   "_mojolearn_mixture",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_ivf",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_x_cluster",
+   "_mojolearn_x_cluster_host",
+   "_mojolearn_x_neighbors",
+   "_mojolearn_x_neighbors_host",
+   "_mojolearn_x_ann",
+   "_mojolearn_x_ann_host"
+  ],
+  "decomp": [
+   "_mojolearn_x_decomp",
+   "_mojolearn_x_decomp_host",
+   "_mojolearn_runtime_decomp_host",
+   "_mojolearn_runtime_manifold_host"
+  ],
+  "tokenizer": [
+   "_mojolearn_x_tokenizer",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_runtime_catalog_host"
+  ],
+  "neural": [
+   "_mojolearn_training",
+   "_mojolearn_training_host",
+   "_mojolearn_mamba",
+   "_mojolearn_mamba_host",
+   "_mojolearn_transformer",
+   "_mojolearn_transformer_host",
+   "_mojolearn_embedding",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_x_sequence",
+   "_mojolearn_x_sequence_host",
+   "_mojolearn_x_cnn",
+   "_mojolearn_x_cnn_host",
+   "_mojolearn_byte_lm",
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_runtime_neural_host",
+   "_mojolearn_runtime_sequential_host",
+   "_mojolearn_runtime_xseq_host",
+   "_mojolearn_runtime_byte_trainer_host"
+  ]
+ },
+ "lanes": {},
+ "lane_rules": [
+  ["*", "shared"]
+ ]
+}
