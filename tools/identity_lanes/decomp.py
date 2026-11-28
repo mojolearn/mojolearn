@@ -96,14 +96,18 @@ _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-decomp-fastica")
 
 @lane("x-decomp-factor-analysis")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.FactorAnalysis(n_components=4, max_iter=60).fit(X[:5000])
-    v = ml.FactorAnalysis(n_components=3, rotation="varimax", max_iter=40).fit(X[:2000])
-    q = ml.FactorAnalysis(n_components=3, rotation="quartimax", max_iter=40).fit(X[:2000])
+    # 2026-11-28 lane/verify-speed-2: EM iterations 60 -> 16, 40 -> 12, the fit_transform 20 -> 8 (36.3 s a cell
+    # on the 0.9.0 Apple record against 0.08 s on the CPU column: the Metal cost is per EM step). Each EM step is the
+    # same SVD / Gram update and the same tolerance test, so 16, 12 and 8 still repeat it and still read the test;
+    # the rows (the n >= d QR, one pass) and every rotation are unchanged.
+    m = ml.FactorAnalysis(n_components=4, max_iter=16).fit(X[:5000])
+    v = ml.FactorAnalysis(n_components=3, rotation="varimax", max_iter=12).fit(X[:2000])
+    q = ml.FactorAnalysis(n_components=3, rotation="quartimax", max_iter=12).fit(X[:2000])
     return _fit(dict(comp=_h(m.components_), psi=_h(m.noise_variance_), ll=_h(np.float64(m.loglike_)),
                      T=_h(m.transform(X[:256])), cov=_h(m.get_covariance()), prec=_h(m.get_precision()),
                      ss=_h(m.score_samples(X[:256])), vcomp=_h(v.components_), qcomp=_h(q.components_),
                      # fit_transform: fit, then transform, in one call
-                     ft=_h(ml.FactorAnalysis(n_components=3, max_iter=20).fit_transform(X[:2000]))),
+                     ft=_h(ml.FactorAnalysis(n_components=3, max_iter=8).fit_transform(X[:2000]))),
                 m, lambda e: (e.transform(Xh[:256]), e.score_samples(Xh[:256])))
 
 
@@ -263,9 +267,12 @@ def _(ml, X, yc, yr, Xh=None):
     # 'auto' rule takes it past 200 rows, python/mojolearn/_expansion_decomp.py:4385).
     # Every other size is kept: each fit's eigh stays on its side of n = 64
     # and the radius Isomap's graph keeps the radius it was built for.
-    md = ml.MDS(n_components=2, init="random", n_init=2, max_iter=20, random_state=0)
+    # 2026-11-28 lane/verify-speed-2: SMACOF iterations again (20 -> 8, 15 -> 6, nonmetric 12 -> 6; 29.8 s a cell
+    # on the 0.9.0 Apple record against 1.3 s on the CPU column): each iteration is the same Guttman step and
+    # stress test, n_init stays 2 (the best-of-inits choice). Every Isomap and LLE fit is unchanged.
+    md = ml.MDS(n_components=2, init="random", n_init=2, max_iter=8, random_state=0)
     emb = md.fit_transform(S[:100])
-    mc = ml.MDS(n_components=2, init="classical_mds", max_iter=15).fit(S[:100])
+    mc = ml.MDS(n_components=2, init="classical_mds", max_iter=6).fit(S[:100])
     lle = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit(S)
     # past 200 rows: the shift-invert subspace iteration (eigen_solver='auto')
     li = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, random_state=0).fit(X[:240])
@@ -276,7 +283,7 @@ def _(ml, X, yc, yr, Xh=None):
     # identical output, one exact float64 product)
     rad = float(np.asarray(iso.dist_matrix_).max()) * 0.25
     ir = ml.Isomap(n_neighbors=None, radius=rad, n_components=2, path_method="FW").fit(S[:100])
-    nm = ml.MDS(n_components=2, metric_mds=False, init="random", max_iter=12, random_state=1)
+    nm = ml.MDS(n_components=2, metric_mds=False, init="random", max_iter=6, random_state=1)
     nemb = nm.fit_transform(S[:60])
     im = ml.Isomap(n_neighbors=8, n_components=2, metric="manhattan").fit(S[:100])
     ic = ml.Isomap(n_neighbors=8, n_components=2, metric="cosine").fit(S[:100])
@@ -548,9 +555,11 @@ def _(ml, X, yc, yr, Xh=None):
     out, first = {}, None
     for w in _decomp_eigh_widths_lean:
         S = _decomp_eigh_wide(X, w - 1, w)
-        # 4 EM steps (was 10, 2026-11-05 lane/slow-verification-lanes): each
-        # step takes the same d x d eigh, so 4 still repeats it
-        m = ml.FactorAnalysis(n_components=4, max_iter=4).fit(S)
+        # 2 EM steps (was 10, then 4 from 2026-11-05 lane/slow-verification-lanes; 2 from 2026-11-28
+        # lane/verify-speed-2: 19.9 s a cell on the 0.9.0 Apple record, each step one d x d eigh at about
+        # 0.7 s on Metal): each step takes the same d x d eigh, so 2 still repeats it and the second
+        # step still reads the first one's tolerance test
+        m = ml.FactorAnalysis(n_components=4, max_iter=2).fit(S)
         out[f"fit{w}"] = _h(m.components_, m.noise_variance_, np.asarray(m.loglike_, dtype=np.float64), np.int32(m.n_iter_))
         out[f"T{w}"] = _h(m.transform(S[:32]), m.score_samples(S[:32]))
         out[f"cov{w}"] = _h(m.get_covariance(), m.get_precision())

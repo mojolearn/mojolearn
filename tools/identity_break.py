@@ -1712,10 +1712,11 @@ LANE_REVISIONS = {
     "x-decomp-eigh-wide-linalg": "light-fixture-20261105-1",
     "x-decomp-eigh-wide-fastica": "light-fixture-20261105-1",
     "x-decomp-eigh-wide-rotation": "light-fixture-20261105-1",
-    "x-decomp-eigh-wide-factor-analysis": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-factor-analysis": "light-fixture-20261128-1",
     "x-decomp-eigh-wide-mincovdet": "light-fixture-20261105-1",
     "x-decomp-umap-options": "light-fixture-20261105-1",
-    "x-decomp-manifold": "light-fixture-20261105-1",
+    "x-decomp-manifold": "light-fixture-20261128-1",
+    "x-decomp-factor-analysis": "light-fixture-20261128-1",
     "trees-calibrated": "light-fixture-20261105-1",
     "trees-stacking-clf": "lacking-fold-20261124-1",
     "trees-voting-clf": "light-fixture-20261105-1",
@@ -1953,7 +1954,8 @@ NON_SIZE_REVISIONS = {
         "to 2d and EM max_iter from 5 to 3; varimax stays at 72."),
     "x-decomp-eigh-wide-factor-analysis": (
         "2026-11-05 lane/slow-verification-lanes: the widths move from 72/128 to 72/65 with rows still "
-        "width - 1, and EM max_iter from 10 to 4."),
+        "width - 1, and EM max_iter from 10 to 4; 2026-11-28 lane/verify-speed-2: EM max_iter from 4 to 2 "
+        "(each step the same d x d eigh, about 0.7 s on Metal)."),
     "x-decomp-eigh-wide-mincovdet": (
         "2026-11-05 lane/slow-verification-lanes: the MinCovDet widths move from 72/128 to 72/65; rows stay "
         "at 3d and every hashed part is kept."),
@@ -1962,7 +1964,11 @@ NON_SIZE_REVISIONS = {
         "(the array-init pre-fit from 4 to 2); every option arm is kept."),
     "x-decomp-manifold": (
         "2026-11-05 lane/slow-verification-lanes: the MDS max_iter values are halved (40/30/25 to 20/15/12) "
-        "and the shift-invert LLE moves from 300 to 240 rows, still above 200."),
+        "and the shift-invert LLE moves from 300 to 240 rows, still above 200; 2026-11-28 lane/verify-speed-2: "
+        "MDS max_iter again 20/15/12 to 8/6/6, n_init 2 and every Isomap and LLE fit unchanged."),
+    "x-decomp-factor-analysis": (
+        "2026-11-28 lane/verify-speed-2: EM max_iter 60 to 16 (the main fit), 40 to 12 (varimax, quartimax) "
+        "and 20 to 8 (fit_transform); rows, n_components, rotations and every hashed part unchanged."),
     "trees-calibrated": (
         "2026-11-05 lane/slow-verification-lanes: both calibrators fit on the first 7001 rows (was 20000) "
         "with depth-3 trees (was 4), batch protocol on 2001 held-out rows; methods, cv=3 and ensemble arms "
