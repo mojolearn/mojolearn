@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""PageRank, Louvain and connected_components RUN: typed requests in, typed
+"""PageRank, Louvain, Leiden and connected_components RUN: typed requests in, typed
 results out.
 
 The boundary (bindings/neighbors_graph_native_door.mojo) admits the public
@@ -19,7 +19,8 @@ from neighbors.neighbors_graph_run import (
     xn_pagerank_csr_request, xn_pagerank_dense_request, xn_pagerank_decode, xn_cc_csr_request, xn_cc_dense_request,
     xn_cc_csr_components, xn_cc_relabel_check, xn_louvain_csr_request, xn_louvain_request,
     xn_graph_symmetry_request, xn_louvain_symmetry_check, xn_louvain_device_message, xn_louvain_relabel_check,
-    xn_louvain_decode,
+    xn_louvain_decode, xn_leiden_csr_request, xn_leiden_request, xn_leiden_symmetry_check,
+    xn_leiden_device_message, xn_leiden_relabel_check,
 )
 
 comptime _GRAPH_I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -239,6 +240,90 @@ def louvain_fit_run(driver: XnDriver, request: LouvainRequest) raises -> Louvain
     outcome.communities = got[0]
     outcome.modularity = decoded[0]
     outcome.levels = decoded[1]
+    _ = raw^
+    _ = info^
+    _ = rinfo^
+    return outcome^
+
+
+# ---------------------------------------------------------------- Leiden
+
+
+@fieldwise_init
+struct LeidenRequest(Copyable, Movable):
+    # The adjacency as for LouvainRequest. `n_iterations` positive, or -1
+    # (until stable); `quality` XN_LEIDEN_MODULARITY / XN_LEIDEN_CPM; `seed`
+    # the colouring's random_state.
+    var csr: Bool
+    var indptr: Int
+    var indices: Int
+    var vals: Int
+    var nnz: Int
+    var adjacency: Int
+    var labels: Int
+    var n: Int
+    var n_iterations: Int
+    var quality: Int
+    var seed: Int
+    var resolution: Float64
+
+
+struct LeidenOutcome(Copyable, Movable):
+    var communities: Int
+    var quality: Float64
+    var iterations: Float64
+
+    def __init__(out self):
+        self.communities = 0
+        self.quality = 0.0
+        self.iterations = 0.0
+
+
+def leiden_fit_run(driver: XnDriver, request: LeidenRequest) raises -> LeidenOutcome:
+    """Leiden's iterations as one resident operation, then the renumbering
+    (Louvain's `p2m_relabel`). The image's own checks keep their words, as
+    ValueErrors from "Leiden:" on."""
+    var outcome = LeidenOutcome()
+    var n = request.n
+    var raw = xn_scratch_i32(n)
+    var info = xn_scratch_f32(2)
+    if request.csr:
+        var has_vals = request.vals != 0
+        var spare = xn_scratch_f32(1)
+        var vals = request.vals if has_vals else _f32_at(spare)
+        try:
+            _ = xn_request_run(driver, xn_leiden_csr_request(request.indptr, request.indices, vals, _i32_at(raw),
+                                                             _f32_at(info), n, request.nnz, has_vals,
+                                                             request.n_iterations, request.quality, request.seed,
+                                                             request.resolution))
+        except error:
+            var refusal = xn_leiden_device_message(String(error))
+            if refusal.byte_length() == 0:
+                raise error^
+            raise Error(refusal)
+        _ = spare^
+    else:
+        var flags = xn_scratch_i32(2)
+        _ = xn_request_run(driver, xn_graph_symmetry_request(request.adjacency, _i32_at(flags), n))
+        xn_leiden_symmetry_check(_i32_at(flags))
+        _ = flags^
+        try:
+            _ = xn_request_run(driver, xn_leiden_request(request.adjacency, _i32_at(raw), _f32_at(info), n,
+                                                         request.n_iterations, request.quality, request.seed,
+                                                         request.resolution))
+        except error:
+            var refusal = xn_leiden_device_message(String(error))
+            if refusal.byte_length() == 0:
+                raise error^
+            raise Error(refusal)
+    var rinfo = xn_scratch_i32(2)
+    _ = xn_request_run(driver, xn_relabel_request(_i32_at(raw), request.labels, _i32_at(rinfo), n))
+    var got = xn_relabel_decode(_i32_at(rinfo))
+    xn_leiden_relabel_check(got[1])
+    var decoded = xn_louvain_decode(_f32_at(info))
+    outcome.communities = got[0]
+    outcome.quality = decoded[0]
+    outcome.iterations = decoded[1]
     _ = raw^
     _ = info^
     _ = rinfo^

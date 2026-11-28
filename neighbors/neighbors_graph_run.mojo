@@ -296,6 +296,68 @@ def xn_louvain_decode(info: Int) -> Tuple[Float64, Float64]:
     return (xn_f32_value(info, 0), xn_f32_value(info, 1))
 
 
+# ---------------------------------------------------------------- Leiden
+
+#: The quality words of the `leiden` operations (x_neighbors/graph_par.mojo
+#: LD_MOD / LD_CPM).
+comptime XN_LEIDEN_MODULARITY = 0
+comptime XN_LEIDEN_CPM = 1
+
+
+def xn_leiden_quality(name: String) raises -> Int:
+    """`objective_function`: "modularity" or "CPM" (any case)."""
+    var low = name.lower()
+    if low == "modularity":
+        return XN_LEIDEN_MODULARITY
+    if low == "cpm":
+        return XN_LEIDEN_CPM
+    raise Error("ValueError: objective_function must be 'modularity' or 'CPM', got '" + name + "'")
+
+
+def xn_leiden_iterations_check(n_iterations: Int) raises -> Int:
+    """`n_iterations`: a positive count, or negative for "until stable"
+    (returned as -1). Zero is refused."""
+    if n_iterations == 0:
+        raise Error("ValueError: n_iterations must be a positive integer, or negative to run until stable")
+    return -1 if n_iterations < 0 else n_iterations
+
+
+def xn_leiden_csr_request(indptr: Int, indices: Int, vals: Int, labels: Int, info: Int, n: Int, nnz: Int,
+                          has_vals: Bool, n_iterations: Int, quality: Int, seed: Int,
+                          resolution: Float64) -> XnOpRequest:
+    """The `leiden_csr` operation: n_iterations rides shifted by one (the
+    descriptor's words are non-negative), the seed as its low 32 bits."""
+    return XnOpRequest("leiden_csr", [indptr, indices, vals, labels, info],
+        [n, nnz, 1 if has_vals else 0, n_iterations + 1, quality, seed & 0xFFFFFFFF], [xn_f32_word(resolution)])
+
+
+def xn_leiden_request(a: Int, labels: Int, info: Int, n: Int, n_iterations: Int, quality: Int, seed: Int,
+                      resolution: Float64) -> XnOpRequest:
+    return XnOpRequest("leiden", [a, labels, info], [n, n_iterations + 1, quality, seed & 0xFFFFFFFF],
+        [xn_f32_word(resolution)])
+
+
+def xn_leiden_symmetry_check(flags: Int) raises:
+    if xn_i32_word(flags, 0) != 0:
+        raise Error("Leiden: the adjacency matrix must be symmetric (an undirected graph)")
+    if xn_i32_word(flags, 1) == 0:
+        raise Error("Leiden: the graph has no edges")
+
+
+def xn_leiden_device_message(message: String) -> String:
+    """A device check's message as a ValueError from "Leiden:" on; empty
+    when the message is not one."""
+    var at = message.find("Leiden:")
+    if at < 0:
+        return String("")
+    return "ValueError: " + String(message[byte=at:message.byte_length()])
+
+
+def xn_leiden_relabel_check(in_range: Bool) raises:
+    if not in_range:
+        raise Error("RuntimeError: Leiden: a community label fell outside [0, n)")
+
+
 # ---------------------------------------------------------------- SVGP
 
 
