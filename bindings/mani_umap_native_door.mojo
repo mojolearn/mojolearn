@@ -51,7 +51,7 @@ from providers.python.estimator_binding_pyapi_door import estimator_binding_rout
 from core.mode_answer import fast_is_answered_by_identical, MODE_FAMILY_SPECTRAL
 from core.neighbors_entry_table import NeighborsEntryKey
 from core.neighbors_entry_table_umap import (
-    UmapConfigWords, UmapTargetWords, umap_ops_entry, umap_fit_call, umap_fit_ex_call, umap_transform_call,
+    UmapConfigWords, UmapTargetWords, umap_ops_entry, umap_fit_call, umap_fit_ex_call, umap_transform_call, umap_fit_graph_call,
     UMAP_TAIL_LEGACY, UMAP_TAIL_RATES, UMAP_TAIL_EXTRAS,
 )
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_FLOAT
@@ -408,19 +408,19 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var legacy = umap_legacy_abi(True if initial else False, not (target is None), cfg.default_extras(), nc)
     if neighbors != 0:
         legacy = False
-    # The fitted graph (`graph_`) and curve (`a_`, `b_`) come out of the fit
-    # into these arrays (umap/graph_out.mojo): the CSR is sized by the edge
-    # bound and its two edge arrays trimmed to `indptr[n]` after the fit.
-    var k = cfg.n_neighbors
-    var target_kind = 0 if target is None else Int(py=target[0])
-    var target_k = k if target is None else Int(py=target[3])
-    var cap = umap_graph_capacity(n, k, target_kind, target_k)
-    var g_stores = umap_graph_stores(n, cap)
+    # The curve (`a_`, `b_`) comes out of the fit into two words
+    # (umap/graph_out.mojo). The fitted graph does NOT (lane sc-leftovers-1,
+    # 2026-11-28): the fit sends indptr 0, so it allocates no graph arrays
+    # and copies no edges; `graph_` is built when it is read
+    # (`umap_graph_attribute`, UMAP_OP_FIT_GRAPH) from the record below.
+    # Before, every fit sized three arrays by the edge bound 2 n (k - 1),
+    # memcpy'd the CSR into them and trimmed them.
     var g_ab = native_array_unfilled(native_array_code("<f4"), 2)
-    var ptr_address = umap_store_address(g_stores[0])
-    var idx_address = umap_store_address(g_stores[1])
-    var val_address = umap_store_address(g_stores[2])
+    var ptr_address = 0
+    var idx_address = 0
+    var val_address = 0
     var ab_address = umap_store_address(g_ab)
+    var graph_record = _umap_graph_record(config, extras, neighbors, target, n, mode, context)
     var entry = umap_ops_entry(key)
     var x_address = x.source.addr
     var columns = 0
@@ -451,7 +451,6 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     _ = initial_pin^  # the door's pin held the start embedding through RUN
     _ = target^
     umap_check_embedding(columns == nc, embedding_address, n * nc)
-    var graph = umap_graph_pack(g_stores, n, cap, context)
     var abp = FAMILY_F32P(unsafe_from_address=ab_address)
     var curve_a = Float64(abp[0])
     var curve_b = Float64(abp[1])
@@ -469,10 +468,94 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     py_setitem(settings.fields, nk[].k__transform_embedding, frozen)
     py_setitem(settings.fields, nk[].k__transform_config, _umap_concat_tuple(config, extras))
     py_setitem(settings.fields, nk[].k__transform_mode, PythonObject(mode))
-    py_setitem(settings.fields, PythonObject("graph_"), graph)
+    # `graph_` is the class's attribute (python/mojolearn/_umap_impl.py), one
+    # native call when read: this fit's record replaces the last fit's, and
+    # its built graph is dropped.
+    py_setitem(settings.fields, PythonObject(_UMAP_GRAPH_RECORD), graph_record)
+    py_setitem(settings.fields, PythonObject(_UMAP_GRAPH_CACHE), PythonObject(None))
     py_setitem(settings.fields, PythonObject("a_"), PythonObject(curve_a))
     py_setitem(settings.fields, PythonObject("b_"), PythonObject(curve_b))
     return embedding
+
+
+#: The private fields of `graph_` (lane sc-leftovers-1): the fit's record and the graph once it is built.
+comptime _UMAP_GRAPH_RECORD = "_umap_graph_record"
+comptime _UMAP_GRAPH_CACHE = "_umap_graph_cache"
+
+
+def _umap_graph_record(config: PythonObject, extras: PythonObject, neighbors: Int, target: PythonObject, n: Int,
+                       mode: String, context: PythonObject) raises -> PythonObject:
+    """What `graph_` needs of a fit beyond its retained training copy:
+    `(config, extras, neighbors, target, mode)`, the target `None` or
+    `(kind, dims, target_n_neighbors, weight, values)`. References to the
+    fit's own objects; the categorical codes are already the door's own
+    array. A continuous target is the caller's buffer, so its n x dims
+    words are copied (later edits of y must not change `graph_`): the one
+    copy this adds, against the 2 n (k - 1) edges every fit used to copy."""
+    if target is None:
+        return Python.tuple(config, extras, PythonObject(neighbors), PythonObject(None), PythonObject(mode))
+    var values = target[2]
+    if Int(py=target[0]) == 2:
+        var dims = Int(py=target[1])
+        values = _umap_copy(Python.tuple(n * dims), Int(py=target[6]), n * dims, context)
+    var words = Python.tuple(target[0], target[1], target[3], target[4], values)
+    return Python.tuple(config, extras, PythonObject(neighbors), words, PythonObject(mode))
+
+
+def umap_graph_attribute(model: PythonObject, settings: ManifoldSettings, context: PythonObject) raises -> PythonObject:
+    """`UMAP.graph_` (lane sc-leftovers-1, 2026-11-28): the fit's fuzzy
+    simplicial set as the CSR tuple, built on first read by ONE native call
+    (UMAP_OP_FIT_GRAPH: the fit's graph body and supervised intersection
+    over the fit's words and its retained training copy, in the fitted
+    mode's image) and kept until the next fit. The fit itself makes no
+    graph arrays. AttributeError before a fit (and on a loaded model:
+    `graph_` is not saved)."""
+    classical_connect_numpy(context)
+    var cached = py_get(settings.fields, PythonObject(_UMAP_GRAPH_CACHE), PythonObject(None))
+    if cached is not None:
+        return cached
+    var record = py_get(settings.fields, PythonObject(_UMAP_GRAPH_RECORD), PythonObject(None))
+    if record is None:
+        raise Error("AttributeError: 'UMAP' object has no attribute 'graph_'")
+    var nk = mani_keys()
+    var fitted_mode = record[4]
+    var mode = String(py=fitted_mode)
+    var binding = estimator_binding_routed(model, fitted_mode, "_mojolearn_metrics", context, False)
+    var key = _umap_check_mode(binding, mode, "UMAP binary numeric mode disagrees with fitted mode")
+    var training_pin = ArrayPin()
+    var training = _umap_state(mani_field(settings.fields, nk[].k__transform_training, "_transform_training"),
+                               "training", context, training_pin)
+    var n = training.source.rows
+    var d = training.source.cols
+    var cfg = _umap_config_words(record[0], record[1])
+    var neighbors = Int(py=record[2])
+    var target = record[3]
+    var target_words = UmapTargetWords.none()
+    var target_k = cfg.n_neighbors
+    var target_values = PythonObject(None)
+    if not (target is None):
+        target_values = target[4]
+        target_k = Int(py=target[2])
+        target_words = UmapTargetWords(Int(py=target[0]), Int(py=target[1]), target_k, Float64(py=target[3]),
+                                       Int(py=classical_address(target_values)))
+    var cap = umap_graph_capacity(n, cfg.n_neighbors, target_words.kind, target_k)
+    var g_stores = umap_graph_stores(n, cap)
+    var ptr_address = umap_store_address(g_stores[0])
+    var idx_address = umap_store_address(g_stores[1])
+    var val_address = umap_store_address(g_stores[2])
+    var entry = umap_ops_entry(key)
+    var training_address = training.source.addr
+    var edges = 0
+    with GILReleased(Python()):
+        edges = umap_fit_graph_call(entry, training_address, n, d, cfg, target_words, neighbors, ptr_address,
+                                    idx_address, val_address)
+    _ = target_values  # keep the Python object alive through the native call above
+    _ = training  # keep the Python object alive through the native call above
+    _ = training_pin^  # the pin held the training copy through RUN
+    var graph = umap_graph_pack(g_stores, n, cap, context)
+    _ = edges  # the pack reads the count from indptr[n] and refuses one past the capacity
+    py_setitem(settings.fields, PythonObject(_UMAP_GRAPH_CACHE), graph)
+    return graph
 
 
 def _umap_concat_tuple(config: PythonObject, extras: PythonObject) raises -> PythonObject:
