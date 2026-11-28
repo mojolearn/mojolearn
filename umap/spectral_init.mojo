@@ -8,7 +8,6 @@ from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
-from spectral.impl.sparse.coo import CooGraph
 from spectral.impl.spectral_embedding import (
     MLSpectralEmbeddingParams,
     to_cuvs,
@@ -17,7 +16,6 @@ from spectral.impl.preprocessing.detail.spectral_embedding import (
     SpectralEmbeddingParams,
     compute_eigenpairs_status_device,
     laplacian_device_coo,
-    transform_graph_device,
 )
 from spectral.impl.spectral_predict_common import SpectralPredictionState
 from spectral.impl.sparse.solver.lanczos_types import LanczosStatus
@@ -248,49 +246,6 @@ def spectral_initialize_weights(
     )
     _ = coo^
     return res^
-
-
-def spectral_initialize_coo(
-    ctx: DeviceContext,
-    var graph: CooGraph,
-    n_samples: Int,
-    n_components: Int,
-    n_neighbors: Int,
-    seed: UInt64,
-) raises -> List[Float32]:
-    """Shared solver/post-pass for dense-converted and CSR-origin COO.
-
-    Caller supplies the same positive edges in row-major order. Lanczos
-    uses ncv=min(n-k,max(2k+1,20)); UMAP2D/3D basis size is at most20*n,
-    not n*n. This changes neither the solver nor its arithmetic.
-    """
-    if n_components < 1:
-        raise Error("UMAP spectral initialization needs n_components >= 1")
-    if n_samples < 2 * n_components + 4:
-        raise Error("UMAP spectral initialization has too few samples")
-    if graph.n != n_samples:
-        raise Error("UMAP spectral COO shape disagrees with n_samples")
-    var config = MLSpectralEmbeddingParams(
-        n_components=n_components + 1,
-        n_neighbors=n_neighbors,
-        norm_laplacian=True,
-        drop_first=True,
-        has_seed=True,
-        seed=seed,
-    )
-    # `transform_connectivity` is `transform_graph` at 1e-5 over `to_cuvs`;
-    # its device-output twin leaves the embedding resident for the post-pass.
-    var trace = IdentityTrace.disabled()
-    var cp = to_cuvs(config)
-    comptime if UMAP_INIT_TOL_FAST:
-        cp.tolerance = Float32(1e-3)
-    else:
-        cp.tolerance = Float32(1e-5)
-    var d_emb = ctx.enqueue_create_buffer[DType.float32](1)
-    var n_out = transform_graph_device(ctx, cp, graph, d_emb, trace)
-    if n_out != n_components or len(d_emb) != n_samples * n_components:
-        raise Error("UMAP spectral solver returned the wrong shape")
-    return _spectral_post_pass_device(ctx, d_emb, n_samples, n_components)
 
 
 comptime _SC_I32P = MutPointer[Int32, MutAnyOrigin]
