@@ -20,6 +20,7 @@ back. Integer sums: the same words in any order."""
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.atomic import Atomic
+from core.cc_label_bodies import cc_hook_edge, cc_jump_node
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceContext
@@ -104,23 +105,14 @@ def xg_hook_kernel(w: F32Ptr, lab: I32Ptr, n: Int32, changed: I32Ptr):
     if u < nn:
         for v in range(nn):
             if w.unsafe_load(u * nn + v) != Float32(0):
-                var a = lab.unsafe_load(u)
-                var b = lab.unsafe_load(v)
-                if a != b:
-                    var lo = a if a < b else b
-                    var hi = b if a < b else a
-                    if lab.unsafe_load(Int(hi)) > lo:
-                        _ = Atomic[Int32].min(lab + Int(hi), lo)
-                        changed.unsafe_store(0, Int32(1))
+                if cc_hook_edge(lab, u, v):  # the one hook body (core/cc_label_bodies.mojo)
+                    changed.unsafe_store(0, Int32(1))
 
 
 def xg_jump_kernel(lab: I32Ptr, n: Int32):
     var v = _t()
     if v < Int(n):
-        var p = Int(lab.unsafe_load(v))
-        while Int(lab.unsafe_load(p)) != p:
-            p = Int(lab.unsafe_load(p))
-        lab.unsafe_store(v, Int32(p))
+        cc_jump_node(lab, v)
 
 
 def xg_root_flag_kernel(lab: I32Ptr, flag: I32Ptr, n: Int32):
