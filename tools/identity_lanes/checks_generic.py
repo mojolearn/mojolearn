@@ -284,6 +284,10 @@ def _checks_generic_run(ml, X, yc, yr, group):
     classes = _checks_generic_classes(group)
     if not classes:
         raise AssertionError(f"check-generic-{group}: the registry walk found no class with check in this group")
+    # lane verify-light-1, 2026-11-28: the classes are dealt over the nine fixtures (`_spread`, anchor 0), each class
+    # built, fitted and checked on one cell per side, not nine: `check` is the class's mechanism, not the fixture's
+    # pathology, and every class still runs once per side (generic.py `_generic_run` says the same).
+    run = _spread(classes, anchor=0)
     parts, failed = {}, []
     # WHERE A CELL'S TIME GOES (lane verify-speed-2, 2026-11-28): one stderr line a class, "# CHECK-CLASS <lane>
     # <class> <s>s", the build, fit and check of that class. check-generic-trees was 536 s a lane on the 0.9.0 Apple
@@ -295,7 +299,7 @@ def _checks_generic_run(ml, X, yc, yr, group):
     import time
     timed = None
     say = os.environ.get("RECORD_FROM_INSTALLED") == "1"
-    for where, name, cls in classes:  # driver-loop: over the public classes of one group, one bounded check each
+    for where, name, cls in run:  # driver-loop: over the public classes of one group, one bounded check each
         label = f"{where}.{name}" if where else name
         if say and timed is not None:
             print(f"# CHECK-CLASS check-generic-{group} {timed[0]} {time.perf_counter() - timed[1]:.3f}s",

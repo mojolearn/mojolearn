@@ -3662,10 +3662,25 @@ def _cell_takes(slot):
     return not fx or slot % len(FIXTURES) == FIXTURES.index(fx)
 
 
+class _Dealer:
+    """Deals one lane's units over the nine fixtures in the order the lane meets them: the first `anchor` units run
+    on every cell, each later unit takes the next option slot (`_cell_takes`). A lane with several loops and single
+    fits uses one dealer: `deal.units([...])` for a loop's list, `if deal.take():` for one fit."""
+
+    def __init__(self, anchor=1):
+        self.anchor, self.seen = anchor, 0
+
+    def take(self):
+        i, self.seen = self.seen, self.seen + 1
+        return i < self.anchor or _cell_takes(i - self.anchor)
+
+    def units(self, units):
+        return [u for u in units if self.take()]
+
+
 def _spread(units, anchor=1):
     """`units` as this cell runs them: the first `anchor` always, then the option units `_cell_takes` deals here."""
-    units = list(units)
-    return units[:anchor] + [u for i, u in enumerate(units[anchor:]) if _cell_takes(i)]
+    return _Dealer(anchor).units(units)
 
 
 def _dump(arrays):
@@ -5386,7 +5401,7 @@ def _gbdt_cat_fits(ml, X, yc, yr, Xh, configs):
     if configs[0][2][0] != _GBDT_CAT_ALL[0]:
         raise RuntimeError("a categorical lane's first fit must use every column (it answers infer and batch)")
     parts, first = {}, None
-    for name, loss, (cols, cats), options in configs:
+    for name, loss, (cols, cats), options in _spread(configs):
         kw = dict(n_estimators=_GBDT_CAT_TREES, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
                   border_count=128, leaf_estimation_iterations=1, boosting_type="Plain",
                   random_state=7, loss=loss, cat_features=list(cats))
@@ -5519,7 +5534,7 @@ def _(ml, X, yc, yr, Xh=None):
                 max_ctr_complexity=1)
     quantile = dict(loss="Quantile", leaf_estimation_method="Gradient", leaf_estimation_iterations=1)
     parts, first = {}, None
-    for name, (cols, cats), yf, wf, proba, options in [
+    for name, (cols, cats), yf, wf, proba, options in _spread([
         ("quantile_all_defaults", _GBDT_CAT_ALL, yq, None, False, dict(quantile, **_GBDT_CAT_DEFAULTS)),
         ("quantile_mcc2", _GBDT_CAT_MCC2, yq, None, False,
          dict(quantile, max_ctr_complexity=2, **_GBDT_CAT_PLAIN)),
@@ -5534,7 +5549,7 @@ def _(ml, X, yc, yr, Xh=None):
         ("ova_all_weighted_bernoulli", _GBDT_CAT_ALL, y3, w, True,
          dict(loss="MultiClassOneVsAll", leaf_estimation_iterations=1, bootstrap_type="Bernoulli",
               subsample=0.7, random_strength=0.0)),
-    ]:
+    ]):
         kw = dict(base, cat_features=list(cats))
         kw.update(options)
         Xs = np.ascontiguousarray(Xc[:, cols])
@@ -5548,25 +5563,29 @@ def _(ml, X, yc, yr, Xh=None):
     # CTR target binarization reads one target per row), so the
     # one_hot_features fit this lane carried was refused on every fixture;
     # the native one-hot arm stays covered by gbdt_host_device_cat rest4cat
-    cols, _ = _GBDT_CAT_ONEHOT
-    Xs = np.ascontiguousarray(Xc[:, cols])
-    mr = ml.GradientBoosting(**dict(base, loss="MultiRMSE", boost_from_average=False,
-                                    leaf_estimation_iterations=1, **_GBDT_CAT_PLAIN)).fit(Xs, ymr)
-    parts["multirmse_coded_columns"] = _h(mr.predict(Xs))
-    parts["multirmse_coded_columns:digest"] = _h(np.frombuffer(str(mr.digest_).encode(), dtype=np.uint8))
+    # lane verify-light-1, 2026-11-28 (`_spread`): the loop above deals its seven option fits over the nine
+    # fixtures (slots 0-6); these two fits take slots 7 and 8
+    if _cell_takes(7):
+        cols, _ = _GBDT_CAT_ONEHOT
+        Xs = np.ascontiguousarray(Xc[:, cols])
+        mr = ml.GradientBoosting(**dict(base, loss="MultiRMSE", boost_from_average=False,
+                                        leaf_estimation_iterations=1, **_GBDT_CAT_PLAIN)).fit(Xs, ymr)
+        parts["multirmse_coded_columns"] = _h(mr.predict(Xs))
+        parts["multirmse_coded_columns:digest"] = _h(np.frombuffer(str(mr.digest_).encode(), dtype=np.uint8))
     # the held-out fit: the curve, the detector's stop and the shrink
-    Xe = np.ascontiguousarray(_gbdt_cat_xh(Xh[:rows])[:, _GBDT_CAT_CTR[0]])
-    ye3 = _rank_codes(labels_for(Xh, HELDOUT_SEED)[1][:rows], [1.0 / 3.0, 2.0 / 3.0]).astype(np.float32)
-    cols, cats = _GBDT_CAT_CTR
-    Xs = np.ascontiguousarray(Xc[:, cols])
-    ev = ml.GradientBoosting(**dict(base, loss="MultiClassOneVsAll", cat_features=list(cats),
-                                    leaf_estimation_iterations=1, n_estimators=30, learning_rate=1.0,
-                                    od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3,
-                                    **_GBDT_CAT_PLAIN)).fit(Xs, y3, eval_set=(Xe, ye3))
-    parts["ova_ctr_eval"] = _h(ev.predict_proba(Xs))
-    parts["ova_ctr_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["ova_ctr_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                ev.best_iteration_], dtype=np.int64))
+    if _cell_takes(8):
+        Xe = np.ascontiguousarray(_gbdt_cat_xh(Xh[:rows])[:, _GBDT_CAT_CTR[0]])
+        ye3 = _rank_codes(labels_for(Xh, HELDOUT_SEED)[1][:rows], [1.0 / 3.0, 2.0 / 3.0]).astype(np.float32)
+        cols, cats = _GBDT_CAT_CTR
+        Xs = np.ascontiguousarray(Xc[:, cols])
+        ev = ml.GradientBoosting(**dict(base, loss="MultiClassOneVsAll", cat_features=list(cats),
+                                        leaf_estimation_iterations=1, n_estimators=30, learning_rate=1.0,
+                                        od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3,
+                                        **_GBDT_CAT_PLAIN)).fit(Xs, y3, eval_set=(Xe, ye3))
+        parts["ova_ctr_eval"] = _h(ev.predict_proba(Xs))
+        parts["ova_ctr_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["ova_ctr_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                    ev.best_iteration_], dtype=np.int64))
     return _fit(parts, first, lambda e: (e.predict(_gbdt_cat_xh(Xh)),))
 
 
@@ -5626,7 +5645,7 @@ def _(ml, X, yc, yr, Xh=None):
     if configs[0][2][0] != _GBDT_CAT_ALL[0]:
         raise RuntimeError("gbdt-cat-nonsym's first fit must use every column (it answers infer and batch)")
     parts, first = {}, None
-    for name, loss, (cols, cats), options, weighted, held in configs:
+    for name, loss, (cols, cats), options, weighted, held in _spread(configs):
         kw = dict(n_estimators=_GBDT_CAT_TREES, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
                   border_count=128, leaf_estimation_iterations=1, boosting_type="Plain",
                   random_state=7, loss=loss, cat_features=list(cats))
@@ -5920,7 +5939,7 @@ def _gbdt_rank_fits(ml, X, yr, Xh, configs, max_rows=_GBDT_RANK_ROWS):
         pairs = _rank_pairs(groups, rel)
         pair_w = _hw((len(pairs),), "gbdt-rank:pairs_weight", 0.5, 2.0)
     parts, first = {}, None
-    for name, loss, options, with_pairs in configs:
+    for name, loss, options, with_pairs in _spread(configs):
         kw = dict(n_estimators=10, max_depth=4, learning_rate=_GBDT_RANK_RATE, l2_leaf_reg=3.0,
                   border_count=128, boosting_type="Plain", random_state=7, loss=loss,
                   bootstrap_type="No", random_strength=0.0, leaf_estimation_method="Newton",
@@ -6178,7 +6197,7 @@ def _gbdt_gaps_weighted(ml, X, Xh, fits, tag):
     fit answers the infer, model and batch columns."""
     w = _hw((X.shape[0],), "gbdt-gaps:" + tag + ":sample_weight", 0.25, 4.0)
     parts, first = {}, None
-    for name, y, options in fits:
+    for name, y, options in _spread(fits):
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**options)).fit(X, y, sample_weight=w)
         _gbdt_gaps_parts(parts, name, m, X)
         first = first if first is not None else m
@@ -6307,12 +6326,20 @@ def _(ml, X, yc, yr, Xh=None):
         ("lossguide_logloss", yc, ycn, dict(lg, loss="Logloss", score_function="NewtonL2")),
         ("lossguide_rmse", yr, yrn, dict(lg, loss="RMSE", score_function="NewtonL2", boost_from_average=False)),
     ]
-    parts, first = {}, None
+    # lane verify-light-1, 2026-11-28 (`_Dealer`): each shape's plain fit and its detector-and-shrink pair are two
+    # units dealt over the nine fixtures (the first plain fit is the anchor); the stop fits take 12 trees (was 30):
+    # at rate 1.0 and depth 6 on the noisy held-out labels the detector fires and the shrink cuts within the first
+    # few trees, and the checks below still refuse a fit on which either goes inert.
+    parts, first, deal = {}, None, _Dealer()
     for name, y, ye, options in fits:
-        plain = ml.GradientBoosting(**_gbdt_gaps_kw(use_best_model=False, **options)).fit(X, y, eval_set=(Xe, ye))
-        _gbdt_gaps_parts(parts, name + "_plain", plain, X)
-        parts[name + "_plain:test_loss_curve"] = _h(np.asarray(plain.test_loss_curve_, dtype=np.float64))
-        stop = dict(options, n_estimators=30, learning_rate=1.0, max_depth=6)
+        if deal.take():
+            plain = ml.GradientBoosting(**_gbdt_gaps_kw(use_best_model=False, **options)).fit(X, y, eval_set=(Xe, ye))
+            _gbdt_gaps_parts(parts, name + "_plain", plain, X)
+            parts[name + "_plain:test_loss_curve"] = _h(np.asarray(plain.test_loss_curve_, dtype=np.float64))
+            first = first if first is not None else plain
+        if not deal.take():
+            continue
+        stop = dict(options, n_estimators=12, learning_rate=1.0, max_depth=6)
         od = ml.GradientBoosting(**_gbdt_gaps_kw(od_type="Iter", od_wait=2, use_best_model=False, **stop)
                                  ).fit(X, y, eval_set=(Xe, ye))
         sh = ml.GradientBoosting(**_gbdt_gaps_kw(use_best_model=True, best_model_min_trees=3, **stop)
@@ -6334,7 +6361,6 @@ def _(ml, X, yc, yr, Xh=None):
                                                   od.best_iteration_, sh.best_iteration_], dtype=np.int64))
         _gbdt_gaps_parts(parts, name + "_shrunk", sh, X)
         parts[name + "_shrunk:test_loss_curve"] = _h(sh_curve)
-        first = first if first is not None else plain
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -6572,8 +6598,8 @@ def _(ml, X, yc, yr, Xh=None):
     rows = min(_GBDT_GAPS_ROWS, X.shape[0])
     X, yc, yr = np.ascontiguousarray(X[:rows]), yc[:rows], yr[:rows]
     pw = dict(use_pointwise_searcher=True, boost_from_average=True)
-    parts, first = {}, None
-    for name, loss, yf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, loss, yf, options in deal.units([
         ("logloss_newtonl2_bernoulli", "Logloss", yc, dict(pw, score_function="NewtonL2",
                                                           bootstrap_type="Bernoulli", subsample=0.7,
                                                           leaf_estimation_method="Newton",
@@ -6597,47 +6623,51 @@ def _(ml, X, yc, yr, Xh=None):
                                                   random_strength=1.0, feature_fraction=0.5,
                                                   leaf_estimation_method="Newton",
                                                   leaf_estimation_iterations=1)),
-    ]:
+    ]):
         m = ml.GradientBoosting(**_gbdt_gaps_kw(loss=loss, **options)).fit(X, yf)
         _gbdt_gaps_parts(parts, name, m, X)
         first = first if first is not None else m
     # sample weights on the NewtonCosine arm
     w = _hw((rows,), "gbdt-pointwise-arms:sample_weight", 0.25, 4.0)
-    mw = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **dict(
-        pw, score_function="NewtonCosine", bootstrap_type="Bernoulli", subsample=0.7, random_strength=1.0,
-        leaf_estimation_method="Newton", leaf_estimation_iterations=3))).fit(X, yc, sample_weight=w)
-    _gbdt_gaps_parts(parts, "logloss_newtoncosine_weighted", mw, X)
+    if deal.take():
+        mw = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **dict(
+            pw, score_function="NewtonCosine", bootstrap_type="Bernoulli", subsample=0.7, random_strength=1.0,
+            leaf_estimation_method="Newton", leaf_estimation_iterations=3))).fit(X, yc, sample_weight=w)
+        _gbdt_gaps_parts(parts, "logloss_newtoncosine_weighted", mw, X)
     # class weights (lane gbdt-one-body, 2026-11-23): alone, and times the
     # sample weights (the device's one weight column)
     cw = dict(pw, score_function="Cosine", bootstrap_type="Bernoulli", subsample=0.7, class_weights=[1.0, 2.5],
               leaf_estimation_method="Newton", leaf_estimation_iterations=3)
-    mc = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **cw)).fit(X, yc)
-    _gbdt_gaps_parts(parts, "logloss_cosine_class_weights", mc, X)
-    mcs = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **dict(
-        pw, score_function="L2", bootstrap_type="Bayesian", bagging_temperature=1.0, class_weights=[1.0, 2.5],
-        leaf_estimation_method="Newton", leaf_estimation_iterations=3))).fit(X, yc, sample_weight=w)
-    _gbdt_gaps_parts(parts, "logloss_l2_class_and_sample_weights", mcs, X)
+    if deal.take():
+        mc = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **cw)).fit(X, yc)
+        _gbdt_gaps_parts(parts, "logloss_cosine_class_weights", mc, X)
+    if deal.take():
+        mcs = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **dict(
+            pw, score_function="L2", bootstrap_type="Bayesian", bagging_temperature=1.0, class_weights=[1.0, 2.5],
+            leaf_estimation_method="Newton", leaf_estimation_iterations=3))).fit(X, yc, sample_weight=w)
+        _gbdt_gaps_parts(parts, "logloss_l2_class_and_sample_weights", mcs, X)
     # the held-out fit: the curve, the detector's stop and the shrink, hashed
-    Xe = np.ascontiguousarray(Xh[:rows])
-    yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(
-        pw, loss="RMSE", score_function="Cosine", bootstrap_type="Poisson", subsample=0.66, random_strength=1.0,
-        leaf_estimation_method="Newton", leaf_estimation_iterations=1, n_estimators=30, learning_rate=1.0,
-        max_depth=6, od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3))
-    ).fit(X, yr, eval_set=(Xe, yeh))
-    _gbdt_gaps_parts(parts, "rmse_cosine_poisson_eval", ev, X)
-    parts["rmse_cosine_poisson_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["rmse_cosine_poisson_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                            ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(
+            pw, loss="RMSE", score_function="Cosine", bootstrap_type="Poisson", subsample=0.66, random_strength=1.0,
+            leaf_estimation_method="Newton", leaf_estimation_iterations=1, n_estimators=30, learning_rate=1.0,
+            max_depth=6, od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3))
+        ).fit(X, yr, eval_set=(Xe, yeh))
+        _gbdt_gaps_parts(parts, "rmse_cosine_poisson_eval", ev, X)
+        parts["rmse_cosine_poisson_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["rmse_cosine_poisson_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                                ev.best_iteration_], dtype=np.int64))
     # feature_fraction on the grouped pointwise searcher
     rr = min(_GBDT_RANK_ROWS, rows)
     Xr = np.ascontiguousarray(X[:rr])
     groups, rel = _rank_groups(rr), _relevance(yr[:rr])
-    for name, loss, options in [
+    for name, loss, options in deal.units([
         ("QueryRMSE_pw_ff", "QueryRMSE", dict(score_function="Cosine", random_strength=1.0)),
         ("YetiRank_pw_ff", "YetiRank", dict(score_function="NewtonL2", bootstrap_type="Bernoulli",
                                             subsample=0.7)),
-    ]:
+    ]):
         kw = dict(loss=loss, use_pointwise_searcher=True, feature_fraction=0.5, leaf_estimation_method="Newton",
                   leaf_estimation_iterations=1)
         kw.update(options)
@@ -6746,8 +6776,8 @@ def _(ml, X, yc, yr, Xh=None):
     wz[::7] = np.float32(0.0)
     ordered = dict(boosting_type="Ordered", score_function="Cosine", leaf_estimation_iterations=1,
                    boost_from_average=False)
-    parts, first = {}, None
-    for name, Xf, yf, wf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, Xf, yf, wf, options in deal.units([
         ("logloss_weighted", X, yc, w, dict(loss="Logloss")),
         ("logloss_class_weights_bayesian_noise", X, yc, None,
          dict(loss="Logloss", class_weights=[1.0, 2.5], bootstrap_type="Bayesian", bagging_temperature=1.0,
@@ -6760,7 +6790,7 @@ def _(ml, X, yc, yr, Xh=None):
                                              bagging_temperature=1.0)),
         ("mae_weighted_bfa", X, yr, w, dict(loss="MAE", boost_from_average=True,
                                             leaf_estimation_method="Gradient")),
-    ]:
+    ]):
         kw = dict(ordered)
         kw.update(options)
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xf, yf, sample_weight=wf)
@@ -6768,22 +6798,24 @@ def _(ml, X, yc, yr, Xh=None):
         parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
         first = first if first is not None else m
     # the held-out fit: zero weights in the learn pool, the curve, the stop
-    Xe = np.ascontiguousarray(Xh[:rows])
-    ye = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
-    kw = dict(ordered, loss="RMSE", n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2,
-              use_best_model=True, best_model_min_trees=3)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yr, sample_weight=wz, eval_set=(Xe, ye))
-    _gbdt_gaps_parts(parts, "rmse_zero_weights_eval", ev, X)
-    parts["rmse_zero_weights_eval:loss_curve"] = _h(np.asarray(ev.loss_curve_, dtype=np.float64))
-    parts["rmse_zero_weights_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["rmse_zero_weights_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                          ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        ye = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
+        kw = dict(ordered, loss="RMSE", n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2,
+                  use_best_model=True, best_model_min_trees=3)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yr, sample_weight=wz, eval_set=(Xe, ye))
+        _gbdt_gaps_parts(parts, "rmse_zero_weights_eval", ev, X)
+        parts["rmse_zero_weights_eval:loss_curve"] = _h(np.asarray(ev.loss_curve_, dtype=np.float64))
+        parts["rmse_zero_weights_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["rmse_zero_weights_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                              ev.best_iteration_], dtype=np.int64))
     # weighted Logloss over one CTR column (40 categories), Poisson
-    cols, cats = _GBDT_CAT_CTR
-    Xc = np.ascontiguousarray(_gbdt_cat_x(X)[:, cols])
-    kw = dict(ordered, loss="Logloss", cat_features=list(cats), bootstrap_type="Poisson", subsample=0.66)
-    mc = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xc, yc, sample_weight=w)
-    _gbdt_gaps_parts(parts, "logloss_weighted_ctr", mc, Xc)
+    if deal.take():
+        cols, cats = _GBDT_CAT_CTR
+        Xc = np.ascontiguousarray(_gbdt_cat_x(X)[:, cols])
+        kw = dict(ordered, loss="Logloss", cat_features=list(cats), bootstrap_type="Poisson", subsample=0.66)
+        mc = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xc, yc, sample_weight=w)
+        _gbdt_gaps_parts(parts, "logloss_weighted_ctr", mc, Xc)
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -6808,8 +6840,8 @@ def _(ml, X, yc, yr, Xh=None):
     w = _hw((rows,), "gbdt-nonsym-rest:sample_weight", 0.25, 4.0)
     dw = dict(grow_policy="Depthwise", leaf_estimation_method="Newton", boost_from_average=False)
     lg = dict(grow_policy="Lossguide", max_leaves=16, leaf_estimation_method="Newton", boost_from_average=False)
-    parts, first = {}, None
-    for name, yf, wf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, yf, wf, options in deal.units([
         ("depthwise_logloss_l2", yc, None, dict(dw, loss="Logloss", score_function="L2")),
         ("depthwise_logloss_newtonl2", yc, None, dict(dw, loss="Logloss", score_function="NewtonL2")),
         ("depthwise_logloss_newtoncosine", yc, None, dict(dw, loss="Logloss", score_function="NewtonCosine")),
@@ -6827,22 +6859,23 @@ def _(ml, X, yc, yr, Xh=None):
          dict(lg, loss="CrossEntropy", score_function="NewtonL2", boost_from_average=True)),
         ("depthwise_crossentropy_class_weights_weighted", yc, w,
          dict(dw, loss="CrossEntropy", score_function="Cosine", class_weights=[1.0, 3.0])),
-    ]:
+    ]):
         m = ml.GradientBoosting(**_gbdt_gaps_kw(**options)).fit(X, yf, sample_weight=wf)
         _gbdt_gaps_parts(parts, name, m, X)
         parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
         first = first if first is not None else m
     # the held-out fit: boost_from_average on Logloss, the curve, the stop
-    Xe = np.ascontiguousarray(Xh[:rows])
-    yce = labels_for(Xh, HELDOUT_SEED)[0][:rows].astype(np.float32)
-    kw = dict(dw, loss="Logloss", score_function="Cosine", boost_from_average=True, n_estimators=30,
-              learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yc, eval_set=(Xe, yce))
-    _gbdt_gaps_parts(parts, "depthwise_logloss_bfa_eval", ev, X)
-    parts["depthwise_logloss_bfa_eval:loss_curve"] = _h(np.asarray(ev.loss_curve_, dtype=np.float64))
-    parts["depthwise_logloss_bfa_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["depthwise_logloss_bfa_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                                              ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        yce = labels_for(Xh, HELDOUT_SEED)[0][:rows].astype(np.float32)
+        kw = dict(dw, loss="Logloss", score_function="Cosine", boost_from_average=True, n_estimators=30,
+                  learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yc, eval_set=(Xe, yce))
+        _gbdt_gaps_parts(parts, "depthwise_logloss_bfa_eval", ev, X)
+        parts["depthwise_logloss_bfa_eval:loss_curve"] = _h(np.asarray(ev.loss_curve_, dtype=np.float64))
+        parts["depthwise_logloss_bfa_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["depthwise_logloss_bfa_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                                  ev.best_iteration_], dtype=np.int64))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -7072,8 +7105,8 @@ def _(ml, X, yc, yr, Xh=None):
     yce = (np.float32(0.25) + np.float32(0.5) * ycn).astype(np.float32)
     simple = dict(score_function="Cosine", boost_from_average=False, leaf_estimation_method="Simple",
                   leaf_estimation_iterations=1)
-    parts, first = {}, None
-    for name, yf, wf, options in [
+    parts, first, deal = {}, None, _Dealer()
+    for name, yf, wf, options in deal.units([
         ("logloss_cosine", ycn, None, dict(loss="Logloss")),
         ("logloss_l2_weighted_bernoulli", ycn, w,
          dict(loss="Logloss", score_function="L2", bootstrap_type="Bernoulli", subsample=0.7,
@@ -7089,7 +7122,7 @@ def _(ml, X, yc, yr, Xh=None):
         ("quantile_cosine", yrn, None, dict(loss="Quantile")),
         ("crossentropy_newtoncosine", yce, None, dict(loss="CrossEntropy", score_function="NewtonCosine")),
         ("mae_weighted", yrn, w, dict(loss="MAE")),
-    ]:
+    ]):
         kw = dict(simple)
         kw.update(options)
         if kw.get("leaf_estimation_iterations", 1) is None:
@@ -7101,19 +7134,19 @@ def _(ml, X, yc, yr, Xh=None):
     # the greedy ranking losses (YetiRank refuses Simple on both columns:
     # "changing the leaf_estimation_method parameter is prohibited")
     g, rel = _rank_groups(rows), _relevance(yrn)
-    for loss in ("QueryRMSE", "PairLogit"):
+    for loss in deal.units(("QueryRMSE", "PairLogit")):
         m = ml.GradientBoosting(**_gbdt_gaps_kw(loss=loss, **simple)).fit(Xn, rel, group_id=g)
         _gbdt_gaps_parts(parts, loss.lower() + "_greedy", m, Xn)
         parts[loss.lower() + "_greedy:loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
     # categorical columns: several permutations, feature combinations
     crows = min(_GBDT_CAT_ROWS, X.shape[0])
     Xc = _gbdt_cat_x(X[:crows])
-    for name, (cols, cats), yf, options in [
+    for name, (cols, cats), yf, options in deal.units([
         ("logloss_ctr_onehot", _GBDT_CAT_ALL, yc[:crows], dict(loss="Logloss", cat_features=None)),
         ("rmse_mcc2", _GBDT_CAT_MCC2, yr[:crows], dict(loss="RMSE", max_ctr_complexity=2, cat_features=None)),
         ("quantile_ctr", _GBDT_CAT_CTR, yr[:crows], dict(loss="Quantile", cat_features=None)),
         ("logloss_one_hot_features", _GBDT_CAT_ONEHOT, yc[:crows], dict(loss="Logloss", one_hot_features=[0])),
-    ]:
+    ]):
         kw = dict(simple)
         kw.update(options)
         if "cat_features" in kw:
@@ -7124,15 +7157,16 @@ def _(ml, X, yc, yr, Xh=None):
         parts[name + ":digest"] = _h(np.frombuffer(str(m.digest_).encode(), dtype=np.uint8))
         parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
     # the held-out fit: RMSE, the curve, the stop
-    Xe = np.ascontiguousarray(Xh[:rows])
-    ye = labels_for(Xh, HELDOUT_SEED)[1][:rows]
-    kw = dict(simple, loss="RMSE", n_estimators=30, od_type="Iter", od_wait=2, use_best_model=True,
-              best_model_min_trees=3)
-    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xn, yrn, eval_set=(Xe, ye))
-    _gbdt_gaps_parts(parts, "rmse_eval", ev, Xn)
-    parts["rmse_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
-    parts["rmse_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
-                                             ev.best_iteration_], dtype=np.int64))
+    if deal.take():
+        Xe = np.ascontiguousarray(Xh[:rows])
+        ye = labels_for(Xh, HELDOUT_SEED)[1][:rows]
+        kw = dict(simple, loss="RMSE", n_estimators=30, od_type="Iter", od_wait=2, use_best_model=True,
+                  best_model_min_trees=3)
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xn, yrn, eval_set=(Xe, ye))
+        _gbdt_gaps_parts(parts, "rmse_eval", ev, Xn)
+        parts["rmse_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts["rmse_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                 ev.best_iteration_], dtype=np.int64))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
