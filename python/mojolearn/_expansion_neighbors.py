@@ -32,7 +32,7 @@ from ._buffer import addr, addr_ro, empty, zeros
 from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin, available_if
 from . import _native_family_bridge
-from ._native_robust_bridge import native_method as _native_local_method
+from ._native_method_marker import native_method as _native_local_method
 
 # The compiled family owner (bindings/neighbors_native_unpack.mojo), connected once
 # at import: PolynomialCountSketch's `fit`, `transform` and `fit_transform`

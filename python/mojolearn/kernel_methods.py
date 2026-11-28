@@ -38,7 +38,7 @@ transforms from a saved model on a CPU without a GPU.
 
 from . import _native_archive_bridge, _native_family_bridge
 from ._mode import NumericModeMixin as _NumericModeMixin
-from ._native_robust_bridge import native_method as _native_method
+from ._native_method_marker import native_method as _native_method
 
 #: The saved-model formats (lane/inference-linear-svm, 2026-09-15):
 #: `mojolearn.host_model(path)` predicts or transforms from each on a CPU.

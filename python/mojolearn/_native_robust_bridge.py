@@ -65,11 +65,6 @@ def connect(scaler_class, qselect):
     return call, context
 
 
-def native_method(method):
-    # glue: only these complete methods own output/fitted/input handling;
-    # application subclass overrides retain the ordinary compatibility wrappers.
-    method._mojolearn_public_out = True
-    method._mojolearn_tracks_fit = True
-    method._mojolearn_needs_fit = True
-    method._mojolearn_validates = True
-    return method
+# `native_method` is `_native_method_marker.py` since 2026-11-28 (the same object, kept importable from here):
+# doors of other families import it from there, so they no longer read as loading this bridge's x_prep binding.
+from ._native_method_marker import native_method  # noqa: E402,F401

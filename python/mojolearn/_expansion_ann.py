@@ -15,7 +15,7 @@ first imported, after the package, so both may rely on every module existing:
                                its `_HostBound`; never import it at module level
 """
 from . import _native_archive_bridge, _native_family_bridge
-from ._native_robust_bridge import native_method as _native_ann_method
+from ._native_method_marker import native_method as _native_ann_method
 from ._mode import NumericModeMixin
 
 # The compiled saved-model owner, connected once at import: `save` of

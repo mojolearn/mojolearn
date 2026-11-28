@@ -17,7 +17,7 @@ whoever owns that file decides the public namespace.
 
 
 from . import _native_archive_bridge, _native_family_bridge
-from ._native_robust_bridge import native_method
+from ._native_method_marker import native_method
 from ._mode import ParamsMixin, available_if
 
 #: `AgglomerativeClustering.save`'s format tag

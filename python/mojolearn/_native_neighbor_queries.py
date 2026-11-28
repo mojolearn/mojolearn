@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connections for complete native neighbor queries."""
 from types import BuiltinFunctionType, MethodType, ModuleType
-from ._native_robust_bridge import native_method
+from ._native_method_marker import native_method
 
 _CONTEXTS = {}
 _BINDING_ALIASES = {}
