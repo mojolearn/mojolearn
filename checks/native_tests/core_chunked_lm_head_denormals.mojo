@@ -21,7 +21,7 @@ from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.math import isfinite
 from std.memory import bitcast
-from core.mojolearn_training_host_impl import chunked_lm_head_v2_loss_host_into, chunked_lm_head_v2_train_host_into
+from training.mojolearn_training_host_impl import chunked_lm_head_v2_loss_host_into, chunked_lm_head_v2_train_host_into
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 from core.hostptr import f32_ptr, i32_ptr
@@ -167,7 +167,7 @@ def run_chunked_denormal_fixture[C: ChunkedHeadCalls](fixture_id: Int) raises:
 
 
 # ---- The host column (was core_chunked_lm_head_denormals_cpu_suite.mojo) ----
-# The host column's chunked LM head (core/mojolearn_training_host_impl.mojo,
+# The host column's chunked LM head (training/mojolearn_training_host_impl.mojo,
 # the `_mojolearn_training_host` entries), fixtures run across host cores.
 struct HostChunkedHead(ChunkedHeadCalls):
     @staticmethod

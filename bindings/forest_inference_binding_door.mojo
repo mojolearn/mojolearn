@@ -5,8 +5,8 @@ The calling extension holds the GIL throughout prepare/predict/release, so no
 native handle can be released while another call is using it.
 """
 from std.python import PythonObject
-from core.forest_inference_model import resident_release, resident_stage_input, resident_unstage_input, FOREST_ORDERED_RESIDENT
-from core.forest_inference_run import (
+from ensemble.forest_inference_model import resident_release, resident_stage_input, resident_unstage_input, FOREST_ORDERED_RESIDENT
+from ensemble.forest_inference_run import (
     _f32_ptr,
     forest_prepare_gpu_native,
     forest_predict_resident_into_gpu_native,

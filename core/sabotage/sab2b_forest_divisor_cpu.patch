@@ -1,7 +1,7 @@
-diff --git a/core/forest_host_predict.mojo b/core/forest_host_predict.mojo
+diff --git a/ensemble/forest_host_predict.mojo b/ensemble/forest_host_predict.mojo
 index fb08c43683..cbb7a24354 100644
---- a/core/forest_host_predict.mojo
-+++ b/core/forest_host_predict.mojo
+--- a/ensemble/forest_host_predict.mojo
++++ b/ensemble/forest_host_predict.mojo
 @@ -72,6 +72,9 @@ def _divisor(n_trees: Int) -> Float32:
      `Float32(Int(forest.n_trees))` in `forest_vote_host`; the same value."""
      comptime if FOREST_HOST_SABOTAGE:

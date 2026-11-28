@@ -25,9 +25,9 @@ from core.kde_native_api import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.native_tests.pca_native_helpers import guards, unchanged, PCA_TEST_GUARD
-from core.kde_native_host import KDEHostKernels
+from kde.kde_native_host import KDEHostKernels
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
-from core.kde_native_device import KDEDeviceKernels
+from kde.kde_native_device import KDEDeviceKernels
 
 
 

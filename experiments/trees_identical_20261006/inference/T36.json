@@ -17,8 +17,8 @@
         "ET"
       ],
       "production_callers": [
-        "core/forest_inference.mojo:launch_forest_inference",
-        "core/forest_inference_model.mojo:ResidentForest.predict_into",
+        "ensemble/forest_inference.mojo:launch_forest_inference",
+        "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
         "python/mojolearn/_forest_protocol.py"
       ],
       "default": false,
@@ -241,8 +241,8 @@
         "ET"
       ],
       "production_callers": [
-        "core/forest_inference.mojo:launch_forest_inference",
-        "core/forest_inference_model.mojo:ResidentForest.predict_into",
+        "ensemble/forest_inference.mojo:launch_forest_inference",
+        "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
         "python/mojolearn/_forest_protocol.py"
       ],
       "default": false,
@@ -453,8 +453,8 @@
     }
   ],
   "production_callers": [
-    "core/forest_inference.mojo:launch_forest_inference",
-    "core/forest_inference_model.mojo:ResidentForest.predict_into",
+    "ensemble/forest_inference.mojo:launch_forest_inference",
+    "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
     "python/mojolearn/_forest_protocol.py"
   ],
   "supported_estimators": [

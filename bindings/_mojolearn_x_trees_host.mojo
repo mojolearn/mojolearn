@@ -16,7 +16,7 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from xtrees.glue_runs import publish_x_trees_glue
 from xtrees.dart_runs_host import publish_x_trees_dart_host
-from core.dart_member import dart_member_publish_image
+from gbdt.dart_member import dart_member_publish_image
 from core.ensemble_member import ensemble_member_publish_image
 from providers.python.xtrees_api_pyapi_door import register, tree_shap_cache_create_args, tree_shap_cache_values_args
 from xtrees import shap_host as shap_cpu

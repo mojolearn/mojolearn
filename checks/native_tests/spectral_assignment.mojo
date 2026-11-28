@@ -21,11 +21,11 @@ from core.spectral_assignment_api import (
 from checks.native_tests.spectral_native import source, source_unchanged, guarded, guards, fit
 from checks.native_tests.spectral_dense import clear
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.spectral_native_provider import spectral_native_v1
-from core.spectral_native_host import SpectralHostKernels
-from core.spectral_assignment_host import SpectralAssignmentHost
-from core.spectral_native_device import SpectralDeviceKernels
-from core.spectral_assignment_device import SpectralAssignmentDevice
+from spectral.spectral_native_provider import spectral_native_v1
+from spectral.spectral_native_host import SpectralHostKernels
+from x_cluster.spectral_assignment_host import SpectralAssignmentHost
+from spectral.spectral_native_device import SpectralDeviceKernels
+from x_cluster.spectral_assignment_device import SpectralAssignmentDevice
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).

@@ -40,7 +40,7 @@ from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, r
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from checks.numerics import identical_mul
-from core.mojolearn_training_host_impl import neural_rng_host_into
+from training.mojolearn_training_host_impl import neural_rng_host_into
 from training.native_primitive_dispatch import native_primitive_operation
 
 

@@ -13,7 +13,7 @@ from std.python.bindings import PythonModuleBuilder
 from core.shared_slot import SharedSlot
 from core.scaler_native_api import PrepProgramAPI
 from x_prep.transport_host import publish_x_prep_transport_host
-from core.prep_program_native_host import PrepProgramHostKernels
+from x_prep.prep_program_native_host import PrepProgramHostKernels
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE

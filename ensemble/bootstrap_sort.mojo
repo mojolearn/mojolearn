@@ -5,7 +5,7 @@ Extracted incumbent radix schedule; nonnegative Int32 IDs, stable even passes.
 """
 from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.launch_clock import log_launch_ctx
+from ensemble.launch_clock import log_launch_ctx
 from core.segmented_sort import SORT_BLOCK, seg_add_block_carry_kernel, seg_reorder_one_bit_kernel, enqueue_seg_scan_block_sums, seg_scan_key_bit_kernel
 
 def sort_passes_for(n_rows_bound: Int) -> Int:

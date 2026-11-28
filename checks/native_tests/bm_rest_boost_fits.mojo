@@ -26,8 +26,8 @@ from core.trees_entry_table import TreesEntryKey
 from core.forest_entry_table import ForestEntryKey, FOREST_TABLE_RF, FOREST_TABLE_ET
 from core.forest_calls import xf_ref, xf_caps, xf_export_sizes, xf_export_into, xf_export_release
 from core.forest_fit_request import XF_CAP_DEVICE_SCAN
-from core.mojolearn_et_host_run import publish_et_host_forest
-from core.mojolearn_rf_host_run import publish_rf_host_forest
+from extratrees.mojolearn_et_host_run import publish_et_host_forest
+from ensemble.mojolearn_rf_host_run import publish_rf_host_forest
 from xtrees.glue_runs import publish_x_trees_glue
 from xtrees.dart_runs_host import publish_x_trees_dart_host
 from xtrees.glue_calls import xt_ref, xt_positive_codes, xt_softmax_rows, xt_transpose_f64

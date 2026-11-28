@@ -32,11 +32,11 @@ from checks.native_tests.agglo_native_profiles import AggloCase, profile, query_
 from checks.native_tests.pca_native_helpers import unchanged
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neighbors_native_driver import XnDriver
-from core.dbscan_native_host import DBSCANHostKernels
+from dbscan.dbscan_native_host import DBSCANHostKernels
 from hierarchy.solver_descriptor_host import hierarchy_solver_host_v1
 from hierarchy.cluster_descriptor_host import hierarchy_cluster_host_v1
 from x_neighbors.native_descriptor_host import xn_native_v1
-from core.dbscan_native_device import DBSCANDeviceKernels
+from dbscan.dbscan_native_device import DBSCANDeviceKernels
 from hierarchy.solver_descriptor_device import hierarchy_solver_device_v1
 from hierarchy.cluster_descriptor_device import hierarchy_cluster_device_v1
 from x_neighbors.native_descriptor_device import xn_native_v1 as xn_native_v1_gpu

@@ -1,9 +1,9 @@
---- a/core/forest_host_groves_binding_impl.mojo
-+++ b/core/forest_host_groves_binding_impl.mojo
+--- a/ensemble/forest_host_groves_binding_impl.mojo
++++ b/ensemble/forest_host_groves_binding_impl.mojo
 @@ -1,8 +1,19 @@
  # SPDX-License-Identifier: Apache-2.0
  """Typed snapshot copy moved word for word from bindings/forest_host_groves_binding.mojo."""
- from core.forest_host_groves import HostGroveForest
+ from ensemble.forest_host_groves import HostGroveForest
 +from std.memory import bitcast
  
  

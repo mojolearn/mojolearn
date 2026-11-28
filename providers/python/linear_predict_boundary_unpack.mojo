@@ -46,7 +46,7 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     # X's finite test is deferred to the prediction entry (lane
     # ols-regression, 2026-11-14): a borrowed float32 C-order X takes no host
     # pass here; the entry tests the words it uploads and returns the status
-    # word at its one drain (core/p3_linear_impl.mojo ols_predict_device; the
+    # word at its one drain (glm/p3_linear_impl.mojo ols_predict_device; the
     # host column scans in its entry). A cast X was tested in the cast pass
     # (`finite` True) and is not tested again. 0.8.55's predict scanned
     # nothing; the host scan here was the added pass (ols taxi infer L40S

@@ -12,9 +12,9 @@ slots)."""
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.entry_table import entry_table_same_call
 from core.gp_native_api import GPDriver
-from core.gp_native_provider import GPProviderAPI, gp_native_v1
-from core.gp_native_host import GPHostKernels
-from core.gp_native_host_infer import GPHostInferenceKernels
+from gaussian_process.gp_native_provider import GPProviderAPI, gp_native_v1
+from gaussian_process.gp_native_host import GPHostKernels
+from gaussian_process.gp_native_host_infer import GPHostInferenceKernels
 from core.gp_entry_table import (
     GPEntryKey,
     GP_COLUMN_DEVICE,

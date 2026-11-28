@@ -36,16 +36,16 @@ from checks.native_tests.gp_native_data import (
     GP_GUARD64,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.gp_native_provider import gp_native_v1
-from core.gp_native_host import GPHostKernels
-from core.gp_native_host_infer import GPHostInferenceKernels
+from gaussian_process.gp_native_provider import gp_native_v1
+from gaussian_process.gp_native_host import GPHostKernels
+from gaussian_process.gp_native_host_infer import GPHostInferenceKernels
 from checks.native_tests.gp_native_learning_cases import GP_LEARNING_FIXTURES, learning_fixture
 from checks.native_tests.gp_native_classifier_cases import (
     GP_CLASSIFIER_CPU_FIXTURES,
     classifier_fixture,
     GP_CLASSIFIER_GPU_FIXTURES,
 )
-from core.gp_native_device import GPDeviceKernels
+from gaussian_process.gp_native_device import GPDeviceKernels
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 

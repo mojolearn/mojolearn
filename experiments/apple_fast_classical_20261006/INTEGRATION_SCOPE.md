@@ -97,7 +97,7 @@ Further caller and quality details are in the corresponding lane JSON/Markdown.
 | T05 | `gbdt/methods/kernel/pointwise_split_resolve.mojo::_fold_block` consumes AFCL_RESOLVE_RECORDS | SYM_RESOLVE_BLOCK enabled in both arms; fused level/pointwise entrances must remain enabled |
 | T06 | `gbdt/methods/leaves_estimation/apple_fast_est.mojo` uses `_afcl_leaf_stats_sm` for scratch and statistic launches | Existing admitted Apple leaf objectives only; multiclass/multi-RMSE/group/ranking exclusions remain |
 | T07 | `gbdt/resident_model.mojo` consumes AFCL_PREDICT_BLOCK for oblivious model row grids/launches | Resident oblivious application only; nonresident/nonsymmetric routes are excluded |
-| T08 | `core/forest_inference.mojo::_afcl_rf_block[RF_INPUT]` feeds traversal and grove geometry | RF_INPUT=True only; ExtraTrees, legacy host and OOB training paths retain their schedules |
+| T08 | `ensemble/forest_inference.mojo::_afcl_rf_block[RF_INPUT]` feeds traversal and grove geometry | RF_INPUT=True only; ExtraTrees, legacy host and OOB training paths retain their schedules |
 | T09 | ExtraTrees builder uses ET_FEATURE_TILE in tiled range/regression score kernels and feature grids | Existing tiled row-major eligibility only; classification score family is not replaced |
 | T10 | Isolation tree builder's IF_PATH_TPB feeds default IFLaunchKnobs and path/score launches | Explicit path_tpb overrides can bypass it; tree construction is unchanged |
 | T11 | `xtrees/shap_device.mojo` query helper and all row/fold launches use QUERY_TPB | Preparation/table construction and unsupported interaction APIs remain unchanged |

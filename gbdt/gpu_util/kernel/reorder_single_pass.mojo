@@ -89,7 +89,7 @@ kernel.
 # rocPRIM shipping this machinery is the vendors' own statement); Metal
 # promises nothing of the shape, and a Metal kernel that spins does not
 # get interrupted (`random_gen.mojo:105` learned this the hard way).
-# DEVIATION 115a (`core/scan_by_key.mojo`) declined the lookback for that
+# DEVIATION 115a (`ensemble/scan_by_key.mojo`) declined the lookback for that
 # reason ACROSS ALL COLUMNS; this row narrows the decline to the columns
 # whose vendors decline it themselves, which is exactly what a kernel-
 # matrix row is for. Never an inline vendor `if`: the kernel below is

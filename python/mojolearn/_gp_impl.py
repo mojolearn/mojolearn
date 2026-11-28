@@ -562,7 +562,7 @@ class GaussianProcessRegressor(NumericModeMixin):
     #: classifier's default folds, as scikit-learn's does.
     _estimator_type = "regressor"
     # Runs as a native member of a meta-estimator: (member family, kind) of
-    # core/member_families.mojo (MEMBER_FAMILY_GP = 23) and core/gp_member.mojo.
+    # core/member_families.mojo (MEMBER_FAMILY_GP = 23) and gaussian_process/gp_member.mojo.
     _mojolearn_member = (23, 0)
 
     _BINDING = "_mojolearn_gp"

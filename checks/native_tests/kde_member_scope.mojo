@@ -32,11 +32,11 @@ from core.member_abi import (
     MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_SCORE_SAMPLES, MEMBER_OP_SCORE, MEMBER_OP_EXPORT,
     MEMBER_OP_CAPABILITIES, MEMBER_CAN_SCOPE, MEMBER_CAN_ROW_INDEX, MEMBER_BLOCK_FAMILY,
 )
-from core.density_member import density_member_v2
+from dbscan.density_member import density_member_v2
 from core.kde_native_api import KDENativeDriver, kde_native_v1, KDE_CAPABILITIES, KDE_CAP_DEV_STORE
-from core.kde_native_host import KDEHostKernels
-from core.kde_native_device import KDEDeviceKernels
-from core.estimators_store import estimators_store_v1
+from kde.kde_native_host import KDEHostKernels
+from kde.kde_native_device import KDEDeviceKernels
+from glm.estimators_store import estimators_store_v1
 from bindings.arena_cache_run import arena_scope_new, arena_scope_close, arena_cache_live
 from x_prep.transport_abi import XP_OP_COUNT
 

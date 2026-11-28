@@ -41,7 +41,7 @@ core/cast_in.mojo:cast_w64_bits	integer words also carry the pandas indexer, so 
 core/cast_in.mojo:label_kind_of	no fault reaches a lane: every kind sorts the fixtures' non-negative labels alike
 core/label_encode.mojo:LABEL_KIND_U64	a comptime constant; no lane passes uint64 labels
 core/py2mojo_rows.mojo:rows_param_count	returns a parameter count (a size)
-core/py2mojo_cluster_est_impl.mojo:dbscan_core_count	returns the core-row count that sizes the gather buffers
+dbscan/py2mojo_cluster_est_impl.mojo:dbscan_core_count	returns the core-row count that sizes the gather buffers
 dbscan/core_device_impl.mojo:dbscan_core_count	returns the core-row count that sizes the gather buffers
 training/byte_lm_session_ops.mojo:_FILE_CHUNK	a read chunk size (a capacity)
 core/mojolearn_shell_impl.mojo:nonzero_f64_fill_host	the GPU base binding's COO scan: on a GPU install every spectral affinity takes the metrics dense entry, so no install reaches it through a public call
@@ -121,7 +121,7 @@ core/step_glue.mojo:step_glue_arm_from_env	reads an experiment arm name from the
 core/identity_trace.mojo:IdentityTrace.__init__	an empty trace record's construction, no value
 core/msel_host.mojo:MselHostStore.__init__	the host snapshot store's empty construction, no value
 core/device_store.mojo:DeviceStore.__init__	the resident store's empty construction, no value
-core/forest_host_groves.mojo:HostGroveRegistry.__init__	the grove registry's empty construction, no value
+ensemble/forest_host_groves.mojo:HostGroveRegistry.__init__	the grove registry's empty construction, no value
 cluster/resident_centers.mojo:KMeansCentersRegistry.__init__	the resident-centers registry's empty construction, no value
 kernel_methods/krr_resident.mojo:KernelRidgeResidentRegistry.__init__	the resident kernel-ridge registry's empty construction, no value
 tokenizer/impl/tokenizer_host_shell_impl.mojo:BpeHandle.__init__	the BPE handle's construction from a built table, no arithmetic
@@ -151,7 +151,7 @@ x_cnn/ops.mojo:neural_tape_budget_bytes	a configured byte budget, no data value
 x_cnn/ops.mojo:neural_numerical_profile	the CNN arithmetic-profile word (build metadata), no data value
 core/py2mojo_linear.mojo:py2mojo_linear_flags	a compile-time route-flag word, no data value
 resample/estimator.mojo:resample_fast_defines	the fast-tier define list (build metadata), no data value
-core/forest_inference_model.mojo:forest_ordered_resident_policy	a compile-time route policy flag, no data value
+ensemble/forest_inference_model.mojo:forest_ordered_resident_policy	a compile-time route policy flag, no data value
 arima/impl/fast_order_search.mojo:fast_search_mode	a compile-time route-mode word, no data value
 gbdt/estimator.mojo:gbdt_fit_row_major_available	a capability flag, no data value
 core/step_glue.mojo:step_glue_arm_name	an experiment arm's name, no data value
@@ -163,7 +163,7 @@ core/msel_host.mojo:MselHostStore.free	frees a host snapshot slot; no value leav
 core/msel_device.mojo:MselStore.alloc	allocates a device snapshot slot; no value leaves it
 core/msel_device.mojo:MselStore.free	frees a device snapshot slot; no value leaves it
 transformer/transformer_binding_impl.mojo:CausalLMSession.release	a session's teardown (frees buffers); no value leaves it
-core/forest_host_groves.mojo:HostGroveRegistry.release	frees a saved forest's groves; no value leaves it
+ensemble/forest_host_groves.mojo:HostGroveRegistry.release	frees a saved forest's groves; no value leaves it
 xtrees/dart_device.mojo:dart_open	opens the DART fit's scratch state; no value leaves it
 xtrees/dart_device.mojo:dart_close	frees the DART fit's scratch state; no value leaves it
 xtrees/dart_host.mojo:dart_close	frees the DART fit's host scratch state; no value leaves it

@@ -9,7 +9,7 @@ engines the archive names (docs/FOREST_INFERENCE_ENGINES.md): the sequential
 walk for a `mojolearn-randomforest-1` or `mojolearn-extratrees-1` archive,
 and, since lane/forest-groves-cpu-and-speed (2026-09-17), the
 `parallel_groves` engine for a `-parallel-groves-1` archive (32 fixed tree
-groups, the 16/8/4/2/1 fold, `core/forest_host_groves.mojo`), so a groves
+groups, the 16/8/4/2/1 fold, `ensemble/forest_host_groves.mojo`), so a groves
 model trained on a GPU infers the GPU groves engine's bits on a CPU. A groves
 archive saved under a numeric mode other than `identical` is refused by name,
 because this binding computes IDENTICAL bits only. `predict` and

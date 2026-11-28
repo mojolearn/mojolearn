@@ -189,7 +189,7 @@ class KernelRidge(_KernelMethodBase):
 
     _WHERE = "KernelRidge"
 
-    # Member ABI family 7 (KernelRidge), kind 0: core/kernel_ridge_member.mojo.
+    # Member ABI family 7 (KernelRidge), kind 0: kernel_methods/kernel_ridge_member.mojo.
     _mojolearn_member = (7, 0)
 
     def __init__(self, alpha=1.0, kernel="linear", gamma=None, degree=3, coef0=1.0):
@@ -387,7 +387,7 @@ class Nystroem(_KernelMethodBase):
 
     _WHERE = "Nystroem"
 
-    # Member ABI family 8 (KernelApprox), kind 0: core/kernel_approx_member.mojo.
+    # Member ABI family 8 (KernelApprox), kind 0: kernel_methods/kernel_approx_member.mojo.
     _mojolearn_member = (8, 0)
 
     # scikit-learn's no-op keywords, at the class too: a model the archive door loads
@@ -551,7 +551,7 @@ class RBFSampler(_KernelMethodBase):
 
     _WHERE = "RBFSampler"
 
-    # Member ABI family 8 (KernelApprox), kind 1: core/kernel_approx_member.mojo.
+    # Member ABI family 8 (KernelApprox), kind 1: kernel_methods/kernel_approx_member.mojo.
     _mojolearn_member = (8, 1)
 
     def __init__(self, gamma=1.0, n_components=100, random_state=0):

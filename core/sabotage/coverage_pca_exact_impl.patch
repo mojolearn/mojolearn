@@ -1,5 +1,5 @@
---- a/core/pca_exact_impl.mojo
-+++ b/core/pca_exact_impl.mojo
+--- a/x_decomp/pca_exact_impl.mojo
++++ b/x_decomp/pca_exact_impl.mojo
 @@ -10,6 +10,8 @@
              raise Error("PCA whitening requires finite " + name)
          if nonnegative and ptr[i] < 0:

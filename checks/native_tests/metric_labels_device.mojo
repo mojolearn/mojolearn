@@ -37,7 +37,7 @@ from core.cast_in import CAST_KIND_SIGNED
 from core.labels_score_encode import score_encode_signed
 from core.metrics_exp_impl import mexp_gather_i32
 from core.host_finite_scan import host_all_finite_f32
-from core.metric_labels_device import (
+from metrics.metric_labels_device import (
     metric_encode_resident,
     metric_gather_resident,
     metric_first_nonfinite_resident,

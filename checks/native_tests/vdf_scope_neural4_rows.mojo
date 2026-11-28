@@ -46,10 +46,10 @@ from x_decomp.nmf_owner import NMF_INIT_NNDSVDA, nmf_run
 from core.msel_device_x import msel_fold_store, msel_device_x_context
 from core.pca_native_api import PCAFitRequest, PCAQueryRequest, PCAFoldStore
 from core.pca_native_fold import PCAFoldKernels
-from core.pca_native_device import PCADeviceKernels
+from decomposition.pca_native_device import PCADeviceKernels
 from core.tsvd_native_api import TSVDQueryRequest
 from core.tsvd_native_fold import TSVDFoldKernels
-from core.tsvd_native_device import TSVDDeviceKernels
+from decomposition.tsvd_native_device import TSVDDeviceKernels
 
 comptime CASES = 5
 comptime _ROWS = 24

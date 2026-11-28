@@ -272,7 +272,7 @@ def metrics_plan_execute(entry: NativeDescriptorCall, plan: MetricProgramPlan, i
             raise Error("RuntimeError: x_metrics: a device-resident input needs the image's range route")
         ins = _whole_arena_spans(ins, size)
     if ranges or whole_slots:
-        # the shared ranges runner (core/arena_io.mojo): only the inputs go
+        # the shared ranges runner (x_prep/arena_io.mojo): only the inputs go
         # up, only the outputs come back (ranges on); the whole arena's host
         # words up and the whole-arena arm's download (the slot form)
         var outs = merged.copy() if known and (ranges or output_ranges) else [Int32(0), Int32(size), Int32(-1), Int32(1)]

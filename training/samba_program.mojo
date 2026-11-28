@@ -71,7 +71,7 @@ from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TA
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.cast_in import CastIn
-from core.decode_slab import decode_slab_check, decode_slab_put, decode_slab_take_ids
+from sequence.decode_slab import decode_slab_check, decode_slab_put, decode_slab_take_ids
 from core.device_scan import device_first_nonfinite
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig

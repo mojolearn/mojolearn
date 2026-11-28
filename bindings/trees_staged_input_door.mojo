@@ -3,7 +3,7 @@
 #
 # Each fitted forest member predicts through its resident snapshot, and every
 # snapshot of one forest binary borrows that binary's single input workspace
-# (core/forest_inference_model.mojo, `ForestIOWorkspace`). Before this every
+# (ensemble/forest_inference_model.mojo, `ForestIOWorkspace`). Before this every
 # member uploaded the same X into that workspace again and scanned it again:
 # AdaBoost's one-tree members, a OneVsRest or calibrated forest per class or
 # fold, a voting or stacking ensemble of forests. Now the ensemble call stages

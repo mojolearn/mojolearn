@@ -28,8 +28,8 @@ from checks.native_tests.testsuite_cases import check_cases, check_cases_serial,
 from core.member_abi import MemberCall, MEMBER_OP_CAPABILITIES, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MemberRef, member_call
 from core.entry_table import EntryRef
 from core.device_route import DeviceRoute
-from core.dart_member import dart_member_v2
-from core.isolation_forest_member import isolation_forest_member_v2
+from gbdt.dart_member import dart_member_v2
+from isolation_forest.isolation_forest_member import isolation_forest_member_v2
 from max.gpu.host import DeviceContext
 from core.fold_x_device import FOLD_X_STORE, fold_x_word
 from core.neural_context import process_ctx

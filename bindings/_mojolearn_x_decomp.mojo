@@ -5,7 +5,7 @@ points of x_decomp/api.mojo on the device executor (x_decomp/device.mojo).
 bindings/_mojolearn_x_decomp_host.mojo registers the same names on the host
 executor."""
 from x_decomp.publish_device_run import _publish_linear_entry_table
-from core.pls_member import pls_member_publish
+from x_decomp.pls_member import pls_member_publish
 from checks.vendor import COMPILED_VENDOR
 from core.experiment_guards_decomposition import DECOMPOSITION_GUARDS_OK
 from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
@@ -75,11 +75,11 @@ from providers.python.neural_descriptor_pyapi_door import neural_descriptor_caps
 
 
 from core.shared_slot import SharedSlot
-from core.tsvd_native_decomp import TSVDDecompAPI
-from core.nmf_native_provider import NMFProviderAPI
-from core.ipca_native_provider import IPCAProviderAPI
+from x_decomp.tsvd_native_decomp import TSVDDecompAPI
+from x_decomp.nmf_native_provider import NMFProviderAPI
+from x_decomp.ipca_native_provider import IPCAProviderAPI
 from core.kpca_native_api import KPCAProviderAPI
-from core.kpca_native_provider import KPCAEigenKernels
+from x_decomp.kpca_native_provider import KPCAEigenKernels
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime _TSVD_DECOMP_API_NAME = "MojolearnTSVDDecompDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTSVDDecompDeviceFastV1"

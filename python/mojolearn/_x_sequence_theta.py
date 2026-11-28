@@ -94,7 +94,7 @@ class AutoTheta(ParamsMixin):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
-    #: A member of a meta-estimator (core/forecast_seq_member.mojo: family 43, kind 0).
+    #: A member of a meta-estimator (sequence/forecast_seq_member.mojo: family 43, kind 0).
     _mojolearn_member = (43, 0)
 
     def __init__(self, season_length=1, decomposition_type="multiplicative", model=None,

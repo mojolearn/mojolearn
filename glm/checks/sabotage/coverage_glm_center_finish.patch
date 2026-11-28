@@ -1,7 +1,7 @@
-diff --git a/core/p3_linear_impl.mojo b/core/p3_linear_impl.mojo
+diff --git a/glm/p3_linear_impl.mojo b/glm/p3_linear_impl.mojo
 index 555e1f9731..9baf218cb0 100644
---- a/core/p3_linear_impl.mojo
-+++ b/core/p3_linear_impl.mojo
+--- a/glm/p3_linear_impl.mojo
++++ b/glm/p3_linear_impl.mojo
 @@ -127,6 +127,9 @@ def ols_predict_device(
          step_count_d2h()
      ctx.synchronize()

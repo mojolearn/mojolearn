@@ -15,7 +15,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.decomp_entry_table_pca import pca_ops_check_spans, pca_status_word
-from core.estimators_host_impl import pca_fit_owned_host_run
+from glm.estimators_host_impl import pca_fit_owned_host_run
 
 
 def pca_fit_owned_host_run_words(a: List[Int], p: List[Int], fraction: Float64) raises -> Tuple[Int, Float64]:

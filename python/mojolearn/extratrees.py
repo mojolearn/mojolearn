@@ -292,7 +292,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
     >>> proba = model.predict_proba(X)
     """
     # The member ABI mark (core/member_abi.mojo, family 15 MEMBER_FAMILY_EXTRA_TREES): fit and predict run native
-    # inside a meta-estimator (core/extra_trees_member.mojo).
+    # inside a meta-estimator (extratrees/extra_trees_member.mojo).
     _mojolearn_member = (15, 0)
     predict = _ForestClassifierPredict.predict
 
@@ -459,7 +459,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
     >>> pred = model.predict(X)
     """
     # The member ABI mark (core/member_abi.mojo, family 15 MEMBER_FAMILY_EXTRA_TREES): fit and predict run native
-    # inside a meta-estimator (core/extra_trees_member.mojo).
+    # inside a meta-estimator (extratrees/extra_trees_member.mojo).
     _mojolearn_member = (15, 1)
 
     def __init__(

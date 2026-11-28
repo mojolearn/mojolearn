@@ -22,7 +22,7 @@ from core.xcnn_entry_table import (
     XC_GEMM_M, XC_SPMM_M, XC_MAP2_M, XC_GRAPH_OP, XC_GRAPH_OP_M, XC_LINEAR_FORWARD_M, XC_LINEAR_BACKWARD,
     XC_GCN_BACKWARD_T, XC_SAGE_BACKWARD_T,
 )
-from core.xcnn_graph_impl import graph_bias_rows, graph_admit_edges
+from x_cnn.xcnn_graph_impl import graph_bias_rows, graph_admit_edges
 from core.xseq_marshal import xseq_fill_f32
 from x_cnn.door_run import xcnn_run_call, xcnn_run_fixed2, XcnnF32P
 from core.host_bytes_equal import host_bytes_equal

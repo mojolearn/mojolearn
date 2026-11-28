@@ -1,6 +1,6 @@
-diff --git a/core/spectral_native_host.mojo b/core/spectral_native_host.mojo
---- a/core/spectral_native_host.mojo
-+++ b/core/spectral_native_host.mojo
+diff --git a/spectral/spectral_native_host.mojo b/spectral/spectral_native_host.mojo
+--- a/spectral/spectral_native_host.mojo
++++ b/spectral/spectral_native_host.mojo
 @@ -43,6 +43,8 @@
              Float32(r.options.tolerance), UInt64(r.options.seed), result.labels,
              result.embedding, result.state, r.options.keep_state,

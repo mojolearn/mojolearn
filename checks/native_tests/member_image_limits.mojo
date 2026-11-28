@@ -48,7 +48,7 @@ from core.entry_table import EntryRef, entry_ref_word
 from core.host_helpers_impl import argmax_rows_f32
 from core.linear_svc_native_api import LINEAR_SVC_NATIVE_COUNT
 from core.linear_svm_member import linear_svm_member_v2
-from core.logistic_member import logistic_member_v2
+from glm.logistic_member import logistic_member_v2
 from core.logistic_native_api import QnNativeDriver
 from core.logistic_route import LogisticRoute, logistic_route_pack
 from core.member_abi import (
@@ -57,7 +57,7 @@ from core.member_abi import (
     MEMBER_F32, MEMBER_I32, MEMBER_I64,
 )
 from core.member_families import MEMBER_FAMILY_LOGISTIC, MEMBER_FAMILY_LINEAR_SVM
-from core.gbdt_member import (
+from gbdt.gbdt_member import (
     GbdtMemberSlot, _feature_tail, _feature_flags, _group_sizes, _category_fit, _category_apply,
     _pairs_words, _eval_scan,
 )

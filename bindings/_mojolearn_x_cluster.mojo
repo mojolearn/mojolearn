@@ -24,7 +24,7 @@ from core.hostptr import f32_ptr
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.device_route import device_vendor_code
-from core.xcluster_member import xcluster_member_publish
+from x_cluster.xcluster_member import xcluster_member_publish
 from x_cluster.device_execution import cluster_device_execute
 from x_cluster.minibatch_ptr import MBK_DEVSCAN_ANY
 from x_cluster.out import ClusterOut
@@ -36,7 +36,7 @@ from x_cluster.resident import xc_centers_count
 
 from core.shared_slot import SharedSlot
 from core.spectral_assignment_api import SpectralAssignmentAPI
-from core.spectral_assignment_device import SpectralAssignmentDevice
+from x_cluster.spectral_assignment_device import SpectralAssignmentDevice
 from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_IDENTICAL
 
 comptime _SPECTRAL_ASSIGN_SLOT = "MojolearnSpectralAssignDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == _SPECTRAL_IDENTICAL else "MojolearnSpectralAssignDeviceFastV1"
@@ -156,7 +156,7 @@ def build__mojolearn_x_cluster() -> PythonObject:
         # TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_cluster.patch
         var published_module = m.finalize()
-        # The x_cluster member entry (core/xcluster_member.mojo) beside its variants kernel table.
+        # The x_cluster member entry (x_cluster/xcluster_member.mojo) beside its variants kernel table.
         xcluster_member_publish(Int(GLOBAL_NUMERIC_MODE), device_vendor_code(String(COMPILED_VENDOR)), Int(KMEANS_VARIANTS_DEVICE_API.get_or_create_ptr()[].entries.unsafe_ptr()))
         return published_module
     except e:

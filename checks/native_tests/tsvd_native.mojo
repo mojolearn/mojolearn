@@ -10,9 +10,9 @@ from core.host_parallel import host_parallelize
 from core.pca_native_api import PCAFoldStore
 from core.tsvd_native_api import TSVDNativeDriver, TSVDQueryRequest, TSVDFitRequest, TSVD_RANDOMIZED
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.tsvd_native_host import tsvd_host_native_v1
+from decomposition.tsvd_native_host import tsvd_host_native_v1
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
-from core.tsvd_native_device import tsvd_device_native_v1
+from decomposition.tsvd_native_device import tsvd_device_native_v1
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 

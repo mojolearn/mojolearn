@@ -45,11 +45,11 @@ squared distance walks the feature axis descending, and the gemm oracle's
 leaf walks descending with it, so every fit and predict this binary serves
 differs.
 """
-from core.gp_native_provider import GPProviderAPI
+from gaussian_process.gp_native_provider import GPProviderAPI
 from core.gp_entry_table import GPEntryKey, GP_COLUMN_HOST, gp_table_publish
-from core.gp_member import gp_member_publish
+from gaussian_process.gp_member import gp_member_publish
 from bindings.py_balanced import py_setattr
-from core.gp_native_host import GPHostKernels
+from gaussian_process.gp_native_host import GPHostKernels
 from core.shared_slot import SharedSlot
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from core.experiment_guards_kernel import KERNEL_GUARDS_OK
@@ -636,7 +636,7 @@ def build__mojolearn_gp_host() -> PythonObject:
         module.def_function[cholesky_solve_binding]("cholesky_solve")
         var published = module.finalize()
         _publish_gp_table(published)
-        # The family's member entry (core/gp_member.mojo), vendor 0 (CPU).
+        # The family's member entry (gaussian_process/gp_member.mojo), vendor 0 (CPU).
         gp_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(GP_HOST_NATIVE_API.get_or_create_ptr()))
         return published
     except e:

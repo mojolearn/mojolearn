@@ -59,7 +59,7 @@ comptime GBDT_INDEX_PACK_DEVICE = SYM_FEAT_FAST_APPLE and (
 # fast only, so the owed NVIDIA L40S A/B can time it): the float columns
 # resident once, and the image answers XG_CAP_FIT_SLOT_X so a model-selection
 # fold's X reaches the fit as THE FOLD X WORD (core/fold_x_device.mojo); off,
-# the member fit takes the host fold gather (core/gbdt_member.mojo). Same
+# the member fit takes the host fold gather (gbdt/gbdt_member.mojo). Same
 # border kernels and binarize arithmetic either way. A/B OWED on the L40S:
 # docs/apple-fast/EXPERIMENTS.md row MOJOLEARN_GBDT_QUANT_DEVICE (pending).
 comptime GBDT_QUANT_DEVICE = (

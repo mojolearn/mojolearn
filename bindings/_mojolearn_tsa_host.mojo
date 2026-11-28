@@ -52,7 +52,7 @@ from checks.kernel_matrix import (
 )
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE
+from holtwinters.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE
 from holtwinters.host.hw_oracle import (
     HW_ORACLE_HOST_SABOTAGE,
     oracle_fit,
@@ -62,7 +62,7 @@ from holtwinters.impl.runner import (
     holtwinters_validate_params,
 )
 from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
-from core.kpss_host_test_impl import KPSS_DECISION_SABOTAGE
+from tsa.kpss_host_test_impl import KPSS_DECISION_SABOTAGE
 from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
 from tsa.tsa_ops_host import publish_tsa_hw_ops_host
 

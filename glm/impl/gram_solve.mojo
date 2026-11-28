@@ -55,7 +55,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_mul, identical_mul_add
 from x_decomp.cells import F32Ptr, chol_diag, div0, sqrt0
 from core.blocked_moments import bm_centered_cross_panels, bm_centered_gram_panels
-from core.blocked_moments_multi_gpu import bm_centered_gram_cross_dispatch
+from glm.blocked_moments_multi_gpu import bm_centered_gram_cross_dispatch
 from core.device_plan import DevicePlan
 from core.device_zero import enqueue_fill
 from core.fold_x_device import fold_x_fill

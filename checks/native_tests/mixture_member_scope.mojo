@@ -29,7 +29,7 @@ from core.member_abi import (
     MEMBER_OP_SCORE_SAMPLES, MEMBER_OP_SCORE, MEMBER_OP_EXPORT, MEMBER_OP_CAPABILITIES, MEMBER_CAN_SCOPE,
     MEMBER_CAN_ROW_INDEX, MEMBER_BLOCK_FAMILY,
 )
-from core.mixture_member import mixture_member_v2
+from mixture.mixture_member import mixture_member_v2
 from core.mixture_native_api import GmmDriver, MIXTURE_NATIVE_CAPABILITIES, MIXTURE_CAP_DEV_STORE
 from mixture.host.gmm_native_host import gmm_native_host_v1
 from mixture.gmm_native_device import gmm_native_device_v1

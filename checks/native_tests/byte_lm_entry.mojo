@@ -32,7 +32,7 @@ from training.byte_lm_host_glue_entry import publish_byte_lm_host_entries
 from core.native_descriptor_call import native_descriptor_call
 from core.state_registry import StateHandle
 from core.entry_table import EntryRef
-from core.byte_lm_entry_table_sessions import (
+from training.byte_lm_entry_table_sessions import (
     BS_CREATE, BS_RUN, BS_CLOSE, byte_lm_sessions_entry, byte_lm_sessions_ref, byte_lm_sessions_published,
     byte_lm_resident_open, byte_lm_resident_run, byte_lm_resident_close,
 )

@@ -25,7 +25,7 @@ the copy is one memcpy, the rebuild it replaces was per node).
 """
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from core.forest_host_strict_run import (
+from ensemble.forest_host_strict_run import (
     forest_host_strict_predict,
     forest_strict_prepare_host_native,
     forest_strict_predict_host_check,

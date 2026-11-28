@@ -2,7 +2,7 @@
 # Resident whole-model reservation and execution on the original CausalLM and
 # Transformer session owners. Group admission/release is GIL-held; numerical
 # execution is GIL-released by the common provider, as in the public binding.
-from core.native_session_group import NativeSessionGroup
+from transformer.native_session_group import NativeSessionGroup
 from transformer.transformer_binding_impl import (
     CausalLMSession, TransformerDecodeSession, _require_session_open,
     _lm_open_run, _lm_open_run_int15, _lm_run, _lm_forward_run,

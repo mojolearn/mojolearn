@@ -34,7 +34,7 @@ from core.shared_slot import SharedSlot
 from core.hostptr import i32_ptr, read_f32
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from resample.checks.statistics import MC_DIMS
-from core.resample_impl import resample_store_indices
+from resample.resample_impl import resample_store_indices
 from std.memory import unsafe_memcpy
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk

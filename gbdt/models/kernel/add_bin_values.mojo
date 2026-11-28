@@ -34,7 +34,7 @@ from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.apple_fast_tree_experiments import AFT_P05
+from xtrees.apple_fast_tree_experiments import AFT_P05
 # the non-symmetric walk's one body, shared with the host fit and the host
 # predict (lane gbdt-cpu-rest-4-cat-ns, 2026-11-23)
 from gbdt.models.non_symmetric_walk_body import ns_node_goes_right, ns_walk_step

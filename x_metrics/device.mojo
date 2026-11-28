@@ -12,7 +12,7 @@ from x_metrics.common import FP, IP, STAGE_INTS
 from x_metrics.units import N_OPS, run_unit
 from x_metrics.plan import Plan, plan_program, is_user_op, OP_SORT_MERGE
 from x_metrics.par import sort_merge_path_unit, merge_path_chunks
-from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
+from x_prep.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from x_prep.store_slot import X_PREP_STORE, x_prep_ctx
 
 #: x_metrics program profile: `-D MOJOLEARN_XMETRICS_PROFILE` builds drain and
@@ -169,7 +169,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         print("XMPROF stage", nst - 1, "op", Int(pl.rows[(nst - 1) * STAGE_INTS]), "us", (perf_counter_ns() - t_last) // 1000)
         t_last = perf_counter_ns()
     if nouts >= 0:
-        # the shared runner's download (core/arena_io.mojo), the loop this
+        # the shared runner's download (x_prep/arena_io.mojo), the loop this
         # lane wrote first (metrics-apple2), moved there unchanged
         download_ranges(ctx, df, host_f, outs_addr, nouts)
     elif arena_len > 0:

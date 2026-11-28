@@ -224,7 +224,7 @@ def _pair_end_range(v: Int, i: Int, j: Int, n_rows: Int) raises:
 
 # ------------------------------------------------------------ the two-level FeatureFreq checks (lane mf-meta5)
 # ONE BODY of `ExperimentalTwoLevelFeatureFreq.fit`'s data checks: the fit door
-# (bindings/trees_public_gbdt_door.mojo `feature_freq_unpack`) and the member's fit (core/gbdt_member.mojo
+# (bindings/trees_public_gbdt_door.mojo `feature_freq_unpack`) and the member's fit (gbdt/gbdt_member.mojo
 # kind 3, `_fit_feature_freq`) call these, in the door's order and words. Every column is an independent
 # unit of the scan (host workers); the refusal is then the first one in the door's order.
 comptime _FF_OK = 0

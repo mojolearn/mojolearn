@@ -50,9 +50,9 @@ from core.member_families import (
     MEMBER_FAMILY_XNEIGHBORS,
 )
 from core.neighbors_member import neighbors_member_v2, NEIGHBORS_BLOCK_POINTS
-from core.xcluster_member import xcluster_member_v2
+from x_cluster.xcluster_member import xcluster_member_v2
 from core.xdecomp_member import xdecomp_member_v2, XDECOMP_KIND_MDS, XDECOMP_MDS_PARAM_COUNT
-from core.spectral_member import spectral_member_v2
+from spectral.spectral_member import spectral_member_v2
 from bindings.prep_select_run import rfe_named_block
 from checks.native_tests.testsuite_cases import require
 
@@ -294,7 +294,7 @@ def test_se_refusals_before_entry() raises:
     try:
         var mask = member_call(_ref(3), MEMBER_OP_CAPABILITIES, call)
         # 999e1d2475 (lane vdf-scope-cluster6): the kind reads a fold's row index (MEMBER_CAN_ROW_INDEX); the host
-        # route has no SPECTRAL_CAP_DEV_STORE (core/spectral_native_device.mojo only), so no MEMBER_CAN_SCOPE
+        # route has no SPECTRAL_CAP_DEV_STORE (spectral/spectral_native_device.mojo only), so no MEMBER_CAN_SCOPE
         require(mask == (MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y | MEMBER_CAN_ROW_INDEX),
                 "SpectralEmbedding kind mask is not FIT | EXPORT | IMPORT | IGNORES_Y | ROW_INDEX")
         call.x = MemberMatrix(Int(x.unsafe_ptr()), 4, 3)

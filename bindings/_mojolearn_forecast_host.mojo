@@ -50,8 +50,8 @@ from checks.kernel_matrix import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from arima.host.arima_oracle import ARIMA_ORACLE_PREDICT_SABOTAGE
 from arima.arima_ops_forecast_host import publish_arima_ops_forecast_host
-from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE
-from core.kpss_host_test_impl import KPSS_DECISION_SABOTAGE
+from holtwinters.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE
+from tsa.kpss_host_test_impl import KPSS_DECISION_SABOTAGE
 from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
 from tsa.tsa_ops_forecast_host import publish_tsa_hw_ops_forecast_host
 

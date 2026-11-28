@@ -64,7 +64,7 @@ from bindings.forest_export_binding_unpack import (
 from bindings.forest_export_binding_pack import (
     forest_export_descriptor_py,
 )
-from core.mojolearn_trees_host_impl import et_forest_lists
+from xtrees.mojolearn_trees_host_impl import et_forest_lists
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -81,8 +81,8 @@ from bindings.forest_host_groves_binding_pack import (
 )
 from bindings.forest_fit_boundary_unpack import forest_fit_args_py
 from core.entry_table import ENTRY_OP_GIL_FREE
-from core.extra_trees_member import extra_trees_member_publish_image
-from core.forest_entry import forest_entry_dispatch, forest_entry_publish, forest_host_entry_releases
+from extratrees.extra_trees_member import extra_trees_member_publish_image
+from ensemble.forest_entry import forest_entry_dispatch, forest_entry_publish, forest_host_entry_releases
 from core.forest_entry_table import FOREST_TABLE_ET
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -90,7 +90,7 @@ from extratrees.checks.pcg_rng import PCG_HOST_SABOTAGE
 from extratrees.estimator import FitResult
 # RUN (lane bm-trees, 2026-11-22): the fit, the export registry, the predict
 # walk and the image's entry operations are typed Mojo in core.
-from core.mojolearn_et_host_run import (
+from extratrees.mojolearn_et_host_run import (
     ET_HOST_EXPORTS,
     EtHostForest,
     et_host_export_into,
@@ -192,7 +192,7 @@ def _kept_forest_out(handle: Int) raises -> PythonObject:
     # lookup (DictKeyError) and the list build (Error) both raise Error to
     # the caller's try/finally, which cannot mix the two error types.
     var registry = ET_HOST_EXPORTS.get_or_create_ptr()
-    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # THE LOCK (ensemble/forest_export_run.mojo): the entry is taken out, read with
     # no lock held and put back on every path.
     var entry = registry[].take(handle)
     var out = PythonObject(None)
@@ -239,7 +239,7 @@ def _et_fit_py[CLASSIFIER: Bool, ROWMAJOR: Bool](
     args.tree_start = tree_start
     # The GIL released around the whole fit (its slot checks included: they
     # read plain words and raise in words) and the retain (its registry has
-    # its own lock word, core/forest_export_run.mojo).
+    # its own lock word, ensemble/forest_export_run.mojo).
     var handle = 0
     with GILReleased(Python()):
         handle = et_host_fit_handle[CLASSIFIER, ROWMAJOR](args)

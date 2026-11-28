@@ -11,7 +11,7 @@ from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.spectral_native_api import SpectralInput, SpectralStateView, SpectralFitOptions, SpectralFitRequest, SpectralEmbeddingOptions, SpectralEmbeddingRequest, SpectralQueryShape, SpectralQueryRequest, SpectralPrepareRequest, SpectralResidentQueryRequest, SpectralNativeKernels, SpectralDriver
-from core.spectral_native_provider import SpectralProviderAPI, spectral_native_v1
+from spectral.spectral_native_provider import SpectralProviderAPI, spectral_native_v1
 
 comptime SPECTRAL_CONTRACT_FIXTURES = 58
 comptime WIDE_HANDLE = 9007199254740993

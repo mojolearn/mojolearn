@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_type, py_contains, py_fields, py_se
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.native_buffer_owner_pack import native_buffer_view, native_storage_allocate
 from bindings.classical_attributes_door import classical_connect_numpy
-from core.training_state_validation import training_byte_shape_validate
+from training.training_state_validation import training_byte_shape_validate
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.byte_lm_metadata_pyapi_run import _config_names
 

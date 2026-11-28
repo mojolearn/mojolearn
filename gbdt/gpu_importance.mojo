@@ -42,7 +42,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.fold_x_device import fold_x_fill
 
-from core.gbdt_importance import (
+from gbdt.gbdt_importance import (
     GbdtImpF32, GbdtImpI32, GbdtImpU32, GbdtImpU8, GbdtImportanceInput, gbdt_importance_input,
     gbdt_imp_bin_body, gbdt_imp_exponent, gbdt_imp_finish_body, gbdt_imp_fold_body, gbdt_imp_row_leaf,
     gbdt_imp_tree_body, gbdt_imp_weight_word,

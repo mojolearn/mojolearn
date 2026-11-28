@@ -12,7 +12,7 @@ from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr
-from core.estimators_host_impl import pca_fit_host_run, pca_whiten_host_run
+from glm.estimators_host_impl import pca_fit_host_run, pca_whiten_host_run
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import process_ctx
 from decomposition.estimator import pca_fit_host, pca_whiten_transform_host, pca_whiten_inverse_transform_host

@@ -19,7 +19,7 @@ from bindings.native_loaded_module_door import native_loaded_module, NativeModul
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from providers.python.byte_lm_metadata_pyapi_door import _Shape, _shape_of, byte_lm_lengths, byte_lm_config_operation
 from bindings.admitted_sequence_door import admit_nd_owned_f32
-from core.training_state_validation import training_byte_shape_validate
+from training.training_state_validation import training_byte_shape_validate
 from core.sha256 import sha256_hex_addr
 from bindings.tsa_hw_native_door import tsa_array
 from core.neural_block_public_impl import neural_copy_row_prefixes

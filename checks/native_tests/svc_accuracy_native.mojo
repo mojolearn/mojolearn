@@ -12,7 +12,7 @@ from core.host_parallel import host_parallelize
 from core.labels_native_api import LabelsNativeDriver, LabelsPrepareRequest, LabelsGatherRequest
 from core.labels_score_keys import score_integer_keys, score_key_join, ScoreKeyIndex, score_key_codes
 from core.gp_native_accuracy import GPCAccuracyProgram
-from core.svc_score_codes import svc_score_codes_valid, svc_used_classes, svc_gather_words
+from svm.svc_score_codes import svc_score_codes_valid, svc_used_classes, svc_gather_words
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.labels_native_host_provider import labels_host_native_v2
 from x_metrics.descriptor_host import metrics_program_host_v1

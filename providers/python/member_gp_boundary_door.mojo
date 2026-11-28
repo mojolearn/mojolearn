@@ -209,7 +209,7 @@ def _gpc_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwne
     # An explicit HostGaussianProcessClassifier (its own host-only word, lane mf-cal3b): the image its own
     # doors bind (`gp_host_class_binding`). On the inference-only image a wheel ships, the member's fit reaches
     # the same unavailable Laplace entry its own fit reaches first (`gpc_fit_all`, else `gpc_fit`: the same
-    # GP_CAP_OVR test, bindings/gp_classifier_native_door.mojo `_gpc_fit` and core/gp_member.mojo `_gpc_fit`)
+    # GP_CAP_OVR test, bindings/gp_classifier_native_door.mojo `_gpc_fit` and gaussian_process/gp_member.mojo `_gpc_fit`)
     # and the native set raises those words; on the reference image it fits as its own fit does.
     var binding = (gp_host_class_binding(model, context) if member_host_only(model)
                    else estimator_binding(model, "_mojolearn_gp", context))

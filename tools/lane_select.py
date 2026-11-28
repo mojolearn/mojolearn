@@ -784,7 +784,7 @@ def _builtin_only_names(names, funcs, module_globals):
     stem indexed `max` (`_python_symbols`), so every lane whose spec or
     helpers call the builtin `max` seeded the MAX adapter and through it the
     neural, forest and mamba trees: neural_inference.py selected 542 of 571
-    lanes and core/forest_inference.mojo 487. A name is dropped only when it is
+    lanes and ensemble/forest_inference.mojo 487. A name is dropped only when it is
     a builtin the harness module does not rebind, no visited function uses it
     as an attribute (`ml.adapters.max` keeps it), and every visited function's
     source was read (an unreadable one keeps every name)."""
@@ -1134,7 +1134,7 @@ def _region_import_edges(rel, wanted, narrow_unused=True):
     every lane that imports linear_model.py for a save-format helper, through
     it `randomforest.py`, whose extender `_expansion_trees.py` then ran whole:
     492 of 517 lanes were declared for the estimators host binding and the
-    narrow answers (glm/host/qn_oracle.mojo, core/forest_host_predict.mojo)
+    narrow answers (glm/host/qn_oracle.mojo, ensemble/forest_host_predict.mojo)
     selected nearly every lane. A def outside the region does not run for the
     lane, so neither does the import inside it."""
     key = (rel, None if wanted is None else frozenset(wanted), narrow_unused)
@@ -1781,7 +1781,7 @@ def _extender_fires(ext, target, asked, wanted):
     `_class_weight_rows` from randomforest.py (e9608596a), so every linear lane
     ran `_expansion_trees.py` (which subclasses RandomForestClassifier) whole
     and was declared for the rf, trees and x_trees bindings, and
-    core/forest_host_predict.mojo selected ols. And `_expansion_trees.py`
+    ensemble/forest_host_predict.mojo selected ols. And `_expansion_trees.py`
     imports RandomForestClassifier by name to subclass it, so its own import
     woke itself. A helper is a helper: the region rule (`_region_nodes`)
     already says a function naming a class does not run its methods.
@@ -2209,7 +2209,7 @@ def _region_closure(seeds, sinks=(), entered=None, follow=frozenset()):
     boosting, linear, model-selection, training and time-series modules
     locally. Read whole, those local imports put `neural_inference.py` in 542
     of 571 lanes and connected the rf, gbdt and trees bindings to every
-    lane, whose native owners then made `core/forest_inference.mojo` select
+    lane, whose native owners then made `ensemble/forest_inference.mojo` select
     487 lanes (54 reviewed). `connect` imports none of them.
 
     `entered`, a dict, receives each sink the walk entered with the names its
@@ -2288,7 +2288,7 @@ def _mojo_module_files(dotted, rel, names=()):
     shipped `.so`. Resolving against the root alone found no such file and
     dropped the import as one of the toolchain's own, so the whole resident
     forest inference tree (`bindings/forest_inference_binding_door.mojo` ->
-    `core/forest_inference_model.mojo` -> `core/forest_inference.mojo`) was in
+    `ensemble/forest_inference_model.mojo` -> `ensemble/forest_inference.mojo`) was in
     no lane's map while being a shipped surface.
 
     This is not a new rule for this tree: `tools/bincache.py:198`, written for
@@ -3318,7 +3318,7 @@ def _published_entries(rel):
     A published entry is an export with no Python name. `_binding_exports`
     reads `def_function` registrations only, so when gradient boosting's
     predict moved from the `gbdt_predict` export to the image's native entry
-    (9c65b76827), `core/gbdt_host_predict.mojo` lost every gbdt lane and kept
+    (9c65b76827), `gbdt/gbdt_host_predict.mojo` lost every gbdt lane and kept
     only the saved-model route (`hf-checkpoint`). Comments and string literals
     are not read. Only definitions of the binding's OWN file count: a
     publisher the binding imports and calls with no local definition
@@ -4610,7 +4610,7 @@ def _binding_names(rel):
     length: on 2026-09-16 that gave every lane `_mojolearn_forest_host` and
     `_mojolearn_byte_lm_host` because some shared door mentions them in prose,
     every lane then hit those bindings' whole-closure fallback, and
-    core/gbdt_host_predict.mojo selected every lane at once. A sentence about a
+    gbdt/gbdt_host_predict.mojo selected every lane at once. A sentence about a
     binding is not a call into it."""
     tree = _parse(rel)
     return _binding_names_in(rel, list(tree.body) if tree is not None else [])
@@ -5385,7 +5385,7 @@ def _derive_lane_sources():
         buffer helpers: `_forest_host.py`, `_byte_lm_impl.py` and
         `_byte_lm_host.py`. So every lane resolved the forest and byte LM
         bindings, every lane's door called none of THEIR exports, every lane
-        took this whole-closure fallback, and `core/gbdt_host_predict.mojo`
+        took this whole-closure fallback, and `gbdt/gbdt_host_predict.mojo`
         and the whole mamba tree selected all 211 lanes. That is the same
         symptom the syntax rule above was written for, arriving by a second
         road: the prose was one source of the edge and the import closure is
@@ -6920,7 +6920,7 @@ def unreachable(path):
             return why
         # IMPORTED BY SOMETHING, EVEN SOMETHING THE MAP DOES NOT HAVE. The
         # corpus is what a lane reaches, and a chain of files the map is
-        # missing votes nowhere: `core/forest_inference_model.mojo` is
+        # missing votes nowhere: `ensemble/forest_inference_model.mojo` is
         # imported by `bindings/forest_inference_binding_door.mojo`, which is
         # itself outside the map, so nothing in the corpus named either and
         # the model file read "nothing reaches it". A Mojo import is a
@@ -7199,10 +7199,10 @@ def _mojo_named(path):
 
     TWO READINGS THAT NAMED THE WRONG FILE (2026-09-22). The basename counts
     only when no other tracked file shares it: `checks/forest_inference_model.mojo`
-    shares its name with `core/forest_inference_model.mojo`, which a binding
+    shares its name with `ensemble/forest_inference_model.mojo`, which a binding
     imports, and was read as reached. And the bare stem counts only as a word
     that is neither the tail of ANOTHER dotted module path
-    (`core.forest_inference_model`) nor an identifier being called or
+    (`ensemble.forest_inference_model`) nor an identifier being called or
     parametrized (`def forest_ordered_resident_policy[`) nor the stem of a
     file with another suffix (the CatBoost reference
     `oblivious_tree_structure_searcher.cpp` a docstring cites); these are

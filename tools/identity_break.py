@@ -4404,7 +4404,7 @@ def _(ml, X, yc, yr, Xh=None):
     REFUSES a `parallel_groves` archive by name (`tools/forest_host_gate.py`,
     "the host engine is sequential"), a sentence that stopped being true on
     lane/forest-groves-cpu-and-speed (2026-09-17) when
-    `core/forest_host_groves.mojo` and `forest_host_groves_prepare/predict/
+    `ensemble/forest_host_groves.mojo` and `forest_host_groves_prepare/predict/
     release` landed. So the groves HOST engine -- the 32 fixed tree groups
     and the 16/8/4/2/1 fold that a groves-saved model infers with on a CPU --
     had no recorded evidence of any kind. This lane runs all three.
@@ -4432,8 +4432,8 @@ def _(ml, X, yc, yr, Xh=None):
 
     SABOTAGE. The forest family's define is `MOJOLEARN_FOREST_HOST_SABOTAGE`,
     NOT the generic `MOJOLEARN_HOST_SABOTAGE`, which reaches nothing in
-    `core/forest_host_predict.mojo`, `core/gbdt_host_predict.mojo` or
-    `core/forest_host_groves.mojo`; a column built with the generic one alone
+    `ensemble/forest_host_predict.mojo`, `gbdt/gbdt_host_predict.mojo` or
+    `ensemble/forest_host_groves.mojo`; a column built with the generic one alone
     reads this cell UNMOVED, which a column total cannot tell from a pass.
     Under the family's define all three engines move (the groves engine
     carries a second arm of its own, `MOJOLEARN_FOREST_GROVES_SABOTAGE`).

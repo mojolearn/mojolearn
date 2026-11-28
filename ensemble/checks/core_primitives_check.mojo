@@ -46,9 +46,9 @@ from std.sys.info import size_of
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
 
-from core.block_reduce import block_reduce_sum, block_flush_count_i32
-from core.block_scan import BlockScanElement, pdf_to_cdf
-from core.scan_by_key import (
+from ensemble.block_reduce import block_reduce_sum, block_flush_count_i32
+from ensemble.block_scan import BlockScanElement, pdf_to_cdf
+from ensemble.scan_by_key import (
     ScanByKeyElement,
     ScanByKeyOps,
     launch_inclusive_scan_by_key,

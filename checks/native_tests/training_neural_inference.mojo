@@ -30,8 +30,8 @@ refusals by name, the reference-path comparison and the binding's export
 list stay in the Python test.
 """
 from std.memory import bitcast
-from core.mojolearn_neural_host_run import mlp_forward_logits_run, transformer_forward_fresh_run
-from core.mojolearn_neural_host_impl import _run_forward
+from training.mojolearn_neural_host_run import mlp_forward_logits_run, transformer_forward_fresh_run
+from training.mojolearn_neural_host_impl import _run_forward
 from transformer.block_options import BlockOptions
 from checks.native_tests.training_check_common import lcg_fill, same_words
 from std.testing import TestSuite

@@ -33,7 +33,7 @@ from bindings.svc_common_pack import svc_cached_class_table
 from bindings.labels_descriptor_boundary_door import labels_prepare_targets, labels_gather
 from bindings.labels_score_boundary_door import ScoreKeyOwner, score_keys_unpack, score_keys_union, score_keys_index
 from core.labels_score_keys import ScoreKeyIndex, score_integer_keys, score_key_codes
-from core.svc_score_codes import svc_score_codes_valid, svc_used_classes, svc_gather_words, SvcUsedClasses
+from svm.svc_score_codes import svc_score_codes_valid, svc_used_classes, svc_gather_words, SvcUsedClasses
 from core.gp_native_accuracy import GPCAccuracyProgram
 from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
 from bindings.arena_prog_run import _switch

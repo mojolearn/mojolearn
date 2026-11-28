@@ -99,7 +99,7 @@ class HostGBDT:
     """
 
     estimator = 'GradientBoosting'
-    #: A predict-only member of a meta-estimator or an explainer (core/gbdt_member.mojo: family 16, kind 5, the
+    #: A predict-only member of a meta-estimator or an explainer (gbdt/gbdt_member.mojo: family 16, kind 5, the
     #: saved model imported from its own fields).
     _mojolearn_member = (16, 5)
     _mojolearn_member_predict_only = True

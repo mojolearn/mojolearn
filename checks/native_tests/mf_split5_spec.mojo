@@ -67,7 +67,7 @@ from core.ensemble_member import (
     ensemble_member_v2, meta_plan_mint_with, meta_plan_release, meta_plan_split, META_STACK_CLASSIFIER,
     META_CALIBRATED,
 )
-from core.logistic_member import logistic_member_v2
+from glm.logistic_member import logistic_member_v2
 from core.logistic_native_api import QnNativeDriver
 from core.logistic_route import LogisticRoute, logistic_route_pack
 from core.member_abi import (

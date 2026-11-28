@@ -23,12 +23,12 @@ from bindings.forest_config_run import (
     FOREST_FEATURES_FRACTION,
 )
 from xtrees.trees_forest_run import ForestFit
-from core.mojolearn_rf_host_run import _rf_fit_forest
-from core.forest_host_strict_run import (
+from ensemble.mojolearn_rf_host_run import _rf_fit_forest
+from ensemble.forest_host_strict_run import (
     forest_strict_prepare_host_native, forest_strict_predict_host_check, forest_strict_predict_host_walk,
     forest_strict_release_host_native,
 )
-from core.forest_host_groves_run import (
+from ensemble.forest_host_groves_run import (
     forest_prepare_host_native, forest_predict_resident_host_native, forest_release_host_native,
 )
 from xtrees.ops import tree_shape

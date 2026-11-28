@@ -19,7 +19,7 @@
   {
    "define": "MOJOLEARN_XPREP_NO_SLOT_HOP",
    "control": "xprep_no_slot_hop",
-   "reason": "DELETED 2026-10-09 (lane postmerge-act-2): post-merge A/B on main (one run per arm) found G3 (large direct inputs as host spans straight into the arena) slower on the average: default -> on ms gaussian-nb istella NV 92.1 -> 114.7 (1.25x) / AMD 46.4 -> 46.3 (1.00x), taxi NV 20.0 -> 20.4 (1.02x) / AMD 14.1 -> 14.5 (1.03x) (nv n0668 -> n0630, amd a1066 -> a1090); accuracy SAME, same digests. x_prep_run_ranges_host, run_program_device_ranges_host, core/arena_io.mojo upload_ranges_host, DeviceStore.stage_upload and the _Prog.run glue are deleted; the define is refused in core/six_lane_experiment_guards.mojo; code recoverable at main 5c137b55e."
+   "reason": "DELETED 2026-10-09 (lane postmerge-act-2): post-merge A/B on main (one run per arm) found G3 (large direct inputs as host spans straight into the arena) slower on the average: default -> on ms gaussian-nb istella NV 92.1 -> 114.7 (1.25x) / AMD 46.4 -> 46.3 (1.00x), taxi NV 20.0 -> 20.4 (1.02x) / AMD 14.1 -> 14.5 (1.03x) (nv n0668 -> n0630, amd a1066 -> a1090); accuracy SAME, same digests. x_prep_run_ranges_host, run_program_device_ranges_host, x_prep/arena_io.mojo upload_ranges_host, DeviceStore.stage_upload and the _Prog.run glue are deleted; the define is refused in core/six_lane_experiment_guards.mojo; code recoverable at main 5c137b55e."
   },
   {
    "define": "MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE",

@@ -55,7 +55,7 @@ from arima.host.arima_oracle import ARIMA_ORACLE_HOST_SABOTAGE
 # published table (arima/arima_ops_host.mojo); this root registers only the
 # read-backs the host loader asks for.
 from arima.arima_ops_host import publish_arima_ops_host, ARIMA_OPS_HOST_API
-from core.forecast_member import forecast_member_publish
+from tsa.forecast_member import forecast_member_publish
 
 
 def arima_host_numeric_mode_binding() raises -> PythonObject:

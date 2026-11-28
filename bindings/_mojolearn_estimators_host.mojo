@@ -60,20 +60,20 @@ from core.logistic_native_api import (
     QN_NATIVE_SIGMOID, QN_NATIVE_SOFTMAX,
 )
 from glm.host.logistic_native_host import QnHostKernels, LOGISTIC_HOST_API
-from core.mojolearn_estimators_host_run import (
+from glm.mojolearn_estimators_host_run import (
     _pp_load, _pp_out, tsvd_transform_host_words, inverse_transform_host_words,
     _publish_linear_entry_table, _publish_estimators_qn_table,
 )
 from glm.host.linear_svc_native_host import LINEAR_SVC_HOST_API
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
-from core.dbscan_native_host import DBSCAN_HOST_API, DBSCANHostKernels
-from core.density_member import density_member_publish
-from core.hierarchy_member import hierarchy_member_publish
+from dbscan.dbscan_native_host import DBSCAN_HOST_API, DBSCANHostKernels
+from dbscan.density_member import density_member_publish
+from hierarchy.hierarchy_member import hierarchy_member_publish
 from core.dbscan_native_api import DBSCANFitRequest
-from core.kde_native_host import KDE_HOST_API, KDEHostKernels
+from kde.kde_native_host import KDE_HOST_API, KDEHostKernels
 from core.kde_native_api import KDEQueryRequest
-from core.pca_native_host import PCA_HOST_API
-from core.tsvd_native_host import TSVD_HOST_API
+from decomposition.pca_native_host import PCA_HOST_API
+from decomposition.tsvd_native_host import TSVD_HOST_API
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -109,7 +109,7 @@ from core.classical_host_predict import (
     host_pca_whiten_inverse_transform_into,
     host_pca_whiten_transform_into,
 )
-from core.labeled_reference_host_predict import (
+from dbscan.labeled_reference_host_predict import (
     LABELED_PREDICT_HOST_SABOTAGE,
     host_labeled_reference_predict,
     labeled_reference_threshold,
@@ -152,7 +152,7 @@ from preprocessing.host.scaler_oracle import (
     host_minmax_transform,
     host_standard_transform,
 )
-from core.estimators_host_impl import (
+from glm.estimators_host_impl import (
     _positive,
     cd_predict_host_run,
     host_pca_validate_first,
@@ -1445,9 +1445,9 @@ def build__mojolearn_estimators_host() -> PythonObject:
         var published_module = module.finalize()
         _publish_linear_entry_table()
         _publish_estimators_qn_table()
-        # DBSCAN's member entry (core/density_member.mojo) beside its host kernel table.
+        # DBSCAN's member entry (dbscan/density_member.mojo) beside its host kernel table.
         density_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(DBSCAN_HOST_API.get_or_create_ptr()[].entries.unsafe_ptr()))
-        # AgglomerativeClustering's member entry (core/hierarchy_member.mojo): its predict runs on
+        # AgglomerativeClustering's member entry (hierarchy/hierarchy_member.mojo): its predict runs on
         # this image's labeled-reference queries.
         hierarchy_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(DBSCAN_HOST_API.get_or_create_ptr()[].entries.unsafe_ptr()))
         _publish_decomp_pca_ops(published_module)

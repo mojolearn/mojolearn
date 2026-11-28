@@ -1,7 +1,7 @@
-diff --git a/core/resample_impl.mojo b/core/resample_impl.mojo
+diff --git a/resample/resample_impl.mojo b/resample/resample_impl.mojo
 index 275ba78981..e12f114c11 100644
---- a/core/resample_impl.mojo
-+++ b/core/resample_impl.mojo
+--- a/resample/resample_impl.mojo
++++ b/resample/resample_impl.mojo
 @@ -9,3 +9,6 @@ def resample_store_indices(op: MutPointer[Int32, MutUntrackedOrigin], idx: List[
      # int32 buffer (it was a serial one-element-per-iteration host loop)
      if count > 0:

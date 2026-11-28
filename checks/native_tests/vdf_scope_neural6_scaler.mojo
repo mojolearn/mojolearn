@@ -38,8 +38,8 @@ from core.member_abi import (
 )
 from core.scaler_member import scaler_member_v2, SCALER_ROUTE_DIRECT, SCALER_ROUTE_STORE
 from core.scaler_native_api import scaler_native_v1, SCALER_OP_COUNT
-from core.scaler_native_device import ScalerDeviceKernels
-from core.scaler_native_host import ScalerHostKernels
+from preprocessing.scaler_native_device import ScalerDeviceKernels
+from preprocessing.scaler_native_host import ScalerHostKernels
 from core.pca_native_api import pca_vendor_code
 from core.fold_x_device import FOLD_X_STORE
 from x_prep.transport_abi import XP_OP_COUNT

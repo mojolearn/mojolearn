@@ -1151,7 +1151,7 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
         eval_constant = Bool(py=lo == hi)
     # The settings read once into the typed config (bindings/gbdt_config_run.mojo),
     # the request slots resolved from the rows there (RUN): the same words the
-    # Gbdt member builds (core/gbdt_member.mojo).
+    # Gbdt member builds (gbdt/gbdt_member.mojo).
     var config = gbdt_config(fields, model, False, context)
     var words = gbdt_fit_words(config, n_rows, n_features, n_flags, n_weights, n_eval_rows, eval_constant)
     py_setitem(fields, nk[].k_learning_rate_, PythonObject(words.rate))

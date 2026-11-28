@@ -30,7 +30,7 @@ from std.math import ceildiv
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_div
-from core.forest_inference import finite_key, forest_add
+from ensemble.forest_inference import finite_key, forest_add
 from ensemble.decisiontree.decisiontree import TreeMetaDataNode
 from xtrees.ops_device_elem import mul_f32_kernel, scale_kernel, scale_to_f32_kernel
 

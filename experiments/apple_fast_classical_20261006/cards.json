@@ -9352,7 +9352,7 @@
      "implementation_manifest": "lanes/trees.json",
      "actual_implementation": "RF_INPUT specializations use 64 instead of 128 threads per traversal group. Ordered and row-owned groves use matching ceil-divided grids; lane-owned groves use two rather than four rows, with matching shared row staging and partial-buffer layouts. Logical 32-tree grove reductions are retained.",
      "implementation_paths": [
-      "core/forest_inference.mojo"
+      "ensemble/forest_inference.mojo"
      ]
     },
     "experiments/apple_fast_classical_20261006/full_workloads.json": {
@@ -9370,7 +9370,7 @@
      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
      "route_scope_source": [
       "Legacy/host inference engines and OOB training kernels are unchanged.",
-      "No source change was needed in core/forest_inference_model.mojo; its existing dispatch consumes launch_forest_inference.",
+      "No source change was needed in ensemble/forest_inference_model.mojo; its existing dispatch consumes launch_forest_inference.",
       "Shared-row/packed-node/vector flags must match across arms; their existing eligibility rules are unchanged."
      ],
      "quality_scope": [
@@ -9408,7 +9408,7 @@
      "baseline_env": {},
      "candidate_env": {},
      "implementation_paths": [
-      "core/forest_inference.mojo"
+      "ensemble/forest_inference.mojo"
      ],
      "mechanism": "RF_INPUT specializations use 64 instead of 128 threads per traversal group. Ordered and row-owned groves use matching ceil-divided grids; lane-owned groves use two rather than four rows, with matching shared row staging and partial-buffer layouts. Logical 32-tree grove reductions are retained.",
      "affected_callers": [
@@ -9422,7 +9422,7 @@
      ],
      "limitations": [
       "Legacy/host inference engines and OOB training kernels are unchanged.",
-      "No source change was needed in core/forest_inference_model.mojo; its existing dispatch consumes launch_forest_inference.",
+      "No source change was needed in ensemble/forest_inference_model.mojo; its existing dispatch consumes launch_forest_inference.",
       "Shared-row/packed-node/vector flags must match across arms; their existing eligibility rules are unchanged."
      ],
      "quality_scope": [

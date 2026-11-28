@@ -52,7 +52,7 @@ from providers.python.neural_descriptor_pyapi_door import (
 from x_decomp.descriptor_schema import xd_vendor_code
 
 comptime _WHERE = "KernelRidge"
-# core/kernel_ridge_member.mojo's block names (docstring order).
+# kernel_methods/kernel_ridge_member.mojo's block names (docstring order).
 comptime _B_X_FIT = MEMBER_BLOCK_FAMILY
 comptime _B_DUAL = MEMBER_BLOCK_FAMILY + 1
 

@@ -25,7 +25,7 @@ normal draw that check does not cover.
 from std.testing import TestSuite
 from std.memory import bitcast
 from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD, require
-from core.mojolearn_training_host_impl import neural_rng_host_into
+from training.mojolearn_training_host_impl import neural_rng_host_into
 from training.native_primitive_dispatch import native_primitive_operation
 
 comptime KIND_UNIFORM = 0

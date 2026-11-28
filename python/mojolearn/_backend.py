@@ -1735,20 +1735,20 @@ def host_families_built():
 #:     fit_extra_trees_regressor_host_exact (the device trainer restated on
 #:     the host, exact keys and quantized leaves), forest_export,
 #:     forest_export_legacy, forest_export_release and et_predict over
-#:     core/forest_host_predict.mojo; since 2026-09-15 the resident
+#:     ensemble/forest_host_predict.mojo; since 2026-09-15 the resident
 #:     forest_prepare_gpu, forest_predict_resident_reuse_gpu and
 #:     forest_release_gpu (inference_engine='parallel_groves') over
-#:     core/forest_host_groves.mojo, with et_predict_gpu_parallel and the
+#:     ensemble/forest_host_groves.mojo, with et_predict_gpu_parallel and the
 #:     other resident arms absent.
 #:   _mojolearn_rf -> _mojolearn_rf_host (rf-clf, rf-reg; workstream E
 #:     batch 3, 2026-09-14): the eight rf_*_fit entries over
 #:     ensemble/host/rf_oracle.mojo::rf_host_fit (the device trainer
 #:     restated on the host), forest_export, forest_export_legacy,
 #:     forest_export_release, and rf_predict_proba and rf_predict_reg over
-#:     core/forest_host_predict.mojo; since 2026-09-15 the POISSON, GAMMA and
+#:     ensemble/forest_host_predict.mojo; since 2026-09-15 the POISSON, GAMMA and
 #:     INVERSE_GAUSSIAN criteria, rf_classifier_fit_weighted (the weighted
 #:     bootstrap; weights without a bootstrap refuse by name) and the
-#:     resident parallel_groves entries over core/forest_host_groves.mojo;
+#:     resident parallel_groves entries over ensemble/forest_host_groves.mojo;
 #:     the shard fits and the non-resident GPU engines refuse by name. This is its own family, not the forest host binding
 #:     named above, because it exports the GPU binding's names.
 #:   _mojolearn_gp -> _mojolearn_gp_host (gp, gp-matern12, gp-matern32,
@@ -1769,7 +1769,7 @@ def host_families_built():
 #:     with NewtonL2); every other option value refuses by name inside
 #:     gbdt_fit,
 #:     gbdt_predict and gbdt_model_dim over the model text and
-#:     core/gbdt_host_predict.mojo, and gbdt_sigmoid_pair; gbdt_fit_ordered_rmse
+#:     gbdt/gbdt_host_predict.mojo, and gbdt_sigmoid_pair; gbdt_fit_ordered_rmse
 #:     over gbdt/host/gbdt_oracle_ordered.mojo and
 #:     gbdt_fit_two_level_feature_freq over
 #:     gbdt/host/gbdt_oracle_feature_freq.mojo (gbdt-ordered-rmse,

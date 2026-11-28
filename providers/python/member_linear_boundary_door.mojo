@@ -104,7 +104,7 @@ def linear_member_pack(model: PythonObject, fields: PythonObject, context: Pytho
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
     var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
     if targets > 1:
-        # the targets' intercepts, then the y mean (core/linear_member.mojo)
+        # the targets' intercepts, then the y mean (glm/linear_member.mojo)
         var intercepts = classical_array(targets, 0, context, True)
         var icpt = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(intercepts)))
         for t in range(targets):  # small-loop(the targets' intercepts)

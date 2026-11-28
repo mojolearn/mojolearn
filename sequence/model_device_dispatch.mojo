@@ -21,7 +21,7 @@ from sequence.seq_member_store import seq_member_store_ptr
 from sequence.model_outputs_device import model_output_device
 from autograd.program_device_execution import program_device_request
 from sequence.exec_device import DeviceExec
-from core.label_cast_device import device_unique_inverse_cast
+from sequence.label_cast_device import device_unique_inverse_cast
 from core.shared_slot import SharedSlot
 
 

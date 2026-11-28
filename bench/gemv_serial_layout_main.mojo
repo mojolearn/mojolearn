@@ -22,7 +22,7 @@ from std.time import perf_counter_ns
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.gemm import PINNED_GEMM_TPB, pinned_gemv_n_kernel
-from core.gemv_serial_layout_candidate import (
+from bench.gemv_serial_layout_candidate import (
     serial_layout_gemv_into,
     serial_layout_gemv_prepared,
 )

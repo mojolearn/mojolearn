@@ -126,7 +126,7 @@ def test_the_linear_lanes_reach_their_plans():
     assert family == "glm/impl/qn/multi_gpu.mojo" and LS.RECIPES[recipe] is LS._logistic
     assert fixture == "blobs" and features >= max(LS.COUNTS)  # active = min(count, features); 4 blob labels
     _n, family, recipe, _f, n_rows, features, _s = rows["ridge-gram"]
-    assert family == "core/blocked_moments_multi_gpu.mojo" and LS.RECIPES[recipe] is LS._ridge
+    assert family == "glm/blocked_moments_multi_gpu.mojo" and LS.RECIPES[recipe] is LS._ridge
     assert n_rows >= max(LS.COUNTS) * 128 + 1 and features >= 2  # three leaves of 128 rows; Ridge at d = 1 refuses
     _n, family, recipe, _f, n_rows, _features, _s = rows["ols-tsqr"]
     assert family == "x_decomp/tsqr_multi_gpu.mojo" and LS.RECIPES[recipe] is LS._ols

@@ -165,7 +165,7 @@
       "source_anchors": [
         "core/scratch_pool.mojo",
         "core/device_pool.mojo",
-        "core/device_liveness.mojo"
+        "gbdt/device_liveness.mojo"
       ],
       "arm_a": "Reuse explicitly owned scratch sized from live bytes for sequential stages; separate retained fit scratch from optional repeated-call caches.",
       "arm_b": "Allocate and release each temporary at each phase/call.",
@@ -195,7 +195,7 @@
       ],
       "source_anchors": [
         "core/row_norms.mojo",
-        "core/cosine_rows.mojo",
+        "dbscan/cosine_rows.mojo",
         "core/expand_distances.mojo"
       ],
       "arm_a": "Assign multiple independent rows to one block or tile, reusing dispatch and coalesced loads with each row's logical lanes unchanged.",
@@ -1481,9 +1481,9 @@
         "IsolationForest"
       ],
       "source_anchors": [
-        "core/forest_inference.mojo",
-        "core/forest_inference_model.mojo",
-        "core/gbdt_host_predict.mojo"
+        "ensemble/forest_inference.mojo",
+        "ensemble/forest_inference_model.mojo",
+        "gbdt/gbdt_host_predict.mojo"
       ],
       "arm_a": "Compare structure-of-arrays node storage and bounded row/tree tiles, retaining a fixed logical per-row tree accumulation order.",
       "arm_b": "Incumbent model layout and per-tree traversal schedule.",

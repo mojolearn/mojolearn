@@ -7,7 +7,7 @@ from gbdt.options.child_hessian import child_hessian_threshold, check_child_hess
 from std.math import fma
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_zero import enqueue_fill
-from core.device_units import device_multiprocessor_count
+from gbdt.device_units import device_multiprocessor_count
 from std.math import isfinite
 from std.sys.compile import is_defined
 # TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, IDENTICAL sort-free CTR leaf sums, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 8cc12e71fe.
@@ -27,7 +27,7 @@ from gbdt.gpu_util.kernel.transform import (
     launch_gather_planes_with_mask_f32,
     launch_gather_with_mask_f32,
 )
-from core.device_liveness import (
+from gbdt.device_liveness import (
     DEAD_DEVICE_POISON,
     SAB_2002_DEAD_DEVICE,
 )
@@ -5909,7 +5909,7 @@ def fit_with_test(
     # exact -0.0) passes: only non-delivery fails, which cannot happen
     # on a live in-order queue with the synchronize below.
     # `-D MOJOLEARN_2002_SABOTAGE=1` (REQUIRED-RED, see
-    # `core/device_liveness.mojo`) compiles the copy out to fake
+    # `gbdt/device_liveness.mojo`) compiles the copy out to fake
     # exactly that signature.
     # =========================================================
     h_fv.unsafe_ptr().bitcast[UInt32]().unsafe_store(

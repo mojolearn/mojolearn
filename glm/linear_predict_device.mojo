@@ -7,7 +7,7 @@ from core.linear_boundary_types import LINEAR_PREDICT_ABI, LinearPredictRequest,
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.neural_context import process_ctx
-from core.p3_linear_impl import ols_predict_device, ols_predict_device_targets
+from glm.p3_linear_impl import ols_predict_device, ols_predict_device_targets
 from core.shared_slot import SharedSlot
 
 comptime _CONTEXT = "MojolearnEstimatorsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEstimatorsContextFastV3"

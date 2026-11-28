@@ -106,7 +106,7 @@ from tsa.impl.timeSeries.stationarity import (
 from tsa.impl.auto_arima import select_d
 from tsa.impl.stationarity import kpss_test
 from tsa.estimator import kpss_test_host
-from core.kpss_host_test_impl import _kpss_flags_host
+from tsa.kpss_host_test_impl import _kpss_flags_host
 
 
 from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL

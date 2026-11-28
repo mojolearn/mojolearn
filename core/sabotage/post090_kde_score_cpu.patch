@@ -1,6 +1,6 @@
-diff --git a/core/estimators_host_impl.mojo b/core/estimators_host_impl.mojo
---- a/core/estimators_host_impl.mojo
-+++ b/core/estimators_host_impl.mojo
+diff --git a/glm/estimators_host_impl.mojo b/glm/estimators_host_impl.mojo
+--- a/glm/estimators_host_impl.mojo
++++ b/glm/estimators_host_impl.mojo
 @@ -104,9 +104,9 @@
      if want_total:
          var scores = List[Float32](capacity=n_query)

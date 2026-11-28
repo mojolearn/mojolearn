@@ -30,7 +30,7 @@ def cell(name):
 
 # linear_model._accuracy_host, _labels_1d, _column_means, _vector_mean and _round_f32 cells removed 2026-11-14
 # (lane py-classical-linalg): the Python helpers had no product caller and are deleted; their native owners are
-# bindings/svc_common_door.mojo, bindings/logistic_native_door.mojo and core/p3_linear_impl.mojo.
+# bindings/svc_common_door.mojo, bindings/logistic_native_door.mojo and glm/p3_linear_impl.mojo.
 
 
 @cell("linear_model: binary predict codes + decode_labels (LogisticRegression.predict)")

@@ -26,7 +26,7 @@ from training.byte_lm_host_execution import (
     byte_host_logits_native, byte_host_next_native, byte_host_train_native,
     byte_host_loss_native,
 )
-from core.training_state_validation import training_admit_moments_and_flags
+from training.training_state_validation import training_admit_moments_and_flags
 from core.host_helpers_impl import argmax_rows_f32
 
 

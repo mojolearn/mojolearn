@@ -54,7 +54,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call
 from bindings.py_balanced import py_type as _balanced_type
-from core.mojolearn_solver_host_impl import linkage_fit_host_into, cd_predict_host_into, cd_fit_host_into
+from solver.mojolearn_solver_host_impl import linkage_fit_host_into, cd_predict_host_into, cd_fit_host_into
 from core.solver_entry_table import SolverEntryKey, solver_ops_publish
 from core.cd_member import cd_member_publish
 from solver.ops_entry_host import SOLVER_OPS_HOST_API, solver_ops_host_v1

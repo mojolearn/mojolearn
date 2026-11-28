@@ -1,7 +1,7 @@
-diff --git a/core/spectral_native_execution.mojo b/core/spectral_native_execution.mojo
+diff --git a/spectral/spectral_native_execution.mojo b/spectral/spectral_native_execution.mojo
 index ce820c0b99..52106a9b33 100644
---- a/core/spectral_native_execution.mojo
-+++ b/core/spectral_native_execution.mojo
+--- a/spectral/spectral_native_execution.mojo
++++ b/spectral/spectral_native_execution.mojo
 @@ -6,6 +6,8 @@ output room guards and copies are the existing binding work; this module adds
  no solver, numerical data loop, transfer or algorithm selection threshold.
  """

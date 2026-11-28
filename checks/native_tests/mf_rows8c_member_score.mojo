@@ -30,7 +30,7 @@ from core.member_abi import (
     member_call, member_call_of, member_new, member_free, member_kind_capabilities,
 )
 from core.member_families import MEMBER_FAMILY_MIXTURE
-from core.mixture_member import mixture_member_v2
+from mixture.mixture_member import mixture_member_v2
 from core.mixture_native_api import GmmDriver, GmmScoreRequest, MIXTURE_NATIVE_SCORE_BIC_AIC
 from mixture.host.gmm_native_host import gmm_native_host_v1
 

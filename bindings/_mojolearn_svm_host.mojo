@@ -55,8 +55,8 @@ from bindings.py_balanced import py_call as _balanced_call, py_type as _svm_host
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from svm.host.native_descriptor_dispatch import SVC_HOST_NATIVE_API
-from core.kernel_svm_member import kernel_svm_member_publish
-from core.isolation_forest_member import isolation_forest_member_publish
+from svm.kernel_svm_member import kernel_svm_member_publish
+from isolation_forest.isolation_forest_member import isolation_forest_member_publish
 from core.native_descriptor_abi import NativeDescriptorError
 from core.forest_fit_request import fit_loop_put
 from core.iforest_entry import (
@@ -759,7 +759,7 @@ def build__mojolearn_svm_host() -> PythonObject:
         kernel_svm_member_publish(GLOBAL_NUMERIC_MODE, 0, Int(SVC_HOST_NATIVE_API.get_or_create_ptr()))
         # The IsolationForest entry (core/iforest_entry.mojo), CPU vendor 0.
         if_entry_publish["MojolearnSvmHostIForestEntryOwnerV1"](Int(GLOBAL_NUMERIC_MODE), 0, svm_host_iforest_entry_v1)
-        # Its member entry (core/isolation_forest_member.mojo), over that entry.
+        # Its member entry (isolation_forest/isolation_forest_member.mojo), over that entry.
         isolation_forest_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(SVC_HOST_NATIVE_API.get_or_create_ptr()))
         return module.finalize()
     except error:

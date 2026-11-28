@@ -73433,7 +73433,7 @@
       ],
       "gaps": [
         "Legacy/host inference engines and OOB training kernels are unchanged.",
-        "No source change was needed in core/forest_inference_model.mojo; its existing dispatch consumes launch_forest_inference.",
+        "No source change was needed in ensemble/forest_inference_model.mojo; its existing dispatch consumes launch_forest_inference.",
         "Shared-row/packed-node/vector flags must match across arms; their existing eligibility rules are unchanged."
       ],
       "id": "AF.C.AFCL-T08",
@@ -465015,7 +465015,7 @@
       "binding": "bindings/_mojolearn_gbdt.mojo",
       "changed_source_files": [
         "checks/numerics.mojo",
-        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/apple_fast_tree_experiments.mojo",
         "core/six_lane_experiment_guards.mojo",
         "gbdt/methods/dynamic_boosting.mojo",
         "gbdt/methods/leaves_estimation/tree_t26_device.mojo",
@@ -465769,8 +465769,8 @@
       "binding": "bindings/_mojolearn_rf.mojo",
       "changed_source_files": [
         "checks/numerics.mojo",
-        "core/apple_fast_tree_experiments.mojo",
-        "core/forest_inference_model.mojo",
+        "xtrees/apple_fast_tree_experiments.mojo",
+        "ensemble/forest_inference_model.mojo",
         "core/six_lane_experiment_guards.mojo",
         "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
         "ensemble/importance_device.mojo",
@@ -466737,7 +466737,7 @@
       "binding": "bindings/_mojolearn_gbdt.mojo",
       "changed_source_files": [
         "checks/numerics.mojo",
-        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/apple_fast_tree_experiments.mojo",
         "core/six_lane_experiment_guards.mojo"
       ],
       "compiler": "Mojo 1.0.0 (ed45d567)",
@@ -467486,7 +467486,7 @@
       "binding": "bindings/_mojolearn_rf.mojo",
       "changed_source_files": [
         "checks/numerics.mojo",
-        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/apple_fast_tree_experiments.mojo",
         "core/six_lane_experiment_guards.mojo",
         "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
         "ensemble/importance_device.mojo",
@@ -468107,7 +468107,7 @@
       "binding": "bindings/_mojolearn_rf.mojo",
       "changed_source_files": [
         "checks/numerics.mojo",
-        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/apple_fast_tree_experiments.mojo",
         "core/six_lane_experiment_guards.mojo",
         "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
         "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
@@ -468781,7 +468781,7 @@
       "binding": "bindings/_mojolearn_gbdt.mojo",
       "changed_source_files": [
         "checks/numerics.mojo",
-        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/apple_fast_tree_experiments.mojo",
         "core/six_lane_experiment_guards.mojo"
       ],
       "compiler": "Mojo 1.0.0 (ed45d567)",
@@ -469005,7 +469005,7 @@
       "binding": "bindings/_mojolearn_gbdt.mojo",
       "changed_source_files": [
         "checks/numerics.mojo",
-        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/apple_fast_tree_experiments.mojo",
         "core/six_lane_experiment_guards.mojo"
       ],
       "compiler": "Mojo 1.0.0 (ed45d567)",
@@ -469658,7 +469658,7 @@
       "binding": "bindings/_mojolearn_rf.mojo",
       "changed_source_files": [
         "checks/numerics.mojo",
-        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/apple_fast_tree_experiments.mojo",
         "core/six_lane_experiment_guards.mojo",
         "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
         "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
@@ -470305,7 +470305,7 @@
       "binding": "bindings/_mojolearn_rf.mojo",
       "changed_source_files": [
         "checks/numerics.mojo",
-        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/apple_fast_tree_experiments.mojo",
         "core/six_lane_experiment_guards.mojo",
         "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
         "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
@@ -483723,7 +483723,7 @@
       "artifact_sha256": null,
       "binding": "bindings/_mojolearn_x_trees.mojo",
       "changed_source_files": [
-        "core/forest_auxiliary_device.mojo"
+        "ensemble/forest_auxiliary_device.mojo"
       ],
       "compiler": "496 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1339c0000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
       "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
@@ -516473,7 +516473,7 @@
       "artifact_sha256": null,
       "binding": "bindings/_mojolearn_x_trees.mojo",
       "changed_source_files": [
-        "core/forest_auxiliary_device.mojo"
+        "ensemble/forest_auxiliary_device.mojo"
       ],
       "compiler": "497 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51de80000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
       "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",

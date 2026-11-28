@@ -35,7 +35,7 @@ from core.manifold_member import manifold_member_v2, MANIFOLD_KIND_UMAP, MANIFOL
 from core.neighbors_entry_table_umap import UMAP_OPERATION_COUNT
 from umap.ops_entry_host import umap_ops_host_v1
 from umap.ops_entry_device import umap_ops_device_v1
-from core.metrics_store import metrics_store_v1, METRICS_STORE_API
+from metrics.metrics_store import metrics_store_v1, METRICS_STORE_API
 from core.metrics_store_ref import metrics_store_publish, metrics_store_find
 from bindings.arena_cache_run import arena_scope_new, arena_scope_close, arena_cache_live
 

@@ -85,8 +85,8 @@ from kernel_methods.krr_resident import (
 from providers.python.kernel_methods_rbf_resident_pyapi_pack import rbf_sampler_fit_transform_binding, rbf_staged_binding
 
 from kernel_methods.native_descriptor_dispatch import KERNEL_METHOD_NATIVE_API
-from core.kernel_ridge_member import kernel_ridge_member_publish
-from core.kernel_approx_member import kernel_approx_member_publish
+from kernel_methods.kernel_ridge_member import kernel_ridge_member_publish
+from kernel_methods.kernel_approx_member import kernel_approx_member_publish
 from kernel_methods.kernel_methods_binding_run import (
     kernel_ridge_fit_ptr_run,
     nystroem_transform_model_run,

@@ -79,7 +79,7 @@ def test_scoring_none_classifier_without_member_score_is_accuracy(make, grid):
 
 
 def test_scoring_none_gaussian_mixture_is_its_own_score():
-    # Fail-proof: drop MEMBER_CAN_SCORE from core/mixture_member.mojo's capability answer: the search refuses
+    # Fail-proof: drop MEMBER_CAN_SCORE from mixture/mixture_member.mojo's capability answer: the search refuses
     # (NotImplementedError naming GaussianMixture) instead of scoring.
     X, _ = _regression(n=60)
     folds = [(np.arange(0, 40), np.arange(40, 60))]

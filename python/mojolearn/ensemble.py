@@ -880,7 +880,7 @@ class GradientBoosting(_NumericModeMixin):
     >>> proba = model.predict_proba(X)
     """
 
-    #: A member of a meta-estimator (core/gbdt_member.mojo: family 16, kind 1).
+    #: A member of a meta-estimator (gbdt/gbdt_member.mojo: family 16, kind 1).
     _mojolearn_member = (16, 1)
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_gbdt"
@@ -1366,7 +1366,7 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
         requires a GPU installation. Other values raise ``ValueError``.
     """
 
-    #: A member of a meta-estimator (core/gbdt_member.mojo: family 16, kind 3, its own fit).
+    #: A member of a meta-estimator (gbdt/gbdt_member.mojo: family 16, kind 3, its own fit).
     _mojolearn_member = (16, 3)
 
     def __init__(
@@ -1426,7 +1426,7 @@ class OrderedRMSE(GradientBoosting):
         requires a GPU installation. Other values raise ``ValueError``.
     """
 
-    #: A member of a meta-estimator (core/gbdt_member.mojo: family 16, kind 4, its own fit over the
+    #: A member of a meta-estimator (gbdt/gbdt_member.mojo: family 16, kind 4, its own fit over the
     #: caller's `permutation`).
     _mojolearn_member = (16, 4)
 

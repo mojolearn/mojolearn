@@ -195,7 +195,7 @@ class DecisionTreeClassifier(RandomForestClassifier):
     >>> proba = model.predict_proba(X)
     """
     # The member ABI mark (core/member_abi.mojo, family 13 MEMBER_FAMILY_TREE): fit and predict run native
-    # inside a meta-estimator (core/tree_member.mojo).
+    # inside a meta-estimator (xtrees/tree_member.mojo).
     _mojolearn_member = (13, 0)
     save = _TreeSave.save
 
@@ -344,7 +344,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
     >>> pred = model.predict(X)
     """
     # The member ABI mark (core/member_abi.mojo, family 13 MEMBER_FAMILY_TREE): fit and predict run native
-    # inside a meta-estimator (core/tree_member.mojo).
+    # inside a meta-estimator (xtrees/tree_member.mojo).
     _mojolearn_member = (13, 1)
     save = _TreeSave.save
 
@@ -1232,7 +1232,7 @@ class DARTRegressor(_DARTBase):
     _mojolearn_native_public = True
     _KIND = 0
     # The member ABI mark (core/member_abi.mojo, family 17 MEMBER_FAMILY_DART): fit and predict run native
-    # inside a meta-estimator (core/dart_member.mojo).
+    # inside a meta-estimator (gbdt/dart_member.mojo).
     _mojolearn_member = (17, 1)
 
     def __init__(self, *, n_estimators=100, learning_rate=0.1, num_leaves=31, max_depth=-1,
@@ -1359,7 +1359,7 @@ class DARTClassifier(_DARTBase):
     _mojolearn_native_public = True
     _KIND = 1
     # The member ABI mark (core/member_abi.mojo, family 17 MEMBER_FAMILY_DART): fit and predict run native
-    # inside a meta-estimator (core/dart_member.mojo).
+    # inside a meta-estimator (gbdt/dart_member.mojo).
     _mojolearn_member = (17, 0)
 
     def __init__(self, *, n_estimators=100, learning_rate=0.1, num_leaves=31, max_depth=-1,

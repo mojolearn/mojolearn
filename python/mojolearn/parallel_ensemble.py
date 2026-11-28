@@ -236,7 +236,7 @@ class ParallelForestPredictor:
     # one native call (bindings/family_native_door.mojo `family_par_run`, driver
     # `forest_predict`): the plain predict of the copy with the device plan
     # bound, so its first predict builds the parallel_groves pool on the
-    # selected devices (core/forest_inference_pool.mojo) and later predicts
+    # selected devices (ensemble/forest_inference_pool.mojo) and later predicts
     # reuse it. Later source mutations or refits do not affect this predictor.
     # This pools inference model storage; fit_forest remains a separate API.
     # Use as a context manager, or call close to release GPU state.

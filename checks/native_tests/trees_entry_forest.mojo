@@ -30,7 +30,7 @@ from core.forest_fit_request import (
     ForestFitArgs, FOREST_ENTRY_ABI, XF_OP_COUNT, FOREST_ARG_NO_INT, FOREST_ARG_NO_FLOAT, XF_CAP_STRICT, XF_CAP_DART, XF_CAP_DEVICE_SCAN,
     XF_RESIDENT_RELEASE, XF_STRICT_RELEASE, forest_export_sizes_into, forest_export_verify_lists,
 )
-from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
+from ensemble.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
 from core.forest_calls import (
     xf_ref, xf_caps, xf_numeric_mode, xf_dt_default_bins, xf_fit, xf_fit_dart, xf_export_sizes, xf_export_into,
     xf_export_verify, xf_export_release, xf_predict, xf_resident_prepare, xf_resident_predict, xf_resident_labels,

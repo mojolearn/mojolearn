@@ -1596,7 +1596,7 @@ def _node_best_split(
             else:
                 label_sums[b] = label_sums[b] + Int32(labels_f[row] * label_scale)
                 counts[b] = counts[b] + UInt32(1)
-        # `pdf_to_cdf` per class plane (`core/block_scan.mojo:288-350`).
+        # `pdf_to_cdf` per class plane (`ensemble/block_scan.mojo:288-350`).
         var global_sample_count = Int64(0)
         var max_class_count = Int64(0)
         for pl in range(planes):

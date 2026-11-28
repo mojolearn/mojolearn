@@ -284,7 +284,7 @@ def _connect_feature_freq_members(registry, register, waiting):
 
 def _connect_host_tree_members(registry, register, waiting):
     # glue: import-time class metadata. 7. The saved-model classes HostForest (mark (14, 2)) and HostGBDT (mark
-    # (16, 5)) (lane mf-hostent5): PREDICT-ONLY member kinds (core/forest_member_run.mojo, core/gbdt_member.mojo),
+    # (16, 5)) (lane mf-hostent5): PREDICT-ONLY member kinds (core/forest_member_run.mojo, gbdt/gbdt_member.mojo),
     # whose fitted state is imported from their own fields (`_mojolearn_member_predict_only`). They have no fit
     # and a constructor that takes the saved arrays, so `_derive_member` cannot read them: registered as
     # MEMBER-ONLY plans with no constructor parameters (a clone is never built: nothing fits them) and the tree

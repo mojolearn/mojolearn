@@ -21,7 +21,7 @@ from std.testing import TestSuite
 from std.memory import bitcast
 from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD, require
 from core.hostptr import f32_ptr
-from core.mojolearn_training_host_impl import neural_rng_host_into
+from training.mojolearn_training_host_impl import neural_rng_host_into
 from core.neural_context import neural_ctx
 from core.train_dev_pool import train_dev_alloc, train_dev_free, train_dev_put, train_dev_get
 from training.dev_tensors import IDN_TRAIN_DEV_TENSORS

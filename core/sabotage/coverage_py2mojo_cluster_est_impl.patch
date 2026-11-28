@@ -1,5 +1,5 @@
---- a/core/py2mojo_cluster_est_impl.mojo	2026-11-22 12:34:48
-+++ b/core/py2mojo_cluster_est_impl.mojo	2026-11-22 12:35:46
+--- a/dbscan/py2mojo_cluster_est_impl.mojo	2026-11-22 12:34:48
++++ b/dbscan/py2mojo_cluster_est_impl.mojo	2026-11-22 12:35:46
 @@ -1,8 +1,17 @@
  # SPDX-License-Identifier: Apache-2.0
  """Typed DBSCAN core-array loops moved word for word from bindings/py2mojo_cluster_est.mojo."""

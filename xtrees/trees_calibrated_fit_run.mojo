@@ -190,7 +190,7 @@ struct CalFitPlan(Movable):
     # THE FOLD IN PLACE (lane vdf-meta4, 2026-11-24: a model-selection fold, `_arena_io.DeviceRows`, handed to
     # CalibratedClassifierCV.fit): TWO INDEXES. `x` is then the fold's whole host BASE (`x_rows` rows) and the
     # fit's `n` rows are the fold's; the units' row draws are base rows (the cv folds composed inside the
-    # fold, core/meta_fold_rows.mojo), so their targets are `draw_codes` (the fold's codes put at its base
+    # fold, xtrees/meta_fold_rows.mojo), so their targets are `draw_codes` (the fold's codes put at its base
     # rows, `x_rows` words), and per fold `x_test_rows[f]` are its test rows in `x` (the rows the member's
     # scores READ) while `test_rows[f]` stay fold positions (where the out-of-fold scores are PLACED and the
     # test codes read, n-row blocks). Otherwise (`fold`): one index, `x_rows` = n, `draw_codes` = codes.

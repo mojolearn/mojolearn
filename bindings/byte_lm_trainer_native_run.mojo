@@ -28,7 +28,7 @@ from std.memory import ArcPointer, unsafe_memcpy
 from core.entry_table import EntryRef
 from core.state_registry import StateRegistry, StateHandle
 from core.byte_lm_entry_table import ByteLmEntryKey
-from core.byte_lm_entry_table_sessions import byte_lm_resident_run, byte_lm_sessions_published
+from training.byte_lm_entry_table_sessions import byte_lm_resident_run, byte_lm_sessions_published
 from training.byte_lm_session_owner_run import ByteLmSessionOwner
 from training.byte_lm_glue_abi import byte_lm_trainer_call
 

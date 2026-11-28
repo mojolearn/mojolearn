@@ -16,7 +16,7 @@ from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TA
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.state_registry import StateRegistry
-from core.byte_lm_entry_table_sessions import (
+from training.byte_lm_entry_table_sessions import (
     BS_CREATE, BS_RUN, BS_CLOSE, BS_OP_COUNT, byte_lm_sessions_handle, byte_lm_sessions_write_handle,
     byte_lm_sessions_check_create,
     byte_lm_sessions_run, byte_lm_sessions_floats,

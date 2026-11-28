@@ -1,7 +1,7 @@
-diff --git a/core/mojolearn_neural_host_impl.mojo b/core/mojolearn_neural_host_impl.mojo
+diff --git a/training/mojolearn_neural_host_impl.mojo b/training/mojolearn_neural_host_impl.mojo
 index b42e2309ae..d9a4d90b20 100644
---- a/core/mojolearn_neural_host_impl.mojo
-+++ b/core/mojolearn_neural_host_impl.mojo
+--- a/training/mojolearn_neural_host_impl.mojo
++++ b/training/mojolearn_neural_host_impl.mojo
 @@ -92,6 +92,19 @@ def _transformer_weights_from(
      )
  

@@ -5,7 +5,7 @@ HOST ONLY: the entry points of x_decomp/api.mojo on the host executor
 (x_decomp/host.mojo), under the GPU binding's names and address contract,
 plus the family read-backs."""
 from x_decomp.publish_host_run import _publish_linear_entry_table
-from core.pls_member import pls_member_publish
+from x_decomp.pls_member import pls_member_publish
 from core.experiment_guards_decomposition import DECOMPOSITION_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
@@ -48,11 +48,11 @@ from providers.python.neural_descriptor_pyapi_door import neural_descriptor_caps
 
 
 from core.shared_slot import SharedSlot
-from core.tsvd_native_decomp import TSVDDecompAPI
-from core.nmf_native_provider import NMFProviderAPI
-from core.ipca_native_provider import IPCAProviderAPI
+from x_decomp.tsvd_native_decomp import TSVDDecompAPI
+from x_decomp.nmf_native_provider import NMFProviderAPI
+from x_decomp.ipca_native_provider import IPCAProviderAPI
 from core.kpca_native_api import KPCAProviderAPI
-from core.kpca_native_provider import KPCAEigenKernels
+from x_decomp.kpca_native_provider import KPCAEigenKernels
 from checks.numerics import NUMERIC_IDENTICAL
 
 comptime _TSVD_DECOMP_API_NAME = "MojolearnTSVDDecompHostIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTSVDDecompHostFastV1"

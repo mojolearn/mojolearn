@@ -20,7 +20,7 @@ include/LightGBM/utils/random.h at github.com/lightgbm-org/LightGBM.
 """
 from gbdt.targets.ranking_options import DEFAULT_NDCG_CUTOFF
 from std.memory import bitcast
-from core.float_sort_key import sort_key_bits
+from gbdt.float_sort_key import sort_key_bits
 from checks.soft_f64 import (
     SF64_ZERO, SF64_INF, sf64_add, sf64_sub, sf64_mul, sf64_div, sf64_exp, sf64_log,
     sf64_from_f32, sf64_to_f32,

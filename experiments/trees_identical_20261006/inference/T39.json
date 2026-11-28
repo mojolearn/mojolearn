@@ -17,8 +17,8 @@
         "ET"
       ],
       "production_callers": [
-        "core/forest_auxiliary_units.mojo",
-        "core/forest_auxiliary_device.mojo",
+        "ensemble/forest_auxiliary_units.mojo",
+        "ensemble/forest_auxiliary_device.mojo",
         "xtrees/api.mojo:forest_auxiliary_binding",
         "python/mojolearn/_forest_protocol.py:ForestProtocol"
       ],
@@ -86,8 +86,8 @@
     }
   ],
   "production_callers": [
-    "core/forest_auxiliary_units.mojo",
-    "core/forest_auxiliary_device.mojo",
+    "ensemble/forest_auxiliary_units.mojo",
+    "ensemble/forest_auxiliary_device.mojo",
     "xtrees/api.mojo:forest_auxiliary_binding",
     "python/mojolearn/_forest_protocol.py:ForestProtocol"
   ],

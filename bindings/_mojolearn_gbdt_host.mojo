@@ -102,9 +102,9 @@ from gbdt.mojolearn_gbdt_host_run import (
     gbdt_predict_multi_run,
 )
 from gbdt.gbdt_entry import gbdt_entry_publish, gbdt_entry_dispatch, gbdt_entry_releases, GbdtImage
-from core.gbdt_importance import gbdt_feature_importances_host
+from gbdt.gbdt_importance import gbdt_feature_importances_host
 from core.native_descriptor_call import native_descriptor_report
-from core.gbdt_member import GbdtMemberImage, gbdt_member_publish_image
+from gbdt.gbdt_member import GbdtMemberImage, gbdt_member_publish_image
 
 
 struct _GbdtMemberHostImage(GbdtMemberImage):
@@ -437,7 +437,7 @@ struct _GbdtHostImage(GbdtImage):
     def importances(text: String, x: Int, n_rows: Int, n_input: Int, row_major: Bool, weights: Int,
                     n_weights: Int, dst: Int) raises -> Int:
         # XG_IMPORTANCES (lane mf-imp6): the host column, the same bodies and
-        # fold order as the device column (core/gbdt_importance.mojo).
+        # fold order as the device column (gbdt/gbdt_importance.mojo).
         var values = gbdt_feature_importances_host(text, x, n_rows, n_input, row_major, weights, n_weights)
         var into = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst)
         for c in range(len(values)):  # small-loop(one word per input column: the result copy)
@@ -487,7 +487,7 @@ def build__mojolearn_gbdt_host() -> PythonObject:
         var module = PythonModuleBuilder("_mojolearn_gbdt_host")
         # The native gbdt entry (core/gbdt_entry_table.mojo) under the cpu key.
         gbdt_entry_publish["MojolearnGbdtEntryOwnerHostV1"]("cpu", gbdt_host_entry_v1)
-        # The Gbdt member (core/gbdt_member.mojo), after the gbdt entry.
+        # The Gbdt member (gbdt/gbdt_member.mojo), after the gbdt entry.
         gbdt_member_publish_image[_GbdtMemberHostImage]("cpu")
         module.def_function[gbdt_host_numeric_mode_binding]("gbdt_host_numeric_mode")
         module.def_function[gbdt_host_vendor_binding]("gbdt_host_vendor")

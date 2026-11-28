@@ -1,7 +1,7 @@
-diff --git a/core/kpss_host_test_impl.mojo b/core/kpss_host_test_impl.mojo
+diff --git a/tsa/kpss_host_test_impl.mojo b/tsa/kpss_host_test_impl.mojo
 index 7e5c591b02..240245415f 100644
---- a/core/kpss_host_test_impl.mojo
-+++ b/core/kpss_host_test_impl.mojo
+--- a/tsa/kpss_host_test_impl.mojo
++++ b/tsa/kpss_host_test_impl.mojo
 @@ -2,6 +2,7 @@
  """Typed KPSS flag and select_d loops moved word for word from bindings/kpss_host_test.mojo."""
  from std.sys.compile import is_defined

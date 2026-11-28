@@ -31,13 +31,13 @@ from xtrees.trees_forest_run import ForestFit
 from ensemble.instruments import StageTimes
 from checks.native_tests.bm_trees_et_fits import EtSpec, et_config
 from extratrees.mojolearn_trees_run import _et_classifier_fit_run, ET_STORE, et_store_ctx
-from core.mojolearn_trees_host_impl import et_forest_lists
-from core.mojolearn_rf_run import RF_STORE, rf_store_ctx
-from core.forest_inference_run import (
+from xtrees.mojolearn_trees_host_impl import et_forest_lists
+from ensemble.mojolearn_rf_run import RF_STORE, rf_store_ctx
+from ensemble.forest_inference_run import (
     forest_prepare_gpu_native, forest_predict_resident_labels_gpu_native, forest_resident_rows_native,
 )
-from core.forest_inference_model import resident_release
-from core.forest_inference_pool import PooledForest
+from ensemble.forest_inference_model import resident_release
+from ensemble.forest_inference_pool import PooledForest
 
 comptime _N = 96
 comptime _D = 5

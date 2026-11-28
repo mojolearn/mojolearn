@@ -37,12 +37,12 @@ FAIL-PROOF EDITS (each must fail the named case): in `meta_rows_index` write `v[
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases_serial, CPU_COLUMN_BUILD, require
-from core.meta_fold_rows import meta_rows_index, meta_rows_compose, meta_rows_take_u32, META_ROWS_OUTSIDE
+from xtrees.meta_fold_rows import meta_rows_index, meta_rows_compose, meta_rows_take_u32, META_ROWS_OUTSIDE
 from max.gpu.host import DeviceContext
 from core.gram_multi_gpu import gram_plan_current
 from core.neural_context import process_ctx
 from glm.impl.gram_solve import linear_gram_fit_host
-from core.p3_linear_impl import ols_predict_device
+from glm.p3_linear_impl import ols_predict_device
 from core.fold_x_device import FOLD_X_STORE, fold_x_word
 
 comptime NB = 40000

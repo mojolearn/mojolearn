@@ -4,7 +4,7 @@
 forecast/predict over the packed components, run by the doors with the GIL
 released. No Python import (tools/python_free_dirs.sh). Lane rs-shared-infra-b
 (2026-11-12): moved word for word; the kernels it calls are unchanged."""
-from core.holtwinters_host_predict_impl import hw_store_values
+from holtwinters.holtwinters_host_predict_impl import hw_store_values
 from holtwinters.host.hw_predict import (
     hw_forecast_from_state_ptr,
     hw_predict_in_sample_ptr,

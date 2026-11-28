@@ -49,7 +49,7 @@ from core.device_route import DeviceRoute, DEVICE_CPU
 from core.entry_table import EntryRef, entry_ref_word
 from core.linear_svc_native_api import LINEAR_SVC_NATIVE_COUNT
 from core.linear_svm_member import linear_svm_member_v2
-from core.logistic_member import logistic_member_v2
+from glm.logistic_member import logistic_member_v2
 from core.logistic_native_api import QnNativeDriver
 from core.logistic_route import LogisticRoute, logistic_route_pack
 from core.member_abi import (

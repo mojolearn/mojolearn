@@ -142,7 +142,7 @@ categorical/multiclass paths. Sources: `gbdt/methods/greedy_subsets_searcher/`,
 Includes trees exposed through expanded algorithms: DART classifier/regressor,
 bagging, AdaBoost, random-trees embedding, and exported forests when they reach
 the changed kernels. Kernel-SHAP and permutation-SHAP over non-tree models are
-out of scope. Sources: `core/forest_inference.mojo`, `gbdt/resident_model.mojo`,
+out of scope. Sources: `ensemble/forest_inference.mojo`, `gbdt/resident_model.mojo`,
 `gbdt/models/kernel/add_bin_values.mojo`, `xtrees/shap_device.mojo`,
 `xtrees/dart_device.mojo`.
 

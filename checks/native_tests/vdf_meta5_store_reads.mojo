@@ -27,8 +27,8 @@ drop RM_FIT_SLOT's branch in `ridge_multi_check_spans` (host 0).
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases_serial, CPU_COLUMN_BUILD, require
 from core.linear_entry_table_multi import ridge_multi_check_spans, RM_FIT_SLOT, RM_PREDICT_SLOT, RM_OP_COUNT
-from core.estimators_store import ESTIMATORS_STORE, estimators_store_ctx
-from core.linear_multi_device import (
+from glm.estimators_store import ESTIMATORS_STORE, estimators_store_ctx
+from glm.linear_multi_device import (
     lm_col_sums_run, lm_means_finish_run, lm_center_run, ridge_fit_multi_run, ridge_predict_multi_run,
     ridge_fit_multi_slot_run, ridge_predict_multi_slot_run,
 )

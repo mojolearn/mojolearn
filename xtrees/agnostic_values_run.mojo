@@ -44,7 +44,7 @@ from xtrees.trees_meta_vote_run import (
 )
 from std.memory import unsafe_memcpy
 from core.host_finite_scan import host_all_finite_f32
-from core.linear_multi_calls import rm_predict
+from xtrees.linear_multi_calls import rm_predict
 from core.neighbors_native_driver import XnDriver
 from core.admitted_refusals import admitted_finite_refuse
 from neighbors.label_propagation_run import LpQueryRequest, lp_query_run

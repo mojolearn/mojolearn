@@ -23,12 +23,12 @@ from core.tsvd_native_api import (
 )
 from checks.native_tests.pca_native_helpers import close_values, unchanged, guards, PCA_TEST_GUARD
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.tsvd_native_host import tsvd_host_native_v1
-from core.tsvd_native_decomp import tsvd_decomp_native_v1
+from decomposition.tsvd_native_host import tsvd_host_native_v1
+from x_decomp.tsvd_native_decomp import tsvd_decomp_native_v1
 from x_decomp.host import HostExec
 from x_decomp.pca_randomized import NoRDev
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
-from core.tsvd_native_device import tsvd_device_native_v1
+from decomposition.tsvd_native_device import tsvd_device_native_v1
 from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
 from core.msel_device_x import msel_fold_store, msel_device_x_context

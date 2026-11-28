@@ -15,10 +15,10 @@ repeats; Gini / MSE.
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import require as _require
 from core.forest_fit_request import ForestFitArgs
-from core.mojolearn_rf_run import (
+from ensemble.mojolearn_rf_run import (
     _rf_classifier_fit_forest, _rf_regressor_fit_forest, RF_STORE, rf_store_ctx,
 )
-from core.mojolearn_rf_impl import rf_flatten_trees
+from ensemble.mojolearn_rf_impl import rf_flatten_trees
 from ensemble.instruments import StageTimes
 
 comptime _N = 96

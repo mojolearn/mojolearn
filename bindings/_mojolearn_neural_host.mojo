@@ -79,9 +79,9 @@ from bindings.py_balanced import py_call as _balanced_call, py_type as _py_type
 from bindings.native_class_admission_door import static_builtin_type
 from bindings.sha256_door import sha256_hexdigest
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
-from core.neural_host_dispatch import NATIVE_HOST_PRIMITIVE_API, NATIVE_HOST_MAMBA_STATE_API, NATIVE_HOST_TRANSFORMER_API, NATIVE_HOST_MAMBA_BLOCK_API
+from training.neural_host_dispatch import NATIVE_HOST_PRIMITIVE_API, NATIVE_HOST_MAMBA_STATE_API, NATIVE_HOST_TRANSFORMER_API, NATIVE_HOST_MAMBA_BLOCK_API
 from core.numeric_profile_parts_sabotage import np_entry_parts
-from core.mojolearn_neural_host_impl import _opt_read, _write, _run_forward, _run_decode_steps, _m1_weights, _mamba1_run, _m2_weights, _mamba2_run, _m3_weights, _mamba3_run
+from training.mojolearn_neural_host_impl import _opt_read, _write, _run_forward, _run_decode_steps, _m1_weights, _mamba1_run, _m2_weights, _mamba2_run, _m3_weights, _mamba3_run
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -92,7 +92,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.samba_entry_table_neural_host import publish_samba_neural_host_primitives
+from training.samba_entry_table_neural_host import publish_samba_neural_host_primitives
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE
 from gemm.host.neural_gemm import gemm_oracle
 from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims, MambaWeights
@@ -145,11 +145,11 @@ from transformer.block_options import (
     BLOCK_OPTION_PARAMS,
     BlockOptions,
 )
-from core.neural_entry_neural_host import publish_neural_block_neural_host
-from core.causal_entry_neural_host import publish_causal_neural_host
+from training.neural_entry_neural_host import publish_neural_block_neural_host
+from training.causal_entry_neural_host import publish_causal_neural_host
 # RUN (lane rs-neural): the GIL-released bodies of the stateless MLP and
 # transformer prefill entries, typed Mojo only.
-from core.mojolearn_neural_host_run import mlp_forward_logits_run, transformer_forward_fresh_run
+from training.mojolearn_neural_host_run import mlp_forward_logits_run, transformer_forward_fresh_run
 
 
 def _index(value: PythonObject) raises -> Int:

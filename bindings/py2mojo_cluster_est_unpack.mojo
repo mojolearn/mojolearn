@@ -10,7 +10,7 @@
 
 It acts on the host arrays the fit already returned (its
 outputs), so the two columns run the same loops."""
-from core.py2mojo_cluster_est_impl import dbscan_core_count, dbscan_core_gather
+from dbscan.py2mojo_cluster_est_impl import dbscan_core_count, dbscan_core_gather
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call

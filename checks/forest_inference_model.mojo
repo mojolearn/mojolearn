@@ -8,8 +8,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from core.forest_inference import forest_predict_gpu
-from core.forest_inference_model import resident_prepare, resident_predict, resident_release, ResidentForest, resident_predict_into, FOREST_ORDERED_RESIDENT
+from ensemble.forest_inference import forest_predict_gpu
+from ensemble.forest_inference_model import resident_prepare, resident_predict, resident_release, ResidentForest, resident_predict_into, FOREST_ORDERED_RESIDENT
 
 
 def check_ordered_resident[RF_INPUT: Bool]() raises:

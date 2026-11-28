@@ -153,7 +153,7 @@ from bindings.arena_prog_run import MetricRoute
 from bindings.msel_search_stats_run import msel_row_means, msel_row_stds, msel_rank_scores, msel_rank_best
 from core.device_route import DEVICE_CPU
 from core.entry_table import EntryRef, entry_ref_unresolved
-from core.logistic_member import logistic_member_v2
+from glm.logistic_member import logistic_member_v2
 from core.logistic_native_api import QnNativeDriver
 from core.logistic_route import LogisticRoute, logistic_route_pack
 from core.member_abi import (

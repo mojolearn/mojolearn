@@ -17,12 +17,12 @@
         "ET"
       ],
       "production_callers": [
-        "core/forest_inference.mojo:launch_forest_inference",
-        "core/forest_inference_model.mojo:ResidentForest.predict_into",
+        "ensemble/forest_inference.mojo:launch_forest_inference",
+        "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
         "python/mojolearn/_forest_protocol.py",
         "core/forest_experiments.mojo:forest_chunk_sum",
-        "core/forest_host_predict.mojo",
-        "core/forest_host_groves.mojo"
+        "ensemble/forest_host_predict.mojo",
+        "ensemble/forest_host_groves.mojo"
       ],
       "default": false,
       "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
@@ -232,12 +232,12 @@
     }
   ],
   "production_callers": [
-    "core/forest_inference.mojo:launch_forest_inference",
-    "core/forest_inference_model.mojo:ResidentForest.predict_into",
+    "ensemble/forest_inference.mojo:launch_forest_inference",
+    "ensemble/forest_inference_model.mojo:ResidentForest.predict_into",
     "python/mojolearn/_forest_protocol.py",
     "core/forest_experiments.mojo:forest_chunk_sum",
-    "core/forest_host_predict.mojo",
-    "core/forest_host_groves.mojo"
+    "ensemble/forest_host_predict.mojo",
+    "ensemble/forest_host_groves.mojo"
   ],
   "supported_estimators": [
     "RF",

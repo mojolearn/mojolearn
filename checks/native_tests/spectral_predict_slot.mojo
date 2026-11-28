@@ -22,7 +22,7 @@ the predict) -> case 0 fails on a store with the spare pool.
 from std.testing import TestSuite
 from std.memory import bitcast
 from checks.native_tests.testsuite_cases import check_cases_serial, CPU_COLUMN_BUILD, require
-from core.metrics_store import METRICS_STORE, metrics_store_ctx, metrics_store_buffer
+from metrics.metrics_store import METRICS_STORE, metrics_store_ctx, metrics_store_buffer
 from spectral.estimator import spectral_fit_predict_dataset_host_keep, spectral_predict_host
 from spectral.host.spectral_predict_host import host_spectral_predict
 from spectral.impl.spectral_predict_common import SpectralPredictionState, SpectralPrediction

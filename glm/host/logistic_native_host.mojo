@@ -6,7 +6,7 @@ from core.host_finite_scan import host_finite_status
 from core.host_predict_threads import host_predict_task_count, host_predict_task_count_work, host_predict_chunk
 from core.host_parallel import host_parallelize
 from core.host_helpers_impl import argmax_rows_f32
-from core.estimators_host_impl import _positive, qn_fit_host_run
+from glm.estimators_host_impl import _positive, qn_fit_host_run
 from core.classical_host_predict import (
     host_qn_decision_into, host_qn_decision_multi_into, host_qn_predict_binary_into,
     host_qn_sigmoid_into, host_qn_softmax_into, host_rows_log_inplace,

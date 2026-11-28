@@ -103,7 +103,7 @@ from checks.native_tests.mf_ada_fits import (
     ada_member_fit,
 )
 from checks.native_tests.py2mojo_forest_fits import RfSpec, rf_config, predict, argmax_rows, RF_SQUARED
-from core.logistic_member import logistic_member_v2
+from glm.logistic_member import logistic_member_v2
 from core.logistic_native_api import QnNativeDriver
 from core.logistic_route import LogisticRoute, logistic_route_pack
 from core.member_abi import (

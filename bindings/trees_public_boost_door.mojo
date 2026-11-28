@@ -1649,7 +1649,7 @@ def _ada_native(fields: PythonObject, base: PythonObject, classifier: Bool, x: A
     plan.xcm = xcm
     # THE GIL (lane mf-ada2): released ONCE around the whole RUN; every
     # value it reads is typed above and its forest entry is marked GIL-free
-    # (the session ops, fits and walks run bare; core/forest_entry.mojo).
+    # (the session ops, fits and walks run bare; ensemble/forest_entry.mojo).
     plan.forest = entry_ref_gil_free(session.key)
     var result = AdaFitResult()
     with GILReleased(Python()):

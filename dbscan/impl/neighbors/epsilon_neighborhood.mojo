@@ -205,7 +205,7 @@ from dbscan.impl.neighbors.fast_mma_eps import (
 comptime DBSCAN_METRIC_L2 = 0
 comptime DBSCAN_METRIC_L1 = 1
 #: DEVIATION 5113: cuML's CosineExpanded (`dbscan.cuh`): every row is scaled
-#: to unit length ONCE on the host (`core/cosine_rows.mojo`, the same code on
+#: to unit length ONCE on the host (`dbscan/cosine_rows.mojo`, the same code on
 #: both bindings) and the L2 kernel runs on the unit rows against
 #: `Float32(2 * eps)`, because `|a - b|^2 = 2 (1 - cos)` for unit rows.
 comptime DBSCAN_METRIC_COSINE = 2

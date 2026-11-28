@@ -36,7 +36,7 @@ Cases (one row each, run across the host cores by `check_cases`):
 from std.testing import TestSuite
 from std.memory import bitcast
 from checks.native_tests.testsuite_cases import check_cases, require
-from core.gbdt_importance import (
+from gbdt.gbdt_importance import (
     GbdtImportancePlan, GbdtImpF32, gbdt_importance_finish_plan, gbdt_imp_bins_host, gbdt_imp_leaf_weights_host,
     gbdt_imp_from_leaf_weights_host, gbdt_imp_exponent, gbdt_imp_weight_word, gbdt_imp_fold_body,
     GBDT_IMP_SABOTAGE,

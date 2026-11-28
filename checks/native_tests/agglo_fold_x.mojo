@@ -30,7 +30,7 @@ from hierarchy.estimator import linkage_fit_host
 from x_cluster.device_ops import DeviceOps
 from x_cluster.entries import agglo_entry
 from x_neighbors.device_ops import op_row_all_zero
-from core.labeled_reference_resident import (
+from dbscan.labeled_reference_resident import (
     labeled_reference_prepare, labeled_reference_predict_resident, labeled_reference_release,
 )
 

@@ -11,7 +11,7 @@
 # x_metrics on the same x_prep store through the x_prep transport entry,
 # bindings/x_metrics_resident_door.mojo),
 # the input/output range descriptors of the shared ranges runner
-# (core/arena_io.mojo), the stage word packing, the run itself and the
+# (x_prep/arena_io.mojo), the stage word packing, the run itself and the
 # release of every device slot it acquired. It replaces the Python bodies of
 # `_expansion_prep._Prog.run` and `_expansion_metrics._execute` step for
 # step: the same entries are called with the same words, so no bit moves.
@@ -374,7 +374,7 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
         # device to device, and the whole arena back (the off arm's download).
         var whole_slots = any_slot and not ranges
         if ranges or whole_slots:
-            # the shared ranges runner (core/arena_io.mojo): the inputs go up,
+            # the shared ranges runner (x_prep/arena_io.mojo): the inputs go up,
             # the rest of the host arena starts zero on the device, and
             # everything but the inputs (and the in-out inputs) comes back
             var outs: List[Int32]

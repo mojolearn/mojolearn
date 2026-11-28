@@ -16,7 +16,7 @@ from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.launch_log import log_launch
-from core.launch_clock import log_launch_ctx
+from ensemble.launch_clock import log_launch_ctx
 from core.device_zero import enqueue_zero_bytes
 from ensemble.instruments import FitInstruments
 from ensemble.decisiontree.batched_levelalgo.bins import Bin, BinScales

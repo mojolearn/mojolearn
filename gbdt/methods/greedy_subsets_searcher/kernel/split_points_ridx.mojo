@@ -59,7 +59,7 @@ byte for byte, so the merge gate's compare passes by construction.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.device_units import device_multiprocessor_count
+from gbdt.device_units import device_multiprocessor_count
 
 from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     GATHER_INPLACE_BLOCK,

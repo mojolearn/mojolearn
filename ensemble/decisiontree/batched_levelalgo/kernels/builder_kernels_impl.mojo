@@ -396,11 +396,11 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from core.block_reduce import block_flush_count_i32, block_reduce_sum
+from ensemble.block_reduce import block_flush_count_i32, block_reduce_sum
 from core.launch_log import log_launch
-from core.launch_clock import log_launch_ctx
-from core.block_scan import BlockScanElement, pdf_to_cdf
-from core.scan_by_key import (
+from ensemble.launch_clock import log_launch_ctx
+from ensemble.block_scan import BlockScanElement, pdf_to_cdf
+from ensemble.scan_by_key import (
     ScanByKeyElement,
     ScanByKeyOps,
     launch_inclusive_scan_by_key,

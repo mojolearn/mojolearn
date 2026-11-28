@@ -5,7 +5,7 @@
 Three pieces every arena family shares:
 
 1. THE RANGES RUNNER: an arena program names its INPUT words and its OUTPUT
-   words, and a binding entry built on `core/arena_io.mojo`
+   words, and a binding entry built on `x_prep/arena_io.mojo`
    (`upload_ranges`, `download_ranges`) moves only those: the other words
    are zeroed on the device (as the host arena's words arrive zeroed) and
    never come back. x_metrics (`x_metrics_run_ranges`) and x_prep

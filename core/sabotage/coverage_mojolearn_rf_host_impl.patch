@@ -1,10 +1,10 @@
-diff --git a/core/mojolearn_rf_host_impl.mojo b/core/mojolearn_rf_host_impl.mojo
+diff --git a/ensemble/mojolearn_rf_host_impl.mojo b/ensemble/mojolearn_rf_host_impl.mojo
 index eb6b02d4fd..759a6895bc 100644
---- a/core/mojolearn_rf_host_impl.mojo
-+++ b/core/mojolearn_rf_host_impl.mojo
+--- a/ensemble/mojolearn_rf_host_impl.mojo
++++ b/ensemble/mojolearn_rf_host_impl.mojo
 @@ -5,6 +5,16 @@ calls these; the session structs are re-exported there under the same names."""
  from std.memory import ArcPointer
- from core.forest_export_binding_impl import copy_forest_export_leaves
+ from ensemble.forest_export_binding_impl import copy_forest_export_leaves
  from ensemble.host.rf_oracle import RfHostForest, RfHostParams, n_sampled_rows_host
 +from std.memory import bitcast
 +

@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_contains
 from bindings.classical_validate_unpack import classical_view
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
-from core.pca_exact_impl import pca_check_state
+from x_decomp.pca_exact_impl import pca_check_state
 
 
 # TOMBSTONE: pca_input_snapshot (PCA's own X admission: a zero-filled cast destination and its own cast/scan call; its refusals were admit_x's wording with est PCA) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.

@@ -63,7 +63,7 @@ struct Split(ImplicitlyCopyable, Movable):
 
 
 from std.atomic import Atomic, Ordering
-from core.device_mutex import claim_device_mutex
+from ensemble.device_mutex import claim_device_mutex
 from max.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, lane_id, thread_idx
 from max.gpu.primitives import warp
 from std.memory import stack_allocation
@@ -511,7 +511,7 @@ def split_reduce_kernel[
                 if sab != SPLIT_SAB_NO_LOCK:
                     # The shared claim. See DEVIATION 106 in
                     # ensemble/decisiontree/batched_levelalgo/split.mojo and
-                    # core/device_mutex.mojo. The SPLIT_SAB_NO_LOCK sabotage
+                    # ensemble/device_mutex.mojo. The SPLIT_SAB_NO_LOCK sabotage
                     # arm still bypasses it, unchanged.
                     claim_device_mutex(
                         mutexes.unsafe_offset(slot), Int32(0), Int32(1)

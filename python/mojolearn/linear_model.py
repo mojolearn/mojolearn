@@ -56,7 +56,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 # TOMBSTONE: linear_model `_round_f32`, `_labels_1d`, `_accuracy_host`, `_col_sums`, `_means`,
 # `_weight_total`, `_column_means`, `_vector_mean`, `_dims`, `_helper_output` and `_center` (no product
-# caller: the OLS/Ridge fit, its centering and sample-weight total are core/p3_linear_impl.mojo and
+# caller: the OLS/Ridge fit, its centering and sample-weight total are glm/p3_linear_impl.mojo and
 # bindings/x_linear_native_door.mojo; the score's shape refusal and match count are
 # bindings/svc_common_door.mojo and bindings/logistic_native_door.mojo) deleted 2026-11-14 by lane
 # py-classical-linalg; code recoverable at 9140ed9c6c.
@@ -315,7 +315,7 @@ class LinearRegression(_NumericModeMixin):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
     # Runs as a native member of a meta-estimator: (member family, kind) of
-    # core/member_families.mojo (MEMBER_FAMILY_LINEAR = 0) and core/linear_member.mojo.
+    # core/member_families.mojo (MEMBER_FAMILY_LINEAR = 0) and glm/linear_member.mojo.
     _mojolearn_member = (0, 0)
 
     #: The methods below are one call each into the compiled classical owner
@@ -507,7 +507,7 @@ class Ridge(_NumericModeMixin):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
     # Runs as a native member of a meta-estimator: (member family, kind) of
-    # core/member_families.mojo (MEMBER_FAMILY_LINEAR = 0) and core/linear_member.mojo.
+    # core/member_families.mojo (MEMBER_FAMILY_LINEAR = 0) and glm/linear_member.mojo.
     _mojolearn_member = (0, 1)
 
     #: The methods below are one call each into the compiled classical owner
@@ -765,7 +765,7 @@ class LogisticRegression(_NumericModeMixin):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
     # Runs as a native member of a meta-estimator: (member family, kind) of
-    # core/member_families.mojo (MEMBER_FAMILY_LOGISTIC = 1) and core/logistic_member.mojo.
+    # core/member_families.mojo (MEMBER_FAMILY_LOGISTIC = 1) and glm/logistic_member.mojo.
     _mojolearn_member = (1, 0)
 
     # `device` (None: this installation's device; "gpu"; "cpu") is checked

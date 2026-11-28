@@ -12,7 +12,7 @@ unchanged."""
 from std.memory import bitcast
 from core.device_plan import DevicePlan, device_plan_current
 from core.hostptr import list_f32, list_u32
-from core.pair_split_device import device_split_pairs
+from gbdt.pair_split_device import device_split_pairs
 from core.neural_context import process_ctx
 from core.shared_slot import SharedSlot
 from std.atomic import Atomic, Ordering

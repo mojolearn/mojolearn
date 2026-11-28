@@ -22,7 +22,7 @@ already holds. Those three forms are therefore allowed only in:
   it lowers the file's number here in the same commit (`--baseline` prints
   the current counts); a file whose count reaches zero is deleted from DEBT.
 
-The scan covers the runtime Mojo trees (bindings/, providers/, core/).
+The scan covers the runtime Mojo trees (bindings/, providers/, core/) and the files moved out of core/.
 Comment lines (first non-blank character `#`) are not counted. Tests,
 benches, experiments and training scripts are out of scope.
 
@@ -665,11 +665,22 @@ def count_forms(text):
     return counts
 
 
+def moved_core_files(repo=REPO):
+    """Files that left core/ for their family (tools/ops/core_move_map.tsv, 2026-11-28). They stay in this scan:
+    the move changed where they live, not what they may call."""
+    table = repo / "tools" / "ops" / "core_move_map.tsv"
+    if not table.is_file():
+        return []
+    rows = (line.split("\t") for line in table.read_text().splitlines()[1:])
+    return sorted(repo / r[2] for r in rows if len(r) > 2 and r[1] == "move" and (repo / r[2]).is_file())
+
+
 def runtime_files(repo=REPO):
     for root in ROOTS:
         base = repo / root
         if base.is_dir():
             yield from sorted(base.rglob("*.mojo"))
+    yield from moved_core_files(repo)
 
 
 def violations(sources, doors=DOORS, debt=None):

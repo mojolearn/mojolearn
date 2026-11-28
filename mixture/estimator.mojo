@@ -136,7 +136,7 @@ from autograd.program_loop_device import (
 from core.step_gate import (
     STEP_DONE, STEP_ITER, STEP_STOP_ITER, step_fail_joins_loop, step_gate_open_word,
 )
-from core.em_loop_chunk import em_loop_check_every
+from mixture.em_loop_chunk import em_loop_check_every
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
 from checks.numerics import identical_div, identical_log
 from max.gpu import block_dim, block_idx, thread_idx
@@ -1551,7 +1551,7 @@ def gaussian_mixture_fit_device(
     # E-step, the M-step and the precision Cholesky with the kernels and
     # order of the host-driven loop it replaces, then the commit and the
     # criterion as device values). The host reads the register block once
-    # per `check_every` iterations (core/em_loop_chunk.mojo); a trace, a
+    # per `check_every` iterations (mixture/em_loop_chunk.mojo); a trace, a
     # sabotage arm or a row-sharded E-step reads it every iteration.
     # TOMBSTONE: gmm-em-host-driver-loop (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n1-gmm-bgmm-loops; code recoverable at f59d913b0b.
     # Restore: git apply experiments/removed/EXECUTOR_EM_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.

@@ -24,8 +24,8 @@ from core.device_route import DeviceRoute, DEVICE_CPU
 from core.entry_table import EntryRef
 from core.member_abi import MemberCall, MemberPlan, MemberRef, member_new, member_free
 from core.member_families import MEMBER_FAMILY_SEQUENCE, MEMBER_FAMILY_FORECAST_SEQ, MEMBER_FAMILY_SELECT
-from core.sequence_member import sequence_member_v2
-from core.forecast_seq_member import forecast_seq_member_v2
+from sequence.sequence_member import sequence_member_v2
+from sequence.forecast_seq_member import forecast_seq_member_v2
 from core.select_member import select_member_v2
 
 comptime CASES = 3

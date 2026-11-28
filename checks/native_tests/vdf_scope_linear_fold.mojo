@@ -33,12 +33,12 @@ from core.member_abi import (
 from core.entry_table import EntryRef
 from core.device_route import DeviceRoute
 from core.member_fold_x import MemberFoldX, member_fold_take_f32, member_fold_index
-from core.linear_member import linear_member_v2
+from glm.linear_member import linear_member_v2
 from max.gpu.host import DeviceContext
 from core.gram_multi_gpu import gram_plan_current
 from core.neural_context import process_ctx
 from glm.impl.gram_solve import linear_gram_fit_host
-from core.p3_linear_impl import ols_predict_device
+from glm.p3_linear_impl import ols_predict_device
 from core.fold_x_device import FOLD_X_STORE
 from core.fold_x_word import fold_x_word
 

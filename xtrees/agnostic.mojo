@@ -382,7 +382,7 @@ def pshap_marginal_unit(t: Int, d: Int, k: Int, np: Int, inv: I32P, ey: U64P, ph
 # chunk's synthetic rows is computed here, on the device, straight from x,
 # the background and the chunk's masks or permutations: no synthetic matrix,
 # no download, no model call, no upload. The arithmetic is the forest's own
-# IDENTICAL predict (core/forest_inference.mojo `forest_ordered_kernel`):
+# IDENTICAL predict (ensemble/forest_inference.mojo `forest_ordered_kernel`):
 # the same key comparison per node, the leaves added in increasing tree
 # order from +0.0 with `forest_add`, the flushed divide by the tree count.
 # The value a node compares is the one the synthetic matrix would have held

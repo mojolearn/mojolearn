@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Boundary pins for PCA's native cached admission; no model state in Python containers."""
 from std.python import PythonObject
-from core.pca_query_state import PCAQueryState, PCAQueryIdentity
+from x_decomp.pca_query_state import PCAQueryState, PCAQueryIdentity
 
 
 struct PCAQueryPins(Copyable, Movable):

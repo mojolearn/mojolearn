@@ -10,11 +10,11 @@ from max.gpu.host import DeviceContext
 
 # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
-from core.compact_ops import CompactScratch, compact_op_f32, compact_op_i32, compact_op_indices
-from core.compact_ops_host import compact_indices_host
+from svm.compact_ops import CompactScratch, compact_op_f32, compact_op_i32, compact_op_indices
+from svm.compact_ops_host import compact_indices_host
 from core.device_zero import enqueue_fill
-from core.sort_ops import SortScratch, sort_op_f32, sort_op_gather_rows_f32
-from core.sort_ops_host import sort_op_f32_host
+from gbdt.sort_ops import SortScratch, sort_op_f32, sort_op_gather_rows_f32
+from gbdt.sort_ops_host import sort_op_f32_host
 from core.step_gate import step_gate_open_word
 from autograd.program_loop_device import LoopRegisters
 from x_decomp.eigh_ops import eigh_op_dense, eigh_op_status_joins_loop, eigh_op_tridiag

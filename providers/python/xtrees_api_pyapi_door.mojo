@@ -31,8 +31,8 @@ from xtrees.oob import (
     E64_MAX_ROWS, count_equal_device, count_equal_host, count_rows_device, count_rows_host, oob_r2_device, oob_r2_host,
 )
 from xtrees import agnostic_device as agn_dev
-from core.forest_auxiliary_device import forest_auxiliary_device
-from core.forest_auxiliary_units import forest_auxiliary_host
+from ensemble.forest_auxiliary_device import forest_auxiliary_device
+from ensemble.forest_auxiliary_units import forest_auxiliary_host
 from xtrees.ops_device import (
     apply_trees_device, bag_rows_device, gather_f32_device, transpose_f32_device, transpose_f64_device,
     unseen_rows_device, weighted_sample_device,

@@ -1065,7 +1065,7 @@ def render(data):
         w("and they pass. What they did not reach (lane/laneless-public-classes,")
         w("2026-09-19) is `host_predict` and `host_predict_proba`, which no gate")
         w("calls, and the `parallel_groves` HOST engine, which the forest gate still")
-        w("refuses by name although `core/forest_host_groves.mojo` landed on")
+        w("refuses by name although `ensemble/forest_host_groves.mojo` landed on")
         w("lane/forest-groves-cpu-and-speed. The `saved-model-host-infer` lane runs")
         w("all three, so the surface is counted in the four kinds below; the gates")
         w("remain a different and additional kind of evidence.")

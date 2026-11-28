@@ -31,8 +31,8 @@ from core.causal_lm_entry_table import (
     CAUSAL_PRIM_NORM_FORWARD, CAUSAL_PRIM_LINEAR_FORWARD, CAUSAL_BLOCK_HOST_FORWARD,
     CAUSAL_BLOCK_HOST_FORWARD_INT15, CAUSAL_MAMBA1_FORWARD, CAUSAL_MAMBA2_DECODE,
 )
-from core.causal_entry_neural_host import publish_causal_neural_host
-from core.neural_entry_neural_host import publish_neural_block_neural_host
+from training.causal_entry_neural_host import publish_causal_neural_host
+from training.neural_entry_neural_host import publish_neural_block_neural_host
 from gemm.host.causal_entry_host import publish_causal_linalg_host
 from core.state_registry import StateHandle
 from core.causal_lm_entry_table_sessions import (

@@ -33,7 +33,7 @@ from core.device_plan import device_plan_current
 from bindings.forest_config_run import forest_request
 from xtrees.trees_forest_run import ForestFit
 from ensemble.instruments import StageTimes
-from core.mojolearn_rf_run import _rf_classifier_fit_forest, _rf_regressor_fit_forest
+from ensemble.mojolearn_rf_run import _rf_classifier_fit_forest, _rf_regressor_fit_forest
 from extratrees.mojolearn_trees_run import _et_classifier_fit_run, _et_regressor_fit_run
 from isolation_forest.estimator import IF_WANT_SCORE_SAMPLES, iforest_run_host
 from checks.native_tests.py2mojo_forest_fits import RfSpec, rf_config

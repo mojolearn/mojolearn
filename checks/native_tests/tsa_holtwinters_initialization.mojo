@@ -31,7 +31,7 @@ from std.math import cos, isfinite, pi, sin, sqrt
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr, i32_ptr
-from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
+from tsa.mojolearn_tsa_host_impl import holtwinters_fit_host_into
 from holtwinters.host.hw_predict import hw_forecast_from_state_ptr
 from holtwinters.impl.internal.hw_estimate import HW_INIT_ESTIMATED, HW_INIT_HEURISTIC
 from std.testing import TestSuite

@@ -21,7 +21,7 @@ never sizes a grid from a device count).
 from std.testing import TestSuite
 from max.gpu.host import DeviceContext
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from core.device_units import device_multiprocessor_count
+from gbdt.device_units import device_multiprocessor_count
 from checks.hardware_matrix import gpu_cores_for
 from checks.kernel_matrix import TARGET_COLUMN
 from transformer.impl.llama.fused_attention import attn_device_units

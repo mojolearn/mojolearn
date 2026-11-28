@@ -26,7 +26,7 @@ reaching this module.
 from core.experiment_guards_series import SERIES_GUARDS_OK
 from std.os import abort
 from core.hostptr import i32_ptr, read_f32
-from core.resample_impl import resample_store_indices
+from resample.resample_impl import resample_store_indices
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder

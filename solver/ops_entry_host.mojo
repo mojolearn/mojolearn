@@ -11,7 +11,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.solver_entry_table import SV_OP_CD_FIT, SV_OP_CD_PREDICT, sv_ops_check_spans
-from core.mojolearn_solver_host_impl import cd_fit_host_into, cd_predict_host_into
+from solver.mojolearn_solver_host_impl import cd_fit_host_into, cd_predict_host_into
 
 
 def solver_ops_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

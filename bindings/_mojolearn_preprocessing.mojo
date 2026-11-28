@@ -10,7 +10,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from core.shared_slot import SharedSlot
 from core.scaler_native_api import ScalerProviderAPI
-from core.scaler_native_device import ScalerDeviceKernels
+from preprocessing.scaler_native_device import ScalerDeviceKernels
 from core.scaler_native_api import SCALER_NATIVE_ABI, SCALER_OP_COUNT
 from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_SCALER, PREP_STORE_ABI
 from preprocessing.prep_member_store import prep_member_store_v1

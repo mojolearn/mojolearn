@@ -18,8 +18,8 @@ from core.spectral_native_api import (
     SPECTRAL_RESIDENT_COUNT,
 )
 from core.spectral_native_state import SpectralResidentState
-from core.spectral_native_device import SpectralDeviceKernels
-from core.spectral_native_provider import spectral_native_v1
+from spectral.spectral_native_device import SpectralDeviceKernels
+from spectral.spectral_native_provider import spectral_native_v1
 from checks.native_tests.spectral_native import source, source_unchanged, guarded, finite, fit
 from checks.native_tests.spectral_prediction import query, labels_equal, labels_valid
 from checks.native_tests.testsuite_cases import require

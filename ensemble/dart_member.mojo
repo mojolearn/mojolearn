@@ -19,7 +19,7 @@ from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from core.launch_clock import log_launch_ctx
+from ensemble.launch_clock import log_launch_ctx
 
 comptime DART_MEMBER_TPB = 256
 

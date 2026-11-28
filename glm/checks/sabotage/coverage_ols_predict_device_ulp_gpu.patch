@@ -1,7 +1,7 @@
-diff --git a/core/p3_linear_impl.mojo b/core/p3_linear_impl.mojo
+diff --git a/glm/p3_linear_impl.mojo b/glm/p3_linear_impl.mojo
 index 555e1f9731..b017f582f5 100644
---- a/core/p3_linear_impl.mojo
-+++ b/core/p3_linear_impl.mojo
+--- a/glm/p3_linear_impl.mojo
++++ b/glm/p3_linear_impl.mojo
 @@ -29,6 +29,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
  from core.fold_x_device import fold_x_fill
  from max.gpu import block_dim, block_idx, thread_idx

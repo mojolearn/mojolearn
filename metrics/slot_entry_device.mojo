@@ -76,7 +76,7 @@ from std.math import fma
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
-from core.metric_labels_device import metric_encode_resident, metric_gather_resident
+from metrics.metric_labels_device import metric_encode_resident, metric_gather_resident
 from metrics.slot_inputs import MetricInputs, MetricSlotF32, MetricSlotI32
 from metrics.label_pair_admission import metrics_check_range
 from metrics.impl.regression_errors import regression_error

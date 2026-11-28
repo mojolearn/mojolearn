@@ -25,8 +25,8 @@ from core.samba_entry_table import (
     SAMBA_PRIM_EMBEDDING_FORWARD, SAMBA_PRIM_RMS_NORM_FORWARD, SAMBA_PRIM_LINEAR_FORWARD,
     SAMBA_PRIM_CE_LOSS, SAMBA_PRIM_OPTIMIZER_STEP,
 )
-from core.samba_entry_table_training_host import publish_samba_training_host_primitives
-from core.samba_entry_table_neural_host import publish_samba_neural_host_primitives
+from training.samba_entry_table_training_host import publish_samba_training_host_primitives
+from training.samba_entry_table_neural_host import publish_samba_neural_host_primitives
 
 comptime SAMBA_ENTRY_CASES = 8
 

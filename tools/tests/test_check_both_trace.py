@@ -428,7 +428,7 @@ def test_a_named_launch_site_still_tests_one_flag_when_nothing_is_on():
     body = log.split("def log_launch(name: StringSlice) raises:")[1].split("\ndef ")[0]
     code = [line.strip() for line in body.split('"""')[2].split("\n") if line.strip()]
     assert code[:3] == ["var st = _LAUNCH_LOG.get_or_create_ptr()", "if not st[].watch:", "return"]
-    clock = _text("core/launch_clock.mojo").split("def log_launch_ctx(")[1]
+    clock = _text("ensemble/launch_clock.mojo").split("def log_launch_ctx(")[1]
     assert clock.index("if not st[].watch:") < clock.index("if st[].counting:") < clock.index("if not st[].enabled:")
     assert 'SharedSlot[_LaunchLogState, "MojolearnRFLaunchLogV2", 2]' in log, "the layout moved with the name"
     assert "self.counting = False" in log and "self.watch = self.enabled" in log, "off unless a verification asks"
@@ -444,9 +444,9 @@ def test_the_counted_doors_are_the_central_ones_and_each_reads_the_switch_once()
     for entry in ("activity_uploaded", "activity_downloaded", "activity_host_split", "activity_host"):
         body = _text("core/launch_log.mojo").split(f"def {entry}(")[1].split("\ndef ")[0]
         assert body.count("_LAUNCH_LOG.get_or_create_ptr()") == 1 and "if not st[].counting:" in body, entry
-    for path, name in (("core/forest_host_predict.mojo", "rf_host_predict"),
-                       ("core/forest_host_predict.mojo", "et_host_predict"),
-                       ("core/gbdt_host_predict.mojo", "gbdt_host_predict"),
+    for path, name in (("ensemble/forest_host_predict.mojo", "rf_host_predict"),
+                       ("ensemble/forest_host_predict.mojo", "et_host_predict"),
+                       ("gbdt/gbdt_host_predict.mojo", "gbdt_host_predict"),
                        ("core/knn_host_predict.mojo", "host_knn_search")):
         assert _text(path).count(f'activity_host("{name}")') == 1, name
 
