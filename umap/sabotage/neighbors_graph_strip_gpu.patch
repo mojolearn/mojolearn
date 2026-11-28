@@ -1,0 +1,10 @@
+diff --git a/umap/graph_out.mojo b/umap/graph_out.mojo
+--- a/umap/graph_out.mojo
++++ b/umap/graph_out.mojo
+@@ -97,3 +97,6 @@ def umap_strip_row(knn_d: MutPointer[Float32, MutAnyOrigin], knn_i: MutPointer[U
+         for j in range(kk):  # one row's k - 1 kept slots
+             dst_i.unsafe_store(r * kk + j, Int32(knn_i.unsafe_load(r * k + 1 + j)))
+             dst_d.unsafe_store(r * kk + j, knn_d.unsafe_load(r * k + 1 + j))
++            from std.sys import is_defined
++            comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE neighbors-graph-gpu (lane sc-leftovers-1): every kept distance 1e-3 up, the GPU bindings only
++                dst_d.unsafe_store(r * kk + j, knn_d.unsafe_load(r * k + 1 + j) + Float32(1e-3))

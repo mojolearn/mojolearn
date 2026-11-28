@@ -1418,6 +1418,8 @@ TRAINING_LANE_NAMES = {
     "spectral-fit-predict": "SpectralClustering: fit_predict",
     "tsvd-inverse-fit-transform": "TruncatedSVD: fit_transform",
     "umap-fit-transform": "UMAP: fit_transform",
+    "umap-neighbors-graph": "neighbors_graph and UMAP.graph_, exact",
+    "umap-neighbors-graph-ivf": "neighbors_graph and UMAP.graph_, IVF",
 }
 # The expansion lanes' covered lanes (`_surface_<lane>.py`; see EXPANSION_LANES).
 TRAINING_LANE_NAMES = _merge_expansion("TRAINING_LANE_NAMES", TRAINING_LANE_NAMES)
@@ -2469,7 +2471,9 @@ FAMILIES = (
                         # lane sc-graph-1 (2026-11-28): DiffusionMap; RECORD OWED (the next release record)
                         "spectral-diffmap",
                         "spectral-fit-predict",
-                        "umap-fit-transform",),
+                        "umap-fit-transform",
+                        # lane sc-leftovers-1 (2026-11-28): neighbors_graph and UMAP.graph_; RECORD OWED
+                        "umap-neighbors-graph", "umap-neighbors-graph-ivf",),
         # UMAP.transform from a saved embedding (lane/inference-forecast-
         # umap-pca, 2026-09-15). Its answer depended on the query batch by the
         # transform's contract until lane/umap-batch-fix (2026-09-16) made all
@@ -5183,6 +5187,9 @@ PUBLIC_PENDING_LANES = {
     "trees-voting-reg-methods": "no reference",
     "tsvd-inverse-fit-transform": "no reference",
     "umap-fit-transform": "no reference",
+    # lane sc-leftovers-1 (2026-11-28): RECORD OWED (the next release record)
+    "umap-neighbors-graph": "no reference",
+    "umap-neighbors-graph-ivf": "no reference",
     "x-ard-score": "no reference",
     "x-bayes-ridge-score": "no reference",
     "x-cluster-affinity-propagation-fit-predict": "no reference",
