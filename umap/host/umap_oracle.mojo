@@ -101,7 +101,7 @@ from spectral.impl.sparse.coo import CooGraph
 from umap.curve import fit_umap_curve
 from umap.graph import canonicalize_self_neighbors
 from umap.params import UMAPParams, UMAP_NEIGHBORS_IVF, umap_ivf_plan_seed
-from umap.graph_out import UmapFitOut, umap_graph_capacity, umap_publish_graph, umap_publish_curve
+from umap.graph_out import UmapFitOut, umap_graph_capacity, umap_publish_graph, umap_publish_curve, umap_strip_row
 from x_ann.host.knn_graph_host import ivf_graph_host
 from x_ann.host.ann_host_cells import ann_span, ann_task_count, ann_tasks
 from x_ann.knn_graph_plan import knn_graph_plan, KG_METHOD_IVF
@@ -318,7 +318,6 @@ def host_umap_neighbors_graph(
     var graph = sparse_fuzzy_simplicial_graph(
         indices.copy(), distances.copy(), n, k, params.set_op_mix_ratio, params.local_connectivity,
     )
-    var kk = k - 1
     var sdp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(distances.unsafe_ptr()))
     var sip = MutPointer[UInt32, MutAnyOrigin](unsafe_from_address=Int(indices.unsafe_ptr()))
     var op = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=dist_indptr)
@@ -328,12 +327,8 @@ def host_umap_neighbors_graph(
 
     def strip_task(t: Int) {imm}:
         var span = ann_span(t, tasks, n + 1)
-        for r in range(span[0], span[1]):  # this task's rows (umap_knn_strip_kernel's thread)
-            op.unsafe_store(r, Int64(r * kk))
-            if r < n:
-                for j in range(kk):
-                    oi.unsafe_store(r * kk + j, Int32(sip.unsafe_load(r * k + 1 + j)))
-                    od.unsafe_store(r * kk + j, sdp.unsafe_load(r * k + 1 + j))
+        for r in range(span[0], span[1]):  # this task's rows (umap_knn_strip_kernel's thread; the one body)
+            umap_strip_row(sdp, sip, op, oi, od, r, n, k)
 
     ann_tasks(strip_task, tasks)
     _ = len(distances)  # the pointers above read these lists through the tasks

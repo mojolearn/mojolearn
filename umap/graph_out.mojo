@@ -79,3 +79,21 @@ def umap_publish_curve(a: Float32, b: Float32, dst: UmapFitOut):
     var p = _F32P(unsafe_from_address=dst.ab)
     p[0] = a
     p[1] = b
+
+
+@always_inline
+def umap_strip_row(knn_d: MutPointer[Float32, MutAnyOrigin], knn_i: MutPointer[UInt32, MutAnyOrigin],
+                   indptr: MutPointer[Int64, MutAnyOrigin], dst_i: MutPointer[Int32, MutAnyOrigin],
+                   dst_d: MutPointer[Float32, MutAnyOrigin], r: Int, n: Int, k: Int):
+    """`mojolearn.neighbors_graph`'s distances CSR, row `r` of the self-first
+    n x k graph (lane sc-leftovers-1: the one body of the device's
+    `umap_knn_strip_kernel` thread and the host's strip task): indptr[r] =
+    r (k - 1) for r <= n, and row r < n keeps slots 1..k-1 (self, slot 0,
+    is dropped: Scanpy's `distances` holds no self edge) in their order."""
+    var kk = k - 1
+    if r <= n:
+        indptr.unsafe_store(r, Int64(r * kk))
+    if r < n:
+        for j in range(kk):  # one row's k - 1 kept slots
+            dst_i.unsafe_store(r * kk + j, Int32(knn_i.unsafe_load(r * k + 1 + j)))
+            dst_d.unsafe_store(r * kk + j, knn_d.unsafe_load(r * k + 1 + j))
