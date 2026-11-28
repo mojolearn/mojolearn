@@ -296,6 +296,150 @@ def xn_louvain_decode(info: Int) -> Tuple[Float64, Float64]:
     return (xn_f32_value(info, 0), xn_f32_value(info, 1))
 
 
+# ---------------------------------------------------------------- Leiden
+
+#: The quality words of the `leiden` operations (x_neighbors/graph_par.mojo
+#: LD_MOD / LD_CPM).
+comptime XN_LEIDEN_MODULARITY = 0
+comptime XN_LEIDEN_CPM = 1
+
+
+def xn_leiden_quality(name: String) raises -> Int:
+    """`objective_function`: "modularity" or "CPM" (any case)."""
+    var low = name.lower()
+    if low == "modularity":
+        return XN_LEIDEN_MODULARITY
+    if low == "cpm":
+        return XN_LEIDEN_CPM
+    raise Error("ValueError: objective_function must be 'modularity' or 'CPM', got '" + name + "'")
+
+
+def xn_leiden_iterations_check(n_iterations: Int) raises -> Int:
+    """`n_iterations`: a positive count, or negative for "until stable"
+    (returned as -1). Zero is refused."""
+    if n_iterations == 0:
+        raise Error("ValueError: n_iterations must be a positive integer, or negative to run until stable")
+    return -1 if n_iterations < 0 else n_iterations
+
+
+def xn_leiden_csr_request(indptr: Int, indices: Int, vals: Int, labels: Int, info: Int, n: Int, nnz: Int,
+                          has_vals: Bool, n_iterations: Int, quality: Int, seed: Int,
+                          resolution: Float64) -> XnOpRequest:
+    """The `leiden_csr` operation: n_iterations rides shifted by one (the
+    descriptor's words are non-negative), the seed as its low 32 bits."""
+    return XnOpRequest("leiden_csr", [indptr, indices, vals, labels, info],
+        [n, nnz, 1 if has_vals else 0, n_iterations + 1, quality, seed & 0xFFFFFFFF], [xn_f32_word(resolution)])
+
+
+def xn_leiden_request(a: Int, labels: Int, info: Int, n: Int, n_iterations: Int, quality: Int, seed: Int,
+                      resolution: Float64) -> XnOpRequest:
+    return XnOpRequest("leiden", [a, labels, info], [n, n_iterations + 1, quality, seed & 0xFFFFFFFF],
+        [xn_f32_word(resolution)])
+
+
+def xn_leiden_symmetry_check(flags: Int) raises:
+    if xn_i32_word(flags, 0) != 0:
+        raise Error("Leiden: the adjacency matrix must be symmetric (an undirected graph)")
+    if xn_i32_word(flags, 1) == 0:
+        raise Error("Leiden: the graph has no edges")
+
+
+def xn_leiden_device_message(message: String) -> String:
+    """A device check's message as a ValueError from "Leiden:" on; empty
+    when the message is not one."""
+    var at = message.find("Leiden:")
+    if at < 0:
+        return String("")
+    return "ValueError: " + String(message[byte=at:message.byte_length()])
+
+
+def xn_leiden_relabel_check(in_range: Bool) raises:
+    if not in_range:
+        raise Error("RuntimeError: Leiden: a community label fell outside [0, n)")
+
+
+# ---------------------------------------------------------------- shared-nearest-neighbor graph
+
+
+def xn_snn_prune_check(prune: Float64) raises:
+    """`prune_snn`: a Jaccard index in [0, 1] (Seurat's `prune.SNN`)."""
+    if not (prune >= 0.0 and prune <= 1.0):
+        raise Error("ValueError: prune_snn must be between 0 and 1, got " + String(prune))
+
+
+def xn_snn_shape_check(n: Int, k: Int) raises:
+    """An (n, k) neighbor-index array: at least one node and one neighbor."""
+    if n < 1 or k < 1:
+        raise Error("ValueError: shared_neighbors_graph: the neighbor-index array must be (n, k) with n >= 1 and"
+                    " k >= 1, got (" + String(n) + ", " + String(k) + ")")
+
+
+def xn_snn_request(indptr: Int, indices: Int, out_indptr: Int, out_indices: Int, out_data: Int, info: Int,
+                   n: Int, nnz: Int, k_uniform: Int, cap: Int, prune: Float64) -> XnOpRequest:
+    """The `snn` operation (graph_par.sn_drive): indptr is a length-1 dummy
+    when k_uniform > 0 (the (n, k) array's offsets are made on the image)."""
+    return XnOpRequest("snn", [indptr, indices, out_indptr, out_indices, out_data, info],
+        [n, nnz, k_uniform, cap], [xn_f32_word(prune)])
+
+
+def xn_snn_room(n: Int, nnz: Int) -> Int:
+    """The first output room of the shared-nearest-neighbor graph: four
+    entries per input entry. A row keeps the nodes whose Jaccard index with
+    it reaches the prune value; with the self entry and a kNN graph's
+    neighbors of neighbors that is a few times the row's own list, so the
+    second run (with the exact room the first one counted) is the
+    exception. A rule from the entry count, not a dataset size."""
+    return max(4 * nnz, n)
+
+
+def xn_graph_device_message(message: String, who: String) -> String:
+    """A device check's message as a ValueError from `who` on; empty when
+    the message is not one."""
+    var at = message.find(who)
+    if at < 0:
+        return String("")
+    return "ValueError: " + String(message[byte=at:message.byte_length()])
+
+
+def xn_label_order(name: String) raises -> Bool:
+    """`label_order`: "first" (communities numbered by their first node) or
+    "size" (largest first, Scanpy's order); True for "size"."""
+    if name == "first":
+        return False
+    if name == "size":
+        return True
+    raise Error("ValueError: label_order must be 'first' or 'size', got '" + name + "'")
+
+
+def xn_size_relabel_request(labels: Int, n: Int, c: Int) -> XnOpRequest:
+    """The `size_relabel` operation (graph_par.sr_drive) on the published labels, in place."""
+    return XnOpRequest("size_relabel", [labels], [n, c], List[Float64]())
+
+
+# ---------------------------------------------------------------- PAGA
+
+
+def xn_paga_size_check(n: Int, labels: Int) raises:
+    """Two nodes at least (the null model divides by n - 1) and one label
+    per node."""
+    if n < 2:
+        raise Error("ValueError: PAGA needs a graph of at least 2 nodes, got " + String(n))
+    if labels != n:
+        raise Error("ValueError: PAGA: labels has " + String(labels) + " entries for a graph of " + String(n)
+                    + " nodes")
+
+
+def xn_paga_request(a: Int, labels: Int, conn: Int, tree: Int, sizes: Int, info: Int, n: Int,
+                    cap: Int) -> XnOpRequest:
+    return XnOpRequest("paga", [a, labels, conn, tree, sizes, info], [n, cap], List[Float64]())
+
+
+def xn_paga_csr_request(indptr: Int, indices: Int, labels: Int, conn: Int, tree: Int, sizes: Int, info: Int,
+                        n: Int, nnz: Int, cap: Int) -> XnOpRequest:
+    return XnOpRequest("paga_csr", [indptr, indices, labels, conn, tree, sizes, info], [n, nnz, cap],
+        List[Float64]())
+
+
 # ---------------------------------------------------------------- SVGP
 
 

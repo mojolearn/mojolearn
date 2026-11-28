@@ -70,6 +70,8 @@ class UMAP(NumericModeMixin):
         Dimension of the embedding, 1 to 32.
     min_dist : float, default 0.1
         Minimum distance between embedded points; ``0 <= min_dist <= spread``.
+        Scanpy's ``tl.umap`` uses 0.5, while the default here is 0.1
+        (umap-learn's and cuML's); pass ``min_dist=0.5`` to match Scanpy.
     spread : float, default 1.0
         Scale of the embedded points; must be positive.
     n_epochs : int or None, default None

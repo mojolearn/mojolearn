@@ -600,13 +600,25 @@ def laplacian_from_sorted_device(
     """`compute_graph_laplacian`'s device half (the degree fold and `D -
     A`) over a row-sorted COO that already holds one diagonal entry per
     row, as `compute_graph_laplacian_prepared_device` leaves it."""
-    var g_n = n
+    return laplacian_of_device_coo(ctx, DeviceCoo(n, nnz, rows^, cols^, vals^, indptr^), tpb)
+
+
+def laplacian_of_device_coo(
+    ctx: DeviceContext, var g: DeviceCoo, tpb: Int = LAPLACIAN_TPB
+) raises -> DeviceCoo:
+    """`laplacian_from_sorted_device` on a `DeviceCoo` (row-sorted, one
+    diagonal entry per row), in place: the degree fold, then `D - A`. The
+    diffusion map (lane sc-graph-1) builds the Laplacian of its density-
+    normalized kernel this way, on the canonical COO the first Laplacian
+    left, so it is neither re-sorted nor re-checked."""
+    var g_n = g.n
+    var nnz = g.nnz
     var degrees = ctx.enqueue_create_buffer[DType.float32](g_n)
     ctx.enqueue_memset(degrees, Float32(0.0))
     comptime if IDN_LAP_DEGREE_LANES:
         ctx.enqueue_function[degree_lanes_kernel](
-            indptr.unsafe_ptr(),
-            vals.unsafe_ptr(),
+            g.indptr.unsafe_ptr(),
+            g.vals.unsafe_ptr(),
             degrees.unsafe_ptr(),
             Int32(g_n),
             grid_dim=((g_n + LAP_DEG_ROWS - 1) // LAP_DEG_ROWS, 1, 1),
@@ -614,17 +626,17 @@ def laplacian_from_sorted_device(
         )
     else:
         ctx.enqueue_function[degree_kernel](
-            indptr.unsafe_ptr(),
-            vals.unsafe_ptr(),
+            g.indptr.unsafe_ptr(),
+            g.vals.unsafe_ptr(),
             degrees.unsafe_ptr(),
             Int32(g_n),
             grid_dim=((g_n + tpb - 1) // tpb, 1, 1),
             block_dim=(tpb, 1, 1),
         )
     ctx.enqueue_function[d_minus_a_kernel](
-        rows.unsafe_ptr(),
-        cols.unsafe_ptr(),
-        vals.unsafe_ptr(),
+        g.rows.unsafe_ptr(),
+        g.cols.unsafe_ptr(),
+        g.vals.unsafe_ptr(),
         degrees.unsafe_ptr(),
         Int32(nnz),
         grid_dim=((nnz + tpb - 1) // tpb, 1, 1),
@@ -632,7 +644,7 @@ def laplacian_from_sorted_device(
     )
     ctx.synchronize()
     _ = degrees^
-    return DeviceCoo(g_n, nnz, rows^, cols^, vals^, indptr^)
+    return g^
 
 
 def laplacian_normalized(

@@ -13,6 +13,7 @@ from core.spectral_native_api import (
     SpectralQueryShape, SpectralQueryRequest, SpectralPrepareRequest,
     SpectralResidentQueryRequest, SpectralNativeKernels,
     SPECTRAL_DATASET, SPECTRAL_GRAPH, SPECTRAL_DENSE, SPECTRAL_RBF, SPECTRAL_KNN, SPECTRAL_DATASET_STORE,
+    SPECTRAL_DIFFMAP,
 )
 from spectral.impl.spectral_predict_common import (
     SpectralPredictionState, SpectralPrediction, spectral_predict_validate,
@@ -36,10 +37,13 @@ struct SpectralFitResult(Movable):
 struct SpectralEmbeddingResult(Movable):
     var columns: Int
     var embedding: List[Float32]
+    #: SPECTRAL_DIFFMAP only: the eigenvalues, one per column.
+    var eigenvalues: List[Float32]
 
     def __init__(out self):
         self.columns = 0
         self.embedding = List[Float32]()
+        self.eigenvalues = List[Float32]()
 
 
 def spectral_guard_fit(labels: List[Int32], embedding: List[Float32], rows: Int, columns: Int) raises:
@@ -106,6 +110,12 @@ def spectral_write_embedding(request: SpectralEmbeddingRequest,
     spectral_guard_embedding(result.embedding, request.input.rows, result.columns,
                              request.options.output_components)
     unsafe_memcpy(dest=f32_ptr(request.embedding), src=result.embedding.unsafe_ptr(), count=len(result.embedding))
+    if request.input.route == SPECTRAL_DIFFMAP:
+        if len(result.eigenvalues) != result.columns:
+            raise Error("diffusion map: the kernel returned " + String(len(result.eigenvalues))
+                        + " eigenvalues for " + String(result.columns) + " components")
+        unsafe_memcpy(dest=f32_ptr(request.input.source), src=result.eigenvalues.unsafe_ptr(),
+                      count=len(result.eigenvalues))
     _ = result
     return result.columns
 
@@ -150,6 +160,10 @@ trait SpectralBackend:
     def embed_affinity(request: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises: ...
     @staticmethod
     def embed_dataset_store(request: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises: ...
+    # SPECTRAL_DIFFMAP (lane sc-graph-1): the diffusion map of a COO graph.
+    @staticmethod
+    def embed_diffmap(request: SpectralEmbeddingRequest, rows: List[Int32], columns: List[Int32],
+                      values: List[Float32], mut result: SpectralEmbeddingResult) raises: ...
     @staticmethod
     def query(source: List[Float32], training: List[Float32], shape: SpectralQueryShape,
               state: SpectralPredictionState) raises -> SpectralPrediction: ...
@@ -253,6 +267,17 @@ struct SpectralKernels[B: SpectralBackend](SpectralNativeKernels):
             # lane vdf-scope-cluster6: the dataset route over a slot of the image's resident store.
             _ = f32_ptr(r.embedding)
             Self.B.embed_dataset_store(r, result)
+        elif r.input.route == SPECTRAL_DIFFMAP:
+            # lane sc-graph-1: the diffusion map of the COO connectivities.
+            var rows = read_i32(r.input.graph_rows, max(0, r.input.nonzeros))
+            var columns = read_i32(r.input.graph_columns, max(0, r.input.nonzeros))
+            var values = read_f32(r.input.graph_values, max(0, r.input.nonzeros))
+            _ = f32_ptr(r.embedding)
+            _ = f32_ptr(r.input.source)
+            Self.B.embed_diffmap(r, rows, columns, values, result)
+            _ = rows
+            _ = columns
+            _ = values
         else:
             raise Error("Spectral native ABI: unknown embedding input route")
         return result^

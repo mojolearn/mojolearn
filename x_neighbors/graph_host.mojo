@@ -8,7 +8,39 @@ from x_neighbors.items import FP, IP
 from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE
 from x_neighbors.graph_par import (
     GA, GExec, Lay, LP, FPU, IPU, LPU, GP_NST, gp_item, pr_drive, lv_drive, pr_drive_csr, lv_drive_csr,
+    ld_drive, ld_drive_csr, sn_drive, pg_drive, sr_drive,
 )
+from core.host_parallel import host_parallelize
+
+comptime GP_HOST_GRAIN = 4096
+"""Items per host task of one launch. A graph item is a few to a few
+hundred loads (a row, a cell, a scan block), so 4096 of them outweigh a
+pool hop by orders of magnitude while a launch of 10^5 items still spreads
+over 25 tasks; a launch below one grain (the scalar stages, small graphs)
+runs inline. A cost rule over item counts, not a dataset shape."""
+
+
+def gp_host_run[S: Int](count: Int, g: GA):
+    """Stage S's items 0 .. count - 1 on the host. Lane sc-graph-1
+    (2026-11-28): the items of one launch run across the host's cores in
+    GP_HOST_GRAIN chunks. graph_par's contract (no item reads what another
+    item of the same launch writes; shared counters are integer atomics) is
+    what lets the device run them at once, so the bits are the ascending
+    loop's. A launch of one chunk stays on the calling thread (no pool hop
+    for a scalar stage)."""
+    var tasks = (count + GP_HOST_GRAIN - 1) // GP_HOST_GRAIN
+    if tasks <= 1:
+        for t in range(count):  # one chunk: the items in ascending order on this thread
+            gp_item[S](t, g)
+        return
+
+    def chunk(k: Int) {imm g, imm count}:
+        var lo = k * GP_HOST_GRAIN
+        var hi = min(lo + GP_HOST_GRAIN, count)
+        for t in range(lo, hi):  # the chunk's items in ascending order
+            gp_item[S](t, g)
+
+    host_parallelize(chunk, tasks)
 
 
 struct GraphCpu(GExec):
@@ -43,8 +75,7 @@ struct GraphCpu(GExec):
     def run(mut self, stage: Int, count: Int, g: GA) raises:
         comptime for s in range(GP_NST):
             if stage == s:
-                for t in range(count):
-                    gp_item[s](t, g)
+                gp_host_run[s](count, g)
 
     def get_i(mut self, slot: Int, idx: Int) raises -> Int:
         return Int(self.li[Int(self.llay[slot]) + idx])
@@ -144,3 +175,79 @@ def op_louvain_csr(
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         var pi = FP(unsafe_from_address=info)
         pi.unsafe_store(0, pi.unsafe_load(0) + Float32(1e-3))
+
+
+def op_leiden(a: Int, labels: Int, info: Int, n: Int, n_iterations: Int, quality: Int, seed: Int,
+              resolution: Float32) raises:
+    """The host column of `graph_dev.op_leiden`."""
+    var ex = GraphCpu(a)
+    ld_drive(ex, n, n_iterations, quality, seed, resolution, labels, info)
+    _ = ex^
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        var pi = FP(unsafe_from_address=info)
+        pi.unsafe_store(0, pi.unsafe_load(0) + Float32(1e-3))
+
+
+def op_leiden_csr(
+    indptr: Int, indices: Int, vals: Int, labels: Int, info: Int,
+    n: Int, nnz: Int, has_vals: Int, n_iterations: Int, quality: Int, seed: Int, resolution: Float32,
+) raises:
+    """The host column of `graph_dev.op_leiden_csr`."""
+    var ex = GraphCpu(0)
+    ld_drive_csr(ex, n, nnz, indptr, indices, vals, has_vals, n_iterations, quality, seed, resolution, labels, info)
+    _ = ex^
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        var pi = FP(unsafe_from_address=info)
+        pi.unsafe_store(0, pi.unsafe_load(0) + Float32(1e-3))
+
+
+def op_snn(
+    indptr: Int, indices: Int, out_indptr: Int, out_indices: Int, out_data: Int, info: Int,
+    n: Int, nnz: Int, k_uniform: Int, cap: Int, prune: Float32,
+) raises:
+    """The host column of `graph_dev.op_snn`."""
+    var ex = GraphCpu(0)
+    sn_drive(ex, n, nnz, indptr, indices, k_uniform, prune, cap, out_indptr, out_indices, out_data, info)
+    _ = ex^
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        var pi = IP(unsafe_from_address=info)
+        if Int(pi.unsafe_load(1)) == 0 and Int(pi.unsafe_load(0)) > 0:
+            var pd = FP(unsafe_from_address=out_data)
+            pd.unsafe_store(0, pd.unsafe_load(0) + Float32(1e-3))
+
+
+def op_paga(a: Int, labels: Int, conn: Int, tree: Int, sizes: Int, info: Int, n: Int, cap: Int) raises:
+    """The host column of `graph_dev.op_paga`."""
+    var ex = GraphCpu(a)
+    pg_drive(ex, n, 0, False, 0, 0, labels, cap, conn, tree, sizes, info)
+    _ = ex^
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        _pg_host_sabotage(conn, info)
+
+
+def op_paga_csr(
+    indptr: Int, indices: Int, labels: Int, conn: Int, tree: Int, sizes: Int, info: Int,
+    n: Int, nnz: Int, cap: Int,
+) raises:
+    """The host column of `graph_dev.op_paga_csr`."""
+    var ex = GraphCpu(0)
+    pg_drive(ex, n, nnz, True, indptr, indices, labels, cap, conn, tree, sizes, info)
+    _ = ex^
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        _pg_host_sabotage(conn, info)
+
+
+def _pg_host_sabotage(conn: Int, info: Int):
+    """The family's host negative control on PAGA: the first connectivity
+    word moved when the result was written."""
+    var pi = IP(unsafe_from_address=info)
+    if Int(pi.unsafe_load(1)) == 0 and Int(pi.unsafe_load(0)) > 0:
+        var pc = FP(unsafe_from_address=conn)
+        pc.unsafe_store(0, pc.unsafe_load(0) + Float32(1e-3))
+
+
+def op_size_relabel(labels: Int, n: Int, c: Int) raises:
+    """Community labels renumbered by size in place (graph_par.sr_drive), on this column."""
+    var ex = GraphCpu(0)
+    sr_drive(ex, n, c, labels)
+    _ = ex^

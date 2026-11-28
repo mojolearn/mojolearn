@@ -211,6 +211,85 @@ def _(ml, X, yc, yr, Xh=None):
                      lab_r=_h(r.labels_), q_r=_h(np.float32(r.modularity_))))
 
 
+@lane("x-neighbors-leiden")
+def _(ml, X, yc, yr, Xh=None):
+    """Leiden (lane leiden-umap-1, 2026-11-28; RECORD OWED): modularity at
+    two resolutions on the weighted graph, until stable and two fixed
+    iterations, a second random_state; CPM on the weighted graph and on the
+    unweighted (indptr, indices, n) CSR tuple of the same edges."""
+    A = _neighbors_graph(X)
+    m = ml.Leiden(resolution=1.0).fit(A)
+    r = ml.Leiden(resolution=0.5, n_iterations=2, random_state=7).fit(A)
+    c = ml.Leiden(resolution=0.5, objective_function="CPM").fit(A)
+    nz = A != 0
+    indptr = np.concatenate([[0], np.cumsum(nz.sum(axis=1))]).astype(np.int32)
+    indices = np.nonzero(nz)[1].astype(np.int32)
+    u = ml.Leiden(resolution=0.2, objective_function="CPM", n_iterations=1).fit((indptr, indices, A.shape[0]))
+    # lane sc-graph-1: Scanpy's numbering (label_order="size") for Leiden and Louvain
+    ls = ml.Leiden(resolution=1.0, label_order="size").fit_predict(A)
+    lvs = ml.Louvain(resolution=1.0, label_order="size").fit_predict(A)
+    return _fit(dict(lab_s=_h(ls), lab_lvs=_h(lvs),
+                     lab=_h(m.labels_), q=_h(np.float32(m.quality_)), it=_h(np.int64(m.n_iterations_)),
+                     lab_r=_h(r.labels_), q_r=_h(np.float32(r.quality_)),
+                     lab_c=_h(c.labels_), q_c=_h(np.float32(c.quality_)),
+                     lab_u=_h(u.labels_), q_u=_h(np.float32(u.quality_))))
+
+
+def _neighbors_knn_index(X, n=128, k=12):
+    """An (n, k) neighbor-index array from exact integer keys only: node j's
+    key from i is (bin_j - bin_i)^2 * n + ((j - i) mod n) over the
+    half-unit bins of column 3, so i itself comes first (key 0) and the
+    order has no ties; a stable integer argsort, no float distance."""
+    q = np.floor(X[:n, 3] * np.float32(2)).astype(np.int64)
+    i = np.arange(n, dtype=np.int64)
+    keys = (q[None, :] - q[:, None]) ** 2 * n + (i[None, :] - i[:, None]) % n
+    return np.ascontiguousarray(np.argsort(keys, axis=1, kind="stable")[:, :k].astype(np.int32))
+
+
+@lane("x-neighbors-snn")
+def _(ml, X, yc, yr, Xh=None):
+    """shared_neighbors_graph (lane sc-graph-1, 2026-11-28; RECORD OWED):
+    the (n, k) index array at Seurat's prune 1/15 and at 0 (every pair that
+    shares a neighbor), the same lists as a CSR tuple with the rows cut to
+    unequal lengths, and Leiden on the pruned graph (the Seurat chain)."""
+    knn = _neighbors_knn_index(X)
+    g = ml.shared_neighbors_graph(knn)
+    z = ml.shared_neighbors_graph(knn, prune_snn=0.0)
+    lens = 6 + np.arange(knn.shape[0]) % 7
+    indptr = np.concatenate([[0], np.cumsum(lens)]).astype(np.int32)
+    indices = np.concatenate([knn[r, :lens[r]] for r in range(knn.shape[0])]).astype(np.int32)
+    u = ml.shared_neighbors_graph((indptr, indices, knn.shape[0]), prune_snn=0.1)
+    lab = ml.Leiden(resolution=0.8).fit_predict(g)
+    return _fit(dict(ip=_h(g.indptr), ix=_h(g.indices), w=_h(g.data),
+                     ip0=_h(z.indptr), ix0=_h(z.indices), w0=_h(z.data),
+                     ipu=_h(u.indptr), ixu=_h(u.indices), wu=_h(u.data), lab=_h(lab)))
+
+
+@lane("x-neighbors-paga")
+def _(ml, X, yc, yr, Xh=None):
+    """PAGA v1.2 (lane sc-graph-1, 2026-11-28; RECORD OWED): the weighted
+    dense graph with the column-0 bins as groups, the same edges as an
+    unweighted CSR tuple, and the directed kNN lists of
+    `_neighbors_knn_index` (Scanpy's distances graph) with Leiden's groups."""
+    A = _neighbors_graph(X)
+    groups = (np.floor(X[:128, 0] * np.float32(2)).astype(np.int64))
+    groups = (groups - groups.min()).astype(np.int32)
+    d = ml.PAGA().fit(A, groups)
+    nz = A != 0
+    indptr = np.concatenate([[0], np.cumsum(nz.sum(axis=1))]).astype(np.int32)
+    indices = np.nonzero(nz)[1].astype(np.int32)
+    c = ml.PAGA().fit((indptr, indices, A.shape[0]), groups)
+    knn = _neighbors_knn_index(X)
+    kp = np.arange(0, knn.size + 1, knn.shape[1], dtype=np.int32)
+    lab = ml.Leiden(resolution=1.0).fit_predict(ml.shared_neighbors_graph(knn))
+    k = ml.PAGA().fit((kp, knn.ravel(), knn.shape[0]), lab)
+    def csr(m):
+        return _h(m.indptr, m.indices, m.data)
+    return _fit(dict(con=csr(d.connectivities_), tree=csr(d.connectivities_tree_), ns=_h(d.group_sizes_),
+                     con_c=csr(c.connectivities_), tree_c=csr(c.connectivities_tree_),
+                     con_k=csr(k.connectivities_), tree_k=csr(k.connectivities_tree_), ns_k=_h(k.group_sizes_)))
+
+
 @lane("x-neighbors-svgp")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.SVGP(n_inducing=24, kernel_variance=2.0, lengthscale=3.0, noise_variance=0.5).fit(X[:512], yr[:512])
@@ -472,6 +551,12 @@ _batch_decl("n/a:whole-graph partition (connected components requires edges betw
             "x-neighbors-connected-components", revision="expansion-batch-2026-09-28-v1")
 _batch_decl("n/a:whole-graph partition (Louvain optimizes graph-wide modularity; node subsets change "
             "the objective and there is no held-out prediction API)", "x-neighbors-louvain", revision="expansion-batch-2026-09-28-v1")
+_batch_decl("n/a:whole-graph partition (Leiden optimizes a graph-wide quality; node subsets change "
+            "the objective and there is no held-out prediction API)", "x-neighbors-leiden", revision="expansion-batch-2026-09-28-v1")
+_batch_decl("n/a:whole-graph function (each node's shared-neighbor edges depend on every other node's "
+            "neighbor list; there are no input rows to split)", "x-neighbors-snn", revision="expansion-batch-2026-09-28-v1")
+_batch_decl("n/a:whole-graph summary (the group connectivities count edges across the whole graph; there "
+            "is no held-out prediction API)", "x-neighbors-paga", revision="expansion-batch-2026-09-28-v1")
 
 
 def _neighbors_batch_gp_cov(ml, e, Xh):

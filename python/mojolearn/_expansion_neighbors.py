@@ -50,7 +50,7 @@ _OP = _operation_codes()
 
 __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch",
            "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer",
-           "PageRank", "connected_components", "Louvain", "SVGP"]
+           "PageRank", "connected_components", "Louvain", "Leiden", "SVGP", "shared_neighbors_graph", "PAGA"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -2032,6 +2032,11 @@ class Louvain(_XNeighbors):
         Maximum number of levels (a positive integer); None means no limit.
     seed : int or None, default None
         Accepted for networkx compatibility; unused.
+    label_order : {'first', 'size'}, default 'first'
+        How communities are numbered: ``'first'`` in order of each
+        community's lowest node, ``'size'`` from the largest community
+        (label 0) down, ties to the community whose lowest node comes first,
+        as Scanpy numbers its clusters.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator. None uses
         the process default.
@@ -2039,8 +2044,7 @@ class Louvain(_XNeighbors):
     Attributes
     ----------
     labels_ : Array of shape (n,), int32
-        Community of each node, numbered in order of each community's lowest
-        node.
+        Community of each node, numbered as ``label_order`` says.
     n_communities_ : int
         Number of communities.
     modularity_ : float
@@ -2064,11 +2068,13 @@ class Louvain(_XNeighbors):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
 
-    def __init__(self, resolution=1.0, *, threshold=1e-7, max_level=None, seed=None, numeric_mode=None, device=None):
+    def __init__(self, resolution=1.0, *, threshold=1e-7, max_level=None, seed=None, label_order="first",
+                 numeric_mode=None, device=None):
         self.resolution = resolution
         self.threshold = threshold
         self.max_level = max_level
         self.seed = seed
+        self.label_order = label_order
         self.numeric_mode = numeric_mode
         self.device = device
 
@@ -2112,6 +2118,282 @@ class Louvain(_XNeighbors):
             Community of each node.
         """
         return _NATIVE(self, _OP.family_xn_graph_louvain_fit_predict, (None, A), _NATIVE_CONTEXT)
+
+
+# ====================================================================== Leiden
+# Reference: Traag, Waltman & van Eck 2019 ("From Louvain to Leiden"),
+# leidenalg `Optimiser.optimise_partition` and igraph `community_leiden` (the
+# CPM quality), as Scanpy `tl.leiden` calls them. Louvain's graph stages with
+# the refinement step between local moving and aggregation
+# (x_neighbors/graph_par.mojo `ld_drive`). Parallel and fixed-order: the
+# colour classes of a seeded graph colouring move together, the refinement
+# merges greedily (leidenalg's randomness theta -> 0) in one pass over the
+# colours, ties to the smallest community id; random_state seeds the
+# colouring, not a random stream. The same bits on every device in
+# `identical`; the partition can differ from leidenalg's.
+class Leiden(_XNeighbors):
+    """Leiden community detection on an undirected weighted graph.
+
+    Finds communities with the Leiden algorithm (Traag, Waltman and van Eck,
+    2019), the method behind Scanpy's ``tl.leiden``: local moving of nodes,
+    then a refinement that splits every community into well-connected
+    parts, then aggregation of the graph on the refined partition. Unlike
+    Louvain, every community it returns is connected. Local moving and
+    refinement run in parallel in a fixed order (the nodes of one color of
+    a graph coloring move together, ties go to the lowest community id),
+    so the result is reproducible for a given ``random_state``; it can
+    differ from leidenalg's partition. The graph is a symmetric weighted
+    adjacency matrix given as a dense square array, a scipy.sparse matrix
+    (any format; indices sorted within each row), or an
+    ``(indptr, indices, n)`` CSR tuple in which every edge weighs 1. A
+    non-symmetric matrix or a graph without edges raises ``ValueError``.
+
+    Parameters
+    ----------
+    resolution : float, default 1.0
+        Resolution of the quality function; larger values favor smaller
+        communities.
+    objective_function : {'modularity', 'CPM'}, default 'modularity'
+        Quality to optimize: modularity with resolution, or the Constant
+        Potts Model, in which ``resolution`` is the edge density a community
+        must exceed.
+    n_iterations : int, default -1
+        Number of iterations of the whole algorithm, each starting from the
+        previous partition; a negative value runs until the quality stops
+        improving.
+    random_state : int or None, default 0
+        Seed of the node coloring that fixes the order of the moves.
+    label_order : {'first', 'size'}, default 'first'
+        How communities are numbered: ``'first'`` in order of each
+        community's lowest node, ``'size'`` from the largest community
+        (label 0) down, ties to the community whose lowest node comes first,
+        as Scanpy's ``tl.leiden`` numbers its clusters.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode for this estimator. None uses the process default.
+
+    Attributes
+    ----------
+    labels_ : Array of shape (n,), int32
+        Community of each node, numbered as ``label_order`` says.
+    n_communities_ : int
+        Number of communities.
+    quality_ : float
+        Value of the objective function for the partition (computed in
+        float32): the modularity, or the CPM quality.
+    n_iterations_ : int
+        Number of iterations run.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> M = np.random.default_rng(0).random((500, 500)) < 0.02
+    >>> A = (M | M.T).astype(np.float32)
+    >>> labels = mojolearn.Leiden(resolution=1.0).fit_predict(A)
+    """
+    _mojolearn_native_public = True
+    _mojolearn_device = True
+
+    def __init__(self, resolution=1.0, *, objective_function="modularity", n_iterations=-1, random_state=0,
+                 label_order="first", numeric_mode=None, device=None):
+        self.resolution = resolution
+        self.objective_function = objective_function
+        self.n_iterations = n_iterations
+        self.random_state = random_state
+        self.label_order = label_order
+        self.numeric_mode = numeric_mode
+        self.device = device
+
+    def fit(self, A, y=None):
+        """Detect communities in the graph.
+
+        Parameters
+        ----------
+        A : array-like of shape (n, n), scipy.sparse matrix, or tuple
+            Symmetric weighted adjacency matrix: a dense square array, a
+            scipy.sparse matrix, or an ``(indptr, indices, n)`` CSR tuple.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : Leiden
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If ``objective_function`` is not 'modularity' or 'CPM',
+            ``n_iterations`` is 0, the matrix is not symmetric, or the graph
+            has no edges.
+        """
+        return _NATIVE(self, _OP.family_xn_graph_leiden_fit, (None, A), _NATIVE_CONTEXT)
+
+    def fit_predict(self, A, y=None):
+        """Detect communities and return ``labels_``.
+
+        Parameters
+        ----------
+        A : array-like of shape (n, n), scipy.sparse matrix, or tuple
+            Symmetric weighted adjacency matrix.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        labels : Array of shape (n,), int32
+            Community of each node.
+        """
+        return _NATIVE(self, _OP.family_xn_graph_leiden_fit_predict, (None, A), _NATIVE_CONTEXT)
+
+# ====================================================================== shared-nearest-neighbor graph
+# Reference: Seurat `FindNeighbors` / `ComputeSNN` (src/snn.cpp): the
+# neighbor sets of a kNN graph, an edge between every two nodes that share a
+# neighbor weighted by the Jaccard index of their sets, weights below
+# `prune.SNN` dropped. One k-way merge per row of the transposed neighbor
+# lists on the device (x_neighbors/graph_par.mojo `sn_drive`); integers and
+# one float32 quotient per edge, so the same bits on every device.
+def shared_neighbors_graph(knn, prune_snn=1 / 15, numeric_mode=None, *, device=None):
+    """Shared-nearest-neighbor graph of a k-nearest-neighbor graph.
+
+    Follows Seurat's ``FindNeighbors``: two nodes are joined when their
+    neighbor sets overlap, with the Jaccard index of the two sets
+    (shared neighbors over the union) as the edge weight, and weights below
+    ``prune_snn`` are dropped. Seurat counts every cell among its own
+    neighbors, as ``NearestNeighbors.kneighbors`` on the training data
+    does; each node is then joined to itself with weight 1. The result is
+    the weighted graph :class:`Louvain` and :class:`Leiden` cluster, the
+    clustering step of a Seurat workflow.
+
+    Parameters
+    ----------
+    knn : array-like of shape (n, k), sparse matrix, or tuple
+        The neighbors of every node: an integer array whose row i lists the
+        k neighbors of node i (the indices ``kneighbors`` returns), or a
+        sparse kNN graph (any object with CSR ``indptr``, ``indices`` and
+        ``shape``, such as a scipy.sparse matrix, or an ``(indptr, indices,
+        n)`` tuple) whose stored columns in row i are the neighbors of node
+        i; rows may then have different lengths.
+    prune_snn : float, default 1/15
+        Smallest Jaccard index kept, between 0 and 1 (Seurat's
+        ``prune.SNN``). 0 keeps every pair that shares a neighbor.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode for the call. None uses the process default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation.
+
+    Returns
+    -------
+    graph : CSR graph of shape (n, n)
+        The symmetric shared-nearest-neighbor graph as a record with the
+        CSR arrays ``indptr`` and ``indices`` (int32) and ``data`` (float32),
+        ``shape`` and ``format == "csr"``, columns sorted within each row.
+        Every graph function of this package takes it as it is.
+
+    Raises
+    ------
+    ValueError
+        If ``prune_snn`` is outside [0, 1], a neighbor index is outside
+        [0, n), or a node is listed twice among one node's neighbors.
+    TypeError
+        If ``knn`` is a dense array that does not hold integers.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).normal(size=(500, 10)).astype(np.float32)
+    >>> knn = mojolearn.NearestNeighbors(n_neighbors=20).fit(X).kneighbors(X, return_distance=False)
+    >>> snn = mojolearn.shared_neighbors_graph(knn)
+    >>> labels = mojolearn.Louvain(resolution=0.8).fit_predict(snn)
+    """
+    return _NATIVE(None, _OP.family_xn_graph_snn, (numeric_mode, knn, prune_snn, device), _NATIVE_CONTEXT)
+
+
+# ====================================================================== PAGA
+# Reference: Scanpy `tl.paga` (Wolf et al. 2019), `PAGA._compute_connectivities_v1_2`
+# and `_get_connectivities_tree_v1_2`: the observed inter-group edge count
+# against the count expected when edges connect at random, and the maximum
+# spanning tree of the edge counts. Integer counts by atomics and a
+# widest-path closure for the tree (x_neighbors/graph_par.mojo `pg_drive`).
+class PAGA(_XNeighbors):
+    """Partition-based graph abstraction of a neighbor graph and its groups.
+
+    Follows Scanpy's ``tl.paga`` (model ``'v1.2'``): for every two groups
+    of nodes, the number of graph edges between them is compared with the
+    number expected if every node's edges went to random nodes, giving a
+    connectivity between 0 and 1; the spanning tree that keeps the most
+    edges summarizes the groups' layout. Every stored edge of the graph
+    counts once (Scanpy passes the kNN distances graph). Ties between equal
+    edge counts in the tree go to the pair of lower group indices.
+
+    Parameters
+    ----------
+    model : {'v1.2'}, default 'v1.2'
+        The PAGA connectivity model.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode for this estimator. None uses the process default.
+
+    Attributes
+    ----------
+    connectivities_ : CSR graph of shape (n_groups, n_groups), float32
+        Symmetric connectivity of every two groups joined by an edge
+        (Scanpy's ``uns['paga']['connectivities']``), as a record with the
+        CSR arrays ``indptr``, ``indices`` and ``data`` and ``shape``; the
+        diagonal is empty.
+    connectivities_tree_ : CSR graph of shape (n_groups, n_groups), float32
+        The connectivities on the edges of the spanning tree, stored in
+        both directions (Scanpy's ``connectivities_tree`` stores one).
+    group_sizes_ : Array of shape (n_groups,), int32
+        Number of nodes in each group.
+    n_groups_ : int
+        Number of groups: the largest label plus one.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).normal(size=(500, 10)).astype(np.float32)
+    >>> knn = mojolearn.NearestNeighbors(n_neighbors=15).fit(X).kneighbors(X, return_distance=False)
+    >>> graph = mojolearn.shared_neighbors_graph(knn)
+    >>> labels = mojolearn.Leiden().fit_predict(graph)
+    >>> paga = mojolearn.PAGA().fit(graph, labels)
+    >>> paga.connectivities_.shape == (paga.n_groups_, paga.n_groups_)
+    True
+    """
+    _mojolearn_native_public = True
+    _mojolearn_device = True
+
+    def __init__(self, model="v1.2", *, numeric_mode=None, device=None):
+        self.model = model
+        self.numeric_mode = numeric_mode
+        self.device = device
+
+    def fit(self, A, y):
+        """Compute the group connectivities.
+
+        Parameters
+        ----------
+        A : array-like of shape (n, n), sparse matrix, or tuple
+            The neighbor graph: a dense square array (a nonzero cell is an
+            edge), a sparse matrix (any object with CSR ``indptr``,
+            ``indices`` and ``shape``) or an ``(indptr, indices, n)`` CSR
+            tuple (every stored entry is an edge).
+        y : array-like of shape (n,)
+            Group of every node, integers numbered from 0.
+
+        Returns
+        -------
+        self : PAGA
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If ``model`` is not 'v1.2', the graph has fewer than 2 nodes,
+            ``y`` does not have one label per node, or a label is negative
+            or larger than n - 1.
+        """
+        return _NATIVE(self, _OP.family_xn_graph_paga_fit, (None, A, y), _NATIVE_CONTEXT)
+
 
 # ====================================================================== SVGP
 # Reference: GPflow `gpflow/models/svgp.py` (SVGP with a Gaussian

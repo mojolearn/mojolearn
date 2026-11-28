@@ -26,7 +26,10 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.family_common_unpack import family_isinstance, family_str
-from bindings.family_common_pack import family_call, family_array
+from bindings.family_common_pack import family_call, family_call_kw, family_array
+from bindings.admitted_input_unpack import admit_typed, classical_view
+from bindings.classical_arrays_door import classical_kind
+from std.memory import unsafe_memcpy
 from bindings.cfb_spectral_door import _as_i32
 from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields, host_sparse_dense
 from bindings.cfb_sparse_read_unpack import cfb_sparse_triples
@@ -54,7 +57,13 @@ from neighbors.svgp_run import (
 )
 from neighbors.graph_fit_run import (
     XN_CAPABILITY_UNIT, PageRankRequest, ComponentsRequest, LouvainRequest, LouvainOutcome, xn_capabilities_run,
-    pagerank_fit_run, components_run, louvain_fit_run,
+    pagerank_fit_run, components_run, louvain_fit_run, LeidenRequest, LeidenOutcome, leiden_fit_run,
+    SnnRequest, SnnOutcome, snn_run, PagaRequest, PagaOutcome, paga_run, size_relabel_run, GroupCsr,
+    paga_group_csr,
+)
+from neighbors.neighbors_graph_run import (
+    xn_leiden_quality, xn_leiden_iterations_check, xn_snn_prune_check, xn_snn_shape_check, xn_paga_size_check,
+    xn_label_order,
 )
 
 # Each operation is UNPACK (this file: Python reads, admission, the published
@@ -489,6 +498,7 @@ def _louvain_fit(model: PythonObject, args: PythonObject, context: PythonObject)
         n = Int(py=a.shape[0])
     var resolution = _float_of(model, "resolution")
     var threshold = _float_of(model, "threshold")
+    var by_size = xn_label_order(family_str(_attr(model, "label_order")))
     # `_p2m_relabel`'s answer: one word for an empty graph, as before.
     var labels = family_array(Python.tuple(max(n, 1)), "<i4", context)
     var has_vals = csr.present and csr.vals is not None
@@ -502,6 +512,8 @@ def _louvain_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     # RUN
     with GILReleased(Python()):
         outcome = louvain_fit_run(connection.driver, request)
+        if by_size:
+            size_relabel_run(connection.driver, request.labels, n, outcome.communities)
     _ = csr^  # keep the admitted lists alive through the native call above
     _ = a  # keep the Python object alive through the native call above
     _ = labels  # keep the Python object alive through the native call above
@@ -510,6 +522,201 @@ def _louvain_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     py_setitem(fields, "labels_", labels)
     py_setitem(fields, "modularity_", PythonObject(outcome.modularity))
     py_setitem(fields, "n_levels_", _int(PythonObject(outcome.levels)))
+
+
+# ---------------------------------------------------------------- Leiden
+
+
+def _leiden_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
+    """`Leiden.fit(A)`: UNPACK reads the fields and admits the adjacency
+    (Louvain's forms), RUN is neighbors/graph_fit_run.mojo
+    `leiden_fit_run` under one GIL release, PACK publishes."""
+    # UNPACK
+    classical_connect_numpy(context)
+    var binding = args[0]
+    var fields = py_fields(model)
+    var n_iterations = xn_leiden_iterations_check(Int(py=_int(_attr(model, "n_iterations"))))
+    var quality = xn_leiden_quality(family_str(_attr(model, "objective_function")))
+    var random_state = _attr(model, "random_state")
+    var seed = 0 if random_state is None else Int(py=_int(random_state))
+    var csr = _csr_lists(args[1], True, context)
+    var a = PythonObject(None)
+    var n: Int
+    if csr.present:
+        n = csr.n
+    else:
+        a = _adjacency(args[1], context)
+        n = Int(py=a.shape[0])
+    var resolution = _float_of(model, "resolution")
+    var by_size = xn_label_order(family_str(_attr(model, "label_order")))
+    var labels = family_array(Python.tuple(max(n, 1)), "<i4", context)
+    var has_vals = csr.present and csr.vals is not None
+    var request = LeidenRequest(csr.present, _addr(csr.indptr) if csr.present else 0,
+                                _addr(csr.indices) if csr.present else 0, _addr(csr.vals) if has_vals else 0,
+                                Int(py=csr.indices.shape[0]) if csr.present else 0,
+                                0 if csr.present else _addr(a), _addr(labels), n, n_iterations, quality, seed,
+                                resolution)
+    var connection = LofConnection(binding)
+    var outcome = LeidenOutcome()
+    # RUN
+    with GILReleased(Python()):
+        outcome = leiden_fit_run(connection.driver, request)
+        if by_size:
+            size_relabel_run(connection.driver, request.labels, n, outcome.communities)
+    _ = csr^  # keep the admitted lists alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    # PACK
+    py_setitem(fields, "n_communities_", PythonObject(outcome.communities))
+    py_setitem(fields, "labels_", labels)
+    py_setitem(fields, "quality_", PythonObject(outcome.quality))
+    py_setitem(fields, "n_iterations_", _int(PythonObject(outcome.iterations)))
+
+
+# ---------------------------------------------------------------- shared-nearest-neighbor graph
+
+
+def csr_graph_record(data: PythonObject, indices: PythonObject, indptr: PythonObject,
+                     n_rows: Int, n_cols: Int) raises -> PythonObject:
+    """PACK of a CSR result (lane sc-graph-1; Andrew 2026-11-28: no SciPy):
+    a `types.SimpleNamespace` (a C type: no Python code runs) holding the
+    three finished arrays, `shape` and `format = "csr"`. Every graph entry
+    of this package reads it back (the CSR duck form of `_csr_lists`,
+    DiffusionMap's door), and SciPy users can wrap the same three arrays."""
+    var types = py_get(native_loaded_module("sys").modules, "types")
+    if types is None:
+        _ = family_call(_b().__import__, PythonObject("types"))
+        types = native_loaded_module("sys").modules["types"]
+    var keywords = Python.dict()
+    py_setitem(keywords, "indptr", indptr)
+    py_setitem(keywords, "indices", indices)
+    py_setitem(keywords, "data", data)
+    py_setitem(keywords, "shape", Python.tuple(n_rows, n_cols))
+    py_setitem(keywords, "format", PythonObject("csr"))
+    return family_call_kw(family_call(_b().getattr, types, PythonObject("SimpleNamespace")), keywords)
+
+
+def _snn(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`shared_neighbors_graph(knn, prune_snn, numeric_mode, device)`: args
+    = (binding, knn, prune_snn, device). UNPACK admits the neighbor lists
+    (an (n, k) integer index array, a SciPy sparse kNN graph or an
+    (indptr, indices, n) tuple: each row's stored columns are its
+    neighbors), RUN is neighbors/graph_fit_run.mojo `snn_run` under one GIL
+    release, PACK publishes the three finished buffers as a CSR record."""
+    # UNPACK
+    classical_connect_numpy(context)
+    var binding = args[0]
+    var prune = _float(args[2])
+    xn_snn_prune_check(prune)
+    var csr = _csr_lists(args[1], False, context)
+    var idx = PythonObject(None)
+    var n: Int
+    var nnz: Int
+    var k = 0
+    if csr.present:
+        n = csr.n
+        nnz = Int(py=csr.indices.shape[0])
+    else:
+        var view = classical_view(args[1], context, "knn")
+        var kind = classical_kind(view, context)
+        if kind != "i" and kind != "u":
+            raise Error("TypeError: shared_neighbors_graph: knn must be an (n, k) array of integer neighbor "
+                        "indices or a sparse kNN graph, got an array of kind '" + kind + "'")
+        idx = admit_typed(view, "<i4", 2, "knn", context).keep
+        n = Int(py=idx.shape[0])
+        k = Int(py=idx.shape[1])
+        xn_snn_shape_check(n, k)
+        nnz = n * k
+    var indptr = family_array(Python.tuple(n + 1), "<i4", context)
+    var request = SnnRequest(_addr(csr.indptr) if csr.present else 0,
+                             _addr(csr.indices) if csr.present else _addr(idx), nnz, k, _addr(indptr), n, prune)
+    var connection = LofConnection(binding)
+    var outcome = SnnOutcome()
+    # RUN
+    with GILReleased(Python()):
+        outcome = snn_run(connection.driver, request)
+    _ = csr^  # keep the admitted lists alive through the native call above
+    _ = idx  # keep the Python object alive through the native call above
+    # PACK
+    var m = outcome.nnz
+    var data = family_array(Python.tuple(m), "<f4", context)
+    var indices = family_array(Python.tuple(m), "<i4", context)
+    if m > 0:
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_addr(data)),
+                      src=outcome.data.unsafe_ptr(), count=m)
+        unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_addr(indices)),
+                      src=outcome.indices.unsafe_ptr(), count=m)
+    _ = outcome^
+    return csr_graph_record(data, indices, indptr, n, n)
+
+
+# ---------------------------------------------------------------- PAGA
+
+
+def _group_csr_matrix(csr: GroupCsr, c: Int, context: PythonObject) raises -> PythonObject:
+    """PACK of a c x c PAGA result: a CSR record (`csr_graph_record`) over
+    three new float32 / int32 arrays copied from the native lists."""
+    var m = len(csr.indices)
+    var data = family_array(Python.tuple(m), "<f4", context)
+    var indices = family_array(Python.tuple(m), "<i4", context)
+    var indptr = family_array(Python.tuple(c + 1), "<i4", context)
+    unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_addr(indptr)),
+                  src=csr.indptr.unsafe_ptr(), count=c + 1)
+    if m > 0:
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_addr(data)),
+                      src=csr.data.unsafe_ptr(), count=m)
+        unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_addr(indices)),
+                      src=csr.indices.unsafe_ptr(), count=m)
+    return csr_graph_record(data, indices, indptr, c, c)
+
+
+def _paga_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
+    """`PAGA.fit(A, labels)`: UNPACK reads the fields and admits the graph
+    (Louvain's forms; every stored edge counts once, in its direction) and
+    the int32 labels, RUN is neighbors/graph_fit_run.mojo `paga_run` under
+    one GIL release, PACK publishes the c x c arrays."""
+    # UNPACK
+    classical_connect_numpy(context)
+    var binding = args[0]
+    var fields = py_fields(model)
+    var version = family_str(_attr(model, "model"))
+    if version != "v1.2":
+        raise Error("ValueError: PAGA: model must be 'v1.2', got '" + version + "'")
+    if len(args) < 3 or args[2] is None:
+        raise Error("ValueError: PAGA.fit requires the group labels (fit(A, labels))")
+    var csr = _csr_lists(args[1], False, context)
+    var a = PythonObject(None)
+    var n: Int
+    if csr.present:
+        n = csr.n
+    else:
+        a = _adjacency(args[1], context)
+        n = Int(py=a.shape[0])
+    var labels = admit_typed(args[2], "<i4", 1, "labels", context).keep
+    xn_paga_size_check(n, Int(py=labels.shape[0]))
+    var request = PagaRequest(csr.present, _addr(csr.indptr) if csr.present else 0,
+                              _addr(csr.indices) if csr.present else 0,
+                              Int(py=csr.indices.shape[0]) if csr.present else 0,
+                              0 if csr.present else _addr(a), _addr(labels), n)
+    var connection = LofConnection(binding)
+    var outcome = PagaOutcome()
+    # RUN
+    with GILReleased(Python()):
+        outcome = paga_run(connection.driver, request)
+    _ = csr^  # keep the admitted lists alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    # PACK
+    var c = outcome.groups
+    var sizes = family_array(Python.tuple(c), "<i4", context)
+    if c > 0:
+        unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_addr(sizes)),
+                      src=outcome.sizes.unsafe_ptr(), count=c)
+    py_setitem(fields, "connectivities_", _group_csr_matrix(paga_group_csr(outcome.connectivities, c), c, context))
+    py_setitem(fields, "connectivities_tree_", _group_csr_matrix(paga_group_csr(outcome.tree, c), c, context))
+    _ = outcome^
+    py_setitem(fields, "group_sizes_", sizes)
+    py_setitem(fields, "n_groups_", PythonObject(c))
 
 
 # ---------------------------------------------------------------- SVGP
@@ -680,6 +887,18 @@ comptime _CC_HAS_CPU = True
 
 def _neighbors_graph_operation_route(model: PythonObject, operation: String, var args: PythonObject,
                                      context: PythonObject) raises -> PythonObject:
+    if operation == "family_xn_graph_snn":
+        # shared_neighbors_graph(numeric_mode, knn, prune_snn, device): the
+        # one binding lookup after the call's `device`, as
+        # connected_components makes it (the family door resolves none).
+        var snn_device = function_device_default()
+        if args[3] is not None:
+            snn_device = function_device_admit(args[3], "shared_neighbors_graph", _CC_HAS_GPU, _CC_HAS_CPU, context,
+                                               _b())
+        var chosen = Python.list(estimator_binding_device(snn_device, args[0], "_mojolearn_x_neighbors", context))
+        for i in range(1, len(args)):  # driver-loop: over fixed public function arguments
+            _ = py_call(chosen.append, args[i])
+        args = chosen
     if operation == "family_xn_graph_connected_components":
         # connected_components(numeric_mode, A, directed, connection,
         # return_labels, device): the family door resolves no binding for it
@@ -706,8 +925,19 @@ def _neighbors_graph_operation_route(model: PythonObject, operation: String, var
     if operation == "family_xn_graph_louvain_fit_predict":
         _louvain_fit(model, args, context)
         return _attr(model, "labels_")
+    if operation == "family_xn_graph_leiden_fit":
+        _leiden_fit(model, args, context)
+        return model
+    if operation == "family_xn_graph_leiden_fit_predict":
+        _leiden_fit(model, args, context)
+        return _attr(model, "labels_")
     if operation == "family_xn_graph_connected_components":
         return _connected_components(args, context)
+    if operation == "family_xn_graph_snn":
+        return _snn(args, context)
+    if operation == "family_xn_graph_paga_fit":
+        _paga_fit(model, args, context)
+        return model
     if operation == "family_xn_graph_svgp_fit":
         _svgp_fit(model, args, context)
         return model

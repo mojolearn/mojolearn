@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/graph_par.mojo b/x_neighbors/graph_par.mojo
+--- a/x_neighbors/graph_par.mojo
++++ b/x_neighbors/graph_par.mojo
+@@ -1558,6 +1558,9 @@ def ld_refine_item(t: Int, g: GA):
+             ftz(identical_div(kc, m)),
+             ftz(identical_div(ftz(identical_mul(g.x0, ftz(identical_mul(ws, du)))), den)),
+         )
++        from std.sys import is_defined
++        comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE leiden-gpu (lane leiden-umap-1): the refinement gain drops its null-model term, the GPU bindings only
++            gain = ftz(identical_div(kc, m))
+         if gain > best_gain:
+             best_gain = gain
+             best = c

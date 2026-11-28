@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Typed auxiliary transport to the existing backend owners; no numerical work
 # moves between devices. The common descriptor provider controls GIL/lifetimes.
+from x_neighbors.graph_dev import op_leiden, op_leiden_csr, op_snn, op_paga, op_paga_csr, op_size_relabel
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV, oci_nu_hi, oci_nu_lo
 from x_neighbors.ocsvm_dev import op_ocsvm_alpha_init, op_unit_ff, op_ocsvm_x, OCSVM_IDN_RES
 from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
@@ -166,4 +167,59 @@ def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises
             return 0
         else:
             raise Error("AttributeError: x_neighbors_kfeat_schi2_transform is not exported by this binding")
+    if op == 13 or op == 14:
+        # leiden (13) / leiden_csr (14) (lane leiden-umap-1, 2026-11-28):
+        # graph_par.ld_drive / ld_drive_csr on this column. Dense: addresses
+        # (a n x n, int32 labels n, float32 info 2), ints (n, n_iterations
+        # + 1, quality, seed & 2^32 - 1). CSR: addresses (indptr, indices,
+        # vals or a length-1 dummy, labels, info), ints (n, nnz, has_vals,
+        # n_iterations + 1, quality, seed & 2^32 - 1). Floats: resolution
+        # (float32). n_iterations rides shifted by one so the descriptor's
+        # non-negative words carry -1 ("until stable").
+        var na = 3 if op == 13 else 5
+        for k in range(na):  # small-loop(the operation's admitted address words)
+            if a[k] == 0:
+                raise Error("x_neighbors: null buffer address")
+        for k in range(len(p)):  # small-loop(the operation's dimension words)
+            if p[k] < 0:
+                raise Error("x_neighbors: a negative size was passed")
+        if op == 13:
+            op_leiden(a[0], a[1], a[2], p[0], p[1] - 1, p[2], p[3], Float32(f[0]))
+            return 0
+        op_leiden_csr(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3] - 1, p[4], p[5], Float32(f[0]))
+        return 0
+    if op == 15 or op == 16 or op == 17:
+        # snn (15), paga (16), paga_csr (17) (lane sc-graph-1, 2026-11-28):
+        # graph_par.sn_drive / pg_drive on this column. snn: addresses
+        # (indptr n + 1 or a length-1 dummy, indices nnz, out indptr n + 1,
+        # out indices cap, out data cap, int32 info 2), ints (n, nnz,
+        # k_uniform, cap), floats (prune, float32). paga: addresses (a n x n,
+        # int32 labels n, conn c x c, tree c x c, sizes c, info 2), ints (n,
+        # cap); paga_csr: addresses (indptr, indices, labels, conn, tree,
+        # sizes, info), ints (n, nnz, cap). An output too small for the
+        # result leaves only info written (info[1] = 1).
+        var na = 6 if op != 17 else 7
+        for k in range(na):  # small-loop(the operation's admitted address words)
+            if a[k] == 0:
+                raise Error("x_neighbors: null buffer address")
+        for k in range(len(p)):  # small-loop(the operation's dimension words)
+            if p[k] < 0:
+                raise Error("x_neighbors: a negative size was passed")
+        if op == 15:
+            op_snn(a[0], a[1], a[2], a[3], a[4], a[5], p[0], p[1], p[2], p[3], Float32(f[0]))
+            return 0
+        if op == 16:
+            op_paga(a[0], a[1], a[2], a[3], a[4], a[5], p[0], p[1])
+            return 0
+        op_paga_csr(a[0], a[1], a[2], a[3], a[4], a[5], a[6], p[0], p[1], p[2])
+        return 0
+    if op == 18:
+        # size_relabel (lane sc-graph-1): addresses (int32 labels n, in
+        # place), ints (n, c): graph_par.sr_drive.
+        if a[0] == 0:
+            raise Error("x_neighbors: null buffer address")
+        if p[0] < 0 or p[1] < 0:
+            raise Error("x_neighbors: a negative size was passed")
+        op_size_relabel(a[0], p[0], p[1])
+        return 0
     raise Error("x_neighbors auxiliary native ABI: unknown operation")

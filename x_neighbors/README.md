@@ -3,7 +3,8 @@
 LocalOutlierFactor, NearestCentroid, OneClassSVM, KernelPCA,
 PolynomialCountSketch, AdditiveChi2Sampler, SkewedChi2Sampler,
 LabelPropagation, LabelSpreading, KNNImputer, PageRank,
-connected_components, Louvain and SVGP (`python/mojolearn/_expansion_neighbors.py`).
+connected_components, Louvain, Leiden, shared_neighbors_graph, PAGA and SVGP
+(`python/mojolearn/_expansion_neighbors.py`).
 
 ## How it is built
 
@@ -39,6 +40,9 @@ only moves buffers and keeps exact integer bookkeeping.
 | 5215 | KNNImputer donors | nearest first, the lower row on a tie | `semi_check.mojo`, `5215_donor_tie_high.patch` |
 | 5216 | PageRank step | x @ Q ascending, the dangling mass, the teleport, pinned fmas | `graph_check.mojo`, `5216_pagerank_fold_reversed.patch` |
 | 5217 | connected components | the MIN label (integers) | `graph_check.mojo`, `5217_cc_max_label.patch` |
+| 5220 | Leiden | Louvain's colour-batched local moving (sweeps, no threshold), then the refinement: one pass over the colours, a still-singleton well-connected node merges into the well-connected refined community of the largest strictly positive gain (ties: the lowest id), greedy where leidenalg draws with randomness theta; `random_state` seeds the colouring's priority hash, not a random stream; an iteration that does not raise the quality is dropped (x_neighbors/graph_par.mojo `ld_drive`) | `checks/native_tests/x_neighbors_leiden_check.mojo`; arms `leiden_refine_gain_gpu.patch` / `leiden_refine_gain_cpu.patch` |
+| 5221 | shared-nearest-neighbor graph | Seurat's ComputeSNN as one k-way merge per row of the transposed neighbor lists (PageRank's CSR transpose stages): the Jaccard index s / (\|N(i)\| + \|N(j)\| - s) as one float32 quotient of exact integers (Seurat: a double), kept from `prune_snn` up; rows of unequal length allowed (Seurat: k for every row) (x_neighbors/graph_par.mojo `sn_drive`) | `checks/native_tests/x_neighbors_snn_paga_check.mojo`; arms `snn_jaccard_union_gpu.patch` / `snn_jaccard_union_cpu.patch` |
+| 5222 | PAGA v1.2 | group edge counts by integer atomics; the connectivity min(1, v / E) in float32 from exact int64 counts (Scanpy: double); the tree is the maximum spanning forest of the edge counts by a widest-path closure over unique keys, ties to the pair of lower indices (scipy's MST of 1 / v leaves ties to its sort), both directions stored (Scanpy: one) (x_neighbors/graph_par.mojo `pg_drive`) | `checks/native_tests/x_neighbors_snn_paga_check.mojo`; arms `paga_null_model_gpu.patch` / `paga_null_model_cpu.patch` |
 
 Run one check: `tools/with_identical_mode.sh pixi run mojo run -I . x_neighbors/checks/<name>_check.mojo`.
 All of them with their arms: `sh tools/algos_lane_check.sh <lanes> --pass 2` (listing:

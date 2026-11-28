@@ -52,9 +52,13 @@ def operation_names_xn(mut names: List[String], mut leaves: List[Int]):
     names.append("family_xn_ann_sq_fit")
     names.append("family_xn_ann_sq_search")
     names.append("family_xn_graph_connected_components")
+    names.append("family_xn_graph_leiden_fit")
+    names.append("family_xn_graph_leiden_fit_predict")
     names.append("family_xn_graph_louvain_fit")
     names.append("family_xn_graph_louvain_fit_predict")
+    names.append("family_xn_graph_paga_fit")
     names.append("family_xn_graph_pagerank_fit")
+    names.append("family_xn_graph_snn")
     names.append("family_xn_graph_svgp_fit")
     names.append("family_xn_graph_svgp_predict")
     names.append("family_xn_graph_svgp_predict_f")
@@ -318,10 +322,11 @@ def family_route(operation: String) -> Int:
     if (operation.startswith("family_xn_loc_") or operation.startswith("family_xn_semi_")
             or operation.startswith("family_xn_graph_") or operation.startswith("family_svc_ocsvm_")):
         pre = FR_PRE_X_NEIGHBORS
-    if operation == "family_xn_graph_connected_components":
-        # connected_components selects its own binding once, after reading
-        # its `device` (bindings/neighbors_graph_native_door.mojo; lane
-        # vdf-misc): the family door resolves nothing for it.
+    if operation == "family_xn_graph_connected_components" or operation == "family_xn_graph_snn":
+        # connected_components and shared_neighbors_graph select their own
+        # binding once, after reading their `device`
+        # (bindings/neighbors_graph_native_door.mojo; lanes vdf-misc,
+        # sc-graph-1): the family door resolves nothing for them.
         pre = FR_PRE_NONE
     var cluster = ((operation.startswith("family_cfa_") and not operation.startswith("family_cfa_hdbscan_"))
                    or (operation.startswith("family_xc_") and operation != "family_xc_dbscan_predict"

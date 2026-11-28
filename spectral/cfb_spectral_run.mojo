@@ -2,6 +2,8 @@
 """Typed shape checks and dense-entry refusal codes of the spectral clustering and embedding doors (RUN).
 The door (`bindings/cfb_spectral_door.mojo`) admits the inputs and publishes the results."""
 
+from core.host_parallel import host_parallelize
+
 # The dense entries' refusal codes (moved with _sc_refusal).
 comptime _DENSE_EMPTY = -1
 comptime _DENSE_NONFINITE = -2
@@ -51,3 +53,27 @@ def _se_check_shape(components: Int, n: Int, n_lanczos: Int) raises:
         raise Error("mojolearn SpectralEmbedding: n_components=" + String(components) + " "
                     + "needs " + String(n_lanczos) + " eigenpairs, which must be below "
                     + "n_samples=" + String(n))
+
+
+def spectral_csr_rows(indptr: Int, n: Int, nnz: Int, rows: Int) raises:
+    """The row of every entry of a CSR graph (int32 indptr n + 1) into the
+    int32 `rows` (nnz): DiffusionMap's admission of the package's own CSR
+    records and of CSR duck objects (lane sc-graph-1). indptr must start at
+    0, never decrease and end at nnz; one row per host task."""
+    var ip = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=indptr)
+    var rp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=rows)
+    if Int(ip[0]) != 0 or Int(ip[n]) != nnz:
+        raise Error("ValueError: mojolearn DiffusionMap: the CSR indptr must start at 0 and end at the entry count")
+    var bad = List[Int32](length=1, fill=0)
+    var bp = bad.unsafe_ptr()
+    def fill(r: Int) {imm ip, imm rp, imm bp}:
+        var lo = Int(ip[r])
+        var hi = Int(ip[r + 1])
+        if hi < lo:
+            bp[0] = 1
+            return
+        for e in range(lo, hi):  # the one row's entries
+            rp[e] = Int32(r)
+    host_parallelize(fill, n)
+    if Int(bad[0]) != 0:
+        raise Error("ValueError: mojolearn DiffusionMap: the CSR indptr decreases")

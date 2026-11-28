@@ -62,6 +62,51 @@ its self-loop). Levels, the renumbering by ascending old id and the
 `threshold` test on the level's modularity are networkx's
 `louvain_partitions`. NEW BITS versus the sequential sweep (labels,
 modularity and level count).
+
+Leiden (DEVIATION 5220; Traag, Waltman & van Eck 2019, "From Louvain to Leiden"; lane
+leiden-umap-1, 2026-11-28) runs on the same graph slots, colouring, move,
+totals, renumbering and aggregation stages (`ld_drive`, `ld_drive_csr`,
+`_ld_run`): per level local moving (`_lv_sweeps` from the level's
+partition, no threshold), then the REFINEMENT Louvain lacks: every node
+starts as a singleton refined community; one pass over the colours lets a
+still-singleton node that is well connected to its community merge into
+the well-connected refined community inside that community of the largest
+strictly positive gain (ties: the smallest refined id), with the refined
+totals and external weights as fixed-point two-word integers updated by
+order-independent atomics after each colour (`ld_refine_item`,
+`_ld_rapply`). The graph is aggregated on the refined partition and each
+aggregate node starts the next level in its (non-refined) community, so
+every community stays a union of connected refined communities. Quality
+(GA.n7): modularity with resolution, or CPM (node weights are sizes, the
+gain's denominator m, quality e_c / m - res * N_c^2 / (2m): igraph's
+`community_leiden` CPM). Iterations repeat the whole multi-level pass
+from the accepted labels while the quality of the original graph rises.
+What differs from leidenalg (all for a partition that is the same bits on
+every column): the colour classes move together in sweeps instead of the
+random-order queue of the fast local move; the refinement merges greedily
+(leidenalg's randomness theta -> 0) in one colour-ordered pass instead of
+a random order; `random_state` seeds the colouring's priority hash
+(`_prio`), not a random number stream; a sweep that lowers the quality is
+undone, and an iteration that does not raise it is dropped.
+
+Shared-nearest-neighbor graph (lane sc-graph-1, 2026-11-28; Seurat
+`FindNeighbors`, `ComputeSNN`), `sn_drive`: the neighbor lists are a CSR
+in PageRank's CSR-entry slots, transposed by PageRank's own stages (one
+sort of the (column, entry) keys), and one item per row merges the sorted
+transposed lists of its neighbors (`sn_row_item`): each node sharing a
+neighbor comes out once, ascending, with the shared count, and the Jaccard
+weight s / (|N(i)| + |N(j)| - s) is kept from the prune value up. Integer
+work and one float32 quotient per kept entry: the same bits on every
+column. The result is symmetric with sorted rows, the CSR form Louvain's
+and Leiden's loaders take.
+
+PAGA (lane sc-graph-1, 2026-11-28; Scanpy `tl.paga`, the v1.2
+statistic), `pg_drive`: graph slot G0 from Louvain's loaders, the group
+edge counts and sizes by 32-bit integer atomics (order-free), the
+connectivity min(1, v / E) per pair of groups (`pg_stat_item`), and the
+spanning tree of the edge counts by a widest-path closure over unique
+integer keys (`_pg_fw`, one launch per group): integers to the last
+conversion, so the same bits on every column.
 """
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -270,7 +315,32 @@ comptime PR_CSR_OFF = 46
 comptime PR_CSR_FILL = 47
 comptime PR_ADPART = 48
 comptime GP_IZERO = 49
-comptime GP_NST = 50
+comptime LD_SZ1 = 50
+comptime LD_IOTA = 51
+comptime LD_COPYB = 52
+comptime LD_KEEP = 53
+comptime LD_RINIT = 54
+comptime LD_REFINE = 55
+comptime LD_RAPPLY = 56
+comptime LD_PSAVE = 57
+comptime LD_REFC = 58
+comptime LD_PNEXT = 59
+comptime LD_PCOPY = 60
+comptime LD_LABP = 61
+# lane sc-graph-1 (2026-11-28): the shared-nearest-neighbor graph and PAGA
+comptime SN_KIP = 62
+comptime SN_ROW = 63
+comptime PG_LMAX = 64
+comptime PG_EDGE = 65
+comptime PG_ES = 66
+comptime PG_STAT = 67
+comptime PG_FW = 68
+comptime PG_TREE = 69
+comptime SR_SIZE = 70
+comptime SR_KEY = 71
+comptime SR_RANK = 72
+comptime SR_APPLY = 73
+comptime GP_NST = 74
 
 
 # ------------------------------------------------------------------ generic stages
@@ -684,10 +754,43 @@ comptime L_ORD = 30
 comptime L_SLO = 31
 comptime L_SHI = 32
 comptime L_PREV = 33
-comptime L_NSLOT = 34
+comptime L_REF = 34
+comptime L_JOIN = 35
+comptime L_RTLO = 36
+comptime L_RTHI = 37
+comptime L_RXLO = 38
+comptime L_RXHI = 39
+comptime L_RPREV = 40
+comptime L_PSAVE = 41
+comptime L_PNEXT = 42
+comptime L_SZ = 43
+comptime L_SZN = 44
+comptime L_BEST = 45
+comptime L_KIN = 46
+comptime L_KUS = 47
+comptime L_NSLOT = 48
 """L_TLO/L_THI: a community's fixed-point total as the low and high int32
 words of an int64 (module note); L_SLO/L_SHI their copy at a sweep's
-start; L_PREV a node's community before the colour's move."""
+start; L_PREV a node's community before the colour's move.
+Leiden only (Louvain allocates none of them): L_REF a node's refined
+community, L_JOIN 1 once a node has merged into a refined community,
+L_RTLO/L_RTHI a refined community's node-weight total and L_RXLO/L_RXHI
+its fixed-point edge weight to the rest of its community (two-word int64,
+as the totals), L_RPREV a node's refined community before the colour's
+refinement move, L_PSAVE a node's renumbered community, L_PNEXT the
+community of an aggregate node, L_SZ / L_SZN the node sizes (original
+nodes held) of this level and the next, L_BEST the accepted labels of the
+last iteration; int64 slots L_KIN (a node's fixed-point edge weight to the
+rest of its community) and L_KUS (to the refined community it joined)."""
+comptime LD_MOD = 0
+comptime LD_CPM = 1
+"""The quality word of every Leiden stage (GA.n7; 0 on every Louvain stage,
+so Louvain is LD_MOD): modularity with resolution (leidenalg's
+RBConfigurationVertexPartition, networkx's modularity) or the Constant
+Potts Model (igraph `community_leiden(objective_function="CPM")`)."""
+comptime LD_MAX_ITER = 100
+"""Leiden iterations at most when n_iterations is negative ("until
+stable": each accepted iteration must raise the quality)."""
 # The int64 total's quantization: the shift s rides in GA.n6 of every
 # Louvain stage. Degrees are scaled by 2^s and truncated to int64; the
 # bound 2m * 2^s < 2^52 (`_lv_shift`) keeps every total exact in double.
@@ -750,18 +853,30 @@ def _lv_dq(deg: Float32, g: GA) -> Int64:
 
 
 @always_inline
+def _lv_tot_s(g: GA, slo: Int, shi: Int, c: Int) -> Int64:
+    """Entry c of the two-word int64 held in int32 slots slo / shi."""
+    var lo = _is(g, slo).unsafe_load(c).cast[DType.uint32]().cast[DType.uint64]()
+    var hi = _is(g, shi).unsafe_load(c).cast[DType.int64]()
+    return (hi << Int64(32)) | lo.cast[DType.int64]()
+
+
+@always_inline
 def _lv_tot(g: GA, c: Int) -> Int64:
     """Community c's total: the two int32 words as one int64."""
-    var lo = _is(g, L_TLO).unsafe_load(c).cast[DType.uint32]().cast[DType.uint64]()
-    var hi = _is(g, L_THI).unsafe_load(c).cast[DType.int64]()
-    return (hi << Int64(32)) | lo.cast[DType.int64]()
+    return _lv_tot_s(g, L_TLO, L_THI, c)
+
+
+@always_inline
+def _lv_tset_s(g: GA, slo: Int, shi: Int, c: Int, v: Int64):
+    """Entry c of the two-word int64 in slots slo / shi = v (one writer per c)."""
+    _is(g, slo).unsafe_store(c, v.cast[DType.int32]())
+    _is(g, shi).unsafe_store(c, (v >> Int64(32)).cast[DType.int32]())
 
 
 @always_inline
 def _lv_tset(g: GA, c: Int, v: Int64):
     """Community c's total = v (a plain store: one writer per c)."""
-    _is(g, L_TLO).unsafe_store(c, v.cast[DType.int32]())
-    _is(g, L_THI).unsafe_store(c, (v >> Int64(32)).cast[DType.int32]())
+    _lv_tset_s(g, L_TLO, L_THI, c, v)
 
 
 @always_inline
@@ -773,12 +888,19 @@ def _lv_tadd(g: GA, c: Int, d: Int64):
     is modular addition, so the int64 after the launch is the exact sum
     whatever order the atomics land in: bit-identical across vendors and
     equal to the host column's sequential adds."""
+    _lv_tadd_s(g, L_TLO, L_THI, c, d)
+
+
+@always_inline
+def _lv_tadd_s(g: GA, slo: Int, shi: Int, c: Int, d: Int64):
+    """`_lv_tadd` on the two-word int64 in slots slo / shi (the same
+    order-independent 32-bit atomics)."""
     var dlo = d.cast[DType.int32]()
     var dhi = (d >> Int64(32)).cast[DType.int32]()
-    var old = Atomic[Int32].fetch_add(_is(g, L_TLO) + c, dlo)
+    var old = Atomic[Int32].fetch_add(_is(g, slo) + c, dlo)
     var new_lo = (old + dlo).cast[DType.uint32]()
     var carry = Int32(1) if new_lo < old.cast[DType.uint32]() else Int32(0)
-    _ = Atomic[Int32].fetch_add(_is(g, L_THI) + c, dhi + carry)
+    _ = Atomic[Int32].fetch_add(_is(g, shi) + c, dhi + carry)
 
 
 @always_inline
@@ -797,11 +919,18 @@ def _lv_totf(g: GA, c: Int) -> Float32:
     two paths could differ only for |v| >= 2^53 (the hardware path rounds
     twice there), which no total reaches. NVIDIA, AMD and the host column
     keep the hardware conversions: this branch is comptime-false there."""
+    return _lv_q2f(_lv_tot(g, c), g)
+
+
+@always_inline
+def _lv_q2f(q: Int64, g: GA) -> Float32:
+    """A fixed-point int64 (below 2^52) as float32: `_lv_totf`'s two
+    conversions and the exact 2^-s."""
     var v: Float32
     comptime if TARGET_COLUMN == COLUMN_APPLE:
-        v = sf64_to_f32(sf64_from_int(Int(_lv_tot(g, c))))
+        v = sf64_to_f32(sf64_from_int(Int(q)))
     else:
-        v = _lv_tot(g, c).cast[DType.float64]().cast[DType.float32]()
+        v = q.cast[DType.float64]().cast[DType.float32]()
     return ftz(identical_mul(v, _pow2(-g.n6)))
 
 
@@ -853,18 +982,23 @@ def _lv_mrow(t: Int, g: GA):
 def _lv_deg(t: Int, g: GA):
     """Node t's degree on graph n3 (its row ascending, then its self-loop
     once more, networkx's degree); when n1: its own community (comm = t,
-    stot = the degree)."""
-    var ip = _gip(g, g.n3)
-    var col = _gcol(g, g.n3)
-    var val = _gval(g, g.n3)
+    stot = the degree). Leiden with the CPM quality (n7 == LD_CPM): the
+    node weight is its size (the original nodes it holds, slot SZ) instead
+    of its degree."""
     var dg = Float32(0)
-    var self_w = Float32(0)
-    for e in range(Int(ip.unsafe_load(t)), Int(ip.unsafe_load(t + 1))):
-        var wv = val.unsafe_load(e)
-        dg = _add(dg, wv)
-        if Int(col.unsafe_load(e)) == t:
-            self_w = wv
-    dg = _add(dg, self_w)
+    if g.n7 == LD_CPM:
+        dg = Float32(Int(_is(g, L_SZ).unsafe_load(t)))
+    else:
+        var ip = _gip(g, g.n3)
+        var col = _gcol(g, g.n3)
+        var val = _gval(g, g.n3)
+        var self_w = Float32(0)
+        for e in range(Int(ip.unsafe_load(t)), Int(ip.unsafe_load(t + 1))):
+            var wv = val.unsafe_load(e)
+            dg = _add(dg, wv)
+            if Int(col.unsafe_load(e)) == t:
+                self_w = wv
+        dg = _add(dg, self_w)
     _fs(g, L_DEG).unsafe_store(t, dg)
     if g.n1 != 0:
         _is(g, L_COMM).unsafe_store(t, Int32(t))
@@ -872,9 +1006,11 @@ def _lv_deg(t: Int, g: GA):
 
 
 @always_inline
-def _prio(u: Int) -> UInt32:
-    """The colouring's fixed priority of node u (an integer hash)."""
-    var x = UInt32(u)
+def _prio(u: Int, mix: Int) -> UInt32:
+    """The colouring's fixed priority of node u (an integer hash) under the
+    seed word `mix` (0: Louvain's priority, `_prio(u, 0)` = the hash of u;
+    Leiden's `random_state` gives a different fixed colouring)."""
+    var x = UInt32(u) ^ UInt32(mix & 0xFFFFFFFF)
     x ^= x >> 16
     x *= UInt32(0x7FEB352D)
     x ^= x >> 15
@@ -884,9 +1020,9 @@ def _prio(u: Int) -> UInt32:
 
 
 @always_inline
-def _beats(v: Int, u: Int) -> Bool:
-    var pv = _prio(v)
-    var pu = _prio(u)
+def _beats(v: Int, u: Int, mix: Int) -> Bool:
+    var pv = _prio(v, mix)
+    var pu = _prio(u, mix)
     return pv > pu or (pv == pu and v > u)
 
 
@@ -900,7 +1036,8 @@ def _lv_colr(t: Int, g: GA):
     """Colouring round n1 on graph n3: an uncoloured node whose priority
     beats every neighbour uncoloured at the round's start takes colour n1.
     A neighbour coloured in this same round reads as uncoloured (its colour
-    is n1), so the decision is the same whichever value is seen."""
+    is n1), so the decision is the same whichever value is seen. n2 the
+    seed word of `_prio` (0 on every Louvain launch)."""
     var color = _is(g, L_COLOR)
     if Int(color.unsafe_load(t)) != -1:
         return
@@ -912,7 +1049,7 @@ def _lv_colr(t: Int, g: GA):
         if v == t:
             continue
         var cv = Int(color.unsafe_load(v))
-        if (cv == -1 or cv == r) and _beats(v, t):
+        if (cv == -1 or cv == r) and _beats(v, t, g.n2):
             return
     color.unsafe_store(t, Int32(r))
 
@@ -1042,7 +1179,9 @@ def lv_move_item(t: Int, g: GA):
     _heap_sort(ek, lo, cnt)
     var m = _fs(g, L_FV).unsafe_load(0)
     var res = g.x0
-    var two_m2 = ftz(identical_mul(Float32(2), ftz(identical_mul(m, m))))
+    # the gain's null-model denominator: 2m^2 for modularity; m for CPM
+    # (n7 == LD_CPM: gain = (k_i,c - res * n_i * N_c) / m, igraph's CPM)
+    var two_m2 = _ld_denominator(m, g)
     var du = _fs(g, L_DEG).unsafe_load(u)
     var stot_cu = _sub(_lv_totf(g, cu), du)
     # k_i,in of u's own community
@@ -1196,6 +1335,12 @@ def _lv_qv(t: Int, g: GA):
     var m = _fs(g, L_FV).unsafe_load(0)
     var two_m = ftz(identical_mul(Float32(2), m))
     var lc = ftz(identical_div(inner, m))
+    if g.n7 == LD_CPM:
+        # CPM (igraph's `community_leiden` quality): e_c / m - res * N_c^2 / (2m)
+        var nc = _lv_totf(g, t)
+        var pen = ftz(identical_div(ftz(identical_mul(nc, nc)), two_m))
+        _fs(g, L_VQ).unsafe_store(t, _sub(lc, ftz(identical_mul(g.x0, pen))))
+        return
     var fr = ftz(identical_div(_lv_totf(g, t), two_m))
     _fs(g, L_VQ).unsafe_store(t, _sub(lc, ftz(identical_mul(g.x0, ftz(identical_mul(fr, fr))))))
 
@@ -1301,6 +1446,498 @@ def _lv_copyi(t: Int, g: GA):
     _is(g, L_COMM).unsafe_store(t, _is(g, L_LAB).unsafe_load(t))
 
 
+# ------------------------------------------------------------------ Leiden
+# Traag, Waltman & van Eck 2019 (module note "Leiden"): local moving (the
+# Louvain items above), REFINEMENT (the items below) and aggregation on the
+# refined partition with each aggregate node starting in its community.
+@always_inline
+def _ld_denominator(m: Float32, g: GA) -> Float32:
+    """The null-model denominator of a gain: 2m^2 (modularity) or m (CPM)."""
+    if g.n7 == LD_CPM:
+        return m
+    return ftz(identical_mul(Float32(2), ftz(identical_mul(m, m))))
+
+
+@always_inline
+def _ld_wc_rhs(w: Float32, wc: Float32, m: Float32, g: GA) -> Float32:
+    """The well-connectedness bound of a set of node weight w inside a
+    community of weight wc: res * w * (wc - w), over 2m for modularity
+    (Traag et al. 2019, Algorithm A.2 `RefinePartition`)."""
+    var r = ftz(identical_mul(g.x0, ftz(identical_mul(w, _sub(wc, w)))))
+    if g.n7 == LD_CPM:
+        return r
+    return ftz(identical_div(r, ftz(identical_mul(Float32(2), m))))
+
+
+@always_inline
+def _ld_sz1(t: Int, g: GA):
+    """Node t's size = 1 (the original graph)."""
+    _is(g, L_SZ).unsafe_store(t, Int32(1))
+
+
+@always_inline
+def _ld_iota(t: Int, g: GA):
+    """labels[t] = t (an iteration starts on the original nodes)."""
+    _is(g, L_LAB).unsafe_store(t, Int32(t))
+
+
+@always_inline
+def _ld_copyb(t: Int, g: GA):
+    """comm[t] = the accepted labels (an iteration starts from them)."""
+    _is(g, L_COMM).unsafe_store(t, _is(g, L_BEST).unsafe_load(t))
+
+
+@always_inline
+def _ld_keep(t: Int, g: GA):
+    """The accepted labels = this iteration's labels."""
+    _is(g, L_BEST).unsafe_store(t, _is(g, L_LAB).unsafe_load(t))
+
+
+@always_inline
+def _ld_rinit(t: Int, g: GA):
+    """The refinement's start for node t of graph n3 (after local moving,
+    the totals current): a singleton refined community (ref = t, its node
+    weight's fixed-point total, not joined) and its fixed-point edge weight
+    to the rest of its community, ascending over its row, into KIN and as
+    the singleton's external weight."""
+    var ip = _gip(g, g.n3)
+    var col = _gcol(g, g.n3)
+    var val = _gval(g, g.n3)
+    var comm = _is(g, L_COMM)
+    var cu = Int(comm.unsafe_load(t))
+    var kin = Int64(0)
+    for e in range(Int(ip.unsafe_load(t)), Int(ip.unsafe_load(t + 1))):
+        var v = Int(col.unsafe_load(e))
+        var w = val.unsafe_load(e)
+        if v != t and w != Float32(0) and Int(comm.unsafe_load(v)) == cu:
+            kin += _lv_dq(w, g)
+    _is(g, L_REF).unsafe_store(t, Int32(t))
+    _is(g, L_JOIN).unsafe_store(t, Int32(0))
+    _ls(g, L_KIN).unsafe_store(t, kin)
+    _ls(g, L_KUS).unsafe_store(t, Int64(0))
+    _lv_tset_s(g, L_RTLO, L_RTHI, t, _lv_dq(_fs(g, L_DEG).unsafe_load(t), g))
+    _lv_tset_s(g, L_RXLO, L_RXHI, t, kin)
+
+
+@always_inline
+def ld_refine_item(t: Int, g: GA):
+    """One node of the current colour in the refinement (`lv_move_item`'s
+    arguments: n0 nodes, n1 the colour's first position in ORD, n3 the
+    graph, x0 the resolution, n7 the quality; m in FV[0]). A node that is
+    still a singleton (ref = itself, nobody joined it) and well connected
+    to its community C (KIN >= `_ld_wc_rhs`) merges into the refined
+    community S inside C of the largest gain k_u,S / m - res * W_S * w_u /
+    denominator among those that are themselves well connected (their
+    external weight >= `_ld_wc_rhs(W_S, W_C)`); only a strictly positive
+    gain merges, equal gains go to the smallest refined id. Candidates are
+    its neighbours' refined communities in C, heap-sorted (refined id,
+    column) keys in its own edge range of EK, each k_u,S folded in ascending
+    column order (and as the fixed-point sum KUS for the apply stage).
+    No two nodes of one colour are adjacent, so a mover's candidates hold
+    no mover of the colour (a singleton {x} is a candidate only of x's
+    neighbours) and the refined totals read are the colour's start values.
+    Writes ref[u], RPREV[u], KUS[u] and JOIN[S] = 1 (every writer stores
+    1; no item of the launch reads JOIN[S]: S holds a node of another
+    colour, or was already joined)."""
+    var nn = g.n0
+    var u = Int(_ls(g, L_ORD).unsafe_load(g.n1 + t) % Int64(nn))
+    var refd = _is(g, L_REF)
+    var ru = Int(refd.unsafe_load(u))
+    _is(g, L_RPREV).unsafe_store(u, Int32(ru))
+    if ru != u or Int(_is(g, L_JOIN).unsafe_load(u)) != 0:
+        return
+    var m = _fs(g, L_FV).unsafe_load(0)
+    var comm = _is(g, L_COMM)
+    var cu = Int(comm.unsafe_load(u))
+    var wcu = _lv_totf(g, cu)
+    var du = _fs(g, L_DEG).unsafe_load(u)
+    if not (_lv_q2f(_ls(g, L_KIN).unsafe_load(u), g) >= _ld_wc_rhs(du, wcu, m, g)):
+        return
+    var ip = _gip(g, g.n3)
+    var col = _gcol(g, g.n3)
+    var val = _gval(g, g.n3)
+    var ek = _ls(g, L_EK)
+    var lo = Int(ip.unsafe_load(u))
+    var d = Int(ip.unsafe_load(u + 1)) - lo
+    var cnt = 0
+    for j in range(d):
+        var v = Int(col.unsafe_load(lo + j))
+        if v != u and val.unsafe_load(lo + j) != Float32(0) and Int(comm.unsafe_load(v)) == cu:
+            ek.unsafe_store(lo + cnt, Int64(refd.unsafe_load(v)) * Int64(d) + Int64(j))
+            cnt += 1
+    if cnt == 0:
+        return
+    _heap_sort(ek, lo, cnt)
+    var den = _ld_denominator(m, g)
+    var d64 = Int64(d)
+    var best = u
+    var best_gain = Float32(0)
+    var best_q = Int64(0)
+    var r = 0
+    while r < cnt:
+        var c = Int(ek.unsafe_load(lo + r) // d64)
+        var kc = Float32(0)
+        var kq = Int64(0)
+        while r < cnt and ek.unsafe_load(lo + r) // d64 == Int64(c):
+            var w = val.unsafe_load(lo + Int(ek.unsafe_load(lo + r) % d64))
+            kc = _add(kc, w)
+            kq += _lv_dq(w, g)
+            r += 1
+        var ws = _lv_q2f(_lv_tot_s(g, L_RTLO, L_RTHI, c), g)
+        if not (_lv_q2f(_lv_tot_s(g, L_RXLO, L_RXHI, c), g) >= _ld_wc_rhs(ws, wcu, m, g)):
+            continue
+        var gain = _sub(
+            ftz(identical_div(kc, m)),
+            ftz(identical_div(ftz(identical_mul(g.x0, ftz(identical_mul(ws, du)))), den)),
+        )
+        if gain > best_gain:
+            best_gain = gain
+            best = c
+            best_q = kq
+    if best != u:
+        refd.unsafe_store(u, Int32(best))
+        _ls(g, L_KUS).unsafe_store(u, best_q)
+        _is(g, L_JOIN).unsafe_store(best, Int32(1))
+
+
+@always_inline
+def _ld_rapply(t: Int, g: GA):
+    """The refined totals after a colour's merges (one item per node of the
+    colour, as `ld_refine_item`): a node that merged into S adds its node
+    weight to S's total and KIN - 2 KUS to S's external weight (its edges
+    to S turn internal), with `_lv_tadd_s`'s order-independent atomics."""
+    var u = Int(_ls(g, L_ORD).unsafe_load(g.n1 + t) % Int64(g.n0))
+    var s = Int(_is(g, L_REF).unsafe_load(u))
+    if s == Int(_is(g, L_RPREV).unsafe_load(u)):
+        return
+    _lv_tadd_s(g, L_RTLO, L_RTHI, s, _lv_dq(_fs(g, L_DEG).unsafe_load(u), g))
+    _lv_tadd_s(g, L_RXLO, L_RXHI, s, _ls(g, L_KIN).unsafe_load(u) - Int64(2) * _ls(g, L_KUS).unsafe_load(u))
+
+
+@always_inline
+def _ld_psave(t: Int, g: GA):
+    """PSAVE[t] = comm[t] (the renumbered communities, before comm takes
+    the refined partition)."""
+    _is(g, L_PSAVE).unsafe_store(t, _is(g, L_COMM).unsafe_load(t))
+
+
+@always_inline
+def _ld_refc(t: Int, g: GA):
+    """comm[t] = ref[t] (renumbering and aggregation run on comm)."""
+    _is(g, L_COMM).unsafe_store(t, _is(g, L_REF).unsafe_load(t))
+
+
+@always_inline
+def _ld_pnext(t: Int, g: GA):
+    """Node t's aggregate node comm[t] (renumbered refined id): its
+    community PNEXT = PSAVE[t] (every member stores the same value: a
+    refined community lies inside one community) and its size SZN +=
+    SZ[t] (int32 atomics after SZN is zeroed: order-independent)."""
+    var c = Int(_is(g, L_COMM).unsafe_load(t))
+    _is(g, L_PNEXT).unsafe_store(c, _is(g, L_PSAVE).unsafe_load(t))
+    _ = Atomic[Int32].fetch_add(_is(g, L_SZN) + c, _is(g, L_SZ).unsafe_load(t))
+
+
+@always_inline
+def _ld_pcopy(t: Int, g: GA):
+    """Aggregate node t starts the next level in its community, with its size."""
+    _is(g, L_COMM).unsafe_store(t, _is(g, L_PNEXT).unsafe_load(t))
+    _is(g, L_SZ).unsafe_store(t, _is(g, L_SZN).unsafe_load(t))
+
+
+@always_inline
+def _ld_labp(t: Int, g: GA):
+    """Original node t's label through this (last) level's communities."""
+    var lab = _is(g, L_LAB)
+    lab.unsafe_store(t, _is(g, L_PSAVE).unsafe_load(Int(lab.unsafe_load(t))))
+
+
+# ------------------------------------------------------------------ shared-nearest-neighbor graph
+# (lane sc-graph-1, 2026-11-28; Seurat `FindNeighbors` / `ComputeSNN`). The
+# neighbor lists are a CSR in PageRank's CSR-entry slots (P_IP, P_IDX), and
+# their transpose (the rows that list each node) is built by PageRank's own
+# stages: `_pr_csr_row` (the (column, entry) keys), `gp_sort`, `_pr_csr_off`
+# (P_CNT: each node's first position) and `_pr_csr_fill` (P_ROWS: the
+# listing rows, ascending). Then one item per row merges the transposed
+# lists of its neighbors (`sn_row_item`).
+comptime SN_PTR = P_NSLOT
+"""int32 per input entry: the read position of the k-way merge in the
+transposed list of that entry's neighbor (each row owns its entries)."""
+comptime SN_OFF = P_NSLOT + 1
+"""int32 n + 1: a row's kept-edge count, then (scanned) its offset."""
+comptime SN_PART = P_NSLOT + 2
+comptime SN_COL = P_NSLOT + 3
+"""int32 cap: the output columns (each row ascending)."""
+comptime SN_VAL = P_NSLOT + 4
+"""float32 cap: the output Jaccard weights."""
+comptime SN_NSLOT = P_NSLOT + 5
+
+
+@always_inline
+def _sn_kip(t: Int, g: GA):
+    """Row offset t of an (n, k) neighbor-index array (n4 = k): P_IP[t] =
+    t * k, so the array is a CSR without a host-built indptr."""
+    _is(g, P_IP).unsafe_store(t, Int32(t * g.n4))
+
+
+@always_inline
+def sn_row_item(t: Int, g: GA):
+    """Row t of the shared-nearest-neighbor graph. Every node j that shares
+    a neighbor with t appears in the transposed lists of t's neighbors (the
+    rows listing each, ascending); one k-way merge of those sorted lists
+    yields the j ascending with s = |N(t) & N(j)| as the multiplicity, with
+    no scratch beyond one read position per entry (SN_PTR). The weight is
+    the Jaccard index s / (|N(t)| + |N(j)| - s) (Seurat's
+    s / (k + (k - s)) when every row lists k), a float32 quotient of two
+    exact integers; it is kept when it is at least the prune value x0
+    (Seurat drops a weight below `prune.SNN`). n5 = 0 counts the kept
+    entries into SN_OFF[t]; n5 = 1 writes them from the scanned offset:
+    the columns ascending, so every row of the result is sorted and its
+    mirror (s and the denominator are symmetric in t and j) holds the same
+    float32. A node listed twice in one row would put the same j at the
+    head twice in a row: IC[2] = 1 (every writer stores 1)."""
+    var n = g.n0
+    var ip = _is(g, P_IP)
+    var idx = _is(g, P_IDX)
+    var cnt = _is(g, P_CNT)
+    var inv = _is(g, P_ROWS)
+    var ptr = _is(g, SN_PTR)
+    var lo = Int(ip.unsafe_load(t))
+    var hi = Int(ip.unsafe_load(t + 1))
+    var deg = hi - lo
+    for e in range(lo, hi):
+        ptr.unsafe_store(e, cnt.unsafe_load(Int(idx.unsafe_load(e))))
+    var base = Int(_is(g, SN_OFF).unsafe_load(t)) if g.n5 != 0 else 0
+    var kept = 0
+    var prev = -1
+    while True:
+        var best = n
+        for e in range(lo, hi):
+            var v = Int(idx.unsafe_load(e))
+            var p = Int(ptr.unsafe_load(e))
+            if p < Int(cnt.unsafe_load(v + 1)):
+                var r = Int(inv.unsafe_load(p))
+                if r < best:
+                    best = r
+        if best == n:
+            break
+        var s = 0
+        for e in range(lo, hi):
+            var v = Int(idx.unsafe_load(e))
+            var p = Int(ptr.unsafe_load(e))
+            if p < Int(cnt.unsafe_load(v + 1)) and Int(inv.unsafe_load(p)) == best:
+                s += 1
+                ptr.unsafe_store(e, Int32(p + 1))
+        if best == prev:
+            _is(g, P_IC).unsafe_store(2, Int32(1))
+        prev = best
+        var dj = Int(ip.unsafe_load(best + 1)) - Int(ip.unsafe_load(best))
+        var jac = ftz(identical_div(Float32(s), Float32(deg + dj - s)))
+        if jac >= g.x0:
+            if g.n5 != 0:
+                _is(g, SN_COL).unsafe_store(base + kept, Int32(best))
+                _fs(g, SN_VAL).unsafe_store(base + kept, jac)
+            kept += 1
+    if g.n5 == 0:
+        _is(g, SN_OFF).unsafe_store(t, Int32(kept))
+
+
+# ------------------------------------------------------------------ PAGA
+# (lane sc-graph-1, 2026-11-28; Scanpy `tl.paga`, Wolf et al. 2019, the
+# v1.2 statistic of `PAGA._compute_connectivities_v1_2`). The graph is
+# Louvain's slot G0, filled by Louvain's loaders (`_lv_rowcnt` / `_lv_fill`
+# for a dense input, `_lv_csrsrc` for a CSR); every stored edge counts once,
+# in its stored direction (Scanpy reads the directed kNN distances with
+# every entry set to one). c groups, the labels in PG_LAB.
+comptime PG_LAB = L_NSLOT
+"""int32 n: the caller's group labels."""
+comptime PG_CNT = L_NSLOT + 1
+"""int32 c x c: edges from group a to group b (the diagonal: inside a)."""
+comptime PG_NS = L_NSLOT + 2
+"""int32 c: the group sizes."""
+comptime PG_ES = L_NSLOT + 3
+"""int32 c: the edges leaving the nodes of each group (inside included)."""
+comptime PG_EK = L_NSLOT + 4
+"""int64 c x c: the inter-group edge key (0: no edge)."""
+comptime PG_W = L_NSLOT + 5
+"""int64 c x c: the widest-path closure of the keys."""
+comptime PG_CON = L_NSLOT + 6
+"""float32 c x c: the connectivities."""
+comptime PG_TREE = L_NSLOT + 7
+"""float32 c x c: the connectivities on the tree's edges."""
+comptime PG_NSLOT = L_NSLOT + 8
+comptime PG_INF = Int64(0x7FFFFFFFFFFFFFFF)
+
+
+@always_inline
+def _pg_lmax(t: Int, g: GA):
+    """Node t's label: IC[0] = max label + 1 by an integer atomic max (the
+    group count, order-free); a negative label sets IC[1] = 1."""
+    var v = Int(_is(g, PG_LAB).unsafe_load(t))
+    if v < 0:
+        _is(g, L_IC).unsafe_store(1, Int32(1))
+    else:
+        _ = Atomic[Int32].max(_is(g, L_IC), Int32(v + 1))
+
+
+@always_inline
+def _pg_edge(t: Int, g: GA):
+    """Node t (n1 = c): its group's size and, for each stored edge t -> u of
+    G0, one more edge from group(t) to group(u), by 32-bit integer atomics:
+    integer addition is order-free, so the counts are the same on every
+    column (igraph's `subgraph(i).ecount()` on the diagonal and the summed
+    `cluster_graph` off it)."""
+    var c = g.n1
+    var lab = _is(g, PG_LAB)
+    var a = Int(lab.unsafe_load(t))
+    _ = Atomic[Int32].fetch_add(_is(g, PG_NS) + a, Int32(1))
+    var ip = _gip(g, L_G0)
+    var col = _gcol(g, L_G0)
+    var cnt = _is(g, PG_CNT)
+    for e in range(Int(ip.unsafe_load(t)), Int(ip.unsafe_load(t + 1))):
+        var b = Int(lab.unsafe_load(Int(col.unsafe_load(e))))
+        _ = Atomic[Int32].fetch_add(cnt + (a * c + b), Int32(1))
+
+
+@always_inline
+def _pg_es(t: Int, g: GA):
+    """Group t's edge total (Scanpy's es: its inner edges plus the edges it
+    sends to other groups), the integer row sum of PG_CNT. n1 = c."""
+    var c = g.n1
+    var cnt = _is(g, PG_CNT)
+    var s = 0
+    for b in range(c):
+        s += Int(cnt.unsafe_load(t * c + b))
+    _is(g, PG_ES).unsafe_store(t, Int32(s))
+
+
+@always_inline
+def pg_stat_item(t: Int, g: GA):
+    """Cell t = a * c + b of the c x c result (n0 = n nodes, n1 = c, n6 = 0
+    for `_lv_q2f`): for a != b with v = edges(a, b) + edges(b, a) > 0, the
+    PAGA v1.2 connectivity min(1, v / E) with E = (es_a n_b + es_b n_a) /
+    (n - 1) the edge count expected between a and b when edges connect at
+    random (1 when E is 0, as Scanpy sets it); 0 on the diagonal and where
+    no edge joins the groups. The integers are exact in int64, converted
+    once to float32 (`_lv_q2f`'s conversions, software binary64 on Apple)
+    and divided through the pinned quotient. Then the spanning tree's edge
+    key of the pair: v * c^2 + (c^2 - 1 - (lo * c + hi)) for lo < hi the
+    pair, unique per pair and symmetric, so more edges win and, between
+    equal counts, the pair of lower index (scipy's minimum_spanning_tree of
+    1 / v leaves that tie to its sort). The closure starts from the keys,
+    the diagonal +inf."""
+    var c = g.n1
+    var a = t // c
+    var b = t % c
+    var con = _fs(g, PG_CON)
+    var ek = _ls(g, PG_EK)
+    var w = _ls(g, PG_W)
+    if a == b:
+        con.unsafe_store(t, Float32(0))
+        ek.unsafe_store(t, Int64(0))
+        w.unsafe_store(t, PG_INF)
+        return
+    var cnt = _is(g, PG_CNT)
+    var v = Int64(Int(cnt.unsafe_load(a * c + b))) + Int64(Int(cnt.unsafe_load(b * c + a)))
+    if v == 0:
+        con.unsafe_store(t, Float32(0))
+        ek.unsafe_store(t, Int64(0))
+        w.unsafe_store(t, Int64(0))
+        return
+    var ns = _is(g, PG_NS)
+    var es = _is(g, PG_ES)
+    var num = (Int64(Int(es.unsafe_load(a))) * Int64(Int(ns.unsafe_load(b)))
+               + Int64(Int(es.unsafe_load(b))) * Int64(Int(ns.unsafe_load(a))))
+    var r = Float32(1)
+    if num != 0:
+        var expected = ftz(identical_div(_lv_q2f(num, g), _lv_q2f(Int64(g.n0 - 1), g)))
+        r = ftz(identical_div(_lv_q2f(v, g), expected))
+        if r > Float32(1):
+            r = Float32(1)
+    con.unsafe_store(t, r)
+    var lo = a if a < b else b
+    var hi = b if a < b else a
+    var cc = Int64(c) * Int64(c)
+    var key = v * cc + (cc - Int64(1) - Int64(lo * c + hi))
+    ek.unsafe_store(t, key)
+    w.unsafe_store(t, key)
+
+
+@always_inline
+def _pg_fw(t: Int, g: GA):
+    """One round of the widest-path closure through group n4 (n1 = c):
+    W[a, b] = max(W[a, b], min(W[a, k], W[k, b])). Row k and column k do
+    not change in round k (W[k, k] = +inf), so no item reads a word another
+    item of the launch writes. After every round, W[a, b] is the largest
+    bottleneck key over all paths; with unique keys an edge is on the
+    maximum spanning tree exactly when its key is that bottleneck."""
+    var c = g.n1
+    var k = g.n4
+    var a = t // c
+    var b = t % c
+    var w = _ls(g, PG_W)
+    var x = w.unsafe_load(a * c + k)
+    var y = w.unsafe_load(k * c + b)
+    var via = x if x < y else y
+    if via > w.unsafe_load(t):
+        w.unsafe_store(t, via)
+
+
+@always_inline
+def _pg_tree(t: Int, g: GA):
+    """Cell t of the tree: the connectivity where the pair's edge key is
+    its widest-path bottleneck (an edge of the maximum spanning forest of
+    the edge counts: Scanpy's minimum_spanning_tree of their inverses),
+    else 0. Both directions are kept."""
+    var k = _ls(g, PG_EK).unsafe_load(t)
+    var tree = _fs(g, PG_TREE)
+    if k > Int64(0) and k == _ls(g, PG_W).unsafe_load(t):
+        tree.unsafe_store(t, _fs(g, PG_CON).unsafe_load(t))
+    else:
+        tree.unsafe_store(t, Float32(0))
+
+
+# ------------------------------------------------------------------ labels by size
+# (lane sc-graph-1, 2026-11-28: Scanpy numbers Louvain / Leiden clusters by
+# size, the largest 0). Input: labels numbered by first occurrence (the
+# fits' `p2m_relabel`), so community c's smallest member index increases
+# with c and "ties by the smallest member index" is "ties by c".
+comptime SR_LAB = 0
+comptime SR_SZ = 1
+comptime SR_KA = 2
+comptime SR_KB = 3
+comptime SR_RK = 4
+comptime SR_NSLOT = 5
+
+
+@always_inline
+def _sr_size(t: Int, g: GA):
+    """Node t adds one to its community's size (int32 atomics, order-free)."""
+    _ = Atomic[Int32].fetch_add(_is(g, SR_SZ) + Int(_is(g, SR_LAB).unsafe_load(t)), Int32(1))
+
+
+@always_inline
+def _sr_key(t: Int, g: GA):
+    """Community t's unique sort key (n0 = n, n1 = c): (n - size) * c + t,
+    so the keys ascend by size descending, then by first member."""
+    var size = Int(_is(g, SR_SZ).unsafe_load(t))
+    _ls(g, SR_KA).unsafe_store(t, Int64(g.n0 - size) * Int64(g.n1) + Int64(t))
+
+
+@always_inline
+def _sr_rank(t: Int, g: GA):
+    """Sorted position t (keys in slot n4): its community's new label is t."""
+    var key = _ls(g, g.n4).unsafe_load(t)
+    _is(g, SR_RK).unsafe_store(Int(key % Int64(g.n1)), Int32(t))
+
+
+@always_inline
+def _sr_apply(t: Int, g: GA):
+    """Node t takes its community's rank."""
+    var lab = _is(g, SR_LAB)
+    lab.unsafe_store(t, _is(g, SR_RK).unsafe_load(Int(lab.unsafe_load(t))))
+
+
 @always_inline
 def gp_item[S: Int](t: Int, g: GA):
     """Stage S's item t."""
@@ -1404,6 +2041,54 @@ def gp_item[S: Int](t: Int, g: GA):
         _pr_adpart(t, g)
     elif S == GP_IZERO:
         _izero(t, g)
+    elif S == LD_SZ1:
+        _ld_sz1(t, g)
+    elif S == LD_IOTA:
+        _ld_iota(t, g)
+    elif S == LD_COPYB:
+        _ld_copyb(t, g)
+    elif S == LD_KEEP:
+        _ld_keep(t, g)
+    elif S == LD_RINIT:
+        _ld_rinit(t, g)
+    elif S == LD_REFINE:
+        ld_refine_item(t, g)
+    elif S == LD_RAPPLY:
+        _ld_rapply(t, g)
+    elif S == LD_PSAVE:
+        _ld_psave(t, g)
+    elif S == LD_REFC:
+        _ld_refc(t, g)
+    elif S == LD_PNEXT:
+        _ld_pnext(t, g)
+    elif S == LD_PCOPY:
+        _ld_pcopy(t, g)
+    elif S == LD_LABP:
+        _ld_labp(t, g)
+    elif S == SN_KIP:
+        _sn_kip(t, g)
+    elif S == SN_ROW:
+        sn_row_item(t, g)
+    elif S == PG_LMAX:
+        _pg_lmax(t, g)
+    elif S == PG_EDGE:
+        _pg_edge(t, g)
+    elif S == PG_ES:
+        _pg_es(t, g)
+    elif S == PG_STAT:
+        pg_stat_item(t, g)
+    elif S == PG_FW:
+        _pg_fw(t, g)
+    elif S == PG_TREE:
+        _pg_tree(t, g)
+    elif S == SR_SIZE:
+        _sr_size(t, g)
+    elif S == SR_KEY:
+        _sr_key(t, g)
+    elif S == SR_RANK:
+        _sr_rank(t, g)
+    elif S == SR_APPLY:
+        _sr_apply(t, g)
 
 
 # ------------------------------------------------------------------ drivers (shared by both columns)
@@ -1698,11 +2383,29 @@ def _lv_layout(mut lb: Lay, n: Int, nnz: Int):
     lb.l(L_ORD, n)
 
 
-def lv_drive[E: GExec](
-    mut ex: E, n: Int, max_level: Int, res: Float32, thr: Float32, labels: Int, info: Int,
-) raises:
-    """Louvain on the dense symmetric n x n input (module note). labels[u]
-    ends as original node u's community; info = [modularity, levels]."""
+def _ld_layout(mut lb: Lay, n: Int, nnz: Int):
+    """Louvain's slots and the refinement's (module note "Leiden")."""
+    _lv_layout(lb, n, nnz)
+    lb.i(L_REF, n)
+    lb.i(L_JOIN, n)
+    lb.i(L_RTLO, n)
+    lb.i(L_RTHI, n)
+    lb.i(L_RXLO, n)
+    lb.i(L_RXHI, n)
+    lb.i(L_RPREV, n)
+    lb.i(L_PSAVE, n)
+    lb.i(L_PNEXT, n)
+    lb.i(L_SZ, n)
+    lb.i(L_SZN, n)
+    lb.i(L_BEST, n)
+    lb.l(L_KIN, n)
+    lb.l(L_KUS, n)
+
+
+def _lv_dense_load[E: GExec](mut ex: E, n: Int, leiden: Bool, mut nnz: Int) raises -> GA:
+    """Graph slot G0 from the dense symmetric n x n input (both methods):
+    the rows counted, the arenas sized from the entry count (Leiden's with
+    the refinement slots), the rows filled. nnz receives the entry count."""
     var la = Lay(L_NSLOT)
     la.i(L_G0, n + 1)
     la.i(L_PART, gp_scan_blocks(n) + 1)
@@ -1712,34 +2415,45 @@ def lv_drive[E: GExec](
     q.n0 = n
     ex.run(LV_ROWCNT, n, q)
     gp_scan(ex, g, L_G0, L_PART, n)
-    var nnz = ex.get_i(L_G0, n)
+    nnz = ex.get_i(L_G0, n)
     var lb = Lay(L_NSLOT)
-    _lv_layout(lb, n, nnz)
+    if leiden:
+        _ld_layout(lb, n, nnz)
+    else:
+        _lv_layout(lb, n, nnz)
     g = ex.alloc(lb)
     q = g
     q.n0 = n
     ex.run(LV_ROWCNT, n, q)
     gp_scan(ex, g, L_G0, L_PART, n)
     ex.run(LV_FILL, n, q)
+    return g
+
+
+def lv_drive[E: GExec](
+    mut ex: E, n: Int, max_level: Int, res: Float32, thr: Float32, labels: Int, info: Int,
+) raises:
+    """Louvain on the dense symmetric n x n input (module note). labels[u]
+    ends as original node u's community; info = [modularity, levels]."""
+    var nnz = 0
+    var g = _lv_dense_load(ex, n, False, nnz)
     _lv_run(ex, g, n, nnz, max_level, res, thr, labels, info)
 
 
-def lv_drive_csr[E: GExec](
-    mut ex: E, n: Int, nnz: Int, indptr: Int, indices: Int, vals: Int, has_vals: Int,
-    max_level: Int, res: Float32, thr: Float32, labels: Int, info: Int,
-) raises:
-    """Louvain from the caller's CSR (lane gap-graph, plan 5.1): indptr,
-    indices and the weights (1.0 each when has_vals is 0) fill graph slot
-    G0 directly (no dense matrix, no `graph_symmetry` pass, one arena
-    allocation); the rows are checked on the executor (`_lv_csrchk`:
-    columns strictly ascending, every entry mirrored with its weight, an
-    edge somewhere) and the levels run as the dense entry's. The dense
-    entry drops zero cells, this one keeps a zero-weight entry in the lists
-    (it colours as an adjacency and moves nothing: `lv_move_item` and the
-    aggregation skip zero weights), so a CSR with explicit zeros can colour
-    differently from its dense twin; one without is the same graph."""
+def _lv_csr_load[E: GExec](
+    mut ex: E, n: Int, nnz: Int, indptr: Int, indices: Int, vals: Int, has_vals: Int, leiden: Bool, who: String,
+) raises -> GA:
+    """Graph slot G0 from the caller's CSR (both methods; `who` names the
+    method in the refusals): indptr, indices and the weights (1.0 each when
+    has_vals is 0) fill G0 directly (no dense matrix, no `graph_symmetry`
+    pass, one arena allocation); the rows are checked on the executor
+    (`_lv_csrchk`: columns strictly ascending, every entry mirrored with
+    its weight, an edge somewhere)."""
     var lb = Lay(L_NSLOT)
-    _lv_layout(lb, n, nnz)
+    if leiden:
+        _ld_layout(lb, n, nnz)
+    else:
+        _lv_layout(lb, n, nnz)
     var g = ex.alloc(lb)
     ex.up_i(L_G0, indptr, n + 1)
     ex.up_i(L_G0 + 2, indices, nnz)
@@ -1754,36 +2468,160 @@ def lv_drive_csr[E: GExec](
     ex.run(LV_CSRCHK, n, q)
     var ic = ex.get_is(L_IC, 8)
     if Int(ic[3]) != 0:
-        raise Error("Louvain: a column index of the CSR adjacency is outside [0, n)")
+        raise Error(who + ": a column index of the CSR adjacency is outside [0, n)")
     if Int(ic[4]) != 0:
-        raise Error("Louvain: the CSR adjacency's columns must be strictly ascending within every row "
+        raise Error(who + ": the CSR adjacency's columns must be strictly ascending within every row "
                     "(scipy: A.sort_indices(), and no duplicate entries)")
     if Int(ic[5]) != 0:
-        raise Error("Louvain: the adjacency matrix must be symmetric (an undirected graph)")
+        raise Error(who + ": the adjacency matrix must be symmetric (an undirected graph)")
     if Int(ic[6]) == 0:
-        raise Error("Louvain: the graph has no edges")
+        raise Error(who + ": the graph has no edges")
+    return g
+
+
+def lv_drive_csr[E: GExec](
+    mut ex: E, n: Int, nnz: Int, indptr: Int, indices: Int, vals: Int, has_vals: Int,
+    max_level: Int, res: Float32, thr: Float32, labels: Int, info: Int,
+) raises:
+    """Louvain from the caller's CSR (lane gap-graph, plan 5.1): G0 filled
+    and checked by `_lv_csr_load`, the levels run as the dense entry's. The
+    dense entry drops zero cells, this one keeps a zero-weight entry in the
+    lists (it colours as an adjacency and moves nothing: `lv_move_item` and
+    the aggregation skip zero weights), so a CSR with explicit zeros can
+    colour differently from its dense twin; one without is the same graph."""
+    var g = _lv_csr_load(ex, n, nnz, indptr, indices, vals, has_vals, False, String("Louvain"))
     _lv_run(ex, g, n, nnz, max_level, res, thr, labels, info)
+
+
+def _lv_m_shift[E: GExec](mut ex: E, g: GA, n: Int) raises -> Float32:
+    """m (each row's share at columns >= its own, blocked fold) into FV[0],
+    read: a control value of both columns."""
+    var q = g
+    q.n0 = n
+    q.n3 = L_G0
+    ex.run(LV_MROW, n, q)
+    gp_fold(ex, g, L_VQ, L_FP, n, L_FV, 0)
+    return ex.get_f(L_FV, 0)
+
+
+def _lv_colour[E: GExec](mut ex: E, g: GA, q: GA, nn: Int) raises -> List[Int32]:
+    """The level's distance-1 colouring of graph q.n3 (Jones-Plassmann
+    rounds in chunks of LV_COLOR_CHUNK, the seed word in q.n2) and the
+    nodes sorted by (colour, node) into ORD. Returns the colours' first
+    positions (rounds + 1 entries)."""
+    ex.run(LV_COL0, nn, q)
+    var rounds = 0
+    while True:
+        for _ in range(LV_COLOR_CHUNK):
+            var c = q
+            c.n1 = rounds
+            ex.run(LV_COLR, nn, c)
+            rounds += 1
+        var z = q
+        z.n1 = 1
+        ex.run(LV_ICZ, 1, z)
+        ex.run(LV_UNCOL, nn, q)
+        if ex.get_i(L_IC, 1) == 0:
+            break
+    ex.run(LV_CKEY, nn, q)
+    var ks = q
+    ks.n4 = gp_sort(ex, g, L_KA, L_KB, nn)
+    ex.run(LV_COFF, rounds + 1, ks)
+    ex.run(LV_COPYL, nn, ks)
+    return ex.get_is(L_COFF, rounds + 1)
+
+
+def _lv_sweeps[E: GExec](
+    mut ex: E, g: GA, q: GA, nn: Int, coff: List[Int32], qprev_in: Float32, thr: Float32,
+) raises -> Tuple[Float32, Bool]:
+    """Local moving, one colour at a time (per colour one move launch and
+    one totals-apply launch; per sweep one read of the move flag and the
+    quality together): a sweep that lowers the quality is undone and ends
+    it, one that raises it by no more than thr ends it. q: n0 nodes, n3
+    the graph, x0 the resolution. Returns (the quality, improved)."""
+    var qprev = qprev_in
+    var rounds = len(coff) - 1
+    var improvement = False
+    for _ in range(LV_MAX_SWEEPS):
+        ex.run(LV_SAVE, nn, q)
+        var z0 = q
+        z0.n1 = 0
+        ex.run(LV_ICZ, 1, z0)
+        for k in range(rounds):
+            var bk = Int(coff[k + 1]) - Int(coff[k])
+            if bk == 0:
+                continue
+            var mv = q
+            mv.n1 = Int(coff[k])
+            ex.run(LV_MOVE, bk, mv)
+            ex.run(LV_APPLY, bk, mv)
+        # the move flag and the quality in one read: FV[1] the quality
+        # (`_lv_modularity`'s stages), FV[2] the flag
+        ex.run(LV_FLAGF, 1, q)
+        ex.run(LV_QV, nn, q)
+        gp_fold(ex, g, L_VQ, L_FP, nn, L_FV, 1)
+        var fv = ex.get_fs(L_FV, 3)
+        if fv[2] == Float32(0):
+            break
+        var qn = fv[1]
+        if qn > qprev:
+            improvement = True
+            var gain = _sub(qn, qprev)
+            qprev = qn
+            if not (gain > thr):
+                break
+        else:
+            ex.run(LV_RESTORE, nn, q)
+            break
+    return (qprev, improvement)
+
+
+def _lv_renumber[E: GExec](mut ex: E, g: GA, q: GA, nn: Int) raises -> Int:
+    """comm renumbered by ascending old id (FLAG marked, scanned); returns
+    the community count."""
+    ex.run(LV_FLAGZ, nn + 1, q)
+    ex.run(LV_USED, nn, q)
+    gp_scan(ex, g, L_FLAG, L_PART, nn)
+    var nc = ex.get_i(L_FLAG, nn)
+    ex.run(LV_RENUM, nn, q)
+    return nc
+
+
+def _lv_aggregate[E: GExec](
+    mut ex: E, g: GA, gcur: Int, gnext: Int, nnzc: Int, nc: Int, who: String,
+) raises -> Int:
+    """Graph gnext from graph gcur under comm (renumbered, nc communities):
+    (pair, entry) keys sorted, each pair's weights folded in that order.
+    Returns the new entry count."""
+    if nc > 0 and nc * nc + 1 > ((Int(1) << 62) // max(nnzc, 1)):
+        raise Error(who + ": the graph is too large for the aggregation keys")
+    var qa = g
+    qa.n0 = nnzc
+    qa.n1 = nc
+    qa.n3 = gcur
+    qa.n5 = gnext
+    ex.run(LV_EKEY, nnzc, qa)
+    qa.n4 = gp_sort(ex, g, L_KA, L_KB, nnzc)
+    ex.run(LV_HEAD, nnzc, qa)
+    gp_scan(ex, g, L_SEGH, L_PART, nnzc)
+    var nnz2 = ex.get_i(L_SEGH, nnzc)
+    ex.run(LV_AGG, nnzc, qa)
+    qa.n2 = nnz2
+    ex.run(LV_AIP, nc + 1, qa)
+    return nnz2
 
 
 def _lv_run[E: GExec](
     mut ex: E, g_in: GA, n: Int, nnz: Int, max_level: Int, res: Float32, thr: Float32, labels: Int, info: Int,
 ) raises:
     """The levels over graph slot G0 (filled by either entry): m, the
-    quantization shift, then per level the colouring, the sweeps (per
-    colour one move launch and one totals-apply launch; per sweep one read
-    of the move flag and the modularity together), the renumbering and
-    the aggregation."""
+    quantization shift, then per level the colouring, the sweeps, the
+    renumbering and the aggregation."""
     var g = g_in
-    var q = g
-    q.n0 = n
-    # m: each row's share at columns >= its own, blocked fold
-    q.n3 = L_G0
-    ex.run(LV_MROW, n, q)
-    gp_fold(ex, g, L_VQ, L_FP, n, L_FV, 0)
     # the fixed-point shift from m, a control value of both columns; it
     # rides in n6 of every stage from here on (the degree sum of every
     # level is 2m, so one shift serves them all)
-    var shift = _lv_shift(ex.get_f(L_FV, 0))
+    var shift = _lv_shift(_lv_m_shift(ex, g, n))
     g.n6 = shift
     var gcur = L_G0
     var gnext = L_GA
@@ -1792,6 +2630,7 @@ def _lv_run[E: GExec](
     var levels = 0
     var mod = Float32(0)
     var first = True
+    var q = g
     while max_level <= 0 or levels < max_level:
         # ---- the level's start: singletons on the current graph
         q = g
@@ -1804,68 +2643,14 @@ def _lv_run[E: GExec](
         if first:
             mod = qprev
             first = False
-        # ---- colouring
-        ex.run(LV_COL0, nn, q)
-        var rounds = 0
-        while True:
-            for _ in range(LV_COLOR_CHUNK):
-                var c = q
-                c.n1 = rounds
-                ex.run(LV_COLR, nn, c)
-                rounds += 1
-            var z = q
-            z.n1 = 1
-            ex.run(LV_ICZ, 1, z)
-            ex.run(LV_UNCOL, nn, q)
-            if ex.get_i(L_IC, 1) == 0:
-                break
-        ex.run(LV_CKEY, nn, q)
-        var ks = q
-        ks.n4 = gp_sort(ex, g, L_KA, L_KB, nn)
-        ex.run(LV_COFF, rounds + 1, ks)
-        ex.run(LV_COPYL, nn, ks)
-        var coff = ex.get_is(L_COFF, rounds + 1)
-        # ---- local moving, one colour at a time
-        var improvement = False
-        for _ in range(LV_MAX_SWEEPS):
-            ex.run(LV_SAVE, nn, q)
-            var z0 = q
-            z0.n1 = 0
-            ex.run(LV_ICZ, 1, z0)
-            for k in range(rounds):
-                var bk = Int(coff[k + 1]) - Int(coff[k])
-                if bk == 0:
-                    continue
-                var mv = q
-                mv.n1 = Int(coff[k])
-                ex.run(LV_MOVE, bk, mv)
-                ex.run(LV_APPLY, bk, mv)
-            # the move flag and the modularity in one read: FV[1] the
-            # modularity (`_lv_modularity`'s stages), FV[2] the flag
-            ex.run(LV_FLAGF, 1, q)
-            ex.run(LV_QV, nn, q)
-            gp_fold(ex, g, L_VQ, L_FP, nn, L_FV, 1)
-            var fv = ex.get_fs(L_FV, 3)
-            if fv[2] == Float32(0):
-                break
-            var qn = fv[1]
-            if qn > qprev:
-                improvement = True
-                var gain = _sub(qn, qprev)
-                qprev = qn
-                if not (gain > thr):
-                    break
-            else:
-                ex.run(LV_RESTORE, nn, q)
-                break
-        if levels > 0 and not improvement:
+        # ---- colouring, then local moving one colour at a time
+        var coff = _lv_colour(ex, g, q, nn)
+        var swept = _lv_sweeps(ex, g, q, nn, coff, qprev, thr)
+        qprev = swept[0]
+        if levels > 0 and not swept[1]:
             break
         # ---- renumber the communities by ascending old id
-        ex.run(LV_FLAGZ, nn + 1, q)
-        ex.run(LV_USED, nn, q)
-        gp_scan(ex, g, L_FLAG, L_PART, nn)
-        var nc = ex.get_i(L_FLAG, nn)
-        ex.run(LV_RENUM, nn, q)
+        var nc = _lv_renumber(ex, g, q, nn)
         var ql = g
         ql.n0 = n
         ex.run(LV_LAB, n, ql)
@@ -1873,22 +2658,8 @@ def _lv_run[E: GExec](
         if not (_sub(qprev, mod) > thr):
             break
         mod = qprev
-        # ---- aggregate: (pair, entry) keys sorted, each pair folded
-        if nc > 0 and nc * nc + 1 > ((Int(1) << 62) // max(nnzc, 1)):
-            raise Error("Louvain: the graph is too large for the aggregation keys")
-        var qa = g
-        qa.n0 = nnzc
-        qa.n1 = nc
-        qa.n3 = gcur
-        qa.n5 = gnext
-        ex.run(LV_EKEY, nnzc, qa)
-        qa.n4 = gp_sort(ex, g, L_KA, L_KB, nnzc)
-        ex.run(LV_HEAD, nnzc, qa)
-        gp_scan(ex, g, L_SEGH, L_PART, nnzc)
-        var nnz2 = ex.get_i(L_SEGH, nnzc)
-        ex.run(LV_AGG, nnzc, qa)
-        qa.n2 = nnz2
-        ex.run(LV_AIP, nc + 1, qa)
+        # ---- aggregate
+        var nnz2 = _lv_aggregate(ex, g, gcur, gnext, nnzc, nc, String("Louvain"))
         var tg = gnext
         gnext = L_GB if tg == L_GA else L_GA
         gcur = tg
@@ -1908,3 +2679,389 @@ def _lv_run[E: GExec](
     var inf = FP(unsafe_from_address=info)
     inf.unsafe_store(0, qf)
     inf.unsafe_store(1, Float32(levels))
+
+
+# ------------------------------------------------------------------ Leiden drivers
+def ld_drive[E: GExec](
+    mut ex: E, n: Int, n_iterations: Int, quality: Int, seed: Int, res: Float32, labels: Int, info: Int,
+) raises:
+    """Leiden on the dense symmetric n x n input (module note "Leiden").
+    labels[u] ends as original node u's community; info = [quality,
+    iterations]."""
+    var nnz = 0
+    var g = _lv_dense_load(ex, n, True, nnz)
+    _ld_run(ex, g, n, nnz, n_iterations, quality, seed, res, labels, info)
+
+
+def ld_drive_csr[E: GExec](
+    mut ex: E, n: Int, nnz: Int, indptr: Int, indices: Int, vals: Int, has_vals: Int,
+    n_iterations: Int, quality: Int, seed: Int, res: Float32, labels: Int, info: Int,
+) raises:
+    """Leiden from the caller's CSR (Louvain's loader and checks)."""
+    var g = _lv_csr_load(ex, n, nnz, indptr, indices, vals, has_vals, True, String("Leiden"))
+    _ld_run(ex, g, n, nnz, n_iterations, quality, seed, res, labels, info)
+
+
+def ld_seed_word(seed: Int) -> Int:
+    """The colouring's seed word from `random_state` (its low 32 bits
+    hashed: 0 stays 0, Louvain's colouring)."""
+    return Int(_prio(seed & 0xFFFFFFFF, 0))
+
+
+def _ld_quality[E: GExec](mut ex: E, g: GA, n: Int, res: Float32, labels_slot: Int) raises -> Float32:
+    """The quality of the original graph under the labels in L_LAB
+    (labels_slot == L_LAB) or L_BEST: sizes 1, node weights, the totals
+    rebuilt, the blocked fold."""
+    var q = g
+    q.n0 = n
+    q.n1 = 1
+    q.n3 = L_G0
+    q.x0 = res
+    ex.run(LD_SZ1, n, q)
+    ex.run(LV_DEG, n, q)
+    if labels_slot == L_LAB:
+        ex.run(LV_COPYI, n, q)
+    else:
+        ex.run(LD_COPYB, n, q)
+    _lv_rebuild(ex, g, n)
+    return _lv_modularity(ex, g, L_G0, n, res)
+
+
+def _ld_pass[E: GExec](mut ex: E, g: GA, n: Int, nnz: Int, res: Float32, mix: Int) raises:
+    """One Leiden iteration (leidenalg `optimise_partition`) from the
+    accepted labels (L_BEST) on G0; the labels of the original nodes end in
+    L_LAB. Per level: the node weights and the totals of the current
+    partition, the colouring, local moving (`_lv_sweeps`, no threshold),
+    the refinement (one pass over the colours: `ld_refine_item` then
+    `_ld_rapply`), the two renumberings; it stops when no refined
+    community merged two nodes or every community is one refined
+    community (leidenalg's `aggregate_further`), else the graph is
+    aggregated on the refined partition (`_lv_aggregate`) and every
+    aggregate node starts in its community, with its size."""
+    var q = g
+    q.n0 = n
+    ex.run(LD_IOTA, n, q)
+    ex.run(LD_SZ1, n, q)
+    ex.run(LD_COPYB, n, q)
+    var gcur = L_G0
+    var gnext = L_GA
+    var nn = n
+    var nnzc = nnz
+    while True:
+        q = g
+        q.n0 = nn
+        q.n1 = 0
+        q.n3 = gcur
+        q.x0 = res
+        ex.run(LV_DEG, nn, q)
+        _lv_rebuild(ex, g, nn)
+        var qprev = _lv_modularity(ex, g, gcur, nn, res)
+        var cq = q
+        cq.n2 = mix
+        var coff = _lv_colour(ex, g, cq, nn)
+        _ = _lv_sweeps(ex, g, q, nn, coff, qprev, Float32(0))
+        # ---- refinement (the totals of the moved partition are current)
+        ex.run(LD_RINIT, nn, q)
+        var rounds = len(coff) - 1
+        for k in range(rounds):  # driver-loop: over the colours of the level's colouring
+            var bk = Int(coff[k + 1]) - Int(coff[k])
+            if bk == 0:
+                continue
+            var mv = q
+            mv.n1 = Int(coff[k])
+            ex.run(LD_REFINE, bk, mv)
+            ex.run(LD_RAPPLY, bk, mv)
+        # ---- the communities renumbered, then the refined communities
+        var ncp = _lv_renumber(ex, g, q, nn)
+        ex.run(LD_PSAVE, nn, q)
+        ex.run(LD_REFC, nn, q)
+        var ncr = _lv_renumber(ex, g, q, nn)
+        var ql = g
+        ql.n0 = n
+        if ncr == nn or ncp == ncr:
+            ex.run(LD_LABP, n, ql)
+            break
+        ex.run(LV_LAB, n, ql)
+        # ---- each aggregate node's community and size, then the graph
+        var z = g
+        z.n4 = L_SZN
+        ex.run(GP_IZERO, ncr, z)
+        ex.run(LD_PNEXT, nn, q)
+        var nnz2 = _lv_aggregate(ex, g, gcur, gnext, nnzc, ncr, String("Leiden"))
+        var tg = gnext
+        gnext = L_GB if tg == L_GA else L_GA
+        gcur = tg
+        nn = ncr
+        nnzc = nnz2
+        var qc = g
+        qc.n0 = nn
+        ex.run(LD_PCOPY, nn, qc)
+
+
+def _ld_run[E: GExec](
+    mut ex: E, g_in: GA, n: Int, nnz: Int, n_iterations: Int, quality: Int, seed: Int, res: Float32,
+    labels: Int, info: Int,
+) raises:
+    """Leiden's iterations over graph slot G0 (filled by either entry): m,
+    the quantization shift (CPM: also bounded by the size total n), then
+    iterations of `_ld_pass` from the accepted labels while the quality of
+    the original graph rises (n_iterations < 0: until it does not, at most
+    LD_MAX_ITER; else at most n_iterations). An iteration that does not
+    raise it is dropped and ends the run."""
+    var g = g_in
+    g.n7 = quality
+    var shift = _lv_shift(_lv_m_shift(ex, g, n))
+    if quality == LD_CPM:
+        shift = min(shift, _lv_shift(Float32(n) * Float32(0.5)))
+    g.n6 = shift
+    var mix = ld_seed_word(seed)
+    var q = g
+    q.n0 = n
+    ex.run(LD_IOTA, n, q)
+    ex.run(LD_KEEP, n, q)
+    var qbest = _ld_quality(ex, g, n, res, L_BEST)
+    var iters = 0
+    var cap = n_iterations if n_iterations >= 0 else LD_MAX_ITER
+    while iters < cap:
+        _ld_pass(ex, g, n, nnz, res, mix)
+        var qn = _ld_quality(ex, g, n, res, L_LAB)
+        iters += 1
+        if not (qn > qbest):
+            break
+        qbest = qn
+        ex.run(LD_KEEP, n, q)
+    ex.down_i(L_BEST, labels, n)
+    var inf = FP(unsafe_from_address=info)
+    inf.unsafe_store(0, qbest)
+    inf.unsafe_store(1, Float32(iters))
+
+
+# ------------------------------------------------------------------ shared-nearest-neighbor driver
+def sn_drive[E: GExec](
+    mut ex: E, n: Int, nnz: Int, indptr: Int, indices: Int, k_uniform: Int, prune: Float32, cap: Int,
+    out_indptr: Int, out_indices: Int, out_data: Int, info: Int,
+) raises:
+    """The shared-nearest-neighbor graph (module note at `sn_row_item`) of
+    the neighbor lists: a CSR (indptr n + 1, indices nnz) or, when
+    k_uniform > 0, an (n, k_uniform) index array whose row offsets are
+    made on the executor (`_sn_kip`). The transpose is PageRank's CSR
+    stages (one sort of the (column, entry) keys); the rows are counted,
+    scanned and filled by `sn_row_item`. info (int32 x 2): [0] the number
+    of entries of the result, [1] 1 when it exceeds `cap` (then nothing is
+    written and the caller runs again with that room). The result is a
+    symmetric CSR (out_indptr n + 1, out_indices / out_data info[0]) with
+    every row's columns ascending and its diagonal (|N(i)| > 0) at 1."""
+    var nbs = gp_scan_blocks(n)
+    var lb = Lay(SN_NSLOT)
+    lb.i(P_CNT, n + 1)
+    lb.i(P_PART, nbs + 1)
+    lb.i(P_DG, n)
+    lb.i(P_ROWS, nnz)
+    lb.f(P_RS, n)
+    lb.f(P_VALS, nnz)
+    lb.i(P_IP, n + 1)
+    lb.i(P_IDX, nnz)
+    lb.f(P_W, 1)
+    lb.i(P_SRC, nnz)
+    lb.l(P_KA, nnz)
+    lb.l(P_KB, nnz)
+    lb.i(P_IC, 4)
+    lb.i(SN_PTR, nnz)
+    lb.i(SN_OFF, n + 1)
+    lb.i(SN_PART, nbs + 1)
+    lb.i(SN_COL, cap)
+    lb.f(SN_VAL, cap)
+    var g = ex.alloc(lb)
+    var q = g
+    q.n0 = n
+    if k_uniform > 0:
+        q.n4 = k_uniform
+        ex.run(SN_KIP, n + 1, q)
+    else:
+        ex.up_i(P_IP, indptr, n + 1)
+    if nnz > 0:
+        ex.up_i(P_IDX, indices, nnz)
+    var z = g
+    z.n4 = P_IC
+    ex.run(GP_IZERO, 4, z)
+    # the transpose: PageRank's CSR-entry stages, unweighted (n1 = 1, n3 = 0)
+    var c = g
+    c.n0 = n
+    c.n1 = 1
+    c.n2 = nnz
+    c.n3 = 0
+    ex.run(PR_CSR_ROW, n, c)
+    var ic = ex.get_is(P_IC, 2)
+    if Int(ic[1]) != 0:
+        raise Error("shared_neighbors_graph: a neighbor index is outside [0, n)")
+    if nnz > 0:
+        c.n4 = gp_sort(ex, g, P_KA, P_KB, nnz)
+    else:
+        c.n4 = P_KA
+    ex.run(PR_CSR_OFF, n + 1, c)
+    ex.run(PR_CSR_FILL, nnz, c)
+    # count, scan, fill
+    var r = g
+    r.n0 = n
+    r.n5 = 0
+    r.x0 = prune
+    ex.run(SN_ROW, n, r)
+    var dup = ex.get_is(P_IC, 3)
+    if Int(dup[2]) != 0:
+        raise Error("shared_neighbors_graph: a node appears twice among one node's neighbors")
+    gp_scan(ex, g, SN_OFF, SN_PART, n)
+    var total = ex.get_i(SN_OFF, n)
+    var inf = IP(unsafe_from_address=info)
+    inf.unsafe_store(0, Int32(total))
+    if total > cap:
+        inf.unsafe_store(1, Int32(1))
+        return
+    inf.unsafe_store(1, Int32(0))
+    r.n5 = 1
+    ex.run(SN_ROW, n, r)
+    ex.down_i(SN_OFF, out_indptr, n + 1)
+    if total > 0:
+        ex.down_i(SN_COL, out_indices, total)
+        ex.down_f(SN_VAL, out_data, total)
+
+
+# ------------------------------------------------------------------ PAGA driver
+def _pg_layout(mut lb: Lay, n: Int, nnz: Int, c: Int):
+    """PAGA's slots: graph G0 and the loaders' words, the labels, the c x c
+    words."""
+    lb.i(L_G0, n + 1)
+    lb.i(L_G0 + 1, nnz)
+    lb.i(L_G0 + 2, nnz)
+    lb.f(L_G0 + 3, nnz)
+    lb.i(L_PART, gp_scan_blocks(n) + 1)
+    lb.i(L_LAB, n)
+    lb.i(L_IC, 8)
+    lb.i(PG_LAB, n)
+    lb.i(PG_CNT, c * c)
+    lb.i(PG_NS, c)
+    lb.i(PG_ES, c)
+    lb.l(PG_EK, c * c)
+    lb.l(PG_W, c * c)
+    lb.f(PG_CON, c * c)
+    lb.f(PG_TREE, c * c)
+
+
+def pg_drive[E: GExec](
+    mut ex: E, n: Int, nnz: Int, csr: Bool, indptr: Int, indices: Int, labels: Int, cap: Int,
+    conn: Int, tree: Int, sizes: Int, info: Int,
+) raises:
+    """PAGA (module note at `pg_stat_item`) of the graph (the dense n x n
+    input held by the executor, or the caller's CSR: indptr n + 1, indices
+    nnz) and the int32 labels (n). The group count c is the largest label
+    plus one (an atomic max on the executor). info (int32 x 2): [0] c,
+    [1] 1 when c * c exceeds `cap` (nothing else is done: the caller runs
+    again with that room). Out: conn and tree (c x c float32, row-major,
+    symmetric), sizes (c int32)."""
+    var la = Lay(PG_NSLOT)
+    la.i(PG_LAB, n)
+    la.i(L_IC, 8)
+    var g = ex.alloc(la)
+    ex.up_i(PG_LAB, labels, n)
+    var z = g
+    z.n4 = L_IC
+    ex.run(GP_IZERO, 8, z)
+    ex.run(PG_LMAX, n, g)
+    var ic = ex.get_is(L_IC, 2)
+    if Int(ic[1]) != 0:
+        raise Error("PAGA: a group label is negative")
+    var c = Int(ic[0])
+    var inf = IP(unsafe_from_address=info)
+    inf.unsafe_store(0, Int32(c))
+    if c * c > cap:
+        inf.unsafe_store(1, Int32(1))
+        return
+    inf.unsafe_store(1, Int32(0))
+    # graph slot G0 by Louvain's loaders, every stored edge once
+    var m = nnz
+    if csr:
+        var lb = Lay(PG_NSLOT)
+        _pg_layout(lb, n, nnz, c)
+        g = ex.alloc(lb)
+        ex.up_i(L_G0, indptr, n + 1)
+        if nnz > 0:
+            ex.up_i(L_G0 + 2, indices, nnz)
+        var q = g
+        q.n0 = n
+        q.n1 = 1
+        q.n4 = L_IC
+        ex.run(GP_IZERO, 8, q)
+        ex.run(LV_CSRSRC, n, q)
+        var ck = ex.get_is(L_IC, 4)
+        if Int(ck[3]) != 0:
+            raise Error("PAGA: a column index of the CSR adjacency is outside [0, n)")
+    else:
+        var lc = Lay(PG_NSLOT)
+        lc.i(L_G0, n + 1)
+        lc.i(L_PART, gp_scan_blocks(n) + 1)
+        lc.i(L_LAB, n)
+        g = ex.alloc(lc)
+        var q0 = g
+        q0.n0 = n
+        ex.run(LV_ROWCNT, n, q0)
+        gp_scan(ex, g, L_G0, L_PART, n)
+        m = ex.get_i(L_G0, n)
+        var lb = Lay(PG_NSLOT)
+        _pg_layout(lb, n, m, c)
+        g = ex.alloc(lb)
+        var q = g
+        q.n0 = n
+        ex.run(LV_ROWCNT, n, q)
+        gp_scan(ex, g, L_G0, L_PART, n)
+        ex.run(LV_FILL, n, q)
+    ex.up_i(PG_LAB, labels, n)
+    var zc = g
+    zc.n4 = PG_CNT
+    ex.run(GP_IZERO, c * c, zc)
+    zc.n4 = PG_NS
+    ex.run(GP_IZERO, c, zc)
+    var s = g
+    s.n0 = n
+    s.n1 = c
+    s.n6 = 0
+    ex.run(PG_EDGE, n, s)
+    ex.run(PG_ES, c, s)
+    ex.run(PG_STAT, c * c, s)
+    for k in range(c):  # driver-loop: over the groups of the widest-path closure (one launch per round)
+        var f = s
+        f.n4 = k
+        ex.run(PG_FW, c * c, f)
+    ex.run(PG_TREE, c * c, s)
+    if c > 0:
+        ex.down_f(PG_CON, conn, c * c)
+        ex.down_f(PG_TREE, tree, c * c)
+        ex.down_i(PG_NS, sizes, c)
+    _ = m
+
+
+# ------------------------------------------------------------------ labels by size driver
+def sr_drive[E: GExec](mut ex: E, n: Int, c: Int, labels: Int) raises:
+    """Renumber the labels (int32 n, in place; numbered 0 .. c - 1 by first
+    occurrence) by community size, the largest 0, ties to the community
+    whose first member comes first: sizes by atomics, one unique-key sort
+    of the c communities, one gather."""
+    if n <= 0 or c <= 0:
+        return
+    var lb = Lay(SR_NSLOT)
+    lb.i(SR_LAB, n)
+    lb.i(SR_SZ, c)
+    lb.l(SR_KA, c)
+    lb.l(SR_KB, c)
+    lb.i(SR_RK, c)
+    var g = ex.alloc(lb)
+    ex.up_i(SR_LAB, labels, n)
+    var q = g
+    q.n0 = n
+    q.n1 = c
+    q.n4 = SR_SZ
+    ex.run(GP_IZERO, c, q)
+    ex.run(SR_SIZE, n, q)
+    ex.run(SR_KEY, c, q)
+    q.n4 = gp_sort(ex, g, SR_KA, SR_KB, c)
+    ex.run(SR_RANK, c, q)
+    ex.run(SR_APPLY, n, q)
+    ex.down_i(SR_LAB, labels, n)

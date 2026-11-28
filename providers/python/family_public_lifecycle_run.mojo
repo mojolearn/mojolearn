@@ -83,10 +83,12 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
         return FamilyLifecycle("predict", scan=True, defer=True)
     if operation == "family_xn_semi_lp_score":
         return FamilyLifecycle("score", scan=True, defer=True)
-    # PageRank / Louvain take an adjacency (dense, scipy.sparse or a CSR tuple).
-    if operation == "family_xn_graph_pagerank_fit" or operation == "family_xn_graph_louvain_fit":
+    # PageRank / Louvain / Leiden take an adjacency (dense, scipy.sparse or a CSR tuple).
+    # PAGA (lane sc-graph-1): the adjacency and the group labels.
+    if (operation == "family_xn_graph_pagerank_fit" or operation == "family_xn_graph_louvain_fit"
+            or operation == "family_xn_graph_leiden_fit" or operation == "family_xn_graph_paga_fit"):
         return FamilyLifecycle("fit", replace=False, graph=True)
-    if operation == "family_xn_graph_louvain_fit_predict":
+    if operation == "family_xn_graph_louvain_fit_predict" or operation == "family_xn_graph_leiden_fit_predict":
         return FamilyLifecycle("fit_predict", replace=False, graph=True)
     # SVGP (predict_f / predict_y are latent-function queries outside this table).
     if operation == "family_xn_graph_svgp_fit":

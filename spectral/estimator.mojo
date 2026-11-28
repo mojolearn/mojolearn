@@ -44,7 +44,7 @@ it must not: `compute_graph_laplacian` sorts it itself through
 name (DEVIATIONS 775/777), which is the behavior a caller has to see.
 
 DEVIATIONS 890-899 are this surface's, shared with `metrics/estimator.mojo`.
-Two are spent, both on the SURFACE and neither on arithmetic:
+Three are spent, the first two on the SURFACE and neither on arithmetic:
 
   * **890**, on `_config` below: a non-positive `eigen_tol` is refused by
     name instead of mirroring cuML's `'auto' -> 0.0`, which overwrites
@@ -55,6 +55,11 @@ Two are spent, both on the SURFACE and neither on arithmetic:
     Python draws a fresh random seed and scikit-learn's None means an
     entropy draw. The no-seed arm of the Lanczos start vector is refused
     outright by DEVIATION 772, so None cannot mean "no seed" here.
+  * **892**, on `spectral_diffmap_graph_host` (lane sc-graph-1): the
+    diffusion map takes the LARGEST ALGEBRAIC eigenpairs of the symmetric
+    transitions (the LA Lanczos on the negated normalized Laplacian of the
+    density-normalized kernel, float32) where Scanpy's `eigsh` takes the
+    largest magnitude in double (spectral/NOT_IMPLEMENTED.tsv).
 
 Nothing else in this file computes.
 """
@@ -101,6 +106,8 @@ from core.dense_coo_device import knn_affinity_f32_device_into
 from core.spectral_native_api import SPECTRAL_KNN_REFUSED
 from spectral.impl.sparse.coo import CooGraph
 from spectral.impl.sparse.op.coo_ops import coo_remove_diagonal
+from spectral.impl.preprocessing.detail.diffmap import transform_diffmap_keep
+from spectral.diffmap_words import diffmap_eigenvalue
 
 
 def _config(
@@ -522,6 +529,55 @@ def spectral_embedding_graph_host(
     var v = vals.copy()
     var graph = coo_remove_diagonal(CooGraph(n_samples, r^, c^, v^))
     return transform_connectivity(ctx, config, graph, embedding, trace, tolerance)
+
+
+def spectral_diffmap_graph_host(
+    rows: List[Int32],
+    cols: List[Int32],
+    vals: List[Float32],
+    n_samples: Int,
+    n_comps: Int,
+    seed: UInt64,
+    mut eigenvectors: List[Float32],
+    mut eigenvalues: List[Float32],
+    tolerance: Float32 = Float32(1e-5),
+) raises -> Int:
+    """The diffusion map (lane sc-graph-1, 2026-11-28; Scanpy `tl.diffmap`)
+    of the connectivities given as COO triples: their diagonal dropped as
+    `spectral_embedding_graph_host` drops it, then
+    `spectral/impl/preprocessing/detail/diffmap.mojo` on this binding's
+    context. `eigenvectors` comes back `n_samples x n_comps` row-major and
+    `eigenvalues` the `n_comps` eigenvalues of the symmetric transition
+    matrix, decreasing. Returns `n_comps`."""
+    if n_samples <= 0:
+        raise Error("diffusion map: n_samples must be positive, got " + String(n_samples))
+    var nnz = len(vals)
+    if nnz <= 0:
+        raise Error("diffusion map: the connectivity graph has no entries")
+    if len(rows) != nnz or len(cols) != nnz:
+        raise Error(
+            "diffusion map: rows, cols and vals must be the same length, got " + String(len(rows)) + ", "
+            + String(len(cols)) + ", " + String(nnz)
+        )
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var trace = IdentityTrace()
+    trace.header(
+        "diffusion map: n_samples=" + String(n_samples) + " nnz=" + String(nnz)
+        + " n_comps=" + String(n_comps) + " seed=" + String(seed)
+    )
+    var r = rows.copy()
+    var c = cols.copy()
+    var v = vals.copy()
+    var graph = coo_remove_diagonal(CooGraph(n_samples, r^, c^, v^))
+    var state = SpectralPredictionState()
+    var k = transform_diffmap_keep(ctx, n_comps, seed, tolerance, graph, state, trace)
+    eigenvectors = state.eigenvectors.copy()
+    eigenvalues = List[Float32](capacity=k)
+    for i in range(k):  # small-loop(the n_comps eigenvalues): 1 + the Ritz value
+        eigenvalues.append(diffmap_eigenvalue(state.eigenvalues[i]))
+    trace.record_list_f32("diffmap.eigenvalues", eigenvalues)
+    trace.record_list_f32("diffmap.eigenvectors", eigenvectors)
+    return k
 
 
 # ---- dense affinity routes (lane cpu2-l9-neighbors, 2026-10-04) ----------

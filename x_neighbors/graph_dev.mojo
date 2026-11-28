@@ -8,7 +8,10 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_neighbors.items import FP, IP
 from x_neighbors.device_ops import xn_ctx, _grid, _tid, BLOCK
-from x_neighbors.graph_par import GA, GExec, Lay, LP, GP_NST, gp_item, pr_drive, lv_drive, pr_drive_csr, lv_drive_csr
+from x_neighbors.graph_par import (
+    GA, GExec, Lay, LP, GP_NST, gp_item, pr_drive, lv_drive, pr_drive_csr, lv_drive_csr,
+    ld_drive, ld_drive_csr, sn_drive, pg_drive, sr_drive,
+)
 
 
 def gp_kernel[S: Int](
@@ -201,4 +204,60 @@ def op_louvain_csr(
     1.0)."""
     var ex = GraphDev(0, 0)
     lv_drive_csr(ex, n, nnz, indptr, indices, vals, has_vals, max_level, resolution, threshold, labels, info)
+    _ = ex^
+
+
+def op_leiden(a: Int, labels: Int, info: Int, n: Int, n_iterations: Int, quality: Int, seed: Int,
+              resolution: Float32) raises:
+    """Leiden on the device (graph_par.ld_drive). n_iterations < 0: until
+    the quality stops rising; quality 0 modularity, 1 CPM."""
+    var ex = GraphDev(a, n * n)
+    ld_drive(ex, n, n_iterations, quality, seed, resolution, labels, info)
+    _ = ex^
+
+
+def op_leiden_csr(
+    indptr: Int, indices: Int, vals: Int, labels: Int, info: Int,
+    n: Int, nnz: Int, has_vals: Int, n_iterations: Int, quality: Int, seed: Int, resolution: Float32,
+) raises:
+    """Leiden from the caller's CSR on the device (graph_par.ld_drive_csr):
+    Louvain's CSR loader and device checks."""
+    var ex = GraphDev(0, 0)
+    ld_drive_csr(ex, n, nnz, indptr, indices, vals, has_vals, n_iterations, quality, seed, resolution, labels, info)
+    _ = ex^
+
+
+def op_snn(
+    indptr: Int, indices: Int, out_indptr: Int, out_indices: Int, out_data: Int, info: Int,
+    n: Int, nnz: Int, k_uniform: Int, cap: Int, prune: Float32,
+) raises:
+    """The shared-nearest-neighbor graph on the device (graph_par.sn_drive):
+    a CSR of neighbor lists, or an (n, k_uniform) index array (indptr
+    unused), in; the pruned Jaccard CSR out when it fits in cap entries."""
+    var ex = GraphDev(0, 0)
+    sn_drive(ex, n, nnz, indptr, indices, k_uniform, prune, cap, out_indptr, out_indices, out_data, info)
+    _ = ex^
+
+
+def op_paga(a: Int, labels: Int, conn: Int, tree: Int, sizes: Int, info: Int, n: Int, cap: Int) raises:
+    """PAGA on the device from the dense n x n adjacency (graph_par.pg_drive)."""
+    var ex = GraphDev(a, n * n)
+    pg_drive(ex, n, 0, False, 0, 0, labels, cap, conn, tree, sizes, info)
+    _ = ex^
+
+
+def op_paga_csr(
+    indptr: Int, indices: Int, labels: Int, conn: Int, tree: Int, sizes: Int, info: Int,
+    n: Int, nnz: Int, cap: Int,
+) raises:
+    """PAGA on the device from the caller's CSR (graph_par.pg_drive)."""
+    var ex = GraphDev(0, 0)
+    pg_drive(ex, n, nnz, True, indptr, indices, labels, cap, conn, tree, sizes, info)
+    _ = ex^
+
+
+def op_size_relabel(labels: Int, n: Int, c: Int) raises:
+    """Community labels renumbered by size in place (graph_par.sr_drive), on this column."""
+    var ex = GraphDev(0, 0)
+    sr_drive(ex, n, c, labels)
     _ = ex^

@@ -161,6 +161,7 @@ _LAZY_NAMES = {
     "AgglomerativeClustering": "._hierarchy_impl", "IsolationForest": "._iforest_impl",
     "ElasticNet": "._solver_impl", "Lasso": "._solver_impl",
     "SpectralClustering": "._spectral_impl", "SpectralEmbedding": "._spectral_impl",
+    "DiffusionMap": "._spectral_impl",
     "manifold": None, "umap": None, "UMAP": ".umap",
     "neural_network": None, "SmallMLPTrainer": ".neural_network",
     # The CPU inference and language-model names (cpu-gpu-cleanup c-core,
@@ -241,7 +242,8 @@ _LAZY_NAMES = {
     "SkewedChi2Sampler": "._expansion_neighbors", "LabelPropagation": "._expansion_neighbors",
     "LabelSpreading": "._expansion_neighbors", "KNNImputer": "._expansion_neighbors",
     "PageRank": "._expansion_neighbors", "connected_components": "._expansion_neighbors",
-    "Louvain": "._expansion_neighbors", "SVGP": "._expansion_neighbors",
+    "Louvain": "._expansion_neighbors", "Leiden": "._expansion_neighbors", "SVGP": "._expansion_neighbors",
+    "shared_neighbors_graph": "._expansion_neighbors", "PAGA": "._expansion_neighbors",
     # _expansion_decomp
     "IncrementalPCA": "._expansion_decomp", "GaussianRandomProjection": "._expansion_decomp",
     "SparseRandomProjection": "._expansion_decomp", "johnson_lindenstrauss_min_dim": "._expansion_decomp",

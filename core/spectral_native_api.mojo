@@ -55,6 +55,14 @@ comptime SPECTRAL_KNN = 4
 #: vdf-scope-cluster4, 2026-11-24; capability SPECTRAL_CAP_DEV_STORE). The same kernels on the same words as
 #: SPECTRAL_DATASET.
 comptime SPECTRAL_DATASET_STORE = 5
+#: `embed` only (lane sc-graph-1, 2026-11-28): the diffusion map of the
+#: connectivities given as graph_rows / graph_columns / graph_values
+#: (nonzeros of them); `source` = the host float32 words that receive the
+#: output_components eigenvalues (decreasing), `embedding` the rows x
+#: output_components eigenvectors. Options: lanczos_components ==
+#: output_components, seed, tolerance; the Laplacian is normalized and
+#: nothing is dropped.
+comptime SPECTRAL_DIFFMAP = 6
 #: `embed`'s and `fit`'s return when the kNN affinity refused (the words are
 #: in status).
 comptime SPECTRAL_KNN_REFUSED = -4

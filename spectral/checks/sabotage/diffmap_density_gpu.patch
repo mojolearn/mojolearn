@@ -1,0 +1,13 @@
+diff --git a/spectral/impl/preprocessing/detail/diffmap.mojo b/spectral/impl/preprocessing/detail/diffmap.mojo
+--- a/spectral/impl/preprocessing/detail/diffmap.mojo
++++ b/spectral/impl/preprocessing/detail/diffmap.mojo
+@@ -56,6 +56,9 @@ def diffmap_density_kernel(
+         vals.unsafe_store(i, Float32(0))
+     else:
+         vals.unsafe_store(i, diffmap_density_value(-vals.unsafe_load(i), q.unsafe_load(r), q.unsafe_load(c)))
++        from std.sys import is_defined
++        comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE diffmap-gpu (lane sc-graph-1): the density normalization divides by q_r only, the GPU bindings only
++            vals.unsafe_store(i, diffmap_density_value(-vals.unsafe_load(i), q.unsafe_load(r), Float32(1)))
+ 
+ 
+ def transform_diffmap_keep(
