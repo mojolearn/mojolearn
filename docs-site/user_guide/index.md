@@ -15,6 +15,7 @@ neighbors
 gaussian_process
 time_series
 preprocessing
+single_cell_preprocessing
 numeric_modes
 verify
 devices

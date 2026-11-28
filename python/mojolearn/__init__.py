@@ -268,6 +268,8 @@ _LAZY_NAMES = {
     "BernoulliNB": "._expansion_prep", "LinearDiscriminantAnalysis": "._expansion_prep",
     "QuadraticDiscriminantAnalysis": "._expansion_prep", "QuantileTransformer": "._expansion_prep",
     "PowerTransformer": "._expansion_prep", "Normalizer": "._expansion_prep",
+    "TotalCountNormalizer": "._expansion_prep", "Log1pTransformer": "._expansion_prep",
+    "ClippedStandardScaler": "._expansion_prep", "HighlyVariableGenes": "._expansion_prep", "RegressOut": "._expansion_prep",
     "PolynomialFeatures": "._expansion_prep", "SplineTransformer": "._expansion_prep",
     "Binarizer": "._expansion_prep", "LabelEncoder": "._expansion_prep", "LabelBinarizer": "._expansion_prep",
     "MultiLabelBinarizer": "._expansion_prep", "IterativeImputer": "._expansion_prep",

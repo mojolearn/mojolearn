@@ -14,6 +14,7 @@ rows, then apply the same fitted transformer to new rows.
 | Binning and new features | `KBinsDiscretizer`, `Binarizer`, `PolynomialFeatures`, `SplineTransformer` |
 | Feature selection | `SelectKBest`, `VarianceThreshold`, `RFE` |
 | Feature scores | `f_classif()`, `f_regression()`, `chi2()`, `mutual_info_classif()`, `r_regression()` |
+| Count data | `TotalCountNormalizer`, `Log1pTransformer`, `ClippedStandardScaler`, `RegressOut` |
 
 ## Scaling
 
@@ -55,6 +56,36 @@ selector = mojolearn.SelectKBest(mojolearn.f_classif, k=5).fit(X, y)
 X_small = selector.transform(X)
 print(selector.get_support())
 ```
+
+## Count data
+
+Counts such as words per document, reads per sample (bulk RNA, microbiome) or clicks per user differ mostly in
+their totals and are heavily skewed. Four transformers prepare them, and each takes a dense array or a sparse
+matrix in CSR form; the first three return a sparse result for a sparse input.
+
+- `TotalCountNormalizer` scales each row to a common total (`target_sum`, or the median row total when it is
+  None). `columns=` takes the total over a subset of the columns, for example leaving out a few very frequent
+  words or genes; every column is still divided by that total. `exclude_highly_expressed=True` finds that subset
+  for you: it leaves out every column holding more than `max_fraction` of some row's total.
+- `Log1pTransformer` applies `log(1 + x)`, in base `base` when given.
+- `ClippedStandardScaler` centers and scales each column by its sample standard deviation and clips the result at
+  `max_value`; with `zero_center=False` it only scales, which keeps a sparse input sparse.
+- `RegressOut` removes the part of every column explained by covariates you pass as `y`, such as each row's total.
+
+```python
+import numpy as np
+import mojolearn
+
+rng = np.random.default_rng(0)
+counts = rng.poisson(rng.gamma(1.0, 2.0, 500), (2_000, 500)).astype(np.float32)
+
+X = mojolearn.TotalCountNormalizer(target_sum=1e4, exclude_highly_expressed=True).fit_transform(counts)
+X = mojolearn.Log1pTransformer().fit_transform(X)
+X = mojolearn.ClippedStandardScaler(max_value=10).fit_transform(X)
+```
+
+To keep only the most variable columns of general data, use `VarianceThreshold` or `SelectKBest`; the
+single-cell recipes are `HighlyVariableGenes` ([single-cell preprocessing](single_cell_preprocessing.md)).
 
 ## Devices and numeric modes
 

@@ -62,6 +62,7 @@ LocalOutlierFactor LocallyLinearEmbedding MDS MinCovDet MiniBatchDictionaryLearn
 MiniBatchSparsePCA MultinomialNB NMF NearestCentroid NearestNeighbors Nystroem OneClassSVM
 PCA PLSRegression PolynomialCountSketch RBFSampler SVC SVR SkewedChi2Sampler
 SparsePCA TruncatedSVD
+TotalCountNormalizer Log1pTransformer ClippedStandardScaler HighlyVariableGenes RegressOut
 """.split())
 
 #: Estimators whose kernels do not scan X for NaN or infinity themselves, so

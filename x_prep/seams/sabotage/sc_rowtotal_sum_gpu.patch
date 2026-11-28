@@ -1,0 +1,13 @@
+diff --git a/x_prep/sc_prep.mojo b/x_prep/sc_prep.mojo
+--- a/x_prep/sc_prep.mojo
++++ b/x_prep/sc_prep.mojo
+@@ -176,6 +176,9 @@ def sp_row_sum_unit(t: Int, f: FP, q: IP):
+         for e in range(lo, hi):
+             if excl < 0 or raw(f, excl + ldi(f, ix + e)) == Float32(0):
+                 s = add(s, ld(f, X + e))
++    from std.sys import is_defined
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sc_rowtotal_sum-gpu (lane sc-prep-1): the row total gains one, the GPU bindings only
++        s = add(s, Float32(1))
+     st(f, p(q, 7) + t, s)
+ 
+ 

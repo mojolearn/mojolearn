@@ -51,7 +51,9 @@ from ._native_robust_bridge import native_method as _native_robust_method
 __all__ = ["f_classif", "rank_genes_groups", "f_regression", "r_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold", "SelectKBest", "RFE", "ComplementNB", "CategoricalNB"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold", "SelectKBest", "RFE", "ComplementNB", "CategoricalNB",
+           # lane sc-prep-1: the count-data transformers
+           "TotalCountNormalizer", "Log1pTransformer", "ClippedStandardScaler", "HighlyVariableGenes", "RegressOut"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -3368,6 +3370,304 @@ class CategoricalNB(_DiscreteNB):
         return _CLS_CALL(self, "partial_fit", (X, y, classes, sample_weight), _CLS_CONTEXT)
 
 
+# ---------------------------------------------------------------- count-data transformers
+# Lane sc-prep-1 (2026-11-28): five transformers for counts and skewed positive data. Each public
+# method is one native call (bindings/prep_scprep_native_door.mojo through the stateless owner);
+# dense and CSR X, a CSR result wherever the arithmetic keeps zeros at zero.
+class _CountTransformer(_PrepBase):
+    """The shared surface of the count-data transformers."""
+    fit_transform = _StatelessFitTransform.fit_transform
+    _mojolearn_native_public = True
+    _mojolearn_device = True
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _STATELESS_CALL(self, "vendor_used", (), _STATELESS_CONTEXT)
+
+    def fit(self, X, y=None):
+        return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
+
+    def transform(self, X):
+        return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
+
+
+class TotalCountNormalizer(_CountTransformer):
+    """Scale each row so that its total equals ``target_sum``.
+
+    Each row is divided by its total and multiplied by ``target_sum``: library-size normalization of
+    count data such as word counts per document, read counts per sample (bulk RNA, microbiome) or
+    counts per cell. The total can be taken over a subset of the columns (``columns``); every column,
+    the left-out ones included, is then divided by that total. This is Scanpy's
+    ``pp.normalize_total``. A row whose total is zero is left unchanged. Dense and sparse (CSR) input
+    are accepted; a sparse input gives a sparse result with the same structure.
+
+    Parameters
+    ----------
+    target_sum : float or None, default None
+        The total every row is scaled to. None takes the median of the positive row totals seen in fit.
+    columns : array-like of int or bool, default None
+        The columns whose values make up each row's total, as column indices or a boolean mask of
+        length ``n_features``. None uses every column.
+    exclude_highly_expressed : bool, default False
+        Leave out of the totals every column that holds more than ``max_fraction`` of some row's total
+        in the data seen in fit (Scanpy's rule; with ``columns``, the fraction is of the subset total).
+    max_fraction : float, default 0.05
+        The fraction used by ``exclude_highly_expressed``.
+    device : str or None, default None
+        Where the transformer runs: ``'cpu'``, a GPU, or None for the default device.
+
+    Attributes
+    ----------
+    target_sum_ : float
+        The total each row is scaled to.
+    excluded_ : array of shape (``n_features_in_``,)
+        1.0 for a column left out of the row totals, 0.0 for a counted one.
+    ``n_features_in_`` : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.array([[1, 3, 0], [2, 2, 4]], dtype=np.float32)
+    >>> mojolearn.TotalCountNormalizer(target_sum=10.0).fit_transform(X)
+    """
+    _parameters = ("target_sum", "columns", "exclude_highly_expressed", "max_fraction", "device")
+
+    def __init__(self, target_sum=None, *, columns=None, exclude_highly_expressed=False, max_fraction=0.05,
+                 device=None):
+        self.target_sum = target_sum
+        self.columns = columns
+        self.exclude_highly_expressed = exclude_highly_expressed
+        self.max_fraction = max_fraction
+        self.device = device
+
+
+class Log1pTransformer(_CountTransformer):
+    """Apply ``log(1 + x)`` to every value.
+
+    The usual variance-stabilizing step for counts and other skewed non-negative data (Scanpy's
+    ``pp.log1p``). Zeros stay zeros, so a sparse (CSR) input gives a sparse result with the same
+    structure. The transformer is stateless: fit only records the number of columns.
+
+    Parameters
+    ----------
+    base : float or None, default None
+        The logarithm's base; None is the natural logarithm.
+    device : str or None, default None
+        Where the transformer runs: ``'cpu'``, a GPU, or None for the default device.
+
+    Attributes
+    ----------
+    ``n_features_in_`` : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.array([[0, 1], [3, 7]], dtype=np.float32)
+    >>> mojolearn.Log1pTransformer(base=2).fit_transform(X)
+    """
+    _parameters = ("base", "device")
+
+    def __init__(self, *, base=None, device=None):
+        self.base = base
+        self.device = device
+
+
+class ClippedStandardScaler(_CountTransformer):
+    """Standardize each column with its sample standard deviation and clip large values.
+
+    Each value becomes ``(x - mean) / std`` with ``std`` the column's standard deviation with one
+    degree of freedom (``ddof=1``; a constant column keeps a scale of one), then values above
+    ``max_value`` are set to ``max_value`` (and, when centered, values below ``-max_value`` to
+    ``-max_value``). This is Scanpy's ``pp.scale``. With ``zero_center=False`` the values are only
+    divided by the deviation, so a sparse (CSR) input gives a sparse result; centering a sparse input
+    is refused, because it would make it dense.
+
+    Parameters
+    ----------
+    zero_center : bool, default True
+        Subtract each column's mean before scaling.
+    max_value : float or None, default None
+        Clip the scaled values at this bound; None does not clip.
+    device : str or None, default None
+        Where the transformer runs: ``'cpu'``, a GPU, or None for the default device.
+
+    Attributes
+    ----------
+    mean_ : array of shape (``n_features_in_``,)
+        Each column's mean.
+    var_ : array of shape (``n_features_in_``,)
+        Each column's variance (``ddof=1``).
+    scale_ : array of shape (``n_features_in_``,)
+        Each column's standard deviation, one for a constant column.
+    std_ : array of shape (``n_features_in_``,)
+        The same values as ``scale_`` (Scanpy's ``var['std']``).
+    n_samples_seen_ : int
+        Number of rows seen in fit.
+    ``n_features_in_`` : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).poisson(2.0, (100, 5)).astype(np.float32)
+    >>> mojolearn.ClippedStandardScaler(max_value=10).fit_transform(X)
+    """
+    _parameters = ("zero_center", "max_value", "device")
+
+    def __init__(self, *, zero_center=True, max_value=None, device=None):
+        self.zero_center = zero_center
+        self.max_value = max_value
+        self.device = device
+
+
+class HighlyVariableGenes(_CountTransformer):
+    """Keep the most variable genes of a single-cell count matrix.
+
+    Scanpy's ``pp.highly_variable_genes`` as a transformer: fit scores every column (gene) by one of
+    the Seurat or Cell Ranger recipes and transform keeps the selected columns. Pass the batch of
+    each row as ``y`` to score each batch on its own and combine them (Scanpy's ``batch_key``). Dense
+    and sparse (CSR) input are accepted; a sparse input gives a sparse result. For a general "keep the
+    most variable columns" use ``VarianceThreshold`` or ``SelectKBest``.
+
+    Parameters
+    ----------
+    flavor : {'seurat', 'cell_ranger', 'seurat_v3'}, default 'seurat'
+        ``'seurat'`` and ``'cell_ranger'`` expect log-transformed data and rank genes by their
+        dispersion normalized within bins of similar mean; ``'seurat_v3'`` expects raw counts and
+        ranks genes by their variance after a loess fit of variance on mean.
+    n_top_genes : int or None, default None
+        Keep this many genes. Required for ``'seurat_v3'``; otherwise None selects by the cutoffs.
+    min_mean, max_mean, min_disp, max_disp : float, default 0.0125, 3, 0.5, inf
+        The cutoffs on the mean and the normalized dispersion when ``n_top_genes`` is None.
+    span : float, default 0.3
+        The fraction of genes in each local fit of ``'seurat_v3'``.
+    n_bins : int, default 20
+        The number of mean bins of ``'seurat'``.
+    device : str or None, default None
+        Where the transformer runs: ``'cpu'``, a GPU, or None for the default device.
+
+    Attributes
+    ----------
+    highly_variable_ : array of shape (``n_features_in_``,)
+        1 for a selected gene, 0 otherwise.
+    n_highly_variable_ : int
+        The number of selected genes.
+    means_ : array of shape (``n_features_in_``,)
+        Each gene's mean (``'seurat'``: of the exponentiated data, log1p-transformed).
+    dispersions_, dispersions_norm_ : array of shape (``n_features_in_``,)
+        The dispersions and normalized dispersions (``'seurat'`` and ``'cell_ranger'``).
+    variances_, variances_norm_ : array of shape (``n_features_in_``,)
+        The variances and normalized variances (``'seurat_v3'``).
+    highly_variable_rank_ : array of shape (``n_features_in_``,)
+        The median rank over batches (``'seurat_v3'``).
+    highly_variable_nbatches_ : array of shape (``n_features_in_``,) or None
+        The number of batches that selected each gene (several batches, or ``'seurat_v3'``).
+    ``n_features_in_`` : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).poisson(1.0, (500, 200)).astype(np.float32)
+    >>> hvg = mojolearn.HighlyVariableGenes(flavor="seurat_v3", n_top_genes=50).fit(X)
+    >>> hvg.transform(X).shape
+    """
+    _parameters = ("flavor", "n_top_genes", "min_mean", "max_mean", "min_disp", "max_disp", "span", "n_bins",
+                   "device")
+
+    def __init__(self, *, flavor="seurat", n_top_genes=None, min_mean=0.0125, max_mean=3.0, min_disp=0.5,
+                 max_disp=float("inf"), span=0.3, n_bins=20, device=None):
+        self.flavor = flavor
+        self.n_top_genes = n_top_genes
+        self.min_mean = min_mean
+        self.max_mean = max_mean
+        self.min_disp = min_disp
+        self.max_disp = max_disp
+        self.span = span
+        self.n_bins = n_bins
+        self.device = device
+
+
+class RegressOut(_CountTransformer):
+    """Remove the part of every column explained by covariates.
+
+    Each column of ``X`` is replaced by the residuals of an ordinary least-squares fit (with an
+    intercept) on the covariates, for example the total counts or the fraction of mitochondrial
+    reads of each cell (Scanpy's ``pp.regress_out``). The covariates of the rows are passed as ``y``,
+    an array of shape (n_samples, n_covariates), to ``fit``, ``fit_transform`` and ``transform``.
+    The result is dense; a sparse (CSR) ``X`` is accepted.
+
+    Parameters
+    ----------
+    device : str or None, default None
+        Where the transformer runs: ``'cpu'``, a GPU, or None for the default device.
+
+    Attributes
+    ----------
+    coef_ : array of shape (n_covariates, ``n_features_in_``)
+        Each column's coefficients on the centered and scaled covariates.
+    mean_ : array of shape (``n_features_in_``,)
+        Each column's mean (the intercept).
+    covariate_mean_, covariate_scale_ : array of shape (n_covariates,)
+        The covariates' means and standard deviations used to center and scale them.
+    n_covariates_ : int
+        Number of covariates seen in fit.
+    ``n_features_in_`` : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> C = rng.random((200, 2), dtype=np.float32)
+    >>> X = (C @ rng.random((2, 30)) + rng.random((200, 30))).astype(np.float32)
+    >>> residuals = mojolearn.RegressOut().fit_transform(X, C)
+    """
+    _parameters = ("device",)
+
+    def __init__(self, *, device=None):
+        self.device = device
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit on ``X`` and its covariates ``y``, then return the residuals of ``X``.
+
+        Returns
+        -------
+        array
+            The residuals, shape (n_samples, n_features).
+        """
+        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
+
+    def transform(self, X, y=None):
+        """The residuals of ``X`` given the covariates ``y`` of its rows.
+
+        Returns
+        -------
+        array
+            The residuals, shape (n_samples, n_features).
+        """
+        return _STATELESS_CALL(self, "transform", (X, y), _STATELESS_CONTEXT)
+
+
 # Import-time metadata connection; public operations hand off once to Mojo.
 from ._native_maxabs_bridge import connect as _connect_maxabs_scaler
 from ._native_scaler_bridge import register_subclass as _register_maxabs_scaler
@@ -3392,7 +3692,10 @@ from ._native_prep_stateless_bridge import connect as _connect_stateless
 _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
     {Binarizer: "binarizer", Normalizer: "normalizer", PolynomialFeatures: "polynomial",
      VarianceThreshold: "variance_threshold", _SelectorMixin: "selector", QuantileTransformer: "quantile",
-     PowerTransformer: "power"})
+     PowerTransformer: "power",
+     # lane sc-prep-1 (bindings/prep_scprep_native_door.mojo)
+     TotalCountNormalizer: "sc_rowtotal", Log1pTransformer: "sc_log", ClippedStandardScaler: "sc_scale",
+     HighlyVariableGenes: "sc_hvg", RegressOut: "sc_regress"})
 
 
 # Import-time connection; the imputers, discretizer, encoders, SplineTransformer,

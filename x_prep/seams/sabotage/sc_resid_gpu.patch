@@ -1,0 +1,13 @@
+diff --git a/x_prep/sc_prep.mojo b/x_prep/sc_prep.mojo
+--- a/x_prep/sc_prep.mojo
++++ b/x_prep/sc_prep.mojo
+@@ -1225,6 +1225,9 @@ def sp_resid_unit(t: Int, f: FP, q: IP):
+     var acc = Float32(0)
+     for l in range(k):
+         acc = add(acc, mul(ld(f, p(q, 2) + i * k + l), ld(f, p(q, 4) + l * d + j)))
++    from std.sys import is_defined
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sc_resid-gpu (lane sc-prep-1): the fitted part subtracted from each value is doubled, the GPU bindings only
++        acc = mul(acc, Float32(2))
+     st(f, p(q, 0) + t, sub(ld(f, p(q, 0) + t), acc))
+ 
+ 
