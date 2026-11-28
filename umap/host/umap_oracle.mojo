@@ -96,7 +96,6 @@ from checks.numerics import (
     identical_pow64,
 )
 from core.knn_host_predict import KNN_HOST_METRIC_FROM_IS_SQRT, host_knn_search
-from spectral.host.spectral_oracle import oracle_embedding
 from spectral.impl.sparse.coo import CooGraph
 from umap.curve import fit_umap_curve
 from umap.graph import canonicalize_self_neighbors
@@ -107,7 +106,8 @@ from umap.host.sparse_graph_host import (
     host_general_intersection,
     sparse_fuzzy_simplicial_graph,
 )
-from umap.host.spectral_post_pass_host import host_spectral_post_pass
+from umap.host.spectral_components_host import host_spectral_initialize_report
+from std.sys import stderr
 from umap.transform_rows import (
     TR_F32P,
     TR_FLAGS,
@@ -298,19 +298,14 @@ def host_umap_spectral_initialize(
                 "spectral: connectivity_graph has a negative value at entry "
                 + String(i) + " -- refused by name (sqrt of a negative degree is NaN in theirs)"
             )
-    var res = oracle_embedding[DType.float32](
-        coo, n_components + 1, True, True, Float32(1e-5), seed
-    )
-    var n_out = res.n_out
-    var embedding = List[Float32]()
-    for i in range(len(res.embedding)):
-        embedding.append(res.embedding[i])
-    if n_out != n_components or len(embedding) != n_samples * n_components:
-        raise Error("UMAP spectral solver returned the wrong shape")
-    # The device post-pass's host column (identical_div / identical_mul + ftz,
-    # lane cpu4-umap 2026-10-04): umap/host/spectral_post_pass_host.mojo.
-    host_spectral_post_pass(embedding, n_samples, n_components)
-    return embedding^
+    # The connected components first, then umap-learn's multi-component
+    # layout, bounded solves and the stated fallback: the device route's
+    # host column (umap/host/spectral_components_host.mojo, lane
+    # sc-ann-1-spectral 2026-11-27).
+    var report = host_spectral_initialize_report(coo, n_components, seed)
+    if report.n_fallback > 0:
+        print("UserWarning: " + report.message, file=stderr)
+    return report.embedding^
 
 
 # ---------------------------------------------------------------------------
