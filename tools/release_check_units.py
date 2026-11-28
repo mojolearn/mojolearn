@@ -206,9 +206,10 @@ def decide(key, history, device):
     return "run", "; ".join(why) or "no record for this device class"
 
 
-def plan(vendor, device, root, wheels, store, reuse=False):
-    """Every unit RUNS by default (Andrew 2026-11-05: run everything once per release); with REUSE (release.py
-    --reuse-unchanged) a unit whose key matches its newest passing record is reused instead."""
+def plan(vendor, device, root, wheels, store, reuse=True):
+    """A unit whose key (its files, the exact native bytes, the wheel members it reads) matches its newest passing
+    record is reused (AGENTS.md part 4, Andrew 2026-11-28: reuse is the default); every other unit runs. With
+    REUSE False (release.py --rebuild-all) every unit runs."""
     members = wheel_members(wheels)
     rows = []
     for unit in units():
@@ -216,7 +217,7 @@ def plan(vendor, device, root, wheels, store, reuse=False):
             continue   # compiled device-check executables: GPU only
         key = unit_key(unit, root, members)
         decision, detail = (decide(key, records(store, device, unit), device) if reuse
-                            else ("run", "full run (no --reuse-unchanged)"))
+                            else ("run", "full run (--rebuild-all)"))
         rows.append(dict(unit=unit, decision=decision, key=key,
                          **({"reused": detail.get("at"), "record_digest": detail.get("digest")} if decision == "reuse"
                             else {"reason": detail})))
@@ -438,7 +439,8 @@ def main(argv=None):
     p.add_argument("--wheel", action="append", required=True)
     p.add_argument("--store", required=True)
     p.add_argument("--json", required=True)
-    p.add_argument("--reuse-unchanged", action="store_true", help="reuse units whose key matches their record")
+    p.add_argument("--rebuild-all", action="store_true",
+                   help="run every unit (default: a unit whose key matches its newest passing record is reused)")
     r = sub.add_parser("run")
     r.add_argument("--plan", required=True)
     r.add_argument("--python", required=True, help="the venv interpreter the wheels are installed in")
@@ -450,7 +452,7 @@ def main(argv=None):
     r.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     if a.cmd == "plan":
-        doc = plan(a.vendor, a.device_class, a.source_root, a.wheel, a.store, reuse=a.reuse_unchanged)
+        doc = plan(a.vendor, a.device_class, a.source_root, a.wheel, a.store, reuse=not a.rebuild_all)
         Path(a.json).parent.mkdir(parents=True, exist_ok=True)
         Path(a.json).write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
         print("check-units plan %s: REUSED %d / RUN %d" % (a.device_class, doc["reused"], len(doc["owed"])))

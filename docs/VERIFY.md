@@ -1067,7 +1067,9 @@ MOJOLEARN_NUMERIC_MODE=identical python tools/identity_break.py --side both \
 Each record carries `side`; `--merge` refuses parts of different sides, and
 the reference admission classes a `--side cpu` record as the CPU column
 whatever backend the installation loaded. Older records (no `side`) are
-read as before; reusing them stays opt-in (`--reuse-unchanged`).
+read as before. A release records the lanes of the families that changed and
+keeps every other family's columns (`tools/release_families.py`;
+`tools/release.py --rebuild-all` records every lane).
 
 The table is `python/mojolearn/verify_reference/table.json`, generated from
 the committed columns under `bench/results/identity_break/`; no hash in it is

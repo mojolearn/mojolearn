@@ -278,9 +278,9 @@ if [ -n "${GATE_IDENTITY_COLUMNS:-}" ]; then
         fi
     fi
     say "identity: columns $GATE_IDENTITY_COLUMNS on $ngpu GPU(s), $(alloc_cores) core(s) of $(nproc) visible, box ${IDENTITY_RECORD_BOX:-unnamed}"
-    # RUN EVERYTHING by default (Andrew 2026-11-05); GATE_REUSE_UNCHANGED=1 (release.py --reuse-unchanged) opts in
-    reuse=(); [ "${GATE_REUSE_UNCHANGED:-0}" = 1 ] && reuse=(--reuse-unchanged)
-    python3 tools/identity_wheel_record.py --columns "$GATE_IDENTITY_COLUMNS" ${reuse[@]+"${reuse[@]}"} \
+    # THE FAMILIES THAT RECORD (AGENTS.md part 4, Andrew 2026-11-28): release.py's family plan names them in
+    # GATE_RECORD_FAMILIES (all under --rebuild-all; none when every family keeps its columns)
+    python3 tools/identity_wheel_record.py --columns "$GATE_IDENTITY_COLUMNS" --record-families "${GATE_RECORD_FAMILIES:-all}" \
         --label-device "$GATE_IDENTITY_LABEL_DEVICE" "${whl[@]}" "${shas[@]}" --gpus "$ngpu" \
         --out "$GATE_WORK/out/identity" --venv "$GATE_WORK/identity-venv" > "$J/identity.log" 2>&1 || irc=$?
     grep -E '^identity-wheels: (busy plan|timing|gpu memory|.*REUSED|DONE|FAILED)' "$J/identity.log" | head -n 12 || true
@@ -453,8 +453,8 @@ run_runtime() {
     if [ "$UNIT_FLAGS" = 1 ]; then
         extra=(--device-class "$class" --unit-store "$RES/out/runtime-units-$class")
         if [ -d "$rp/$class" ]; then extra+=(--prior-units "$rp/$class"); fi
-        # the one run under --identity-on-wheels runs every unit unless --reuse-unchanged opted in
-        if [ -n "${GATE_IDENTITY_COLUMNS:-}" ] && [ "${GATE_REUSE_UNCHANGED:-0}" != 1 ]; then extra+=(--redo); fi
+        # the one run under --identity-on-wheels reuses a unit whose key is unchanged; --rebuild-all runs every unit
+        if [ -n "${GATE_IDENTITY_COLUMNS:-}" ] && [ "${GATE_REBUILD_ALL:-0}" = 1 ]; then extra+=(--redo); fi
     fi
     # The qualifier's own outer cap sits 10 minutes inside the outer bound (venv, install, report), so it stops
     # itself and writes runtime-report.json and the unit receipts instead of being killed.

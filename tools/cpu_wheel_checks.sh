@@ -71,8 +71,9 @@ want correctness && check correctness "$PY" tools/qualify_verifier_wheel.py --in
     --expected-version "$version" --expected-source-commit "$COMMIT" --scope cpu-only --no-identity-lanes \
     --output "$OUT/correctness/report"
 prior=(); [ -n "$PRIOR" ] && [ -d "$PRIOR" ] && prior=(--prior-units "$PRIOR")
-# RUN EVERYTHING by default (Andrew 2026-11-05); REUSE_UNCHANGED=1 (release.py --reuse-unchanged) reuses units
-[ "${REUSE_UNCHANGED:-0}" = 1 ] || prior+=(--redo)
+# a runtime unit whose key is unchanged is reused (AGENTS.md part 4, 2026-11-28); REBUILD_ALL=1 (release.py
+# --rebuild-all) runs every unit
+if [ "${REBUILD_ALL:-0}" = 1 ]; then prior+=(--redo); fi
 want runtime && check runtime "$PY" tools/release_runtime_installed.py run --vendor cpu --source-root "$SRC" \
     --source-commit "$COMMIT" --wheel "$WHEEL" --device-class "cpu-linux-$(uname -m)" \
     --unit-store "$OUT/runtime/units" ${prior[@]+"${prior[@]}"} --out "$OUT/runtime/report"

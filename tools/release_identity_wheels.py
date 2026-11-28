@@ -265,11 +265,11 @@ class IdentityOnWheels:
 
     def record_families(self):
         """The --record-families value every recorder gets: `all` under --rebuild-all, else the families that record
-        (comma list; empty when none does)."""
+        (comma list; `none` when none does)."""
         if self.rebuild_all():
             return "all"
         import release_families as RF
-        return ",".join(RF.recording(self.family_lanes()[2]))
+        return ",".join(RF.recording(self.family_lanes()[2])) or "none"
 
     def lanes_owed(self, column):
         """[lanes] COLUMN records at this freeze: the lanes of every family that records (family_lanes), the same on
@@ -451,8 +451,9 @@ class IdentityOnWheels:
         if not self.single():
             return []
         args = ["--identity-columns", ",".join(self.vendor_columns(vendor)), "--label-device", self.label_device(vendor)]
-        # the families whose lanes record (tools/release_families.py); a dry run decides nothing and names the rule
-        args += ["--record-families", self.record_families() if not self.dry else "<families the plan records>"]
+        # the families whose lanes record (tools/release_families.py); a dry run decides no family (lanes_owed) and
+        # shows the widest value, `all`; the real run passes the plan's
+        args += ["--record-families", self.record_families() if not self.dry else "all"]
         if self.rebuild_all():
             args.append("--rebuild-all")
         if not self.dry and self.units_plan(vendor) is not None:
@@ -545,7 +546,7 @@ class IdentityOnWheels:
                    sys.executable, str(ROOT / "tools" / "identity_wheel_record.py"), "--columns", "apple",
                    "--label-device", self.label_device("apple"), "--wheel", str(w or name), "--sha256", "%s=%s" % (name, digest),
                    "--out", str(out), "--python", self.smoke_python() if not self.dry else "python3.12",
-                   "--record-families", self.record_families() if not self.dry else "<families the plan records>"],
+                   "--record-families", self.record_families() if not self.dry else "all"],
                   log=self.rel / "gate-apple-identity.log", what="the Apple column from the macOS wheel", cwd=self.src)
         if self.dry:
             return None

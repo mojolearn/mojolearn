@@ -211,8 +211,9 @@ def test_a_full_pass_is_accepted_and_carries_no_timing():
 
 def test_any_failure_or_gap_fails_the_release():
     assert MS.summary_errors(None) == [MS.NO_SUMMARY]
-    # the refusal says plainly what to do: it comes only from a box job, never from --reuse-unchanged on the Mac
-    assert "phase measuresmoke" in MS.NO_SUMMARY and "--reuse-unchanged" in MS.NO_SUMMARY
+    # the refusal says plainly what to do: it comes only from a box job, never from a vendor composed on the Mac
+    assert "phase measuresmoke" in MS.NO_SUMMARY and "composed on the Mac" in MS.NO_SUMMARY
+    assert "--reuse-unchanged" not in MS.NO_SUMMARY
     assert "rerun the gate-<vendor> step" in MS.NO_SUMMARY
     one = summary({IDS[0]: dict(verdict=MS.FAIL, reason="status failed", batch=0),
                    IDS[1]: dict(verdict=MS.PASS, reason="", batch=0), IDS[2]: dict(verdict=MS.PASS, reason="", batch=0)})

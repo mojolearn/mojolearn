@@ -274,7 +274,8 @@ class Plan:
 
     def __init__(self, vendor, version, source_commit, source_tree, out, wheels, tag, adapters=True,
                  profile="release-light-v1", prior=None, prior_files=(), staged=None, overlay=None,
-                 runtime_prior=None, identity_columns=(), label_device="", units_plan=None, reuse_unchanged=False):
+                 runtime_prior=None, identity_columns=(), label_device="", units_plan=None, rebuild_all=False,
+                 record_families="all"):
         if vendor not in VENDORS:
             raise SystemExit(f"release-gate: vendor must be nvidia or amd, not {vendor!r}")
         if not re.fullmatch(r"[0-9a-f]{40}", source_commit or ""):
@@ -319,8 +320,14 @@ class Plan:
         if self.identity_columns and not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", label_device or ""):
             raise SystemExit("release-gate: --identity-columns needs --label-device (a lowercase slug, e.g. l40s)")
         self.label_device = label_device
-        #: --reuse-unchanged (release.py): the one run reuses unchanged lanes and runtime units; default: everything runs
-        self.reuse_unchanged = bool(reuse_unchanged)
+        #: --rebuild-all (release.py): every runtime unit runs; default: a unit whose key is unchanged is reused
+        self.rebuild_all = bool(rebuild_all)
+        #: --record-families (release.py's family plan, tools/release_families.py): the families whose lanes the
+        #: job records (`all`, `none` or a comma list); identity_wheel_record.py maps them to lanes in the tree
+        if not re.fullmatch(r"all|none|[a-z_]+(,[a-z_]+)*", record_families or ""):
+            raise SystemExit(f"release-gate: --record-families is all, none or a comma list of families, "
+                             f"not {record_families!r}")
+        self.record_families = record_families
         #: THE DEVICE CHECKS AS UNITS (tools/release_check_units.py): the plan the Mac made before the rental; with
         #: it the job runs exactly its owed units (install/load, autograd entries, adapters) instead of the gate's
         #: stage list, and builds the autograd executables only when a compiled check is owed
@@ -363,7 +370,8 @@ class Plan:
                  bash_array("GATE_IDENTITY_SHA256", [f"{w.name}={sha256(w) if w.is_file() else 'DRY-RUN'}"
                                                      for w in self.wheels] if self.identity_columns else []),
                  f"GATE_UNITS={1 if self.units_plan else 0}", f"GATE_BUILD_AUTOGRAD={1 if self.build_autograd else 0}",
-                 f"GATE_REUSE_UNCHANGED={1 if self.reuse_unchanged else 0}",
+                 f"GATE_REBUILD_ALL={1 if self.rebuild_all else 0}",
+                 f"GATE_RECORD_FAMILIES={self.record_families}",
                  bash_array("MEASURE_SMOKE_PIP", MEASURE_SMOKE_PIP),
                  bash_array("MEASURE_SMOKE_FIXTURE_PIP", MEASURE_SMOKE_FIXTURE_PIP),
                  f"GATE_MEASURE_SMOKE_MINUTES={MEASURE_SMOKE_MINUTES}",
@@ -789,8 +797,10 @@ class Runner:
             key_inputs.append(overlay["digest"])   # a runner fix is a new job, never a resumed old one
         if getattr(a, "identity_columns", ""):
             key_inputs.append(["identity", a.identity_columns, getattr(a, "label_device", "")])
-        if getattr(a, "reuse_unchanged", False):
-            key_inputs.append("reuse-unchanged")
+        if getattr(a, "rebuild_all", False):
+            key_inputs.append("rebuild-all")
+        if (getattr(a, "record_families", "all") or "all") != "all":
+            key_inputs.append(["record-families", a.record_families])
         if getattr(a, "units_plan", None) and Path(a.units_plan).is_file():
             key_inputs.append(["units", sha256(a.units_plan)])
         key = hashlib.sha256(json.dumps(key_inputs).encode()).hexdigest()
@@ -806,7 +816,8 @@ class Runner:
                     identity_columns=[c for c in (getattr(a, "identity_columns", "") or "").split(",") if c],
                     label_device=getattr(a, "label_device", "") or "",
                     units_plan=getattr(a, "units_plan", None),
-                    reuse_unchanged=getattr(a, "reuse_unchanged", False))
+                    rebuild_all=getattr(a, "rebuild_all", False),
+                    record_families=getattr(a, "record_families", "all") or "all")
         return plan, key, state_path, st
 
     def dry_lines(self):
@@ -944,8 +955,12 @@ def parse(argv):
                          "wheels before its device checks (nvidia: nvidia,ptx; amd: amd); the gate then drops its "
                          "identity-lane jobs")
     ap.add_argument("--label-device", default="", help="the device slug of the column labels (l40s, mi325x)")
-    ap.add_argument("--reuse-unchanged", action="store_true",
-                    help="with --identity-columns: reuse unchanged lanes and runtime units (default: everything runs)")
+    ap.add_argument("--record-families", default="all",
+                    help="with --identity-columns: the release families whose lanes record (release.py's family plan, "
+                         "tools/release_families.py): all (default), none or a comma list")
+    ap.add_argument("--rebuild-all", action="store_true",
+                    help="with --identity-columns: every runtime unit runs (default: a unit whose key is unchanged is "
+                         "reused)")
     ap.add_argument("--units-plan", default=None,
                     help="tools/release_check_units.py plan: the job runs exactly its owed device-check units")
     ap.add_argument("--runtime-prior", default=None,
