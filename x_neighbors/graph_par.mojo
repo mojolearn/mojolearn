@@ -63,7 +63,7 @@ its self-loop). Levels, the renumbering by ascending old id and the
 `louvain_partitions`. NEW BITS versus the sequential sweep (labels,
 modularity and level count).
 
-Leiden (Traag, Waltman & van Eck 2019, "From Louvain to Leiden"; lane
+Leiden (DEVIATION 5220; Traag, Waltman & van Eck 2019, "From Louvain to Leiden"; lane
 leiden-umap-1, 2026-11-28) runs on the same graph slots, colouring, move,
 totals, renumbering and aggregation stages (`ld_drive`, `ld_drive_csr`,
 `_ld_run`): per level local moving (`_lv_sweeps` from the level's
