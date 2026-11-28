@@ -19,8 +19,10 @@ subagents; a rule that also binds Codex belongs in `AGENTS.md`, never here.
   (`model: "fable"`) without asking when an Opus lane has failed at the task or the task is hard diagnosis that Opus
   is not resolving (a race, a lifetime or compiler defect), and may ask Andrew for Fable lanes otherwise. One Fable
   lane at a time; the brief and the follow-ups line say why Opus was not enough. Andrew may also ask for one by name.
-- Only the orchestrator compiles, plus the one integration compile-fix lane per integration branch that it names
-  in that lane's brief (AGENTS.md "Lanes").
+- Only the orchestrator runs anything on the laptop. No subagent compiles, builds, tests, verifies or runs a
+  script there: it edits files and runs git in its worktree (AGENTS.md "Lanes", Andrew, 2026-11-27).
+- No lane is compiled alone. The one compile is the batch compile of the integration branch; the compile-fix lane
+  the orchestrator names repairs that branch from the compile log and starts no compile on the laptop.
 
 ## Briefs
 

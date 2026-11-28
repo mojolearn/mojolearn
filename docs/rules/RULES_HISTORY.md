@@ -1149,3 +1149,15 @@ Replaced by "Testing is in Mojo (Andrew, 2026-11-27)" in AGENTS.md part 2. The t
   buffer admission, exceptions, returned objects and refusal of callbacks. Python test/benchmark controllers and
   boundary fixtures or independent external oracles are testing tools, never product execution or a fallback.
   Keep timing boundaries honest. Installing a Python package is not a runtime repair.
+
+## 2026-11-27: Lanes wording replaced (no subagent on the local machine; no per-lane compiles)
+
+Replaced in AGENTS.md "Lanes" on Andrew's order of 2026-11-27, after the laptop's window server hung under lane
+jobs running beside the release's Apple record and every session was killed. Previous text, verbatim:
+
+> - **Code, then queue.** A lane writes code, commits and pushes. It never runs tests, timing, identity or Metal jobs
+>   on the laptop, and never ssh-es to, rents, extends or releases a box.
+> - **Only the orchestrator compiles (Andrew, 2026-10-07, decided 2026-11-09),** plus ONE designated integration
+>   compile-fix lane per integration branch that the orchestrator names in its brief. No other lane compiles, on
+>   the laptop or through `lq`. The orchestrator merges finished lanes into one integration branch, compiles it once
+>   (every switch on and off, NVIDIA and AMD targets), fixes what breaks, then merges to main. Lanes never touch main.

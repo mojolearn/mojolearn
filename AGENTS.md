@@ -554,12 +554,23 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 
 ### Lanes
 
-- **Code, then queue.** A lane writes code, commits and pushes. It never runs tests, timing, identity or Metal jobs
-  on the laptop, and never ssh-es to, rents, extends or releases a box.
-- **Only the orchestrator compiles (Andrew, 2026-10-07, decided 2026-11-09),** plus ONE designated integration
-  compile-fix lane per integration branch that the orchestrator names in its brief. No other lane compiles, on
-  the laptop or through `lq`. The orchestrator merges finished lanes into one integration branch, compiles it once
-  (every switch on and off, NVIDIA and AMD targets), fixes what breaks, then merges to main. Lanes never touch main.
+- **No subagent ever uses the local machine (Andrew, 2026-11-27).** Only the orchestrator runs jobs on the laptop,
+  one at a time, so the laptop is never overwhelmed. A lane or any other subagent edits files and runs git in its
+  own worktree and nothing else there: no compile, build, test, verify, identity or Metal job, no timing, no
+  benchmark, data or docs-build script, no long-running or memory-heavy process, on any core count. Work that
+  needs a machine is queued for a box (`lq`) or handed to the orchestrator as RUN OWED. A brief never asks a
+  subagent for local execution and no subagent is given that ability. Cause: on 2026-11-27 lanes ran local jobs
+  beside the release's Apple record on the 16 GB laptop; the window server hung and every session and the
+  release run were killed.
+- **Code, then queue.** A lane writes code, commits and pushes. It never ssh-es to, rents, extends or releases a
+  box.
+- **We do not compile individual lanes (Andrew, 2026-11-27; replaces the 2026-10-07 and 2026-11-09 wording).** The
+  only thing compiled is the integration branch, in batch: the orchestrator merges every finished lane into the
+  one integration branch and compiles it once (every switch on and off, NVIDIA and AMD targets), fixes what
+  breaks, then merges to main. No lane branch is compiled alone, by anyone, on the laptop, on a box or through
+  `lq`, to check it, to help it or to unblock it. The ONE designated integration compile-fix lane per
+  integration branch, named by the orchestrator in its brief, repairs the integration branch from that batch
+  compile's log; it starts no compile on the laptop. Lanes never touch main.
 - A lane makes its code easy to compile: read the call path and the Mojo syntax, keep each switch's code
   self-contained, follow "Mojo rules that cost a build round", and list every binding the integrator must build.
 - **One worktree per lane:** `~/mojolearn-wt/<lane>` on branch `lane/<lane>` (`tools/lean_worktree.sh` when old
