@@ -23,6 +23,8 @@
 #   tools/do_amd_steward.sh ssh <command>   one command on the droplet, as root (status and housekeeping only)
 #   tools/do_amd_steward.sh ssh-target      prints "<ssh flags> root@<ip>" (for tools/dataset_store.sh stage)
 #   tools/do_amd_steward.sh status          droplet, deadlines, service, queue
+#   tools/do_amd_steward.sh stock           READ-ONLY: is one of the sizes in stock in a region now (exit 0/3);
+#                                           the same check `up` makes, with no lock and no droplet
 #   tools/do_amd_steward.sh down            DELETE, verify 404, disarm, release the lock
 #
 # THE LEASE. Both dead-men read a DEADLINE FILE instead of sleeping a fixed
@@ -208,8 +210,32 @@ echo HEAD=\$(git rev-parse HEAD)" < /dev/null | tee "$TMPD/tree.out"
     grep -qx "HEAD=$1" "$TMPD/tree.out" || die "the droplet's tree is not at $1"
 }
 
+stock_pick() {  # after `do_call GET sizes`: "<size> <regions> <price>" of the first of DO_SIZES in stock, or nothing
+    [ "$DO_CODE" = 200 ] || return 0
+    jq_py "
+want=[x for x in '$DO_SIZES'.split(',') if x]; regs=[x for x in '$DO_REGIONS'.split(',') if x]
+sz={s['slug']:s for s in d['sizes']}
+for w in want:
+    s=sz.get(w)
+    if not s or not s.get('available'): continue
+    r=[x for x in s.get('regions') or [] if not regs or x in regs]
+    if r: print(w, ','.join(r), s['price_hourly']); break"
+}
+
 cmd="${1:-}"; shift || true
 case "$cmd" in
+stock)
+    # READ-ONLY (lane release-family-1, 2026-11-28; tools/release.py step box-stock): the stock check `up` makes,
+    # alone: one GET of the sizes, no lock, no droplet, no deadline. 0.9.0 found no MI300X 80 minutes in, after the
+    # L40S was rented. Prints `STOCK amd <size> <regions> $<price>/h` (exit 0) or `NO-STOCK amd: ...` (exit 3).
+    load_token
+    do_call GET "sizes?per_page=200"
+    [ "$DO_CODE" = 200 ] || die "the DigitalOcean sizes listing answered HTTP $DO_CODE"
+    pick=$(stock_pick)
+    if [ -n "$pick" ]; then read -r SIZE REGS PRICE <<< "$pick"; echo "STOCK amd $SIZE $REGS \$$PRICE/h"; exit 0; fi
+    echo "NO-STOCK amd: none of $DO_SIZES is in stock in a region${DO_REGIONS:+ of $DO_REGIONS}"
+    exit 3
+    ;;
 up)
     minutes="${1:-240}"
     # An explicitly owned release run needs the fixed rental guards, but no
@@ -227,14 +253,7 @@ up)
     [ "$(jq_py 'print("yes" if any(str(x.get("size_slug","")).startswith("gpu-") for x in d["droplets"]) else "no")')" = no ] \
         || die "a GPU droplet already runs on the account (one allowed)"
     do_call GET "sizes?per_page=200"
-    pick=$(jq_py "
-want=[x for x in '$DO_SIZES'.split(',') if x]; regs=[x for x in '$DO_REGIONS'.split(',') if x]
-sz={s['slug']:s for s in d['sizes']}
-for w in want:
-    s=sz.get(w)
-    if not s or not s.get('available'): continue
-    r=[x for x in s.get('regions') or [] if not regs or x in regs]
-    if r: print(w, ','.join(r), s['price_hourly']); break")
+    pick=$(stock_pick)
     [ -n "$pick" ] || { rm -rf "$DO_GPU_LOCK"; die "none of $DO_SIZES is in stock in a region"; }
     read -r SIZE REGS PRICE <<< "$pick"
     say "size $SIZE at \$$PRICE/h, regions $REGS"

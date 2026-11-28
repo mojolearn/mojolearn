@@ -35,6 +35,7 @@
 #                                                      --env K=V (repeatable; K upper case, V plain characters) sets
 #                                                      an environment variable for the persisted job, e.g. the
 #                                                      lane scope tools/reference_refresh.sh passes (SCOPE=all).
+#   tools/nvidia_central.sh stock                      READ-ONLY: is one of NVC_GPUS in stock on RunPod now (exit 0/3)
 #   tools/nvidia_central.sh queue                      every pod's queued/running jobs, last finished, slots, lease
 #   tools/nvidia_central.sh status [<id>]              no id: pods, lanes, queues; id: that job
 #   tools/nvidia_central.sh log    <id> [N]            last N (default 40) lines of the job's log
@@ -512,6 +513,28 @@ sync)
     say "lane $lane is on $k ($GPU_COUNT GPU slots, $GPU); submit with: tools/nvidia_central.sh submit $lane <script>"
     ;;
 submit) central_submit "$@" ;;
+stock)
+    # READ-ONLY (lane release-family-1, 2026-11-28; tools/release.py step box-stock): whether RunPod has one of
+    # NVC_GPUS (the L40S by default) in stock for NVC_GPU_COUNTS' first count RIGHT NOW. One GraphQL GET of the GPU
+    # types' stockStatus (tools/pick_box.sh's query); creates nothing, takes no lock, needs no orchestrator. Prints
+    # `STOCK nvidia <gpu> <status>` and exits 0, or `NO-STOCK nvidia: ...` and exits 3. A snapshot: `up` still walks.
+    load_key || die "no RunPod key (~/.mojolearn_runpod_key, mode 600)"
+    count=${NVC_GPU_COUNTS%% *}
+    curl -s -m 30 -K "$CURLRC" -H 'Content-Type: application/json' https://api.runpod.io/graphql \
+        -d "{\"query\":\"query { gpuTypes { id lowestPrice(input:{gpuCount:${count:-1}}) { stockStatus } } }\"}" \
+        > "$TMPD/stock.json" || die "the RunPod GPU types query failed"
+    pick=$(NVC_GPUS="$NVC_GPUS" python3 -c '
+import json, os, sys
+d = json.load(open(sys.argv[1]))["data"]["gpuTypes"]
+stock = {g["id"]: (g.get("lowestPrice") or {}).get("stockStatus") for g in d}
+for gpu in [x.strip() for x in os.environ["NVC_GPUS"].split(",") if x.strip()]:
+    if stock.get(gpu):
+        print("%s|%s" % (gpu, stock[gpu])); break
+' "$TMPD/stock.json" 2>/dev/null) || die "unreadable RunPod GPU types answer ($TMPD/stock.json)"
+    if [ -n "$pick" ]; then echo "STOCK nvidia ${pick%%|*}: ${pick#*|} (${count:-1}x)"; exit 0; fi
+    echo "NO-STOCK nvidia: none of $NVC_GPUS is in stock on RunPod for ${count:-1} GPU(s)"
+    exit 3
+    ;;
 queue)
     for k in $(live_pods); do
         pod_env $k; echo "== $k: pod $POD_ID, $GPU_COUNT GPU ($GPU), \$$COST_HR/hr"

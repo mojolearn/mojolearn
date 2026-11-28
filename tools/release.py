@@ -97,6 +97,9 @@ right commit, a PASSED receipt for that wheel's sha256, the file on PyPI), not m
 so. A rerun resumes only what is not done.
 
 THE STEPS
+  box-stock          FIRST: every GPU the selected gate steps rent (the L40S pod, the AMD droplet) is in stock by
+                     the providers' read-only listings (nvidia_central.sh stock, do_amd_steward.sh stock), else
+                     the release stops before anything is frozen, built or rented
   freeze-version     _version.py and pyproject.toml say <version> (edited if not)
   freeze-changelog   CHANGELOG.md has `## <version> (published YYYY-MM-DD)`; the
                      prose is the releaser's, so a missing entry stops here
@@ -138,7 +141,11 @@ THE STEPS
                      last PUBLISHED release shipped when the binding's identity
                      (source closure, toolchain, flags, builder scripts as they
                      run after the overlay, box image or Apple toolchain) is
-                     unchanged, else BUILD
+                     unchanged, else BUILD; then WHOLE FAMILIES (tools/release_families.py,
+                     AGENTS.md part 4): a family with one BUILD binding, or sharing a merged
+                     file with one, builds every binding on every target and records its
+                     lanes on every device; an unchanged family ships the published bytes
+                     and keeps its recorded columns (--rebuild-all: everything builds)
   linux-builds       a leg per Linux set that has a binding to BUILD, all
                      launched AT ONCE, detached, unless the leg is done at this
                      freeze or a completed leg of an earlier freeze has the same
@@ -1182,7 +1189,10 @@ def compose_host_mismatch(legs, mismatch, source_root, out_dir):
 #: gone). Every publish shares the "dispatch" resource, so two workflow
 #: dispatches never race for `gh run list`'s newest run.
 STEP_TABLE = [
-    ("freeze-version", "common", [], None),
+    # BOX STOCK FIRST (lane release-family-1, 2026-11-28): before anything is built or rented, every GPU the selected
+    # box steps rent is in stock (step_box_stock). 0.9.0 found no MI300X 80 minutes in, after renting the L40S.
+    ("box-stock", "common", [], None),
+    ("freeze-version", "common", ["box-stock"], None),
     ("freeze-changelog", "common", ["freeze-version"], None),
     ("freeze-docs-facts", "common", ["freeze-changelog"], None),
     ("freeze-commit", "common", ["freeze-docs-facts"], None),
@@ -2612,6 +2622,56 @@ class Release(release_identity_wheels.IdentityOnWheels):
     # ------------------------------------------------------------ steps
     def frozen(self):
         return bool(self.state.get("commit")) and not getattr(self.args, "refreeze", False)
+
+    #: vendor -> the read-only stock check of the box its gate rents (the same check the rental makes, alone)
+    STOCK_CHECKS = {"nvidia": ["bash", str(ROOT / "tools" / "nvidia_central.sh"), "stock"],
+                    "amd": ["bash", str(ROOT / "tools" / "do_amd_steward.sh"), "stock"]}
+
+    def step_box_stock(self):
+        """BOX STOCK, THE FIRST STEP (lane release-family-1, 2026-11-28): every GPU the selected box steps rent
+        (BOX_CONSUMERS: the NVIDIA L40S pod through tools/nvidia_central.sh, the DigitalOcean AMD droplet through
+        tools/do_amd_steward.sh) is in stock RIGHT NOW, by the providers' own read-only listings, else the release
+        stops here with what is missing: nothing frozen, built or rented. On 2026-11-27 the release found no MI300X
+        80 minutes in, after renting the L40S. A box this release already holds needs no stock. It is a snapshot:
+        the rental still walks and retries, and gate-boxes rents nothing it cannot use."""
+        selected = self.selected_steps()
+        vendors = sorted({v for step, v in BOX_CONSUMERS.items() if step in selected})
+        if not vendors:
+            return "not needed: no selected step rents a GPU"
+        held = self.held_boxes()
+
+        def passed(vendor):
+            # a gate that already passed for this freeze rents nothing (a resume); anything unreadable is owed
+            try:
+                return bool(self.gate_ok(vendor)[0])
+            except Exception:
+                return False
+        ask = [v for v in vendors if v not in held and (self.dry or not passed(v))]
+        if not ask and not held:
+            return "not needed: every selected gate already passed for this freeze"
+        if self.dry:
+            return "would check stock: " + ", ".join(" ".join(self.STOCK_CHECKS[v][1:]) for v in ask) \
+                + ("" if not held else "; held: " + ", ".join(sorted(held)))
+        lines, missing = [], []
+        log = self.rel / "box-stock.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with open(log, "a") as fh:
+            for v in ask:
+                try:
+                    p = subprocess.run(self.STOCK_CHECKS[v], capture_output=True, text=True, timeout=180)
+                    out, rc = (p.stdout or "").strip(), p.returncode
+                    fh.write("$ %s\n%s%s\n" % (" ".join(self.STOCK_CHECKS[v]), p.stdout or "", p.stderr or ""))
+                except (OSError, subprocess.SubprocessError) as exc:
+                    out, rc = "%s: %s" % (type(exc).__name__, exc), 1
+                last = out.splitlines()[-1] if out else ""
+                if rc == 0 and last.startswith("STOCK "):
+                    lines.append(last)
+                else:
+                    missing.append(last or "%s: stock check exited %s (see %s)" % (v, rc, log))
+        if missing:
+            raise StepFailed("NO GPU IN STOCK for " + "; ".join(missing) + ": nothing was frozen, built or rented; "
+                             "rerun when the provider has stock")
+        return "; ".join(lines + ["%s held" % v for v in sorted(held)])
 
     def step_freeze_version(self):
         files = ["python/mojolearn/_version.py", "python/pyproject.toml"]
