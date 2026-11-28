@@ -399,6 +399,9 @@ def test_a_stale_endpoint_reference_reads_owed_on_every_vendor(monkeypatch,vendo
     monkeypatch.setattr(api,'output_contract',lambda value:'contract')
     monkeypatch.setattr(api,'selected_endpoints',lambda scope:None)
     monkeypatch.setattr(api,'capture',lambda **kw:copy.deepcopy(clean))
+    # one side, the vendor's: a GPU installation runs the CPU side too and reports it beside the GPU side's
+    # (L40S smoke of c190631c24, 2026-11-28: two messages where this test names one)
+    monkeypatch.setattr(api,'sides',lambda:['cpu' if vendor=='cpu' else 'gpu'])
     result=api.verify(self_test=False,reference=reference)
     assert result['status']=='OWED'
     assert result['errors']==['endpoint fixtures changed; current reference is stale (neural)']
