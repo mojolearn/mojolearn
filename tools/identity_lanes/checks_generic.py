@@ -56,30 +56,49 @@ _checks_generic_FEATURES = 4
 #: answers the side's fitted model and its other-device twin from the same fitted state, so 8 members cross the
 #: devices through the same predict, vote and sum kernels as 1000. A fit that refuses the bound runs again at the
 #: class's own size. Each fragment runs in its own namespace, so the bound is spelled here too.
-_checks_generic_ENSEMBLE_BOUND = 8
-_checks_generic_ENSEMBLE_GROUPS = ("trees",)
-_checks_generic_ENSEMBLE_PARAMS = ("n_estimators",)
+#: 3 MEMBERS AND 8 ITERATIONS (lane verify-speed-2, 2026-11-28): the same bounds as generic.py `_generic_BOUNDS`, for
+#: the same reason (read its comment: on the 0.9.0 Apple record check-generic-trees was 59.6 s a cell at 8 members,
+#: check-generic-linear 49.5, check-generic-neighbors 27.4, check-generic-decomp 17.4; 0.25-0.5 s on the CPU column).
+#: check answers the side's fitted model and its other-device twin from the SAME fitted state, so a 3-member ensemble
+#: and an 8-iteration fit cross the devices through the same predict, vote, sum and transform kernels as the class's
+#: default sizes. Trees: n_estimators unset or above 3 -> 3; linear, decomp, neighbors: an int max_iter or n_iter
+#: above 8 -> 8, an int n_init above 2 -> 2. A fit that refuses a bound runs again at the class's own size.
+_checks_generic_ENSEMBLE_BOUND = 3
+_checks_generic_ITER_BOUND = 8
+_checks_generic_RESTART_BOUND = 2
+#: group -> ((parameter, bound, an unset value is the class's default size and is bounded too), ...)
+_checks_generic_ITERATION_PARAMS = (("max_iter", _checks_generic_ITER_BOUND, False),
+                                    ("n_iter", _checks_generic_ITER_BOUND, False),
+                                    ("n_init", _checks_generic_RESTART_BOUND, False))
+_checks_generic_BOUNDS = {
+    "trees": (("n_estimators", _checks_generic_ENSEMBLE_BOUND, True),),
+    "linear": _checks_generic_ITERATION_PARAMS,
+    "decomp": _checks_generic_ITERATION_PARAMS,
+    "neighbors": _checks_generic_ITERATION_PARAMS,
+}
 
 
 def _checks_generic_bound_ensemble(est, group):
-    """Set `est`'s ensemble-size parameters that are unset or above the bound to the bound (the trees group only);
-    returns {name: its own value} of those it set, to restore on a refusal."""
-    if group not in _checks_generic_ENSEMBLE_GROUPS or not callable(getattr(est, "set_params", None)):
+    """Set `est`'s size parameters of `_checks_generic_BOUNDS[group]` that are above their bound (or, where the entry
+    says so, unset) to the bound; returns {name: its own value} of those it set, to restore on a refusal."""
+    bounds = _checks_generic_BOUNDS.get(group, ())
+    if not bounds or not callable(getattr(est, "set_params", None)):
         return {}
     try:
         params = est.get_params(deep=False)
     except Exception:  # noqa: BLE001 -- a class without get_params keeps its own size
         return {}
-    own = {}
-    for key in _checks_generic_ENSEMBLE_PARAMS:  # small-loop(the ensemble-size parameter names)
+    own, new = {}, {}
+    for key, bound, unset_too in bounds:  # small-loop(the bounded size parameter names, at most three)
         if key not in params:
             continue
         value = params[key]
-        if value is None or (isinstance(value, (int, np.integer)) and not isinstance(value, (bool, np.bool_))
-                             and int(value) > _checks_generic_ENSEMBLE_BOUND):
+        if (value is None and unset_too) or (isinstance(value, (int, np.integer))
+                                             and not isinstance(value, (bool, np.bool_)) and int(value) > bound):
             own[key] = value
+            new[key] = bound
     if own:
-        est.set_params(**{key: _checks_generic_ENSEMBLE_BOUND for key in own})
+        est.set_params(**new)
     return own
 
 
@@ -266,8 +285,22 @@ def _checks_generic_run(ml, X, yc, yr, group):
     if not classes:
         raise AssertionError(f"check-generic-{group}: the registry walk found no class with check in this group")
     parts, failed = {}, []
+    # WHERE A CELL'S TIME GOES (lane verify-speed-2, 2026-11-28): one stderr line a class, "# CHECK-CLASS <lane>
+    # <class> <s>s", the build, fit and check of that class. check-generic-trees was 536 s a lane on the 0.9.0 Apple
+    # record and 3 s on the CPU column, and no record said which classes cost it; the product lane on the Metal
+    # per-call cost reads these lines. Only in a record chunk (RECORD_FROM_INSTALLED=1, tools/identity_wheel_record.py),
+    # never in a user's verify. Not digested, not a part, outside every hash.
+    import os
+    import sys
+    import time
+    timed = None
+    say = os.environ.get("RECORD_FROM_INSTALLED") == "1"
     for where, name, cls in classes:  # driver-loop: over the public classes of one group, one bounded check each
         label = f"{where}.{name}" if where else name
+        if say and timed is not None:
+            print(f"# CHECK-CLASS check-generic-{group} {timed[0]} {time.perf_counter() - timed[1]:.3f}s",
+                  file=sys.stderr, flush=True)
+        timed = (label, time.perf_counter())
         try:
             est, why = _checks_generic_build(ml, where, name, cls)
         except Exception as exc:  # noqa: BLE001 -- a constructor that refuses the side is a failure, never n/a
@@ -310,6 +343,9 @@ def _checks_generic_run(ml, X, yc, yr, group):
         part = _checks_generic_side_part(result, side, label, failed)
         if part is not None:
             parts[label] = part
+    if say and timed is not None:
+        print(f"# CHECK-CLASS check-generic-{group} {timed[0]} {time.perf_counter() - timed[1]:.3f}s",
+              file=sys.stderr, flush=True)
     if failed:
         raise AssertionError(f"check-generic-{group} ({side} side): " + "; ".join(failed))
     parts["classes"] = _h(np.asarray([len(classes)], dtype=np.int64))

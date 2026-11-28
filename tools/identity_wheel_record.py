@@ -20,7 +20,8 @@ columns name: the NVIDIA box (nvidia, ptx), the AMD box (amd), the Mac (apple) o
             record_identity_column.sh <label> DIR/<label>/w<i>` pinned to its device (CUDA_VISIBLE_DEVICES /
             HIP_VISIBLE_DEVICES). With more devices than columns each column gets its own device(s); with fewer,
             columns share them. Workers per device (--workers-per-gpu auto): one per core of the allocation,
-            bounded by the GPU's free memory at GPU_GIB_PER_WORKER and the host's at HOST_GIB_PER_WORKER; the
+            bounded by the GPU's free memory at GPU_GIB_PER_WORKER and the host's available memory less
+            HOST_RESERVE_GIB at the column's measured peak (`PEAKS`, else HOST_GIB_PER_WORKER); the
             lanes are packed into chunks of equal estimated cost, longest lane first (`chunks`). It prints
             "busy plan: W worker(s) of T" before it starts and "timing: record <s>s wall, busy cores mean B of N;
             chunks <min>-<max>s; slowest lanes: ..." and "gpu memory: peak ..." after.
@@ -108,13 +109,23 @@ HOST_GIB_PER_WORKER = 4
 #: of any process a record's chunks ran (getrusage RUSAGE_CHILDREN ru_maxrss after every chunk is reaped), which the
 #: record prints as "host memory: peak RSS ..." and writes to identity-wheels.json timing.host_memory. A column with
 #: no figure plans at its ESTIMATES entry, else HOST_GIB_PER_WORKER. Put the printed figure here after a record; the
-#: plan reads it with PEAK_HEADROOM on top. No record has printed it yet.
-PEAKS = {}
-#: UNMEASURED, until PEAKS has the column: the CPU smoke's largest lane process is 0.34 GiB (mamba2,
-#: tools/ops/wheel_verify_smoke_plan/lanes.tsv, every lane in its own process); a record chunk runs a few hundred
-#: lanes in one interpreter, so the Apple plan takes 1.5 GiB, four times that, not the verify sweep's 4 GiB guess
-#: (which on a 16 GiB Mac with 10 GiB available would plan 2 workers, fewer than the 3 of the 0.9.0 record).
-ESTIMATES = {"apple": 1.5}
+#: plan reads it with PEAK_HEADROOM on top.
+#: apple (lane verify-speed-2, 2026-11-28): MEASURED on the 2026-11-27 Apple record of 0.9.0 on the 16 GB M4 laptop,
+#: three workers: one held 10.06 GB (taken as GiB, the larger reading) while the other two held 1.9 and 2.2 GB, and
+#: the window server hung. The 10.06 was growth, not a cell's need: tools/identity_break.py `_BUILT` kept every
+#: neural model a worker built, with its device buffers, to the end of the process; the cell loop now empties it after
+#: every cell (`_end_cell`) and collects each lane's cycles (`_end_lane`). That fix is reasoning until a record
+#: measures it, so the plan keeps the measured 10.06: one Apple worker, never a hang. After the next record prints
+#: "host memory: peak RSS ...", put that figure here (the steady workers' 2.2 GB would plan 2 workers on 10 GiB
+#: available with HOST_RESERVE_GIB kept free); until then `--workers-per-gpu 2` runs two by hand.
+PEAKS = {"apple": 10.06}
+#: a column's planned figure before it has a PEAKS entry (none today: the 1.5 GiB Apple guess of lane/verify-speed-1
+#: was replaced by the measurement above)
+ESTIMATES = {}
+#: HOST MEMORY KEPT FREE (lane verify-speed-2, 2026-11-28): the record plans its workers on the available memory less
+#: this, so the desktop, the window server and the orchestrator's own session keep at least 4 GiB whatever the plan
+#: (the 2026-11-27 hang on the 16 GB laptop). On a rented box it is a few percent of the memory.
+HOST_RESERVE_GIB = 4.0
 #: the share of a measured peak added before dividing the available memory by it
 PEAK_HEADROOM = 1.25
 #: APPLE GPU MEMORY IS THE HOST'S (unified memory). Metal admits a working set of about two thirds of the RAM
@@ -260,10 +271,12 @@ def auto_workers(gpus, nproc, free_gib, host_gib=None, column="cpu", threads=Non
     A GPU worker keeps GPU_WORKER_CORES busy (measured). With no devices (the cpu and apple columns) a worker runs
     `threads` host threads (`record_threads`), so the cores allow nproc // threads of them; the apple column is also
     bounded by its Metal working set (`metal_gib`, the unified memory Metal admits) at METAL_GIB_PER_WORKER. Host
-    memory: the available GiB over `worker_gib(column)`."""
+    memory: the available GiB less HOST_RESERVE_GIB, over `worker_gib(column)` (at least one worker)."""
     threads = threads or (CPU_THREADS if column == "cpu" else GPU_COLUMN_THREADS)
     per = worker_gib(column)
-    by_host = max(1, int(host_gib // per)) if host_gib else None
+    by_host = max(1, int(max(0.0, host_gib - HOST_RESERVE_GIB) // per)) if host_gib else None
+    if by_host is None and column == "apple":
+        by_host = 1   # unified memory that could not be read plans one worker, never the cores' count
     if gpus <= 0:
         n = max(1, nproc // threads)
         if column == "apple" and metal_gib:
@@ -571,7 +584,7 @@ class Run:
                  " %.2f GiB a worker planned%s; lanes packed by %s)"
                  % (busy, total, len(devices), nproc, ALLOCATION.cores()[1], pool,
             "" if free is None else ", %.0f GiB free per device" % free,
-            "" if host is None else ", %.0f GiB host memory available" % host,
+            "" if host is None else ", %.0f GiB host memory available, %.0f kept free" % (host, HOST_RESERVE_GIB),
             "" if not metal else ", %.1f GiB Metal working set" % metal,
             worker_gib(columns[0]), " (measured peak)" if PEAKS.get(columns[0]) else " (unmeasured)",
             ", ".join(sorted({str(cost_hints_path(c).relative_to(ROOT)) for c in columns}))))

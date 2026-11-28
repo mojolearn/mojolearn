@@ -1712,10 +1712,11 @@ LANE_REVISIONS = {
     "x-decomp-eigh-wide-linalg": "light-fixture-20261105-1",
     "x-decomp-eigh-wide-fastica": "light-fixture-20261105-1",
     "x-decomp-eigh-wide-rotation": "light-fixture-20261105-1",
-    "x-decomp-eigh-wide-factor-analysis": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-factor-analysis": "light-fixture-20261128-1",
     "x-decomp-eigh-wide-mincovdet": "light-fixture-20261105-1",
     "x-decomp-umap-options": "light-fixture-20261105-1",
-    "x-decomp-manifold": "light-fixture-20261105-1",
+    "x-decomp-manifold": "light-fixture-20261128-1",
+    "x-decomp-factor-analysis": "light-fixture-20261128-1",
     "trees-calibrated": "light-fixture-20261105-1",
     "trees-stacking-clf": "lacking-fold-20261124-1",
     "trees-voting-clf": "light-fixture-20261105-1",
@@ -1744,10 +1745,25 @@ LANE_REVISIONS = {
     "bootstrap": "light-fixture-20261105-1",
     # 2026-11-26, lane/slow-lanes-1: the fitting generic trees lanes fit every class at the ensemble bound
     # (generic.py `_generic_ENSEMBLE_BOUND`, checks_generic.py `_checks_generic_ENSEMBLE_BOUND`), not its default size
-    "generic-attrs-trees": "ensemble-bound-8-20261126-1",
-    "generic-pickle-trees": "ensemble-bound-8-20261126-1",
-    "generic-digest-trees": "ensemble-bound-8-20261126-1",
-    "check-generic-trees": "ensemble-bound-8-20261126-1",
+    # 2026-11-28, lane/verify-speed-2: 3 members (was 8), and the linear, decomp and neighbors groups' fitting lanes
+    # bound an int max_iter / n_iter above 8 to 8 and an int n_init above 2 to 2 (generic.py `_generic_BOUNDS`,
+    # checks_generic.py `_checks_generic_BOUNDS`)
+    "generic-attrs-trees": "ensemble-bound-3-20261128-1",
+    "generic-pickle-trees": "ensemble-bound-3-20261128-1",
+    "generic-digest-trees": "ensemble-bound-3-20261128-1",
+    "check-generic-trees": "ensemble-bound-3-20261128-1",
+    "generic-attrs-linear": "iter-bound-8-20261128-1",
+    "generic-pickle-linear": "iter-bound-8-20261128-1",
+    "generic-digest-linear": "iter-bound-8-20261128-1",
+    "check-generic-linear": "iter-bound-8-20261128-1",
+    "generic-attrs-decomp": "iter-bound-8-20261128-1",
+    "generic-pickle-decomp": "iter-bound-8-20261128-1",
+    "generic-digest-decomp": "iter-bound-8-20261128-1",
+    "check-generic-decomp": "iter-bound-8-20261128-1",
+    "generic-attrs-neighbors": "iter-bound-8-20261128-1",
+    "generic-pickle-neighbors": "iter-bound-8-20261128-1",
+    "generic-digest-neighbors": "iter-bound-8-20261128-1",
+    "check-generic-neighbors": "iter-bound-8-20261128-1",
     # 2026-11-28, lane/verify-speed-1: the GBDT gap and categorical lanes fit half the trees (`_GBDT_GAPS_TREES`,
     # `_GBDT_CAT_TREES`, `_GBDT_CTR_TABLES_TREES`); rows, depth, rate and options unchanged
     "gbdt-categorical-ctr-tables": "trees-half-20261128-1",
@@ -1938,7 +1954,8 @@ NON_SIZE_REVISIONS = {
         "to 2d and EM max_iter from 5 to 3; varimax stays at 72."),
     "x-decomp-eigh-wide-factor-analysis": (
         "2026-11-05 lane/slow-verification-lanes: the widths move from 72/128 to 72/65 with rows still "
-        "width - 1, and EM max_iter from 10 to 4."),
+        "width - 1, and EM max_iter from 10 to 4; 2026-11-28 lane/verify-speed-2: EM max_iter from 4 to 2 "
+        "(each step the same d x d eigh, about 0.7 s on Metal)."),
     "x-decomp-eigh-wide-mincovdet": (
         "2026-11-05 lane/slow-verification-lanes: the MinCovDet widths move from 72/128 to 72/65; rows stay "
         "at 3d and every hashed part is kept."),
@@ -1947,7 +1964,11 @@ NON_SIZE_REVISIONS = {
         "(the array-init pre-fit from 4 to 2); every option arm is kept."),
     "x-decomp-manifold": (
         "2026-11-05 lane/slow-verification-lanes: the MDS max_iter values are halved (40/30/25 to 20/15/12) "
-        "and the shift-invert LLE moves from 300 to 240 rows, still above 200."),
+        "and the shift-invert LLE moves from 300 to 240 rows, still above 200; 2026-11-28 lane/verify-speed-2: "
+        "MDS max_iter again 20/15/12 to 8/6/6, n_init 2 and every Isomap and LLE fit unchanged."),
+    "x-decomp-factor-analysis": (
+        "2026-11-28 lane/verify-speed-2: EM max_iter 60 to 16 (the main fit), 40 to 12 (varimax, quartimax) "
+        "and 20 to 8 (fit_transform); rows, n_components, rotations and every hashed part unchanged."),
     "trees-calibrated": (
         "2026-11-05 lane/slow-verification-lanes: both calibrators fit on the first 7001 rows (was 20000) "
         "with depth-3 trees (was 4), batch protocol on 2001 held-out rows; methods, cv=3 and ensemble arms "
@@ -2015,29 +2036,37 @@ NON_SIZE_REVISIONS = {
         "1024 replicates for every arm, in the lane body and its batch part, on 2026-11-05 "
         "(lane/slow-verification-lanes)."),
     "generic-attrs-trees": (
-        "2026-11-26, lane/slow-lanes-1: every class of the trees group whose n_estimators is unset or above 8 "
-        "fits at 8 (GradientBoosting's unset 1000 -> 8, the forests and other ensembles from their defaults of "
-        "10 to 100 -> 8), so the "
-        "lane stops setting the record's wall (474-666 s a lane, 56-160 s a verify unit on the L40S, "
-        "nvc-ab-20261127T015224Z-34c011); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+        "2026-11-28, lane/verify-speed-2: every class of the trees group whose n_estimators is unset or above 3 fits at 3 (was 8 since 2026-11-26, lane/slow-lanes-1; GradientBoosting's unset 1000 and the forests' 100 -> 3): 3 members still fold a first, a middle and a last member through the same build, predict, vote and sum kernels; the 0.9.0 Apple record had check-generic-trees at 59.6 s and generic-attrs-trees at 19.9 s a cell (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-pickle-trees": (
-        "2026-11-26, lane/slow-lanes-1: every class of the trees group whose n_estimators is unset or above 8 "
-        "fits at 8 (GradientBoosting's unset 1000 -> 8, the forests and other ensembles from their defaults of "
-        "10 to 100 -> 8), so the "
-        "lane stops setting the record's wall (474-666 s a lane, 56-160 s a verify unit on the L40S, "
-        "nvc-ab-20261127T015224Z-34c011); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+        "2026-11-28, lane/verify-speed-2: every class of the trees group whose n_estimators is unset or above 3 fits at 3 (was 8 since 2026-11-26, lane/slow-lanes-1; GradientBoosting's unset 1000 and the forests' 100 -> 3): 3 members still fold a first, a middle and a last member through the same build, predict, vote and sum kernels; the 0.9.0 Apple record had check-generic-trees at 59.6 s and generic-attrs-trees at 19.9 s a cell (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "generic-digest-trees": (
-        "2026-11-26, lane/slow-lanes-1: every class of the trees group whose n_estimators is unset or above 8 "
-        "fits at 8 (GradientBoosting's unset 1000 -> 8, the forests and other ensembles from their defaults of "
-        "10 to 100 -> 8), so the "
-        "lane stops setting the record's wall (474-666 s a lane, 56-160 s a verify unit on the L40S, "
-        "nvc-ab-20261127T015224Z-34c011); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+        "2026-11-28, lane/verify-speed-2: every class of the trees group whose n_estimators is unset or above 3 fits at 3 (was 8 since 2026-11-26, lane/slow-lanes-1; GradientBoosting's unset 1000 and the forests' 100 -> 3): 3 members still fold a first, a middle and a last member through the same build, predict, vote and sum kernels; the 0.9.0 Apple record had check-generic-trees at 59.6 s and generic-attrs-trees at 19.9 s a cell (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "check-generic-trees": (
-        "2026-11-26, lane/slow-lanes-1: every class of the trees group whose n_estimators is unset or above 8 "
-        "fits at 8 (GradientBoosting's unset 1000 -> 8, the forests and other ensembles from their defaults of "
-        "10 to 100 -> 8), so the "
-        "lane stops setting the record's wall (474-666 s a lane, 56-160 s a verify unit on the L40S, "
-        "nvc-ab-20261127T015224Z-34c011); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+        "2026-11-28, lane/verify-speed-2: every class of the trees group whose n_estimators is unset or above 3 fits at 3 (was 8 since 2026-11-26, lane/slow-lanes-1; GradientBoosting's unset 1000 and the forests' 100 -> 3): 3 members still fold a first, a middle and a last member through the same build, predict, vote and sum kernels; the 0.9.0 Apple record had check-generic-trees at 59.6 s and generic-attrs-trees at 19.9 s a cell (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "generic-attrs-linear": (
+        "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "generic-pickle-linear": (
+        "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "generic-digest-linear": (
+        "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "check-generic-linear": (
+        "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "generic-attrs-decomp": (
+        "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "generic-pickle-decomp": (
+        "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "generic-digest-decomp": (
+        "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "check-generic-decomp": (
+        "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "generic-attrs-neighbors": (
+        "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "generic-pickle-neighbors": (
+        "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "generic-digest-neighbors": (
+        "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "check-generic-neighbors": (
+        "2026-11-28, lane/verify-speed-2: every class of the group whose int max_iter or n_iter is above 8 fits at 8, and an int n_init above 2 at 2 (generic.py `_generic_BOUNDS`); unset and non-positive values are the class's own and left alone; 8 iterations run the same iteration body and stopping test the mechanism reads; the 0.9.0 Apple record had the linear, decomp and neighbors mechanism lanes at 17-51 s a cell against 0.2-0.5 s on the CPU column (tools/identity_record_seconds/apple.json); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
     "gbdt-categorical-ctr-tables": (
         "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
         "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
@@ -2496,6 +2525,15 @@ def _synthetic_bpe(ml):
 #: constructor arguments), where they read the private `_W_NAMES`/`_w`,
 #: `_parameters`, `_threaded` and `_threads`. The object is held so its id
 #: is never reused while the entry exists.
+#: ONE CELL'S MODELS ONLY (lane verify-speed-2, 2026-11-28): every lookup is
+#: made by the cell that built the object (its lane body and that cell's
+#: probe, batch and protocol parts), so the cell loop empties this at the end
+#: of every cell (`_end_cell`). It was never emptied: each block, session and
+#: LanguageModelInference a neural cell built, with its device weights,
+#: caches and session buffers, stayed alive to the end of the process, so a
+#: record worker grew with every neural cell it ran (one Apple record worker
+#: of 2026-11-27 reached 10.06 GB on the 16 GB laptop while the other two held
+#: 1.9 and 2.2 GB, and the window server hung).
 _BUILT = {}
 
 
@@ -2511,6 +2549,21 @@ def _built_args(obj):
         raise RuntimeError(f"identity_break: {type(obj).__name__} was not built through _built, so its "
                            "constructor arguments are unknown (no private weight read)")
     return entry[1]
+
+
+def _end_cell():
+    """Release what one cell kept alive past its own frame: the models `_built` recorded for it. Called by the cell
+    loop after every computed cell, so a worker's memory does not grow with the number of cells it has run."""
+    _BUILT.clear()
+
+
+def _end_lane():
+    """After a lane's last fixture: collect the reference cycles its fits left (an estimator and its native owner
+    can hold each other), so their device buffers are freed now and not at a collection the Python heap's own
+    allocation counts would trigger much later. Once a lane, not once a cell: a full collection costs tens of
+    milliseconds, and the cycles of nine cells of one lane are bounded."""
+    import gc
+    gc.collect()
 
 
 def _labels_and_proba(m, X):
@@ -13867,10 +13920,15 @@ def _run_reference(args):
                     row_rl.append("REFUSED")
             cell["timing"] = timer.result()
             cells[f"{name}/{f}"] = cell
+            # the cell's fit (and the model it holds) is done with: drop the last reference this frame keeps and
+            # what `_built` recorded, outside the cell's clock (lane verify-speed-2, 2026-11-28)
+            p = None
+            _end_cell()
             if args.json:
                 dump(False)
             print(f"# CELL {name}/{f} {cell['verdict']} {cell['timing']['total_seconds']:.3f}s", flush=True)
             row.append(f"{shown:<16}")
+        _end_lane()
         print(f"| {name:<{W}} | " + " | ".join(row) + " |", flush=True)
         for label, r in (("infer", row_infer), ("model", row_model), ("batch", row_batch), ("rlpair", row_rl)) + tuple(row_extra.items()):
             if any(not s.startswith("n/a") for s in r):

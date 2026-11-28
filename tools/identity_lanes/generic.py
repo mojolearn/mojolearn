@@ -89,30 +89,60 @@ _generic_MISSING = object()
 #: gbdt-cat-bootstrap, the OrderedRMSE lanes and the gbdt-* families at their recorded sizes). A class whose fit
 #: refuses the bound is fitted again at its own size, so the bound never turns a fitted class into an n/a part.
 #: A correctness-check size (AGENTS.md part 4, bounded fixtures), never a product dispatch rule.
-_generic_ENSEMBLE_BOUND = 8
-_generic_ENSEMBLE_GROUPS = ("trees",)
-_generic_ENSEMBLE_PARAMS = ("n_estimators",)
+#:
+#: 3 MEMBERS AND 8 ITERATIONS (lane verify-speed-2, 2026-11-28). The 0.9.0 Apple record
+#: (tools/identity_record_seconds/apple.json, mean seconds a cell) still had these mechanism lanes among its slowest at
+#: 8 members: check-generic-trees 59.6 s a cell, generic-pickle-linear 50.7, check-generic-linear 49.5,
+#: generic-digest-decomp 40.3, check-generic-neighbors 27.4, generic-pickle-neighbors 24.2, generic-attrs-trees 19.9,
+#: check-generic-decomp 17.4, generic-attrs-neighbors 16.7, against 0.2-0.8 s on the CPU column for the same 64 x 4
+#: fixture: the Apple cost is paid per member, per iteration and per launch, not per row. So (1) the trees bound is 3
+#: members: the smallest ensemble whose vote, sum and average fold a first, a middle and a last member (2 would only
+#: pair two), through the same member build, predict, vote and sum kernels as 8; (2) the linear, decomp and
+#: neighbors groups bound their ITERATION counts the same way: an int `max_iter` or `n_iter` above 8 is set to 8 and an
+#: int `n_init` above 2 to 2 (unset and non-positive values are the class's own "no limit" or "auto" and are left
+#: alone). These lanes read the fitted MECHANISMS (attributes, copies, digests, check), and 8 iterations (2 restarts)
+#: run the same iteration body, stopping test and best-of-restarts selection as 1000 (4): the iteration body is what
+#: crosses the devices and what a copy or a digest must carry. What these lanes no longer reach is each class's
+#: converged answer and any phase that starts after iteration 8 (TSNE's post-exaggeration steps from iteration 250,
+#: SGD's n_iter_no_change stop where it came later): each is its own family's lane (x-ann-tsne-*, x-sgd-*, the x-*
+#: solver lanes at their recorded sizes). A fit that refuses a bound is fitted again at the class's own size, exactly
+#: as before. The class list, the parts, the nine fixtures and the 64 x 4 rows are unchanged; params lanes (no fit)
+#: are unchanged. Bits change on every column together (LANE_REVISIONS `*-bound-20261128-1`, RECORD OWED).
+_generic_ENSEMBLE_BOUND = 3
+_generic_ITER_BOUND = 8
+_generic_RESTART_BOUND = 2
+#: group -> ((parameter, bound, an unset value is the class's default size and is bounded too), ...)
+_generic_ITERATION_PARAMS = (("max_iter", _generic_ITER_BOUND, False), ("n_iter", _generic_ITER_BOUND, False),
+                             ("n_init", _generic_RESTART_BOUND, False))
+_generic_BOUNDS = {
+    "trees": (("n_estimators", _generic_ENSEMBLE_BOUND, True),),
+    "linear": _generic_ITERATION_PARAMS,
+    "decomp": _generic_ITERATION_PARAMS,
+    "neighbors": _generic_ITERATION_PARAMS,
+}
 
 
 def _generic_bound_ensemble(est, group):
-    """Set `est`'s ensemble-size parameters that are unset or above `_generic_ENSEMBLE_BOUND` to the bound (the
-    `_generic_ENSEMBLE_GROUPS` only); returns {name: its own value} of those it set, to restore on a refusal."""
-    if group not in _generic_ENSEMBLE_GROUPS or not callable(getattr(est, "set_params", None)):
+    """Set `est`'s size parameters of `_generic_BOUNDS[group]` that are above their bound (or, where the entry says
+    so, unset) to the bound; returns {name: its own value} of those it set, to restore on a refusal."""
+    bounds = _generic_BOUNDS.get(group, ())
+    if not bounds or not callable(getattr(est, "set_params", None)):
         return {}
     try:
         params = est.get_params(deep=False)
     except Exception:  # noqa: BLE001 -- a class without get_params keeps its own size
         return {}
-    own = {}
-    for key in _generic_ENSEMBLE_PARAMS:  # small-loop(the ensemble-size parameter names)
+    own, new = {}, {}
+    for key, bound, unset_too in bounds:  # small-loop(the bounded size parameter names, at most three)
         if key not in params:
             continue
         value = params[key]
-        if value is None or (isinstance(value, (int, np.integer)) and not isinstance(value, (bool, np.bool_))
-                             and int(value) > _generic_ENSEMBLE_BOUND):
+        if (value is None and unset_too) or (isinstance(value, (int, np.integer))
+                                             and not isinstance(value, (bool, np.bool_)) and int(value) > bound):
             own[key] = value
+            new[key] = bound
     if own:
-        est.set_params(**{key: _generic_ENSEMBLE_BOUND for key in own})
+        est.set_params(**new)
     return own
 
 
@@ -392,7 +422,7 @@ def _generic_fit_args(cls, fixture):
 def _generic_prepare(ml, fixture, where, name, cls, fit, label, side, failed, group=None):
     """(est, fit args, why). est None and why None: a failure was appended to `failed`. est None with a why: the
     class could not be built. est set with a why: built, not fitted (the why says why). args None with no why: built
-    and not asked to fit. In `_generic_ENSEMBLE_GROUPS` the fit runs at the ensemble bound; a fit that refuses the
+    and not asked to fit. In a group of `_generic_BOUNDS` the fit runs at the size bounds; a fit that refuses the
     bound runs again at the class's own size."""
     try:
         est, why = _generic_build(ml, where, name, cls)
