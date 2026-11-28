@@ -517,10 +517,6 @@ def _native(key):
     return fn
 
 
-#: The two door binaries `_host_native` resolves helpers from (loaded by
-#: `_backend.load_door_host`, the same loader the doors use).
-_BYTE_LM_HOST_EXTENSION = "_mojolearn_byte_lm_host"
-_FOREST_HOST_EXTENSION = "_mojolearn_forest_host"
 #: DEVIATION 2614: the helpers the CPU inference binding also exports, and the
 #: only ones `_native` may resolve from it.
 _HOST_NATIVE_KEYS = frozenset({"all_finite_f32", "all_finite_f64", "cast_f64_to_f32"})
@@ -532,33 +528,55 @@ _HOST_NATIVE_KEYS = frozenset({"all_finite_f32", "all_finite_f64", "cast_f64_to_
 _FOREST_HOST_NATIVE_KEYS = _HOST_NATIVE_KEYS | frozenset(
     {"argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64"})
 
+#: THE DOORS OFFER THEIR OWN BINARY (lane-loads-1, 2026-11-28). A general
+#: helper is resolved from the SHARED binding: `_mojolearn` on a GPU install,
+#: and on a CPU-only install `_mojolearn_core_host`, which `_backend` routes
+#: `_mojolearn` to and which exports all seven from the same pack file
+#: (`bindings/host_helpers_pack.mojo`). Until this lane this file also named
+#: the byte LM host binary (neural) and the forest host binary (trees) and
+#: loaded them itself when the shared binding did not serve a helper, so every
+#: verify lane depended on a neural binary and a trees binary for helpers that
+#: belong to neither (1,022 of 1,022 lanes in tools/release_families.py derive).
+#: The family binaries keep their exports. A door whose own surface runs on a
+#: box that has its binary and no shared one (`LanguageModelInference`,
+#: `LanguageModelTrainer(device="cpu")`, `HostForest`, `HostGBDT`) registers
+#: that binary here when the door's module is imported: `(load, keys)`, `load`
+#: returning the loaded and read-back binary. Nothing is loaded by registering.
+_HOST_NATIVE_DOORS = []
+
+
+def register_host_native(load, keys, first=False):
+    """Offer the base helpers `keys` from a host door's own binary. `load()`
+    returns that binary, loaded and read back (`_backend.load_door_host`). It
+    is asked only when the shared binding does not serve the helper
+    (`_host_native`); registering loads nothing. `first` puts the offer ahead
+    of the others: the byte LM binary is asked first for the three it
+    carries, then the forest binary for its seven, as before the doors made
+    the offers."""
+    # glue: one insert per door module import; never on a call path
+    _HOST_NATIVE_DOORS.insert(0 if first else len(_HOST_NATIVE_DOORS), (load, frozenset(keys)))
+
 
 def _host_native(key):
-    """`key` from a CPU inference binding, on a box whose GPU base binding
-    is not built (DEVIATION 2614). The same native helper compiled into a
-    second binary, not a Python copy, so the no-Python-fallback rule above
-    holds. The byte LM host binding is asked first for the three it carries,
-    then the forest host binding for its seven. None when `key` is not one of
-    them or neither binary is built; a refused sabotage build raises rather
-    than hiding."""
-    # THE LOADERS, NOT THE DOORS (lane/lazy-imports, 2026-10-10). Importing
-    # `_byte_lm_host` / `_forest_host` here for their `_load()` put the byte LM
-    # door (lowbit, linalg, the decomp and metrics expansions) and the forest
-    # door (`_classical_host` and every classical door) in every lane's import
-    # closure, since every lane loads this file: 251 files selected every lane
-    # in tools/test_lane_select.py. `_backend` holds the loaders now.
-    if key in _HOST_NATIVE_KEYS:
-        from . import _backend
-        try:
-            return getattr(_backend.load_door_host(_BYTE_LM_HOST_EXTENSION), key)
-        except (ImportError, AttributeError):
-            pass
-    if key in _FOREST_HOST_NATIVE_KEYS:
-        from . import _backend
-        try:
-            return getattr(_backend.load_door_host(_FOREST_HOST_EXTENSION), key)
-        except (ImportError, AttributeError):
-            pass
+    """`key` from a host door's binary, on a box where the shared binding
+    (`_mojolearn`, or `_mojolearn_core_host` on a CPU-only install) does not
+    serve it (DEVIATION 2614). The same native helper compiled into a second
+    binary, not a Python copy, so the no-Python-fallback rule above holds.
+    Each registered door (`register_host_native`) is asked for the helpers it
+    carries, in the order the doors were imported. None when `key` is not one
+    of them, no door that carries it has been imported or its binary is not
+    built; a refused sabotage build raises rather than hiding."""
+    # NOT THE DOORS, AND SINCE lane-loads-1 NOT THEIR BINARIES EITHER
+    # (lane/lazy-imports, 2026-10-10: importing `_byte_lm_host` / `_forest_host`
+    # here put both doors in every lane's import closure; naming their
+    # binaries here still put a neural and a trees binary in every lane's
+    # load set). This file names no family binary.
+    for load, keys in _HOST_NATIVE_DOORS:  # glue: the registered doors, on the miss path, once per helper
+        if key in keys:
+            try:
+                return getattr(load(), key)
+            except (ImportError, AttributeError):
+                continue
     return None
 
 

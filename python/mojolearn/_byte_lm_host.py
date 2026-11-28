@@ -54,6 +54,15 @@ def _load():
     return _backend.load_door_host(_EXTENSION)
 
 
+# THE BASE HELPERS THIS BINARY ALSO EXPORTS (DEVIATION 2614; lane-loads-1,
+# 2026-11-28). On a box with this binary and no shared host binding, this
+# door's input conversion resolves `all_finite_*` and `cast_f64_to_f32` from
+# its own binary. The offer is made here, by the door, so the shared buffer
+# helpers name no neural binary. Nothing is loaded until a helper is missed.
+from . import _buffer  # noqa: E402 - beside the loader it registers
+_buffer.register_host_native(_load, _buffer._HOST_NATIVE_KEYS, first=True)
+
+
 # The shape, thread-count and parameter-dict admission (`_native_shape`,
 # `_thread_count`, `_flatten_parameters`) run in the native host trainer door; their
 # dead Python twins are gone (lane py-lm-neural, 2026-11-14).

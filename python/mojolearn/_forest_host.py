@@ -65,6 +65,16 @@ def _load():
     return _backend.load_door_host(_EXTENSION)
 
 
+# THE BASE HELPERS THIS BINARY ALSO EXPORTS (the forest host lane, 2026-09-13;
+# lane-loads-1, 2026-11-28). On a box with this binary and no shared host
+# binding, HostForest and HostGBDT convert their inputs and decode their class
+# labels through this binary's own seven helpers. The offer is made here, by
+# the door, so the shared buffer helpers name no trees binary. Nothing is
+# loaded until a helper is missed.
+from . import _buffer as _buffer_helpers  # noqa: E402 - beside the loader it registers
+_buffer_helpers.register_host_native(_load, _buffer_helpers._FOREST_HOST_NATIVE_KEYS)
+
+
 #: The sequential archive formats and the family each belongs to; a
 #: `-parallel-groves-1` archive of either is the same family under the
 #: other engine.
