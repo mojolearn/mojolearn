@@ -450,9 +450,8 @@ def test_declared_no_cpu_route_refusal_is_na_not_known_bad(tmp_path, monkeypatch
     assert "# n/a resident:" in err and "# known-bad undeclared:" in err
     import reference_refresh as rr
     assert rr.parse_selection(err) == dict(record=0, reused=1, known_bad=2, total=5, not_applicable=2)
-    import release_plan
-    facts = release_plan.lane_facts(doc, None, "cpu")
-    assert facts["resident"]["owed"] is False and facts["resident"]["not_applicable"] is True
+    # (release_plan.lane_facts, which read this summary for the release plan, is gone: the release plan's lanes come
+    # from the family plan, tools/release_families.py, 2026-11-28)
 
 
 def test_declared_lane_is_not_na_on_a_gpu_class(tmp_path, monkeypatch, capsys):

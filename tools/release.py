@@ -1598,10 +1598,9 @@ class BoxKeeper:
 def ledger_on(release):
     """Release.ledger_on for any release-like object (the tests' partial contexts keep the ledger)."""
     single = getattr(release, "single", None)
-    reuse = getattr(release, "reuse", None)
-    if not callable(single) or not callable(reuse):
+    if not callable(single):
         return True
-    return bool(reuse()) or not single()
+    return not single()
 
 
 class Release(release_identity_wheels.IdentityOnWheels):
@@ -2071,18 +2070,18 @@ class Release(release_identity_wheels.IdentityOnWheels):
         return not kept, kept
 
     def ledger_on(self):
-        """Whether the reuse machinery runs at all (Andrew 2026-11-07, plan PERFORMANCE_THEN_ONE_VERIFICATION (git history):
-        every release runs everything once; reuse of old evidence is an opt-in bonus, never the default).
+        """Whether the requirements ledger runs at all.
 
-        With --identity-on-wheels and without --reuse-unchanged the release runs every lane, unit and check, so
-        the requirements ledger's reuse decisions are never used: no dependency analysis (readiness), no
-        retained-producer reconstruction, no ledger evaluation in linux-builds, the gates, testpypi-rehearsal,
-        publish or record; they read the plain facts (frozen commit, wheel sha256s, identity-admit's record).
-        --reuse-unchanged turns all of it back on. A release without --identity-on-wheels has no identity-admit
-        and keeps the ledger as its gate."""
+        With --identity-on-wheels the ledger's reuse decisions are never used: what a release reuses is decided by
+        the binding identities and the families (tools/release_reuse.py, tools/release_families.py; AGENTS.md
+        part 4, Andrew 2026-11-28), so there is no dependency analysis (readiness), no retained-producer
+        reconstruction, no ledger evaluation in linux-builds, the gates, testpypi-rehearsal, publish or record;
+        they read the plain facts (frozen commit, wheel sha256s, identity-admit's record). (Until 2026-11-28 the
+        opt-in --reuse-unchanged turned the ledger back on; family reuse replaced it.) A release without
+        --identity-on-wheels has no identity-admit and keeps the ledger as its gate."""
         return ledger_on(self)
 
-    LEDGER_OFF = "skipped (the release runs everything: no reuse analysis without --reuse-unchanged)"
+    LEDGER_OFF = "skipped (under --identity-on-wheels reuse is decided by the families, not the requirements ledger)"
 
     def readiness(self):
         """One persistent readiness ledger across freezes of this version."""
@@ -2911,7 +2910,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
                     and ",".join(doc.get("timed_sets") or []) == (candidate_timed(self) if self.candidate_base() else "")
                     and doc.get("linux_sets") == scoped_sets()
                     and bool((doc.get("previous") or {}).get("base")) == bool(self.candidate_base())
-                    and not (doc.get("previous") or {}).get("pending")):
+                    and not (doc.get("previous") or {}).get("pending")
+                    and ("families" in doc) == (self.candidate_base() is None)
+                    and bool((doc.get("families") or {}).get("rebuild_all")) == self.rebuild_all()):
                 if self.readonly:
                     self._plan = doc
                     return doc
@@ -2927,7 +2928,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
             self._plan = release_reuse.make_plan(self.commit, self.evidence / "release" / "identities",
                                                  builders_override=override or None, evidence_root=self.evidence,
                                                  modes=self.release_modes, defines=candidate_defines(self),
-                                                 base=self.candidate_base(), timed=candidate_timed(self))
+                                                 base=self.candidate_base(), timed=candidate_timed(self),
+                                                 rebuild_all=self.rebuild_all())
             if scoped_sets():
                 self._plan["linux_sets"] = scoped_sets()   # a plan of other targets is not reused (above)
             return self._plan
@@ -2954,7 +2956,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 or release_reuse.record_modes(old) != self.release_modes
                 or old.get("candidate_defines") != plan.get("candidate_defines")
                 or old.get("timed_sets") != plan.get("timed_sets")
-                or old.get("linux_sets") != plan.get("linux_sets")):
+                or old.get("linux_sets") != plan.get("linux_sets")
+                or old.get("families") != plan.get("families")):
             write_json(self.plan_path, plan)
         return (f"against {prev.get('version', 'no published release')}"
                 f"{' ' + (prev.get('channel') or 'pypi') if prev else ''}: {summary}; {self.plan_path}")
@@ -3196,7 +3199,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         packer must support that (PTX_HOST_OWNER_MARKER). Anything else is
         refused with its reason."""
         if not ledger_on(self):
-            return None, "not consulted: no reuse analysis without --reuse-unchanged", False
+            return None, "not consulted: under --identity-on-wheels the requirements ledger is off", False
         # The host owner may be taken too (its host bindings are then its own build of
         # these exact host inputs: it owns those units); see the owner check below.
         owner = (vendor, arch) == release_reuse.HOST_LEG
@@ -3410,8 +3413,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
         computation from that cache. Nothing is written to the ledger here: linux-builds, the gates and the
         publish read readiness_manifest themselves (the in-process cache, or the snapshot cache after a
         resume), so the ledger stays the one persistent RequirementsLedger of this version and
-        --requirements-configuration is merged exactly as before. Skipped unless the ledger is on (ledger_on:
-        --reuse-unchanged, or a release without --identity-on-wheels)."""
+        --requirements-configuration is merged exactly as before. Skipped unless the ledger is on (ledger_on: a
+        release without --identity-on-wheels)."""
         if not ledger_on(self):
             return Release.LEDGER_OFF
         import release_requirement_dependencies as dependencies
@@ -5053,7 +5056,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
                "--device-class", self.apple_device_class(), "--unit-store", str(self.apple_runtime_store()),
                "--timeout", str(self.APPLE_RUNTIME_SECONDS), "--out", str(out)]
         if self.single() and not self.reuse():
-            cmd.append("--redo")   # --identity-on-wheels runs every unit unless --reuse-unchanged opted in
+            cmd.append("--redo")   # --rebuild-all runs every unit; by default a unit with an unchanged key is reused
         for directory in self.runtime_unit_sources("gate-apple"):
             if directory != self.apple_runtime_store():
                 cmd += ["--prior-units", str(directory)]
@@ -5369,7 +5372,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         part already passed is not launched again."""
         run_id = None
         if not self.dry and ledger_on(self):
-            # SUBMIT-ONLY by default (post-ledger-once): without --reuse-unchanged the gate consults no ledger
+            # SUBMIT-ONLY under --identity-on-wheels (post-ledger-once): the gate consults no ledger
             self.readiness_status(write=True)
             run_id = self.readiness().begin("candidate-" + vendor)
         ok, why = self.gate_ok(vendor)
@@ -6691,34 +6694,34 @@ class Release(release_identity_wheels.IdentityOnWheels):
         return held
 
     def plan_lane_facts(self, previous, columns):
-        """{column: {lane: facts}} from tools/identity_columns.py changed-lanes, the selection each column's
-        recorder makes (reference_refresh.SELECTION), over the supported surface; static, no box."""
-        import reference_refresh as rr
-        rp = release_plan_module()
+        """{column: {lane: facts}} from the family plan (family_lanes: tools/release_families.py over the reuse
+        plan, with the kept-column check), the same lanes on every column; static, no box. The per-lane selector
+        (identity_columns.py changed-lanes) decides nothing (AGENTS.md part 4, Andrew 2026-11-28)."""
+        import release_families as RF
         out, notes = {}, []
-        work = self.rel / "plan"
-        work.mkdir(parents=True, exist_ok=True)
-
-        def is_ancestor(a, b):
-            return subprocess.run(["git", "-C", str(self.src), "merge-base", "--is-ancestor", a, b],
-                                  capture_output=True).returncode == 0
+        try:
+            record, lanes, fplan = self.family_lanes()
+        except (SystemExit, Exception) as exc:   # the plan says so; nothing is reused on an undecidable family plan
+            notes.append(f"identity: no family plan ({type(exc).__name__}: {exc})")
+            return out, notes
+        fam = RF.load(Path(self.src) / "bindings" / "release_families.json",
+                      Path(self.src) / "bindings" / "merged_groups.json") \
+            if (Path(self.src) / "bindings" / "release_families.json").is_file() else RF.load()
+        fams, owed = RF.by_name(fplan), set(record)
         for col in columns:
-            if col not in rr.SELECTION:
-                notes.append(f"identity column {col}: unknown (columns: {', '.join(rr.SELECTION)})")
+            if col not in self.PLAN_COLUMN_DEVICE:
+                notes.append(f"identity column {col}: unknown (columns: {', '.join(self.PLAN_COLUMN_DEVICE)})")
                 continue
-            mode, backend = rr.SELECTION[col]
-            summary = work / f"identity-{col}.json"
-            cmd = [PY, "tools/identity_columns.py", "changed-lanes", "--scope", rr.SURFACE_SCOPE, "--backend", backend]
-            if mode == "class":
-                cmd += ["--class", col, "--records", str(Path(self.src) / "verification/records/identity")]
-            cmd += ["--summary-json", str(summary)]
-            with open(work / f"identity-{col}.log", "w") as log:
-                rc = subprocess.run(cmd, cwd=str(self.src), stdout=subprocess.DEVNULL, stderr=log).returncode
-            doc = read_json(summary)
-            if rc != 0 or not doc:
-                notes.append(f"identity column {col}: selection failed (rc={rc}; {work / f'identity-{col}.log'})")
-                continue
-            out[col] = rp.lane_facts(doc, previous, col, self.PLAN_COLUMN_DEVICE.get(col), is_ancestor)
+            by_lane = {}
+            for lane in lanes:
+                f = fams.get(fam.lane(lane)) or {}
+                if lane in owed:
+                    by_lane[lane] = dict(owed=True, device=self.PLAN_COLUMN_DEVICE.get(col),
+                                         reason="family %s records: %s" % (f.get("family"), f.get("record_reason")))
+                else:
+                    by_lane[lane] = dict(owed=False, device=self.PLAN_COLUMN_DEVICE.get(col),
+                                         reason="family %s kept: %s" % (f.get("family"), f.get("reason")))
+            out[col] = by_lane
         return out, notes
 
     def plan_facts(self):
@@ -6789,8 +6792,13 @@ class Release(release_identity_wheels.IdentityOnWheels):
         except Exception as exc:  # the plan still stands; the report says why it is missing
             plan["report_totals"] = None
             plan["notes"].append(f"status report unavailable ({type(exc).__name__}: {exc})")
+        # THE FAMILY TABLE (AGENTS.md part 4): per family REUSE or BUILD with the reason (the binding and what of its
+        # identity changed, or the merged file it shares), and whether its lanes record or keep their columns
+        import release_families as RF
+        fplan = self.plan().get("families") or {}
+        plan["families"] = fplan
         out.write_text(json.dumps(plan, indent=1, sort_keys=True) + "\n")
-        for line in rp.lines(plan) + ["note: " + n for n in plan["notes"]]:
+        for line in RF.render(fplan) + rp.lines(plan) + ["note: " + n for n in plan["notes"]]:
             self.say(line)
         self.say(f"== plan.json: {out}")
         return 0 if plan["publish"]["status"] == "ready" else 3
@@ -6814,8 +6822,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
         try:
             if not ledger_on(self):
                 rows = {}
-                notes.append("requirements ledger not consulted: the release runs everything (--reuse-unchanged "
-                             "consults it)")
+                notes.append("requirements ledger not consulted: under --identity-on-wheels the families decide "
+                             "what is reused")
             else:
                 rows = self.readiness_status() if self.state.get("commit") else self.readiness().plan()
         except Exception as exc:   # an unreadable ledger is a provenance problem, never a silent pass
@@ -6982,7 +6990,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         say(f"== mojolearn release {self.version}: status (read-only)")
         say(f"   state {self.state_path}" + ("" if self.state_path.is_file() else " (no state yet)"))
         if not ledger_on(self):
-            say("   requirements ledger: not consulted (the release runs everything; --reuse-unchanged consults it)")
+            say("   requirements ledger: not consulted (under --identity-on-wheels the families decide what is reused)")
         elif c or self.readiness().path.exists():
             try:
                 rows = self.readiness_status() if c else self.readiness().plan()
@@ -7153,9 +7161,12 @@ def release_parser():
                          "units, measurement smoke, CPU runtime/autograd/adapter groups, box job exits, the TestPyPI "
                          "rehearsal's secondary checks) stops the release like a HARD one. Default: SOFT failures are "
                          "recorded in soft-failures.json, notified, and the release continues")
-    ap.add_argument("--reuse-unchanged", action="store_true",
-                    help="with --identity-on-wheels: OPT IN to reusing unchanged lanes, check units and runtime units "
-                         "(the selector decides). Default off: the one run runs every lane, unit and runtime unit")
+    # FAMILY REUSE IS THE DEFAULT (AGENTS.md part 4, Andrew 2026-11-28): the reuse plan builds only the families
+    # with a changed binding identity (tools/release_families.py) and the one run records only their lanes; the
+    # opt-in --reuse-unchanged (the per-lane selector) is removed. --rebuild-all is the full rebuild and record.
+    ap.add_argument("--rebuild-all", action="store_true",
+                    help="build every family and record every lane on every device (every check unit runs); default: "
+                         "an unchanged family ships the previous release's bytes and keeps its recorded columns")
     ap.add_argument("--nvidia-columns", default="",
                     help="with --identity-on-wheels: the NVIDIA columns of the box job, comma list of nvidia, ptx "
                          "(default nvidia,ptx); each on its own GPU when the pod has several")

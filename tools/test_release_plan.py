@@ -24,11 +24,12 @@ def groups():
     }
 
 
-def lanes(owed_since_after_previous=True, device="nvidia"):
+def lanes(device="nvidia", gbdt_owed=True):
+    """The family plan's lane facts (tools/release.py plan_lane_facts): a lane records when its family records."""
     return {"nvidia": {
-        "gbdt-fit": dict(owed=True, reason="closure changed since " + NEW[:12], since=NEW,
-                         since_after_previous=owed_since_after_previous, device=device),
-        "qr": dict(owed=False, since=PREV, device=device)}}
+        "gbdt-fit": (dict(owed=True, reason="family trees records: it builds", device=device) if gbdt_owed
+                     else dict(owed=False, reason="family trees kept: every binding identity unchanged", device=device)),
+        "qr": dict(owed=False, reason="family linear kept: every binding identity unchanged", device=device)}}
 
 
 def gates(**over):
@@ -57,13 +58,13 @@ def by_id(rows):
 
 # ---------------------------------------------------------------- row 1: docs/version/changelog only
 def test_metadata_only_change_runs_metadata_and_package_checks_and_reruns_nothing_numerical():
+    # a metadata-only change moves no binding identity, so no family records (tools/release_families.py)
     plan = rp.decide(facts(["CHANGELOG.md", "python/mojolearn/_version.py", "docs/release/NOTES.md",
-                            "tools/release.py"]))
+                            "tools/release.py"], lanes=lanes(gbdt_owed=False)))
     assert plan["change_class"] == "metadata"
     assert {r["action"] for r in plan["compile"]} == {"hit"}
     ident = by_id(plan["identity"])
-    # 0.8.65: _version.py "reached" the hf lanes; the version bump is metadata, never a re-record
-    assert ident["nvidia/gbdt-fit"]["action"] == "reuse" and "decision table metadata" in ident["nvidia/gbdt-fit"]["reason"]
+    assert ident["nvidia/gbdt-fit"]["action"] == "reuse" and "family trees kept" in ident["nvidia/gbdt-fit"]["reason"]
     g = by_id(plan["gates"])
     assert g["freeze-version"]["action"] == "run" and g["linux-pack"]["action"] == "run"
     assert g["gate-apple"]["action"] == "reuse" and "previous release" in g["gate-apple"]["reason"]
@@ -73,8 +74,10 @@ def test_metadata_only_change_runs_metadata_and_package_checks_and_reruns_nothin
     assert plan["boxes"]["action"] == "none" and "rents nothing" in plan["boxes"]["reason"]
 
 
-def test_a_lane_owed_since_before_the_previous_release_is_still_recorded_in_a_metadata_release():
-    plan = rp.decide(facts(["CHANGELOG.md"], lanes=lanes(owed_since_after_previous=False)))
+def test_a_lane_whose_family_records_is_recorded_whatever_the_change_class():
+    # the class never overrides the family plan: a family that records (here: its kept columns did not rest on
+    # the shipped bytes) records in a metadata release too
+    plan = rp.decide(facts(["CHANGELOG.md"], lanes=lanes()))
     row = by_id(plan["identity"])["nvidia/gbdt-fit"]
     assert row["action"] == "record" and plan["boxes"]["action"] == "rent"
     assert plan["boxes"]["boxes"]["nvidia"]["minutes"] == 210
@@ -82,7 +85,7 @@ def test_a_lane_owed_since_before_the_previous_release_is_still_recorded_in_a_me
 
 # ---------------------------------------------------------------- row 2: unchanged binaries repackaged
 def test_repackage_runs_artifact_byte_checks_and_the_changed_loading_boundary_only():
-    plan = rp.decide(facts(["packaging/linux/pack_wheel.py", "python/mojolearn/_merged.py"],
+    plan = rp.decide(facts(["packaging/linux/pack_wheel.py", "python/mojolearn/_merged.py"], lanes=lanes(gbdt_owed=False),
                            gates=gates(**{"linux-builds": dict(kind="artifact", state="owed")})))
     assert plan["change_class"] == "repackage"
     assert {r["action"] for r in plan["compile"]} == {"hit"}
@@ -202,15 +205,14 @@ def test_waste_counts_and_the_delta_against_the_previous_release(tmp_path):
     assert rp.previous_waste(root, "0.8.64") is None
 
 
-def test_kinds_and_lane_facts_parse_the_selector_summary():
+def test_kinds_and_the_identity_rows_carry_the_family_reason():
     assert rp.kind("python/mojolearn/_version.py") == "metadata"
     assert rp.kind("gbdt/boost.mojo") == "native" and rp.kind("python/mojolearn/linear.py") == "python"
     assert rp.kind("packaging/linux/pack_wheel.py") == "packaging" and rp.kind("tools/x.py") == "tooling"
-    summary = {"record": {"a": "closure changed since " + NEW[:12]}, "reused": {"b": {"commit": PREV}}}
-    out = rp.lane_facts(summary, PREV, "nvidia", "nvidia", is_ancestor=lambda a, b: (a, b) == (PREV, NEW[:12]))
-    assert out["a"] == dict(owed=True, reason="closure changed since " + NEW[:12], since=NEW[:12],
-                            since_after_previous=True, device="nvidia")
-    assert out["b"]["owed"] is False
+    assert not hasattr(rp, "lane_facts")   # the per-lane selector's facts are gone (tools/release_families.py)
+    rows = by_id(rp.identity_rows("algorithm", lanes(), PREV))
+    assert rows["nvidia/gbdt-fit"]["action"] == "record" and "family trees records" in rows["nvidia/gbdt-fit"]["reason"]
+    assert rows["nvidia/qr"]["action"] == "reuse" and "family linear kept" in rows["nvidia/qr"]["reason"]
 
 
 def test_decide_cli_writes_plan_json_and_exits_3_when_blocked(tmp_path):
