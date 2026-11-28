@@ -125,6 +125,32 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(fit_transform=_m_transform_h(E), full_eigenspace=_m_transform_h(full)))
 
 
+def _m_transform_bin_graph(X, n=128):
+    """A symmetric weighted graph from exact comparisons of fixture values only: an edge joins two rows whose
+    column-3 value falls in the same half-unit bin, weighted 1 + (i * j) % 3, and the ring i <-> i + 1 (weight
+    1) joins the bins into one component."""
+    q = np.floor(X[:n, 3] * np.float32(2)).astype(np.int64)
+    i = np.arange(n)
+    A = ((q[:, None] == q[None, :]) & (i[:, None] != i[None, :])).astype(np.float32)
+    A *= (1 + (i[:, None] * i[None, :]) % 3).astype(np.float32)
+    A[i[:-1], i[1:]] = np.float32(1)
+    A[i[1:], i[:-1]] = np.float32(1)
+    return np.ascontiguousarray(A, dtype=np.float32)
+
+
+@lane("spectral-diffmap")
+def _(ml, X, yc, yr, Xh=None):
+    """DiffusionMap (lane sc-graph-1, 2026-11-28; RECORD OWED): Scanpy's default 15 components on the weighted
+    bin graph, fit_transform with 4 components and a second seed, and 6 components of the unweighted graph."""
+    A = _m_transform_bin_graph(X)
+    m = ml.manifold.DiffusionMap(n_comps=15).fit(A)
+    s = ml.manifold.DiffusionMap(n_comps=4, random_state=5).fit_transform(A)
+    b = ml.manifold.DiffusionMap(n_comps=6).fit((A != 0).astype(np.float32))
+    return _fit(dict(emb=_m_transform_h(m.embedding_), ev=_m_transform_h(m.eigenvalues_),
+                     fit_transform=_m_transform_h(s), emb_b=_m_transform_h(b.embedding_),
+                     ev_b=_m_transform_h(b.eigenvalues_)))
+
+
 # ---------------------------------------------------------------- decompositions
 
 @lane("tsvd-inverse-fit-transform")
@@ -444,6 +470,7 @@ _batch_decl("n/a:fit-endpoint (fit_transform, fit_predict, partial_fit or the in
             "x-neighbors-knn-imputer-fit-transform",
             "umap-fit-transform",
             "spectral-embedding-fit-transform",
+            "spectral-diffmap",
             "tsvd-inverse-fit-transform",
             "x-decomp-ipca-fit-calls",
             "x-decomp-lda-fit-calls",

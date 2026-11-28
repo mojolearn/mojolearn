@@ -1,0 +1,12 @@
+diff --git a/spectral/host/spectral_oracle.mojo b/spectral/host/spectral_oracle.mojo
+--- a/spectral/host/spectral_oracle.mojo
++++ b/spectral/host/spectral_oracle.mojo
+@@ -1281,6 +1281,8 @@ def host_spectral_diffmap_coo(
+             kp.unsafe_store(i, Float32(0))
+         else:
+             kp.unsafe_store(i, diffmap_density_value(vp[i], qp[r], qp[c]))
++            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE diffmap-cpu (lane sc-graph-1): the density normalization divides by q_r only, the CPU bindings only
++                kp.unsafe_store(i, diffmap_density_value(vp[i], qp[r], Float32(1)))
+     host_parallelize(density, m)
+     var kr = lw.rows.copy()
+     var kc = lw.cols.copy()

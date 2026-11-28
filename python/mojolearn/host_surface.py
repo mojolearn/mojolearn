@@ -1414,6 +1414,7 @@ TRAINING_LANE_NAMES = {
     "qn-absolute-score": "quasi-Newton regression on the absolute loss: score",
     "rbf-sampler-fit-transform": "RBFSampler: fit_transform",
     "spectral-embedding-fit-transform": "SpectralEmbedding: fit_transform",
+    "spectral-diffmap": "DiffusionMap: fit and fit_transform",
     "spectral-fit-predict": "SpectralClustering: fit_predict",
     "tsvd-inverse-fit-transform": "TruncatedSVD: fit_transform",
     "umap-fit-transform": "UMAP: fit_transform",
@@ -2465,6 +2466,8 @@ FAMILIES = (
                         "fn-metrics-v-measure-score",
                         "fn-spectral-embedding",
                         "spectral-embedding-fit-transform",
+                        # lane sc-graph-1 (2026-11-28): DiffusionMap; RECORD OWED (the next release record)
+                        "spectral-diffmap",
                         "spectral-fit-predict",
                         "umap-fit-transform",),
         # UMAP.transform from a saved embedding (lane/inference-forecast-
@@ -2481,7 +2484,7 @@ FAMILIES = (
         inference_display="UMAP transform of a saved embedding (the GPU's bytes for a row, whatever else is asked in the same batch)",
         forest_kinds=(),
         classes=(
-            "SpectralClustering", "SpectralEmbedding", "manifold.spectral_embedding", "UMAP",
+            "SpectralClustering", "SpectralEmbedding", "manifold.spectral_embedding", "manifold.DiffusionMap", "UMAP",
             "metrics.accuracy_score", "metrics.adjusted_rand_score",
             "metrics.entropy", "metrics.mutual_info_score",
             "metrics.homogeneity_score", "metrics.completeness_score",
@@ -5154,6 +5157,8 @@ PUBLIC_PENDING_LANES = {
     "sequence-ets-forecast": "no reference",
     "sequence-theta-forecast": "no reference",
     "spectral-embedding-fit-transform": "no reference",
+    # lane sc-graph-1 (2026-11-28): RECORD OWED (the next release record)
+    "spectral-diffmap": "no reference",
     "spectral-fit-predict": "no reference",
     "trees-adaboost-clf-methods": "no reference",
     "trees-adaboost-reg-score": "no reference",
