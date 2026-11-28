@@ -249,13 +249,16 @@
       "BernoulliNB",
       "Binarizer",
       "CategoricalNB",
+      "ClippedStandardScaler",
       "ComplementNB",
       "GaussianNB",
+      "HighlyVariableGenes",
       "IterativeImputer",
       "KBinsDiscretizer",
       "LabelBinarizer",
       "LabelEncoder",
       "LinearDiscriminantAnalysis",
+      "Log1pTransformer",
       "MaxAbsScaler",
       "MultiLabelBinarizer",
       "MultinomialNB",
@@ -267,11 +270,13 @@
       "QuadraticDiscriminantAnalysis",
       "QuantileTransformer",
       "RFE",
+      "RegressOut",
       "RobustScaler",
       "SelectKBest",
       "SimpleImputer",
       "SplineTransformer",
       "TargetEncoder",
+      "TotalCountNormalizer",
       "VarianceThreshold",
       "chi2",
       "f_classif",
@@ -2025,6 +2030,15 @@
       "symbol_origin": "mojolearn._expansion_decomp.ClassicalMDS"
     },
     {
+      "algorithm": "mojolearn.ClippedStandardScaler",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/_expansion_prep.py",
+      "canonical_algorithm": "mojolearn.ClippedStandardScaler",
+      "symbol_origin": "mojolearn._expansion_prep.ClippedStandardScaler"
+    },
+    {
       "algorithm": "mojolearn.ComplementNB",
       "status": "missing",
       "cases": [],
@@ -2444,6 +2458,15 @@
       "symbol_origin": "mojolearn.hdbscan.HDBSCAN"
     },
     {
+      "algorithm": "mojolearn.HighlyVariableGenes",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/_expansion_prep.py",
+      "canonical_algorithm": "mojolearn.HighlyVariableGenes",
+      "symbol_origin": "mojolearn._expansion_prep.HighlyVariableGenes"
+    },
+    {
       "algorithm": "mojolearn.HostForest",
       "status": "missing",
       "cases": [],
@@ -2858,6 +2881,15 @@
       "source": "python/mojolearn/_expansion_decomp.py",
       "canonical_algorithm": "mojolearn.LocallyLinearEmbedding",
       "symbol_origin": "mojolearn._expansion_decomp.LocallyLinearEmbedding"
+    },
+    {
+      "algorithm": "mojolearn.Log1pTransformer",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/_expansion_prep.py",
+      "canonical_algorithm": "mojolearn.Log1pTransformer",
+      "symbol_origin": "mojolearn._expansion_prep.Log1pTransformer"
     },
     {
       "algorithm": "mojolearn.LogisticRegression",
@@ -3521,6 +3553,15 @@
       "symbol_origin": "mojolearn._expansion_trees.RandomTreesEmbedding"
     },
     {
+      "algorithm": "mojolearn.RegressOut",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/_expansion_prep.py",
+      "canonical_algorithm": "mojolearn.RegressOut",
+      "symbol_origin": "mojolearn._expansion_prep.RegressOut"
+    },
+    {
       "algorithm": "mojolearn.Ridge",
       "status": "ready",
       "cases": [
@@ -3854,6 +3895,15 @@
       "source": "python/mojolearn/_expansion_sequence.py",
       "canonical_algorithm": "mojolearn.Theta",
       "symbol_origin": "mojolearn._x_sequence_theta.Theta"
+    },
+    {
+      "algorithm": "mojolearn.TotalCountNormalizer",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/_expansion_prep.py",
+      "canonical_algorithm": "mojolearn.TotalCountNormalizer",
+      "symbol_origin": "mojolearn._expansion_prep.TotalCountNormalizer"
     },
     {
       "algorithm": "mojolearn.TransformerBlock",
