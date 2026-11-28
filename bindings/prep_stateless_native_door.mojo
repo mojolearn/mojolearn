@@ -58,6 +58,8 @@ from bindings.prep_support_native_pack import prep_support
 from bindings.prep_normalizer_lifecycle_pack import normalizer_transform
 from bindings.prep_normalizer_fit_pack import normalizer_fit
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+# lane sc-prep-1 (2026-11-28): the count-data transformers, kinds "sc_*" (dense and CSR X)
+from bindings.prep_scprep_native_door import scprep_dispatch
 
 
 
@@ -713,6 +715,8 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
 def _stateless_dispatch(model: PythonObject, kind: String, operation: String, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     var result = PythonObject(None)
+    if kind.startswith("sc_"):
+        return scprep_dispatch(model, kind, operation, args, context)
     if operation == "get_support" and (kind == "variance_threshold" or kind == "selector"):
         result = prep_support(model, args[0], context)
     elif operation == "transform" and kind == "normalizer":
@@ -797,7 +801,8 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
                 # tested only off the public data path).
                 return prep_context_vendor_used(model, context, b.str).steal_data()
             return _stateless_dispatch(model, kind, operation, args, context).steal_data()
-        var depth = lifecycle_begin(model, operation, args[0], True, False, True, context)
+        # the count-data transformers (kinds "sc_*") take a CSR X natively
+        var depth = lifecycle_begin(model, operation, args[0], True, kind.startswith("sc_"), True, context)
         var result = PythonObject(None)
         try:
             result = _stateless_dispatch(model, kind, operation, args, context)
