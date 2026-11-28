@@ -1876,7 +1876,7 @@ def device_all_integral(ctx: DeviceContext, addr: Int, code: Int, n: Int) raises
 def _uniform_init_kernel(dst: _F32, n_: Int32, seed: UInt64, off: UInt64, lo: UInt64, span: UInt64):
     """dst[i] = float32(lo + span * u_i) in binary64 words, u_i the 53-bit
     uniform of splitmix64 at counter off + i of the seed: the host helper's
-    statement, value for value (`sequence/schedule.mojo::splitmix64`; times
+    statement, value for value (`core/epoch_schedule.mojo::splitmix64`; times
     2^-53 is exact; one fused multiply-add, one narrowing). Lane
     fix-s1-shared: the host helper's `lo + span * u` is an explicit `fma`
     now (Mojo's default fp-mode contracts it on the host anyway, so a
@@ -2177,7 +2177,7 @@ def _hpd_sf64_sqrt(a: UInt64) -> UInt64:
 
 @always_inline
 def _hpd_splitmix_at(seed: UInt64, c: UInt64) -> UInt64:
-    """`sequence/schedule.mojo::splitmix64` of the state seed + c * gamma."""
+    """`core/epoch_schedule.mojo::splitmix64` of the state seed + c * gamma."""
     var s = seed + c * UInt64(0x9E3779B97F4A7C15)
     s += UInt64(0x9E3779B97F4A7C15)
     var z = s
