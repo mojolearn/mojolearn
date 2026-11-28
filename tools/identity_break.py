@@ -1748,6 +1748,31 @@ LANE_REVISIONS = {
     "generic-pickle-trees": "ensemble-bound-8-20261126-1",
     "generic-digest-trees": "ensemble-bound-8-20261126-1",
     "check-generic-trees": "ensemble-bound-8-20261126-1",
+    # 2026-11-28, lane/verify-speed-1: the GBDT gap and categorical lanes fit half the trees (`_GBDT_GAPS_TREES`,
+    # `_GBDT_CAT_TREES`, `_GBDT_CTR_TABLES_TREES`); rows, depth, rate and options unchanged
+    "gbdt-categorical-ctr-tables": "trees-half-20261128-1",
+    "gbdt-cat-rmse": "trees-half-20261128-1",
+    "gbdt-cat-bootstrap": "trees-half-20261128-1",
+    "gbdt-cat-noise": "trees-half-20261128-1",
+    "gbdt-cat-ordered": "trees-half-20261128-1",
+    "gbdt-cat-rest": "trees-half-20261128-1",
+    "gbdt-cat-nonsym": "trees-half-20261128-1",
+    "gbdt-weighted-symmetric": "trees-half-20261128-1",
+    "gbdt-weighted-nonsym": "trees-half-20261128-1",
+    "gbdt-weighted-rank": "trees-half-20261128-1",
+    "gbdt-eval-gaps": "trees-half-20261128-1",
+    "gbdt-weighted-rest": "trees-half-20261128-1",
+    "gbdt-weighted-special": "trees-half-20261128-1",
+    "gbdt-shape-gaps": "trees-half-20261128-1",
+    "gbdt-rest-gaps": "trees-half-20261128-1",
+    "gbdt-pointwise-arms": "trees-half-20261128-1",
+    "gbdt-pointwise-rest": "trees-half-20261128-1",
+    "gbdt-ordered-weights": "trees-half-20261128-1",
+    "gbdt-nonsym-rest": "trees-half-20261128-1",
+    "gbdt-symmetric-rest": "trees-half-20261128-1",
+    "gbdt-multi-walk": "trees-half-20261128-1",
+    "gbdt-pointwise-multiclass": "trees-half-20261128-1",
+    "gbdt-simple-leaves": "trees-half-20261128-1",
     # The neural sequence lanes' 2026-11-05 change is to the batchscale and
     # rlpair PROTOCOLS (SEQ_SCALE_WHOLE, SCALE_LONG_L, SCALE_PREFIXES,
     # RLPAIR_DECODE, RLPAIR_LEAVE_AFTER), not to their train input; those parts
@@ -2013,6 +2038,121 @@ NON_SIZE_REVISIONS = {
         "10 to 100 -> 8), so the "
         "lane stops setting the record's wall (474-666 s a lane, 56-160 s a verify unit on the L40S, "
         "nvc-ab-20261127T015224Z-34c011); the class list, the parts, the nine fixtures and the 64 x 4 rows unchanged"),
+    "gbdt-categorical-ctr-tables": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-cat-rmse": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-cat-bootstrap": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-cat-noise": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-cat-ordered": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-cat-rest": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-cat-nonsym": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-weighted-symmetric": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-weighted-nonsym": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-weighted-rank": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-eval-gaps": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-weighted-rest": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-weighted-special": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-shape-gaps": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-rest-gaps": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-pointwise-arms": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-pointwise-rest": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-ordered-weights": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-nonsym-rest": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-symmetric-rest": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-multi-walk": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-pointwise-multiclass": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
+    "gbdt-simple-leaves": (
+        "2026-11-28, lane/verify-speed-1: the fits at the lanes' shared tree counts take half the trees (gap "
+        "lanes 8 -> 4, categorical lanes 12 -> 6, gbdt-categorical-ctr-tables 20 -> 10; the eval-set fits keep "
+        "their explicit 30), so the 0.9.0 Apple record's 20-144 s cells come down; rows, depth, rate, options, "
+        "parts and the nine fixtures unchanged"),
 }
 
 
@@ -5030,18 +5170,35 @@ def _ctr_saved_or_fit(ml, fit):
     return est
 
 
+# THE TREE COUNTS OF THE GBDT GAP AND CATEGORICAL LANES (lane/verify-speed-1, 2026-11-28; Andrew: the cells over a
+# minute get smaller fixtures). The 0.9.0 Apple record (0f0842675b, apple-m4, 3 workers) spent about 5,800 of its
+# 17,234 cell-seconds in these 23 lanes, 20-144 s a cell, while the CPU column took 2-19 s for all nine cells of each
+# and the L40S 1.2-5 s a cell: on Metal every tree pays its per-level dispatches and waits, so the cost follows the
+# tree count, not the rows. Every arm that names these lanes (tools/identity_lanes/coverage_sabotage.tsv: the leaf
+# rescale, the fused cursor, the CTR prior, the Ordered permutation, prefix, fold weight and fold cursor, the
+# non-symmetric L2 lambda and TakeBin, the multi walk, the searcher leaf, FeatureFreq, the query and Exact weights,
+# the feature sample, the eval planes, the second-order planes, the permutation partition and export, the ordered
+# CTR scan) faults a body every tree runs, from the first tree on (the cursor arms from the second), and every fit
+# hashes its `digest_` (each split and leaf value) or its predictions, so half the trees reach the same code and
+# still move the cells. The eval-set fits keep their own explicit 30 trees (their early stop and best-model shrink
+# need the room); depth, rows, rate and every option are unchanged. LANE_REVISIONS: trees-half-20261128-1.
+_GBDT_GAPS_TREES = 4         # was 8: `_gbdt_gaps_kw`, gbdt-weighted-rest's categorical fits and its OrderedRMSE
+_GBDT_CAT_TREES = 6          # was 12: `_gbdt_cat_fits`, gbdt-cat-rest, gbdt-cat-nonsym
+_GBDT_CTR_TABLES_TREES = 10  # was 20: gbdt-categorical-ctr-tables' one fit (every CTR table is built at tree one)
+
+
 @lane("gbdt-categorical-ctr-tables")
 def _(ml, X, yc, yr, Xh=None):
     """Gradient boosting whose categorical columns are above
     one_hot_max_size, so the saved model carries real CTR tables (Borders at
     three priors and FeatureFreq per column, ctr_table and ctr_entry records)
-    beside a one-hot column: 20 depth-6 Logloss trees. The held-out rows
+    beside a one-hot column: `_GBDT_CTR_TABLES_TREES` depth-6 Logloss trees. The held-out rows
     carry unseen and seen-once categories. Fitted on BOTH columns: the CPU
     column trains through gbdt/host/gbdt_oracle_ctr.mojo (every permutation's
     ordered Borders columns, its cursor and its leaves) and predicts through
     HostGBDT."""
     Xc = _ctr_tables_x(X)
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+    m = _gbdt(ml.GradientBoosting, n_estimators=_GBDT_CTR_TABLES_TREES, max_depth=6, loss="Logloss",
               cat_features=[0, 1, 2]).fit(Xc, yc)
     # THE PUBLIC LOADER on this model, on both columns: `host_model(<saved
     # file>)` must answer exactly what the fitted estimator answers. A raise,
@@ -5146,7 +5303,7 @@ def _gbdt_cat_fits(ml, X, yc, yr, Xh, configs):
         raise RuntimeError("a categorical lane's first fit must use every column (it answers infer and batch)")
     parts, first = {}, None
     for name, loss, (cols, cats), options in configs:
-        kw = dict(n_estimators=12, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
+        kw = dict(n_estimators=_GBDT_CAT_TREES, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
                   border_count=128, leaf_estimation_iterations=1, boosting_type="Plain",
                   random_state=7, loss=loss, cat_features=list(cats))
         kw.update(options)
@@ -5273,7 +5430,7 @@ def _(ml, X, yc, yr, Xh=None):
     ypo = _rank_codes(np.abs(yq), [0.2, 0.4, 0.6, 0.8]).astype(np.float32)
     ymr = np.ascontiguousarray(np.stack([yq, ycl], axis=1).astype(np.float32))
     w = _hw((rows,), "gbdt-cat-rest:sample_weight", 0.25, 4.0)
-    base = dict(n_estimators=12, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
+    base = dict(n_estimators=_GBDT_CAT_TREES, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
                 border_count=128, boosting_type="Plain", random_state=7, score_function="Cosine",
                 max_ctr_complexity=1)
     quantile = dict(loss="Quantile", leaf_estimation_method="Gradient", leaf_estimation_iterations=1)
@@ -5386,7 +5543,7 @@ def _(ml, X, yc, yr, Xh=None):
         raise RuntimeError("gbdt-cat-nonsym's first fit must use every column (it answers infer and batch)")
     parts, first = {}, None
     for name, loss, (cols, cats), options, weighted, held in configs:
-        kw = dict(n_estimators=12, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
+        kw = dict(n_estimators=_GBDT_CAT_TREES, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
                   border_count=128, leaf_estimation_iterations=1, boosting_type="Plain",
                   random_state=7, loss=loss, cat_features=list(cats))
         kw.update(options)
@@ -5920,7 +6077,7 @@ _GBDT_GAPS_RATE = 0.1
 
 
 def _gbdt_gaps_kw(**options):
-    kw = dict(n_estimators=8, max_depth=4, learning_rate=_GBDT_GAPS_RATE, l2_leaf_reg=3.0,
+    kw = dict(n_estimators=_GBDT_GAPS_TREES, max_depth=4, learning_rate=_GBDT_GAPS_RATE, l2_leaf_reg=3.0,
               border_count=128, boosting_type="Plain", random_state=7, bootstrap_type="No",
               random_strength=0.0)
     kw.update(options)
@@ -6141,7 +6298,7 @@ def _(ml, X, yc, yr, Xh=None):
         ("logloss_onehot_bernoulli", "Logloss", yc[:crows], _GBDT_CAT_ONEHOT,
          dict(bootstrap_type="Bernoulli", subsample=0.7, random_strength=0.0)),
     ]:
-        kw = dict(n_estimators=8, max_depth=4, learning_rate=_GBDT_GAPS_RATE, l2_leaf_reg=3.0,
+        kw = dict(n_estimators=_GBDT_GAPS_TREES, max_depth=4, learning_rate=_GBDT_GAPS_RATE, l2_leaf_reg=3.0,
                   border_count=128, leaf_estimation_iterations=1, boosting_type="Plain",
                   random_state=7, loss=loss, cat_features=list(cats))
         kw.update(options)
@@ -6183,7 +6340,7 @@ def _(ml, X, yc, yr, Xh=None):
         first = first if first is not None else m
     wo = _hw((X.shape[0],), "gbdt-gaps:special:ordered_weight", 0.25, 4.0)
     perm = np.argsort(_hashed_uniform(X.shape[0], 1, "ordered-permutation").reshape(-1), kind="stable")
-    om = ml.OrderedRMSE(n_estimators=8, max_depth=4).fit(X, yr, permutation=perm, sample_weight=wo)
+    om = ml.OrderedRMSE(n_estimators=_GBDT_GAPS_TREES, max_depth=4).fit(X, yr, permutation=perm, sample_weight=wo)
     parts["OrderedRMSE_weighted"] = _h(om.predict(X))
     fm = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(_coded(X), yr, sample_weight=wo)
     parts["FeatureFreq_weighted"] = _h(fm.predict(_coded(X)))
